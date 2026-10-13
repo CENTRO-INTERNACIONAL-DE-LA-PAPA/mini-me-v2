@@ -119,9 +119,35 @@ npm install
 npm run tauri dev
 ```
 
+Tests:
+
+```bash
+npm test                    # frontend (Vitest)
+cd src-tauri && cargo test  # Rust core
+```
+
 Specifications and planned changes live in [`openspec/`](openspec/). The project-wide
 glossary, architecture rules and conventions are in
 [`openspec/config.yaml`](openspec/config.yaml).
+
+## Roadmap
+
+Mini-Me is built one [OpenSpec](openspec/) change at a time, in this order. Each change is
+proposed, reviewed, implemented, verified and archived before the next one starts.
+
+| # | Change | Scope | Status |
+|---|---|---|---|
+| 1 | Event protocol and project storage | Event envelope and delivery, Mini-Me Data and Project folders, Conversations, Assets, `#` references, reactions, minimal UI with a temporary echo responder | Done |
+| 2 | Sidecar runtime | Bundled Python (pinned with `uv`) started and supervised by the Rust core, JSON lines over stdin/stdout with a version handshake, the Trait interface, the echo responder moved into Python as the first Trait. No API keys or costs. | Next |
+| 3 | First real Trait | AI provider keys in the OS keychain, provider and model selection, one AI-backed Trait (for example *Summarize*), Mini-Me definitions with the shared Trait library and one-Step Workflows, optional Mini-Me reactions to your messages | Planned |
+| 4 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Planned |
+| 5 | First Interactive Component | A table whose cells, rows and columns can be selected and referenced | Planned |
+| 6 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |
+| 7 | Workflow editor | Visual editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel) | Planned |
+| 8 | Project Overview | The view of everything a Project has produced | Planned |
+
+Later: code execution (Python and R) with OS-level sandboxing, collaboration through a relay
+server, Microsoft SSO, Dataverse upload.
 
 ## Acknowledgements
 
