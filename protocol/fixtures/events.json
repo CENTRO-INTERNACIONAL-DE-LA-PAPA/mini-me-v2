@@ -1,0 +1,262 @@
+[
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000001",
+    "type": "message.created",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 1,
+    "ts": 1760000000000,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message": {
+        "id": "0199d0a0-0000-7000-8000-000000000101",
+        "author": { "kind": "user", "id": "0199d0a0-0000-7000-8000-0000000000e1" },
+        "content": "Summarize #field-trial.csv",
+        "status": "complete",
+        "reply_to": null,
+        "attachments": [
+          {
+            "id": "0199d0a0-0000-7000-8000-000000000201",
+            "name": "field-trial.csv",
+            "media_type": "text/csv",
+            "size_bytes": 2048
+          }
+        ],
+        "text_components": [
+          {
+            "kind": "asset",
+            "id": "0199d0a0-0000-7000-8000-000000000201",
+            "label": "#field-trial.csv",
+            "start": 10,
+            "end": 26
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000002",
+    "type": "message.created",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 2,
+    "ts": 1760000000100,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message": {
+        "id": "0199d0a0-0000-7000-8000-000000000102",
+        "author": { "kind": "system", "id": "echo" },
+        "content": "",
+        "status": "streaming",
+        "reply_to": "0199d0a0-0000-7000-8000-000000000101",
+        "attachments": [],
+        "text_components": []
+      }
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000003",
+    "type": "message.delta",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 3,
+    "ts": 1760000000200,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message_id": "0199d0a0-0000-7000-8000-000000000102",
+      "text": "Summarize "
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000004",
+    "type": "attachment.added",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 4,
+    "ts": 1760000000300,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message_id": "0199d0a0-0000-7000-8000-000000000102",
+      "asset": {
+        "id": "0199d0a0-0000-7000-8000-000000000202",
+        "name": "summary.md",
+        "media_type": "text/markdown",
+        "size_bytes": 512
+      }
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000005",
+    "type": "message.completed",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 5,
+    "ts": 1760000000400,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message_id": "0199d0a0-0000-7000-8000-000000000102",
+      "content": "Summarize #field-trial.csv"
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000006",
+    "type": "reaction.added",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 6,
+    "ts": 1760000000500,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message_id": "0199d0a0-0000-7000-8000-000000000102",
+      "emoji": "👍",
+      "by": { "kind": "user", "id": "0199d0a0-0000-7000-8000-0000000000e1" }
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000007",
+    "type": "reaction.removed",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 7,
+    "ts": 1760000000600,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message_id": "0199d0a0-0000-7000-8000-000000000102",
+      "emoji": "👍",
+      "by": { "kind": "user", "id": "0199d0a0-0000-7000-8000-0000000000e1" }
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000008",
+    "type": "message.created",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 8,
+    "ts": 1760000000700,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message": {
+        "id": "0199d0a0-0000-7000-8000-000000000103",
+        "author": { "kind": "user", "id": "0199d0a0-0000-7000-8000-0000000000e1" },
+        "content": "Why?",
+        "status": "complete",
+        "reply_to": null,
+        "attachments": [],
+        "text_components": []
+      }
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000009",
+    "type": "message.created",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 9,
+    "ts": 1760000000800,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message": {
+        "id": "0199d0a0-0000-7000-8000-000000000104",
+        "author": { "kind": "system", "id": "echo" },
+        "content": "",
+        "status": "streaming",
+        "reply_to": "0199d0a0-0000-7000-8000-000000000103",
+        "attachments": [],
+        "text_components": []
+      }
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000010",
+    "type": "message.cancelled",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 10,
+    "ts": 1760000000900,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message_id": "0199d0a0-0000-7000-8000-000000000104"
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000011",
+    "type": "message.created",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 11,
+    "ts": 1760000001000,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message": {
+        "id": "0199d0a0-0000-7000-8000-000000000105",
+        "author": { "kind": "system", "id": "echo" },
+        "content": "",
+        "status": "streaming",
+        "reply_to": "0199d0a0-0000-7000-8000-000000000103",
+        "attachments": [],
+        "text_components": []
+      }
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000012",
+    "type": "message.failed",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 12,
+    "ts": 1760000001100,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message_id": "0199d0a0-0000-7000-8000-000000000105",
+      "error": { "code": "interrupted", "message": "The app closed before this reply finished." }
+    }
+  }
+]

@@ -1,0 +1,70 @@
+import { Channel, invoke } from "@tauri-apps/api/core";
+import type {
+  AppError,
+  AssetRef,
+  ConversationSummary,
+  Message,
+  ProjectSummary,
+  ProtocolEvent,
+  SendMessageInput,
+  Uuid,
+} from "./protocol/types";
+
+export const api = {
+  listProjects: () => invoke<ProjectSummary[]>("list_projects"),
+  createProject: (name: string) => invoke<ProjectSummary>("create_project", { name }),
+  openProject: (project_id: Uuid) => invoke<ProjectSummary>("open_project", { project_id }),
+
+  listConversations: (project_id: Uuid) =>
+    invoke<ConversationSummary[]>("list_conversations", { project_id }),
+  createConversation: (project_id: Uuid) =>
+    invoke<ConversationSummary>("create_conversation", { project_id }),
+
+  /** Streams every event after `after_seq`, then new events as they are persisted. */
+  subscribeConversation: (
+    project_id: Uuid,
+    conversation_id: Uuid,
+    after_seq: number,
+    onEvent: (event: ProtocolEvent) => void,
+  ) => {
+    const on_event = new Channel<ProtocolEvent>();
+    on_event.onmessage = onEvent;
+    return invoke<void>("subscribe_conversation", {
+      project_id,
+      conversation_id,
+      after_seq,
+      on_event,
+    });
+  },
+
+  sendMessage: (project_id: Uuid, conversation_id: Uuid, input: SendMessageInput) =>
+    invoke<Message>("send_message", { project_id, conversation_id, input }),
+  stopReply: (project_id: Uuid, conversation_id: Uuid) =>
+    invoke<void>("stop_reply", { project_id, conversation_id }),
+
+  addReaction: (project_id: Uuid, message_id: Uuid, emoji: string) =>
+    invoke<void>("add_reaction", { project_id, message_id, emoji }),
+  removeReaction: (project_id: Uuid, message_id: Uuid, emoji: string) =>
+    invoke<void>("remove_reaction", { project_id, message_id, emoji }),
+
+  /** Opens the native file picker; resolves with the imported Assets (empty if cancelled). */
+  importAssets: (project_id: Uuid) => invoke<AssetRef[]>("import_assets", { project_id }),
+  listAssets: (project_id: Uuid, query: string) =>
+    invoke<AssetRef[]>("list_assets", { project_id, query }),
+  openAsset: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<void>("open_asset", { project_id, asset_id }),
+};
+
+export function errorMessage(error: unknown): string {
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as AppError).message);
+  }
+  return String(error);
+}
+
+export function errorCode(error: unknown): string | null {
+  if (error && typeof error === "object" && "code" in error) {
+    return String((error as AppError).code);
+  }
+  return null;
+}

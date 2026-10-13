@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "mini-me",
-        "width": 800,
-        "height": 600
+        "title": "Mini-Me",
+        "width": 1100,
+        "height": 750,
+        "minWidth": 720,
+        "minHeight": 500
       }
     ],
     "security": {

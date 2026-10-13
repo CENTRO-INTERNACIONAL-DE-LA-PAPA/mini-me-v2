@@ -1,116 +1,310 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --border: #e2e2dd;
+  --text: #1d1d1b;
+  --muted: #73736d;
+  --accent: #2f6f4f;
+  --accent-soft: #e3efe8;
+  --danger: #b3372f;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+    --bg: #161716;
+    --surface: #1f201f;
+    --border: #333532;
+    --text: #ececea;
+    --muted: #9a9a94;
+    --accent: #7cc19c;
+    --accent-soft: #23362b;
+    --danger: #e0786f;
   }
+}
 
-  a:hover {
-    color: #24c8db;
-  }
+* {
+  box-sizing: border-box;
+}
 
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  padding: 0.4em 0.9em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--muted);
+}
+
+button.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+input,
+textarea {
+  padding: 0.5em 0.7em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+  margin: 0.5em 0;
+}
+
+.empty {
+  text-align: center;
+  padding: 2em;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.05em 0.5em;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+.picker {
+  max-width: 520px;
+  margin: 10vh auto;
+  padding: 0 1em;
+}
+
+.picker-create {
+  display: flex;
+  gap: 0.5em;
+}
+
+.picker-create input {
+  flex: 1;
+}
+
+.picker-list {
+  margin-top: 1.5em;
+  display: grid;
+  gap: 0.4em;
+}
+
+.picker-list button {
+  width: 100%;
+  text-align: left;
+}
+
+.project {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  padding: 1em;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+  overflow-y: auto;
+}
+
+.sidebar h2 {
+  margin: 0;
+  font-size: 1.1em;
+}
+
+.conversation-list {
+  display: grid;
+  gap: 0.3em;
+}
+
+.conversation-list button {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  border-color: transparent;
+}
+
+.conversation-list button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.conversation-list .muted {
+  font-size: 0.8em;
+}
+
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat.empty {
+  justify-content: center;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1em 1.5em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8em;
+}
+
+.message {
+  max-width: 760px;
+  padding: 0.7em 0.9em;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.message.user {
+  align-self: flex-end;
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.message header {
+  display: flex;
+  gap: 0.6em;
+  align-items: baseline;
+  font-size: 0.85em;
+}
+
+.message .content {
+  margin: 0.3em 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  color: var(--muted);
+}
+
+.status.failed {
+  color: var(--danger);
+}
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  margin: 0.3em 0;
+}
+
+.reactions {
+  display: flex;
+  gap: 0.3em;
+  align-items: center;
+}
+
+.reaction {
+  padding: 0 0.4em;
+  font-size: 0.85em;
+}
+
+.reaction.mine {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.reactions .quick {
+  display: flex;
+  gap: 0.3em;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.message:hover .quick,
+.reactions .quick:focus-within {
+  opacity: 1;
+}
+
+.composer {
+  position: relative;
+  padding: 0.8em 1.5em 1em;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.composer-row {
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-end;
+}
+
+.composer textarea {
+  flex: 1;
+  resize: vertical;
+  min-height: 2.6em;
+}
+
+.suggestions {
+  position: absolute;
+  bottom: 100%;
+  left: 1.5em;
+  min-width: 240px;
+  padding: 0.3em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+}
+
+.suggestions button {
+  width: 100%;
+  text-align: left;
+  border: none;
 }
