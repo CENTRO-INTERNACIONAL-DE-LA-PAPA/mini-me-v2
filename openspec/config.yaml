@@ -1,0 +1,109 @@
+schema: spec-driven
+
+context: |
+  Mini-Me is a local-first desktop research tool for scientists at the International
+  Potato Center (CIP). It runs on Windows, macOS and Linux. All artifacts are written in English.
+
+  Glossary (use these terms exactly; do not use "agent" for user-facing concepts):
+  - Project: the top-level unit. Owns Conversations, Assets and a Project Overview.
+  - Project Overview: a read-only view of the project's progress, built from what its
+    Conversations produced (files, Interactive Components, experiments, discussion summaries).
+  - Conversation: a chat inside a Project where the user invokes Mini-Mes.
+  - Mini-Me: a user-buildable "little scientist", defined by its Traits and its Workflow.
+    Built in a visual editor; some are predefined. Mini-Mes are the only thing a user can
+    invoke (@-mention) or that the router can pick. A single-Trait job is a Mini-Me whose
+    Workflow has one Step.
+  - Trait: what a Mini-Me can do. The smallest unit: one AI capability focused on one task
+    (two at most), with instructions, a model choice and a set of tools. Traits carry no
+    ordering. They live in a shared library: built-in or user-made, duplicable and editable;
+    Mini-Mes reference Traits from that library, so editing a Trait affects every Mini-Me
+    that uses it. "Skill" is reserved for LLM/Asta skill files and must not be used for Traits.
+  - Workflow: how a Mini-Me uses its Traits. Each Mini-Me has exactly one Workflow: a graph
+    of Steps that may include conditions, loops, parallel branches and human approvals.
+  - Step: a node in a Workflow. A Trait Step runs a Trait (the same Trait may appear in
+    several Steps); a control Step is an approval, condition, loop or parallel split/join.
+    A Mini-Me's Traits are the Traits referenced by its Trait Steps.
+  - Text Component: an inline reference inside a message (@Mini-Me, #asset, #interactive
+    component, #selection within an interactive component). Shown as a chip in the UI and
+    carried as a typed ID reference; when a message reaches a Trait, the backend resolves each
+    reference so the Trait can access the referenced content.
+  - Interactive Component: a rich, interactive element attached to an AI message (table,
+    chart, diagram, ...). Each kind is a fixed, hand-coded type in a catalogue with a
+    versioned spec. Traits emit data/specs for these; they never generate UI code.
+  - Asset: any file in a Project, uploaded or generated, addressed by a stable ID.
+
+  Architecture invariants:
+  - Three processes: React UI (Tauri webview) <-> Rust core <-> Python sidecar.
+  - The Rust core is the source of truth: persistence, filesystem access, permissions,
+    secrets, and the event log. The Python sidecar only executes Traits and Mini-Mes and
+    holds no durable state of its own.
+  - One event protocol everywhere: every interaction (message created/streamed/updated,
+    attachments, Interactive Components, reactions, status, approvals, cancellation) is a
+    typed event in a shared envelope. Rust persists events before forwarding them.
+    The protocol is transport-agnostic; each side reaches it through a thin transport layer.
+    UI <-> Rust uses Tauri IPC (commands + channels). Rust <-> sidecar uses newline-delimited
+    JSON over the sidecar's stdin/stdout; the sidecar reserves the original stdout for the
+    protocol and redirects all other output (including native libraries) to stderr.
+  - Collaboration-ready envelope: event, message and asset IDs are UUIDv7; every event
+    records its origin (installation and user); per-conversation ordering is a sequence
+    number assigned locally today and designed so a server can assign it later. Future
+    collaboration adds a relay server that Rust cores connect to over WebSocket; the UI
+    keeps talking only to its local Rust core, and Mini-Mes still run on the invoking
+    user's machine.
+  - One Trait interface: every Trait, regardless of provider (LangGraph, Asta, others), is an
+    adapter implementing the same run contract (context + input -> stream of protocol
+    events). Adding a provider must not require changes to Rust or the UI.
+  - Workflows are stored as data and compiled to LangGraph at run time. LangGraph is a
+    library inside our sidecar, never the backend or the protocol; LangGraph types and
+    concepts stay internal to the sidecar and must not appear in the protocol or the UI.
+  - Routing: if the user does not @-mention a Mini-Me, Typesafe's Jev picks one. Below a
+    configurable confidence threshold, the app asks the user to choose a Mini-Me.
+  - The sidecar's Python runtime and dependencies are pinned and shipped with the app; the
+    app refuses to run against a mismatched sidecar version. No WSL, Docker or other
+    system-level prerequisites.
+  - Asta (allenai/asta-plugins) is vendored as a Python package in the sidecar and called as
+    a library. Anything requiring Linux-only tooling is out of scope.
+
+  Storage:
+  - All data lives under a "Mini-Me Data" folder; one folder per Project containing a single
+    project.sqlite (conversations, messages, events, references, Overview data) and an assets
+    folder.
+  - Every Trait run is confined to its Project folder. No Trait may read, write or execute
+    anything outside it.
+
+  Credentials and cost:
+  - Users bring their own LLM provider key and choose provider and model. Users log in with
+    their own Ai2 account for Asta. The Typesafe key is a manually configured app setting.
+  - Secrets live in the OS keychain and are sent to the sidecar per run; 
+    never written to project folders, logs or events.
+  - The app must tell the user before any action that incurs an additional cost (beyond
+    their normal LLM usage) and must not proceed without explicit confirmation.
+
+  Not in scope yet (design so it can be added later, but do not build):
+  - Code execution (Python/R) by Traits, and the OS-level sandbox it requires.
+  - Collaboration between Mini-Me instances; Microsoft SSO identities.
+  - Dataverse upload.
+
+rules:
+  proposal:
+    - Name the capabilities affected, using the glossary terms.
+    - State explicitly what is out of scope for the change.
+    - Flag any new external service, credential, or cost to the user.
+  specs:
+    - Use the glossary terms exactly; never "agent" for user-facing concepts, and never
+      "Workflow" or "Step" for anything other than a Mini-Me's Workflow and its Steps.
+    - Name Traits as imperative verbs in Title Case ("Summarize", "Refute", "Theorize"); add
+      an object only when the verb alone is ambiguous ("Find Papers", "Clean Data"). Never
+      use agent nouns ("Summarizer"). A name that needs "and" describes two Traits.
+    - When a requirement adds or changes protocol events, list each event's type and payload.
+    - When a requirement touches the filesystem, state how Project-folder confinement holds.
+  design:
+    - Say which process (UI, Rust core, sidecar) owns each responsibility, and keep durable
+      state in the Rust core.
+    - Justify any new dependency and confirm it works on Windows, macOS and Linux without
+      system-level prerequisites.
+    - Keep Trait-provider specifics behind the Trait adapter interface.
+  tasks:
+    - Include minimal tests only - Rust unit tests and frontend tests for core logic - until
+      the overall architecture is confirmed as stable.
+    - Each task is a small, independently verifiable unit of work.
