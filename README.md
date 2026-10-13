@@ -63,9 +63,7 @@ are verbs, so a Workflow reads like a research protocol.
 
 \* Running code (Python and R) is planned, but it isn't part of the first version.
 
-Some Traits use [Asta](https://github.com/allenai/asta-plugins) (Ai2) tools, such as paper
-search, Paper Finder and Theorizer. Asta's AutoDiscovery isn't planned for the first
-version, because it depends on Linux-only tooling.
+Some Traits use [Asta](https://github.com/allenai/asta-plugins) (Ai2) tools, such as Paper Finder and Theorizer.
 
 ## How it works
 
@@ -125,7 +123,50 @@ Specifications and planned changes live in [`openspec/`](openspec/). The project
 glossary, architecture rules and conventions are in
 [`openspec/config.yaml`](openspec/config.yaml).
 
----
+## Acknowledgements
+
+**Mini-Me** is developed by and for the
+[International Potato Center (CIP)](https://cipotato.org).
+
+### Asta
+
+Several Traits, including *Find Papers* and *Theorize*, are powered by
+[Asta](https://allenai.org/asta), the scientific research agent suite from the
+[Allen Institute for AI (Ai2)](https://allenai.org/). Mini-Me uses Asta through
+[allenai/asta-plugins](https://github.com/allenai/asta-plugins), which is licensed under
+Apache 2.0.
+
+If your research uses output produced with Asta, please cite:
+
+> Bragg, J., D'Arcy, M., Balepur, N., Bareket, D., Dalvi, B., et al. (2026).
+> *AstaBench: Rigorous Benchmarking of AI Agents with a Scientific Research Suite.*
+> International Conference on Learning Representations (ICLR 2026).
+> [arXiv:2510.21652](https://arxiv.org/abs/2510.21652)
+
+<details>
+<summary>BibTeX</summary>
+
+```bibtex
+@inproceedings{bragg2026astabench,
+  title         = {AstaBench: Rigorous Benchmarking of AI Agents with a Scientific Research Suite},
+  author        = {Bragg, Jonathan and D'Arcy, Mike and Balepur, Nishant and Bareket, Dan and Dalvi, Bhavana and others},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2026},
+  eprint        = {2510.21652},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.AI},
+  doi           = {10.48550/arXiv.2510.21652}
+}
+```
+
+</details>
+
+### Built with
+
+[Tauri](https://tauri.app), [React](https://react.dev), [LangGraph](https://www.langchain.com/langgraph)
+and [Typesafe Jev](https://docs.typesafe.ai) for routing.
+
+### Use of generative AI
 
 Parts of this project's planning and documentation were prepared with the help of
-generative AI.
+generative AI. AI-assisted content is reviewed before it is relied on.
