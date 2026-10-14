@@ -112,7 +112,7 @@ build needs it to verify updates.
 `.github/workflows/release.yml` runs on `push` of tags matching `v*.*.*` and has two jobs.
 
 - `draft` (Ubuntu): runs the version check (D9), then creates the draft release
-  "Mini-Me <version>" with `gh release create --draft` and passes its ID on. Creating the
+  "Mini-Me <version>" through the GitHub API and passes its ID on. Creating the
   draft once, before the builds, keeps the two build jobs from each creating their own.
 - `build`: a matrix of `windows-latest` (`--bundles nsis`) and `macos-latest` (Apple
   silicon, `--bundles app,dmg`). Steps: checkout; Node with npm cache; the stable Rust

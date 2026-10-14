@@ -22,10 +22,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
-            --title "Mini-Me ${GITHUB_REF_NAME#v}" --notes ""
-          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
-            --jq ".[] | select(.tag_name == \"$GITHUB_REF_NAME\") | .id")
+          id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+            -f tag_name="$GITHUB_REF_NAME" -f name="Mini-Me ${GITHUB_REF_NAME#v}" \
+            -F draft=true --jq .id)
+          test -n "$id"
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
 
   build:
