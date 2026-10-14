@@ -31,10 +31,11 @@ it.
 
 ## 6. First releases
 
-- [ ] 6.1 Push the tag `v0.1.0`; verify both jobs pass and the draft release has the Windows installer, the macOS app and a `latest.json` listing `windows-x86_64` and `darwin-aarch64` with signatures; then publish it
-- [ ] 6.2 Install `v0.1.0` from the release on macOS; verify it opens as "Mini-Me", the sidecar reaches `ready`, and *Echo* answers
+- [x] 6.1 Push the tag `v0.1.0`; verify both jobs pass and the draft release has the Windows installer, the macOS app and a `latest.json` listing `windows-x86_64` and `darwin-aarch64` with signatures; then publish it
+- [x] 6.2 Install `v0.1.0` from the release on macOS; verify it opens as "Mini-Me", the sidecar reaches `ready`, and *Echo* answers
 - [ ] 6.3 Install `v0.1.0` on a CIP Windows machine without administrator rights; verify the install folder is `%LOCALAPPDATA%\Mini-Me`, `sidecar\python\python.exe` is there, the sidecar reaches `ready` and *Echo* answers. Record OfficeScan's behaviour and the `python.exe` path for IT in the README
-- [ ] 6.4 Bump to `0.1.1`, release it, leave the draft unpublished, and confirm the installed apps report no update; then publish it and confirm both installs show the download progress and offer a restart. On Windows choose "Restart"; on macOS close the app instead. Verify both then open as 0.1.1 with their Projects unchanged
+- [ ] 6.4 Bump to `0.1.1`, release it, and check the draft has only the Windows installer, its `.sig` and a `latest.json` listing `windows-x86_64`. Leave it unpublished and confirm the Windows install reports no update; then publish it, confirm the download progress shows and "Restart" opens 0.1.1 with its Projects unchanged
+- [ ] 6.5 With the next release after `0.1.1`, let the Windows install download it and close Mini-Me instead of restarting; verify the next launch is the new version
 
 ## Workflow follow-up
 

@@ -114,8 +114,8 @@ build needs it to verify updates.
 - `draft` (Ubuntu): runs the version check (D9), then creates the draft release
   "Mini-Me <version>" through the GitHub API and passes its ID on. Creating the
   draft once, before the builds, keeps the two build jobs from each creating their own.
-- `build`: a matrix of `windows-latest` (`--bundles nsis`) and `macos-latest` (Apple
-  silicon, `--bundles app,dmg`). Steps: checkout; Node with npm cache; the stable Rust
+- `build`: `windows-latest` with `--bundles nsis`, kept as a one-entry matrix so another
+  platform is one more entry. Steps: checkout; Node with npm cache; the stable Rust
   toolchain with cache; `astral-sh/setup-uv`; `npm ci`; `tauri-apps/tauri-action` (v1) with
   that `releaseId`, `uploadUpdaterJson: true` and `updaterJsonPreferNsis: true`. The signing
   key and its password come from the `TAURI_SIGNING_PRIVATE_KEY` and
@@ -179,6 +179,8 @@ crashes first, the next launch downloads it again.
   release config's two entries.
 - [An update installs on close while a reply is streaming] → that reply is marked
   `interrupted` on the next open, as for any close today.
+- [Local macOS builds find no macOS entry in `latest.json`] → the check fails quietly and
+  is logged, as when offline; the maintainer rebuilds locally to update.
 - [Unsigned macOS app] → used only by the maintainer, who opens it once through System
   Settings → Privacy & Security → Open Anyway. Updates downloaded by the app itself carry
   no quarantine flag.
@@ -187,8 +189,8 @@ crashes first, the next launch downloads it again.
 
 1. Release `v0.1.0` (the current version) from CI. Install it on macOS and on a CIP Windows
    machine.
-2. Release `v0.1.1` with no functional change. Publish it and confirm both installs update
-   themselves.
+2. Release `v0.1.1` with no functional change, from the Windows-only workflow. Publish it
+   and confirm the Windows install updates itself.
 3. Rollback: delete or unpublish a bad release on GitHub, and installed apps stop being
    offered it. Apps that already updated are fixed by a newer release; there is no
    downgrade.

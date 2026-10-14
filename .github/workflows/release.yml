@@ -1,5 +1,6 @@
-# Builds the installers for a version tag and uploads them, with the signed update files and
-# latest.json, to a draft GitHub Release. Installed apps see the release once it is published.
+# Builds the Windows installer for a version tag and uploads it, with its signed update file
+# and latest.json, to a draft GitHub Release. Installed apps see the release once it is
+# published.
 name: Release
 
 on:
@@ -36,8 +37,6 @@ jobs:
         include:
           - runner: windows-latest
             bundles: nsis
-          - runner: macos-latest # Apple silicon
-            bundles: app,dmg
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

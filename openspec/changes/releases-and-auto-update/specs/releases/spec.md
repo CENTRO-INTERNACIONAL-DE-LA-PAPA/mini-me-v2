@@ -14,8 +14,7 @@ and logs keep their locations.
 
 #### Scenario: Installed app name
 - **WHEN** a user installs a release
-- **THEN** the app appears as "Mini-Me" in the Start menu (Windows) or the Applications
-  folder (macOS)
+- **THEN** the app appears as "Mini-Me" in the Start menu
 
 ### Requirement: Releases are built from version tags
 Pushing a tag of the form `v<major>.<minor>.<patch>` SHALL build the release installers on
@@ -25,8 +24,8 @@ tag.
 
 #### Scenario: Tag pushed
 - **WHEN** the maintainer pushes the tag `v0.2.0`
-- **THEN** a draft release "Mini-Me 0.2.0" appears on GitHub with the Windows installer,
-  the macOS app and the update files
+- **THEN** a draft release "Mini-Me 0.2.0" appears on GitHub with the Windows installer
+  and its update files
 
 ### Requirement: Tag matches the app version
 The release build SHALL fail, publishing nothing, when the tag's version differs from the
@@ -47,8 +46,8 @@ after the maintainer publishes it on GitHub.
 
 ### Requirement: Platforms
 Each release SHALL contain a Windows installer that installs for the current user only,
-without administrator rights, and a macOS app for Apple silicon. Releases SHALL NOT
-contain Linux or Intel macOS builds.
+without administrator rights. Releases SHALL NOT contain macOS or Linux builds; a macOS
+app is built locally with `npm run tauri:release` and is not updated automatically.
 
 #### Scenario: Windows install without administrator rights
 - **WHEN** a CIP user without administrator rights runs the Windows installer
@@ -72,9 +71,8 @@ fail, without creating a draft release, when the signing key is not available.
 - **THEN** it fails and no draft release is created
 
 ### Requirement: Installers are not code-signed
-Installers SHALL NOT be code-signed or notarized. The README SHALL explain the warnings
-Windows SmartScreen and macOS Gatekeeper show for an unsigned app, and how to open Mini-Me
-anyway.
+Installers SHALL NOT be code-signed or notarized. The README SHALL explain the warning
+Windows SmartScreen shows for an unsigned app, and how to run Mini-Me anyway.
 
 #### Scenario: First launch on Windows
 - **WHEN** a user runs the installer and SmartScreen warns about an unrecognized app

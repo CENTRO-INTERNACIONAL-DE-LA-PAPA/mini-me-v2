@@ -14,9 +14,9 @@ has to get past CIP's antivirus (OfficeScan), and IT has to allowlist it by its 
   installer and the install folder. The identifier stays `org.cipotato.mini-me`, so app data,
   settings and logs stay where they are.
 - **Release builds in GitHub Actions:** pushing a version tag (`v0.2.0`) builds a Windows
-  per-user installer and a macOS (Apple silicon) app with the bundled sidecar. It then
-  creates a **draft** GitHub Release with the installers and signed update files. Installed
-  apps see a release only once the maintainer publishes the draft.
+  per-user installer with the bundled sidecar. It then creates a **draft** GitHub Release
+  with the installer and its signed update file. Installed apps see a release only once the
+  maintainer publishes the draft.
 - **Version check:** the build fails if the tag does not match the app's version in its
   configuration files.
 - **Update signing:** a new key pair signs the update files. The private key is a GitHub
@@ -28,7 +28,7 @@ has to get past CIP's antivirus (OfficeScan), and IT has to allowlist it by its 
   with its progress in percent, then offers a restart to finish. An update the user does not
   restart for is installed when the app closes.
 - **No code signing:** installers stay unsigned. The README explains the Windows SmartScreen
-  and macOS Gatekeeper prompts and how to get past them.
+  prompt and how to get past it.
 - **First Windows install check** on a CIP machine: OfficeScan's behaviour and the bundled
   `python.exe` path for the IT allowlist, recorded in the README. This check was moved here
   from the sidecar runtime change.
@@ -68,7 +68,8 @@ for an update is an app exit, so that requirement covers it too.
 ## Out of scope
 
 - Code signing or notarization of the installers.
-- Linux builds, Intel macOS builds and the Microsoft Store.
+- macOS and Linux release builds, and the Microsoft Store. The maintainer builds a macOS
+  app locally with `npm run tauri:release`; it does not update itself.
 - Update channels (beta and stable), staged rollouts, and rolling back to an earlier
   version from inside the app.
 - Release notes shown in the app beyond the version number.

@@ -104,17 +104,14 @@ Each Trait can only access the folder of the Project it runs in.
 Download the installer from the latest
 [release](https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2/releases/latest):
 
-- **Windows:** `Mini-Me_<version>_x64-setup.exe`. It installs for your user only, into
-  `%LOCALAPPDATA%\Mini-Me`, and needs no administrator rights.
-- **macOS (Apple silicon):** `Mini-Me_<version>_aarch64.dmg`. Drag Mini-Me into Applications.
+`Mini-Me_<version>_x64-setup.exe` installs Mini-Me for your Windows user only, into
+`%LOCALAPPDATA%\Mini-Me`, and needs no administrator rights.
 
-The installers are not code-signed, so the first launch shows a warning:
+The installer is not code-signed, so Windows SmartScreen warns "Windows protected your PC"
+the first time: click **More info**, then **Run anyway**.
 
-- **Windows SmartScreen** ("Windows protected your PC"): click **More info**, then
-  **Run anyway**.
-- **macOS Gatekeeper** ("Mini-Me cannot be opened" or "Apple could not verify"): open
-  **System Settings → Privacy & Security**, scroll to the message about Mini-Me and click
-  **Open Anyway**.
+Releases are built for Windows only. On macOS, build the app yourself with
+`npm run tauri:release` (see Development); it does not update itself.
 
 Mini-Me updates itself. When a new version is published it downloads it in the background,
 shows the progress in the sidebar, and offers **Restart**. If you close Mini-Me instead,
@@ -164,8 +161,8 @@ version tag.
    `src-tauri/Cargo.toml`, then run `npm run check-version`.
 2. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 3. Wait for the workflow to finish. It creates a **draft** release with the Windows
-   installer, the macOS app and `latest.json`.
-4. Try the installers from the draft, then click **Publish release**. Installed apps only
+   installer, its `.sig` and `latest.json`.
+4. Try the installer from the draft, then click **Publish release**. Installed apps only
    see published releases.
 
 The update files are signed with the key in the `TAURI_SIGNING_PRIVATE_KEY` repository
