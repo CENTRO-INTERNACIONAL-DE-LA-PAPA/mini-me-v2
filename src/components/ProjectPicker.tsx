@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, errorMessage } from "../api";
 import type { ProjectSummary } from "../protocol/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface Props {
   onOpen: (project: ProjectSummary) => void;
@@ -35,10 +37,10 @@ export function ProjectPicker({ onOpen }: Props) {
   }
 
   return (
-    <main className="picker">
-      <h1>Mini-Me</h1>
-      <form className="picker-create" onSubmit={create}>
-        <input
+    <main className="mx-auto mt-[10vh] max-w-lg px-4">
+      <h1 className="mb-6 text-3xl font-semibold">Mini-Me</h1>
+      <form className="flex gap-2" onSubmit={create}>
+        <Input
           value={name}
           onChange={(e) => {
             setName(e.target.value);
@@ -48,16 +50,18 @@ export function ProjectPicker({ onOpen }: Props) {
           maxLength={200}
           autoFocus
         />
-        <button type="submit">Create Project</button>
+        <Button type="submit">Create Project</Button>
       </form>
-      {error && <p className="error">{error}</p>}
-      <ul className="picker-list">
+      {error && <p className="my-2 text-sm text-destructive">{error}</p>}
+      <ul className="mt-6 grid gap-1.5">
         {projects.map((project) => (
           <li key={project.id}>
-            <button onClick={() => open(project)}>{project.name}</button>
+            <Button variant="outline" className="w-full justify-start" onClick={() => open(project)}>
+              {project.name}
+            </Button>
           </li>
         ))}
-        {projects.length === 0 && <li className="muted">No Projects yet.</li>}
+        {projects.length === 0 && <li className="text-sm text-muted-foreground">No Projects yet.</li>}
       </ul>
     </main>
   );

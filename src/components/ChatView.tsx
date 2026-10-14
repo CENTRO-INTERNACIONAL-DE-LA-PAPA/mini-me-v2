@@ -3,6 +3,7 @@ import { api, errorMessage } from "../api";
 import { ConversationStore } from "../protocol/eventStore";
 import { Composer } from "./Composer";
 import { MessageItem } from "./MessageItem";
+import { Separator } from "@/components/ui/separator";
 
 interface Props {
   projectId: string;
@@ -42,15 +43,18 @@ export function ChatView({ projectId, conversationId, onActivity }: Props) {
   }, [state]);
 
   return (
-    <section className="chat">
-      <div className="messages">
+    <section className="flex min-w-0 flex-1 flex-col">
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-6 py-4">
         {state.messages.map((message) => (
           <MessageItem key={message.id} projectId={projectId} message={message} />
         ))}
-        {state.messages.length === 0 && <p className="muted empty">No messages yet.</p>}
+        {state.messages.length === 0 && (
+          <p className="p-8 text-center text-sm text-muted-foreground">No messages yet.</p>
+        )}
         <div ref={bottom} />
       </div>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="px-6 py-2 text-sm text-destructive">{error}</p>}
+      <Separator />
       <Composer
         projectId={projectId}
         conversationId={conversationId}

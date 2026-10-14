@@ -3,6 +3,10 @@ import { api, errorMessage } from "../api";
 import type { MessageView } from "../protocol/eventStore";
 import { segments } from "../protocol/references";
 import { formatSize } from "./format";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 const QUICK_REACTIONS = ["👍", "❤️", "🎉", "🤔", "👎"];
 
@@ -61,57 +65,75 @@ export function MessageItem({ projectId, message }: Props) {
   }
 
   const status = STATUS_LABEL[message.status];
+  const fromUser = message.author.kind === "user";
 
   return (
-    <article className={`message ${message.author.kind}`}>
-      <header>
+    <Card
+      size="sm"
+      className={cn(
+        "group/message max-w-3xl gap-2 px-4 py-3",
+        fromUser && "self-end bg-accent text-accent-foreground ring-0",
+      )}
+    >
+      <header className="flex items-baseline gap-2 text-xs">
         <strong>{authorName(message)}</strong>
-        {status && <span className={`status ${message.status}`}>{status}</span>}
+        {status && (
+          <span className={message.status === "failed" ? "text-destructive" : "text-muted-foreground"}>
+            {status}
+          </span>
+        )}
       </header>
-      <p className="content">
+      <p className="whitespace-pre-wrap wrap-anywhere">
         {segments(message.content, message.text_components).map((segment, index) =>
           segment.component ? (
-            <button
+            <Badge
               key={index}
-              className="chip"
+              variant="secondary"
               title="Open file"
-              onClick={() => open(segment.component!.id)}
+              className="cursor-pointer align-baseline"
+              render={<button onClick={() => open(segment.component!.id)} />}
             >
               {segment.text}
-            </button>
+            </Badge>
           ) : (
             <span key={index}>{segment.text}</span>
           ),
         )}
       </p>
       {message.attachments.length > 0 && (
-        <div className="attachments">
+        <div className="flex flex-wrap gap-1.5">
           {message.attachments.map((asset) => (
-            <button key={asset.id} className="chip" onClick={() => open(asset.id)}>
+            <Badge
+              key={asset.id}
+              variant="secondary"
+              className="cursor-pointer"
+              render={<button onClick={() => open(asset.id)} />}
+            >
               {asset.name} · {formatSize(asset.size_bytes)}
-            </button>
+            </Badge>
           ))}
         </div>
       )}
-      <footer className="reactions">
+      <footer className="flex items-center gap-1">
         {[...counts].map(([emoji, count]) => (
-          <button
+          <Button
             key={emoji}
-            className={mine(emoji) ? "reaction mine" : "reaction"}
+            size="xs"
+            variant={mine(emoji) ? "secondary" : "outline"}
             onClick={() => toggle(emoji)}
           >
             {emoji} {count}
-          </button>
+          </Button>
         ))}
-        <span className="quick">
+        <span className="flex gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100">
           {QUICK_REACTIONS.filter((emoji) => !counts.has(emoji)).map((emoji) => (
-            <button key={emoji} className="reaction" onClick={() => toggle(emoji)}>
+            <Button key={emoji} size="xs" variant="ghost" onClick={() => toggle(emoji)}>
               {emoji}
-            </button>
+            </Button>
           ))}
         </span>
       </footer>
-      {error && <p className="error">{error}</p>}
-    </article>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </Card>
   );
 }

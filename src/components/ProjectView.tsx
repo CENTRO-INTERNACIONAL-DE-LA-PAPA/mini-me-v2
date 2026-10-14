@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
 import type { ConversationSummary, ProjectSummary } from "../protocol/types";
 import { ChatView } from "./ChatView";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
 interface Props {
   project: ProjectSummary;
@@ -36,30 +39,37 @@ export function ProjectView({ project, onClose }: Props) {
   }
 
   return (
-    <div className="project">
-      <aside className="sidebar">
-        <button className="link" onClick={onClose}>
+    <div className="flex h-screen">
+      <aside className="flex w-64 shrink-0 flex-col gap-3 overflow-y-auto bg-card p-4">
+        <Button variant="link" className="h-auto justify-start p-0 text-muted-foreground" onClick={onClose}>
           ← Projects
-        </button>
-        <h2>{project.name}</h2>
-        <button onClick={create}>New conversation</button>
-        {error && <p className="error">{error}</p>}
-        <ul className="conversation-list">
+        </Button>
+        <h2 className="text-lg font-semibold">{project.name}</h2>
+        <Button variant="outline" onClick={create}>
+          New conversation
+        </Button>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <ul className="grid gap-1">
           {conversations.map((conversation) => (
             <li key={conversation.id}>
-              <button
-                className={conversation.id === selected ? "active" : undefined}
+              <Button
+                variant="ghost"
+                className={cn(
+                  "h-auto w-full flex-col items-start gap-0 py-1.5 whitespace-normal",
+                  conversation.id === selected && "bg-accent text-accent-foreground",
+                )}
                 onClick={() => setSelected(conversation.id)}
               >
                 {conversation.title}
-                <span className="muted">
+                <span className="text-xs font-normal text-muted-foreground">
                   {new Date(conversation.last_activity_at).toLocaleString()}
                 </span>
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
       </aside>
+      <Separator orientation="vertical" />
       {selected ? (
         <ChatView
           key={selected}
@@ -68,7 +78,9 @@ export function ProjectView({ project, onClose }: Props) {
           onActivity={refresh}
         />
       ) : (
-        <section className="chat empty muted">Select or create a conversation.</section>
+        <section className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          Select or create a conversation.
+        </section>
       )}
     </div>
   );

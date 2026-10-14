@@ -9,6 +9,9 @@ import {
 } from "../protocol/references";
 import type { AssetRef } from "../protocol/types";
 import { formatSize } from "./format";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Props {
   projectId: string;
@@ -124,43 +127,50 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
   }
 
   return (
-    <div className="composer">
+    <div className="relative bg-card px-6 pt-3 pb-4">
       {suggestions.length > 0 && (
-        <ul className="suggestions">
+        <ul className="absolute bottom-full left-6 grid min-w-60 gap-0.5 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
           {suggestions.map((asset) => (
             <li key={asset.id}>
-              <button onMouseDown={(e) => e.preventDefault()} onClick={() => pick(asset)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(asset)}
+              >
                 #{asset.name}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
       )}
       {attachments.length > 0 && (
-        <div className="attachments">
+        <div className="mb-2 flex flex-wrap gap-1.5">
           {attachments.map((asset) => (
-            <span key={asset.id} className="chip">
+            <Badge key={asset.id} variant="secondary">
               {asset.name} · {formatSize(asset.size_bytes)}
               <button
-                className="link"
+                className="cursor-pointer text-muted-foreground hover:text-foreground"
                 aria-label={`Remove ${asset.name}`}
                 onClick={() => setAttachments((current) => current.filter((a) => a.id !== asset.id))}
               >
                 ×
               </button>
-            </span>
+            </Badge>
           ))}
         </div>
       )}
-      {error && <p className="error">{error}</p>}
-      <div className="composer-row">
-        <button onClick={attach} title="Attach files">
+      {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
+      <div className="flex items-end gap-2">
+        <Button variant="outline" onClick={attach} title="Attach files">
           Attach
-        </button>
-        <textarea
+        </Button>
+        <Textarea
           ref={input}
           value={text}
           rows={2}
+          className="max-h-48 min-h-9 flex-1 resize-none"
           placeholder="Write a message. Type # to reference a file in this Project."
           onChange={(e) => edit(e.target.value, e.target.selectionStart)}
           onKeyDown={onKeyDown}
@@ -169,13 +179,13 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
           }
         />
         {replying ? (
-          <button className="danger" onClick={stop}>
+          <Button variant="destructive" onClick={stop}>
             Stop
-          </button>
+          </Button>
         ) : (
-          <button onClick={send} disabled={!text.trim()}>
+          <Button onClick={send} disabled={!text.trim()}>
             Send
-          </button>
+          </Button>
         )}
       </div>
     </div>
