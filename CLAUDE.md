@@ -38,10 +38,3 @@ Commit and PR messages carry no Claude co-author or attribution trailers.
 - Write and review comments with the `timeless-comments` skill.
 - Keep tests minimal (Rust unit tests and frontend tests for core logic) until the user
   says the architecture is stable.
-
-## Product decisions not written elsewhere
-
-- Mini-Me v1 (`CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-desktop`) is a reference only. Design
-  v2 on its own merits; mention v1 only to point out a concrete pitfall.
-- Mini-Mes may occasionally add a reaction to the user's message alongside their normal
-  reply, to feel more alive. A reaction never replaces a reply.

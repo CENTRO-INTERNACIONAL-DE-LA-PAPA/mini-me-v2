@@ -12,7 +12,8 @@ context: |
   - Mini-Me: a user-buildable "little scientist", defined by its Traits and its Workflow.
     Built in a visual editor; some are predefined. Mini-Mes are the only thing a user can
     invoke (@-mention) or that the router can pick. A single-Trait job is a Mini-Me whose
-    Workflow has one Step.
+    Workflow has one Step. A Mini-Me may occasionally add a reaction to the user's message
+    alongside its normal reply, to feel more alive; a reaction never replaces a reply.
   - Trait: what a Mini-Me can do. The smallest unit: one AI capability focused on one task
     (two at most), with instructions, a model choice and a set of tools. Traits carry no
     ordering. They live in a shared library: built-in or user-made, duplicable and editable;
@@ -63,6 +64,22 @@ context: |
     system-level prerequisites.
   - Asta (allenai/asta-plugins) is vendored as a Python package in the sidecar and called as
     a library. Anything requiring Linux-only tooling is out of scope.
+
+  UI stack:
+  - Styling: Tailwind CSS v4 with shadcn/ui components built on Base UI (not Radix); add new
+    components with the shadcn CLI so they match. shadcn/ui is a starting point only:
+    restyle every component (colours, typography, spacing, radius, shadows, focus states) so
+    the app has its own identity and never looks like default shadcn/ui.
+  - Charts and plots: d3, imported as individual modules (d3-scale, d3-shape, d3-array, ...).
+    d3 computes scales, shapes and layouts; React renders the SVG. d3 touches the DOM only
+    where it clearly pays off, such as zoom or brushing.
+  - Tables: TanStack Table (headless), styled with the same design tokens.
+  - All UI colours come from the shadcn theme tokens in src/index.css; no other palette.
+    Dark mode is the `.dark` class on the root element, which follows the OS setting.
+    Charts and tables take their colours from the same tokens.
+  - Fonts are bundled with the app, never loaded from a CDN, so the UI renders offline.
+  - The UI runs in WebView2 (Windows), WebKit (macOS) and WebKitGTK (Linux); styles must work
+    in all three.
 
   Storage:
   - All data lives under a "Mini-Me Data" folder; one folder per Project containing a single

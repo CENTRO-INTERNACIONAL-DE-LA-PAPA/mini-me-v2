@@ -189,8 +189,11 @@ If your research uses output produced with Asta, please cite:
 
 ### Built with
 
-[Tauri](https://tauri.app), [React](https://react.dev), [LangGraph](https://www.langchain.com/langgraph)
-and [Typesafe Jev](https://docs.typesafe.ai) for routing.
+[Tauri](https://tauri.app), [React](https://react.dev), [Tailwind CSS](https://tailwindcss.com),
+[shadcn/ui](https://ui.shadcn.com), [D3](https://d3js.org) for charts,
+[TanStack Table](https://tanstack.com/table) for tables,
+[LangGraph](https://www.langchain.com/langgraph) and [Typesafe Jev](https://docs.typesafe.ai)
+for routing.
 
 ### Use of generative AI
 

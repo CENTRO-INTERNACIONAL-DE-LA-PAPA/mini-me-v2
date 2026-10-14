@@ -1,30 +1,6 @@
 :root {
-  --bg: #f7f7f5;
-  --surface: #ffffff;
-  --border: #e2e2dd;
-  --text: #1d1d1b;
-  --muted: #73736d;
-  --accent: #2f6f4f;
-  --accent-soft: #e3efe8;
-  --danger: #b3372f;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 15px;
   line-height: 1.5;
-  color: var(--text);
-  background: var(--bg);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161716;
-    --surface: #1f201f;
-    --border: #333532;
-    --text: #ececea;
-    --muted: #9a9a94;
-    --accent: #7cc19c;
-    --accent-soft: #23362b;
-    --danger: #e0786f;
-  }
 }
 
 * {
@@ -33,7 +9,6 @@
 
 body {
   margin: 0;
-  background: var(--bg);
 }
 
 button,
@@ -48,11 +23,11 @@ button {
   padding: 0.4em 0.9em;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface);
+  background: var(--card);
 }
 
 button:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: var(--primary);
 }
 
 button:disabled {
@@ -64,12 +39,12 @@ button.link {
   border: none;
   background: none;
   padding: 0;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 
 button.danger {
-  color: var(--danger);
-  border-color: var(--danger);
+  color: var(--destructive);
+  border-color: var(--destructive);
 }
 
 input,
@@ -77,7 +52,7 @@ textarea {
   padding: 0.5em 0.7em;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface);
+  background: var(--card);
 }
 
 ul {
@@ -87,11 +62,11 @@ ul {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 
 .error {
-  color: var(--danger);
+  color: var(--destructive);
   margin: 0.5em 0;
 }
 
@@ -107,8 +82,8 @@ ul {
   padding: 0.05em 0.5em;
   border: none;
   border-radius: 6px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--primary);
   font-size: 0.92em;
 }
 
@@ -148,7 +123,7 @@ ul {
   flex-shrink: 0;
   padding: 1em;
   border-right: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--card);
   display: flex;
   flex-direction: column;
   gap: 0.7em;
@@ -174,8 +149,8 @@ ul {
 }
 
 .conversation-list button.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--primary);
+  background: var(--accent);
 }
 
 .conversation-list .muted {
@@ -206,13 +181,13 @@ ul {
   max-width: 760px;
   padding: 0.7em 0.9em;
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--card);
   border: 1px solid var(--border);
 }
 
 .message.user {
   align-self: flex-end;
-  background: var(--accent-soft);
+  background: var(--accent);
   border-color: transparent;
 }
 
@@ -230,11 +205,11 @@ ul {
 }
 
 .status {
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 
 .status.failed {
-  color: var(--danger);
+  color: var(--destructive);
 }
 
 .attachments {
@@ -256,8 +231,8 @@ ul {
 }
 
 .reaction.mine {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--primary);
+  background: var(--accent);
 }
 
 .reactions .quick {
@@ -276,7 +251,7 @@ ul {
   position: relative;
   padding: 0.8em 1.5em 1em;
   border-top: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--card);
 }
 
 .composer-row {
@@ -299,7 +274,7 @@ ul {
   padding: 0.3em;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface);
+  background: var(--card);
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
 }
 
