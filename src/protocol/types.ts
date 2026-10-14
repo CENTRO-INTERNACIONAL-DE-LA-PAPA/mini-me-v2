@@ -48,6 +48,12 @@ export interface ErrorInfo {
   message: string;
 }
 
+/** What a reply's producer is doing; `fraction` is from 0 to 1, or null when unknown. */
+export interface Progress {
+  label: string;
+  fraction: number | null;
+}
+
 interface Envelope {
   id: Uuid;
   v: number;
@@ -62,6 +68,7 @@ export type KnownEvent = Envelope &
   (
     | { type: "message.created"; payload: { message: Message } }
     | { type: "message.delta"; payload: { message_id: Uuid; text: string } }
+    | { type: "message.progress"; payload: { message_id: Uuid } & Progress }
     | { type: "message.completed"; payload: { message_id: Uuid; content: string } }
     | { type: "message.failed"; payload: { message_id: Uuid; error: ErrorInfo } }
     | { type: "message.cancelled"; payload: { message_id: Uuid } }
@@ -72,6 +79,16 @@ export type KnownEvent = Envelope &
 
 /** Any event on the wire, including types this version of the UI does not know. */
 export type ProtocolEvent = Envelope & { type: string; payload: unknown };
+
+export type SidecarState = "starting" | "ready" | "restarting" | "stopped" | "incompatible";
+
+export interface SidecarStatus {
+  state: SidecarState;
+  /** Human-readable explanation; set whenever `state` is not `ready`. */
+  detail: string | null;
+  protocol: number | null;
+  sidecar_version: string | null;
+}
 
 /** Error shape returned by every Rust command. */
 export interface AppError {

@@ -223,15 +223,44 @@ fn fail_locked(state: &mut ProjectState, message_id: Uuid, code: &str, message: 
     Ok(())
 }
 
-/// Stops the reply streaming in a Conversation, if any. The producer notices on its next
-/// update, which is rejected because the reply is no longer streaming.
-pub fn stop_reply(project: &Project, conversation_id: Uuid) -> AppResult<()> {
+pub fn append_progress(
+    project: &Project,
+    message_id: Uuid,
+    label: &str,
+    fraction: Option<f64>,
+) -> AppResult<()> {
+    let mut state = project.lock();
+    let conversation = streaming_reply(&state, message_id)?;
+    state.persist(
+        conversation,
+        EventKind::MessageProgress {
+            message_id,
+            label: label.to_string(),
+            fraction: fraction.map(|f| f.clamp(0.0, 1.0)),
+        },
+    )?;
+    Ok(())
+}
+
+/// Ends a streaming reply as cancelled; a reply that has already ended is left as it is.
+pub fn cancel_reply(project: &Project, message_id: Uuid) -> AppResult<()> {
+    let mut state = project.lock();
+    let conversation = streaming_reply(&state, message_id)?;
+    state.persist(conversation, EventKind::MessageCancelled { message_id })?;
+    Ok(())
+}
+
+/// Stops the reply streaming in a Conversation, if any, and returns the stopped replies'
+/// IDs. The producer's later updates are rejected because the reply is no longer streaming.
+pub fn stop_reply(project: &Project, conversation_id: Uuid) -> AppResult<Vec<Uuid>> {
     let mut state = project.lock();
     state.require_conversation(conversation_id)?;
+    let mut stopped = Vec::new();
     for (_, message_id) in state.streaming_messages(Some(conversation_id))? {
         state.persist(conversation_id, EventKind::MessageCancelled { message_id })?;
+        stopped.push(message_id);
     }
-    Ok(())
+    Ok(stopped)
 }
 
 /// Marks replies left streaming by a previous session as failed with code `interrupted`.

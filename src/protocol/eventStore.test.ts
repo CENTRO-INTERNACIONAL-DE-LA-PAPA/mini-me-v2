@@ -68,6 +68,30 @@ describe("applyEvent ordering", () => {
   });
 });
 
+describe("reply progress", () => {
+  const progressAt = events.findIndex((e) => e.type === "message.progress");
+
+  it("shows the latest progress while the reply streams", () => {
+    const state = replay(events.slice(0, progressAt + 1));
+    const reply = state.messages[state.messages.length - 1];
+    expect(reply.status).toBe("streaming");
+    expect(reply.progress).toEqual({ label: "Reading field-trial.csv", fraction: 0.5 });
+    expect(reply.content).toBe("");
+  });
+
+  it("clears progress once the reply ends", () => {
+    const state = replay(events);
+    expect(state.messages.every((m) => m.progress === null)).toBe(true);
+  });
+
+  it("ignores progress for a reply that has ended", () => {
+    const ended = replay(events);
+    const late = { ...events[progressAt], seq: ended.lastSeq + 1 };
+    const state = applyEvent(ended, late);
+    expect(state.messages.every((m) => m.progress === null)).toBe(true);
+  });
+});
+
 describe("forward compatibility", () => {
   it("skips unknown event types but records their sequence", () => {
     const unknown: ProtocolEvent = { ...events[0], type: "component.added", payload: {} };

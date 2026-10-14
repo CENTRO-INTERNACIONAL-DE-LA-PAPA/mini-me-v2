@@ -267,6 +267,8 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
                 params![message_id.to_string(), text],
             )?;
         }
+        // Progress is shown only while a reply streams, so it has no projection.
+        EventKind::MessageProgress { .. } => {}
         EventKind::MessageCompleted { message_id, content } => {
             tx.execute(
                 "UPDATE messages SET content = ?2, status = 'complete' WHERE id = ?1",

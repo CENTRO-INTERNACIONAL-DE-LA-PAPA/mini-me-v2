@@ -100,6 +100,12 @@ export function MessageItem({ projectId, message }: Props) {
           ),
         )}
       </p>
+      {message.status === "streaming" && message.progress && (
+        <p role="status" className="text-meta text-muted-foreground">
+          {message.progress.label}
+          {message.progress.fraction !== null && ` · ${Math.round(message.progress.fraction * 100)}%`}
+        </p>
+      )}
       {message.attachments.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {message.attachments.map((asset) => (

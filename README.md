@@ -111,19 +111,33 @@ folders or logs.
 
 ## Development
 
-Requirements: [Node.js](https://nodejs.org), [Rust](https://rustup.rs) and the
-[Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
+Requirements: [Node.js](https://nodejs.org), [Rust](https://rustup.rs), the
+[Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS, and
+[uv](https://docs.astral.sh/uv/) for the Python sidecar. Users of the installed app need none
+of these: release builds bundle their own Python.
 
 ```bash
 npm install
+cd sidecar && uv sync --frozen && cd ..   # once, and after the sidecar's dependencies change
 npm run tauri dev
+```
+
+In development the app starts the sidecar from `sidecar/` with `uv run`. Its log is
+`sidecar.log` in the app's log directory; set `MINI_ME_LOG_FRAMES=1` to also log every frame
+of the link (secrets are redacted).
+
+Release build, with the standalone Python and the sidecar bundled into the installer:
+
+```bash
+npm run tauri:release
 ```
 
 Tests:
 
 ```bash
-npm test                    # frontend (Vitest)
-cd src-tauri && cargo test  # Rust core
+npm test                                          # frontend (Vitest)
+cd src-tauri && cargo test                        # Rust core
+cd src-tauri && cargo test -- --include-ignored   # also the tests that start the real sidecar
 ```
 
 Specifications and planned changes live in [`openspec/`](openspec/). The project-wide
@@ -139,12 +153,17 @@ proposed, reviewed, implemented, verified and archived before the next one start
 |---|---|---|---|
 | 1 | Event protocol and project storage | Event envelope and delivery, Mini-Me Data and Project folders, Conversations, Assets, `#` references, reactions, minimal UI with a temporary echo responder | Done |
 | 2 | Sidecar runtime | Bundled Python (pinned with `uv`) started and supervised by the Rust core, JSON lines over stdin/stdout with a version handshake, the Trait interface, the echo responder moved into Python as the first Trait. No API keys or costs. | Next |
-| 3 | First real Trait | AI provider keys in the OS keychain, provider and model selection, one AI-backed Trait (for example *Summarize*), Mini-Me definitions with the shared Trait library and one-Step Workflows, optional Mini-Me reactions to your messages | Planned |
-| 4 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Planned |
-| 5 | First Interactive Component | A table whose cells, rows and columns can be selected and referenced | Planned |
-| 6 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |
-| 7 | Workflow editor | Visual editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel) | Planned |
-| 8 | Project Overview | The view of everything a Project has produced | Planned |
+| 3 | Releases and auto-update | GitHub Actions builds the installers on each version tag and publishes a GitHub Release with signed update files (the repository becomes public so installed apps can fetch them). Installed apps tell you an update exists, download it, then ask you to restart. Windows per-user installer for CIP scientists, macOS build for the maintainer's own use, no Linux for now. Installers are not code-signed: CIP IT allowlists the bundled `python.exe` by path, so the app name is settled first, and the first Windows install is checked on a CIP machine. | Planned |
+| 4 | First real Trait | AI provider keys in the OS keychain, a Settings screen with provider and model selection, one AI-backed Trait (for example *Summarize*), Mini-Me definitions with the shared Trait library and one-Step Workflows, `@`-mentions of Mini-Mes, optional Mini-Me reactions to your messages | Planned |
+| 5 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Planned |
+| 6 | First Interactive Component | A table whose cells, rows and columns can be selected and referenced | Planned |
+| 7 | Asta integration | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) vendored and pinned in the sidecar, signing in with your Ai2 account, and confirmation before any action with an extra cost | Planned |
+| 8 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |
+| 9 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel) | Planned |
+| 10 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
+| 11 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
+| 12 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Planned |
+| 13 | Project Overview | The view of everything a Project has produced | Planned |
 
 Later: code execution (Python and R) with OS-level sandboxing, collaboration through a relay
 server, Microsoft SSO, Dataverse upload.

@@ -1,4 +1,4 @@
-import type { Author, KnownEvent, Message, ProtocolEvent } from "./types";
+import type { Author, KnownEvent, Message, Progress, ProtocolEvent } from "./types";
 
 export interface Reaction {
   emoji: string;
@@ -7,6 +7,8 @@ export interface Reaction {
 
 export interface MessageView extends Message {
   reactions: Reaction[];
+  /** The latest progress of a streaming reply; null once it has ended. */
+  progress: Progress | null;
 }
 
 export interface ConversationState {
@@ -42,7 +44,10 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
 
   switch (known.type) {
     case "message.created":
-      return { ...next, messages: [...state.messages, { ...known.payload.message, reactions: [] }] };
+      return {
+        ...next,
+        messages: [...state.messages, { ...known.payload.message, reactions: [], progress: null }],
+      };
     case "message.delta": {
       const { message_id, text } = known.payload;
       return {
@@ -50,17 +55,35 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
         messages: updateMessage(state, message_id, (m) => ({ ...m, content: m.content + text })),
       };
     }
+    case "message.progress": {
+      const { message_id, label, fraction } = known.payload;
+      return {
+        ...next,
+        messages: updateMessage(state, message_id, (m) =>
+          m.status === "streaming" ? { ...m, progress: { label, fraction } } : m,
+        ),
+      };
+    }
     case "message.completed": {
       const { message_id, content } = known.payload;
       return {
         ...next,
-        messages: updateMessage(state, message_id, (m) => ({ ...m, content, status: "complete" })),
+        messages: updateMessage(state, message_id, (m) => ({
+          ...m,
+          content,
+          status: "complete",
+          progress: null,
+        })),
       };
     }
     case "message.failed":
       return {
         ...next,
-        messages: updateMessage(state, known.payload.message_id, (m) => ({ ...m, status: "failed" })),
+        messages: updateMessage(state, known.payload.message_id, (m) => ({
+          ...m,
+          status: "failed",
+          progress: null,
+        })),
       };
     case "message.cancelled":
       return {
@@ -68,6 +91,7 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
         messages: updateMessage(state, known.payload.message_id, (m) => ({
           ...m,
           status: "cancelled",
+          progress: null,
         })),
       };
     case "attachment.added": {

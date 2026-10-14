@@ -9,6 +9,7 @@ import {
 } from "../protocol/references";
 import type { AssetRef } from "../protocol/types";
 import { formatSize } from "./format";
+import { sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +29,8 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
   const [suggestions, setSuggestions] = useState<AssetRef[]>([]);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const sidecar = useSidecarStatus();
+  const ready = sidecarReady(sidecar);
 
   useEffect(() => {
     if (!query) {
@@ -83,7 +86,7 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
   }
 
   async function send() {
-    if (!text.trim() || replying) {
+    if (!text.trim() || replying || !ready) {
       return;
     }
     try {
@@ -162,6 +165,11 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
         </div>
       )}
       {error && <p className="mb-2 text-meta text-destructive">{error}</p>}
+      {!ready && sidecar && (
+        <p role="status" className="mb-2 text-meta text-muted-foreground">
+          {sidecar.detail}
+        </p>
+      )}
       <div className="flex items-end gap-2">
         <Button variant="outline" onClick={attach} title="Attach files">
           Attach
@@ -183,7 +191,7 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
             Stop
           </Button>
         ) : (
-          <Button onClick={send} disabled={!text.trim()}>
+          <Button onClick={send} disabled={!text.trim() || !ready}>
             Send
           </Button>
         )}

@@ -1,0 +1,92 @@
+{
+  "core_to_sidecar": [
+    { "type": "traits.list" },
+    { "type": "ping", "nonce": "17" },
+    { "type": "shutdown" },
+    {
+      "type": "call.start",
+      "call_id": "0199d0a0-0000-7000-8000-000000000301",
+      "trait_id": "echo",
+      "input": { "text": "Summarize #field-trial.csv" },
+      "context": {
+        "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+        "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+        "message": {
+          "id": "0199d0a0-0000-7000-8000-000000000101",
+          "author": { "kind": "user", "id": "0199d0a0-0000-7000-8000-0000000000e1" },
+          "content": "Summarize #field-trial.csv",
+          "status": "complete",
+          "reply_to": null,
+          "attachments": [],
+          "text_components": [
+            {
+              "kind": "asset",
+              "id": "0199d0a0-0000-7000-8000-000000000201",
+              "label": "#field-trial.csv",
+              "start": 10,
+              "end": 26
+            }
+          ]
+        }
+      }
+    },
+    { "type": "call.cancel", "call_id": "0199d0a0-0000-7000-8000-000000000301" },
+    {
+      "type": "core.response",
+      "request_id": "5f1c2b7e9a0d4c3b8e6f1a2b3c4d5e6f",
+      "result": { "data": "aGVsbG8=", "size_bytes": 5, "eof": true }
+    },
+    {
+      "type": "core.response",
+      "request_id": "6a2d3c8f0b1e4d5c9f7a2b3c4d5e6f70",
+      "error": { "code": "secret_not_allowed", "message": "This Trait cannot use the openai secret." }
+    }
+  ],
+  "sidecar_to_core": [
+    { "type": "hello", "protocol": 1, "sidecar_version": "0.1.0", "python_version": "3.14.0" },
+    {
+      "type": "traits",
+      "traits": [
+        {
+          "id": "echo",
+          "name": "Echo",
+          "description": "Streams your message back to you, one word at a time.",
+          "input_schema": {
+            "type": "object",
+            "properties": { "text": { "type": "string" } },
+            "required": ["text"]
+          },
+          "providers": []
+        }
+      ]
+    },
+    { "type": "pong", "nonce": "17" },
+    { "type": "call.delta", "call_id": "0199d0a0-0000-7000-8000-000000000301", "text": "Summarize " },
+    {
+      "type": "call.progress",
+      "call_id": "0199d0a0-0000-7000-8000-000000000301",
+      "label": "Reading field-trial.csv",
+      "fraction": 0.5
+    },
+    {
+      "type": "call.progress",
+      "call_id": "0199d0a0-0000-7000-8000-000000000301",
+      "label": "Thinking",
+      "fraction": null
+    },
+    { "type": "call.done", "call_id": "0199d0a0-0000-7000-8000-000000000301" },
+    {
+      "type": "call.error",
+      "call_id": "0199d0a0-0000-7000-8000-000000000301",
+      "error": { "code": "trait_error", "message": "This Trait always fails." }
+    },
+    { "type": "call.cancelled", "call_id": "0199d0a0-0000-7000-8000-000000000301" },
+    {
+      "type": "core.request",
+      "request_id": "5f1c2b7e9a0d4c3b8e6f1a2b3c4d5e6f",
+      "call_id": "0199d0a0-0000-7000-8000-000000000301",
+      "method": "asset.read",
+      "params": { "asset_id": "0199d0a0-0000-7000-8000-000000000201", "offset": 0, "length": 1048576 }
+    }
+  ]
+}

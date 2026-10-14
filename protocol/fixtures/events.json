@@ -244,11 +244,29 @@
   },
   {
     "id": "0199d0a0-0000-7000-8000-000000000012",
-    "type": "message.failed",
+    "type": "message.progress",
     "v": 1,
     "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
     "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
     "seq": 12,
+    "ts": 1760000001050,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message_id": "0199d0a0-0000-7000-8000-000000000105",
+      "label": "Reading field-trial.csv",
+      "fraction": 0.5
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000013",
+    "type": "message.failed",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 13,
     "ts": 1760000001100,
     "origin": {
       "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",

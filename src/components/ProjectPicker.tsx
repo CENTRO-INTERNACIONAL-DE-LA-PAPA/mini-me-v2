@@ -3,6 +3,7 @@ import { api, errorMessage } from "../api";
 import type { ProjectSummary } from "../protocol/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SidecarStatusLine, useSidecarStatus } from "./SidecarStatusLine";
 
 interface Props {
   onOpen: (project: ProjectSummary) => void;
@@ -12,6 +13,7 @@ export function ProjectPicker({ onOpen }: Props) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const sidecar = useSidecarStatus();
 
   useEffect(() => {
     api.listProjects().then(setProjects).catch((e) => setError(errorMessage(e)));
@@ -63,6 +65,9 @@ export function ProjectPicker({ onOpen }: Props) {
         ))}
         {projects.length === 0 && <li className="text-muted-foreground">No Projects yet.</li>}
       </ul>
+      <div className="mt-8">
+        <SidecarStatusLine status={sidecar} />
+      </div>
     </main>
   );
 }

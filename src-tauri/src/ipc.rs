@@ -12,18 +12,25 @@ use uuid::Uuid;
 
 use crate::assets;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
-use crate::echo;
 use crate::error::{AppError, AppResult};
 use crate::projects::{self, ProjectSummary};
 use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, now_ms};
+use crate::secrets::NoSecrets;
 use crate::settings::Settings;
+use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
+use crate::trait_calls::{CANCEL_TIMEOUT, TraitCalls};
+
+/// Until Mini-Mes exist, every user message is answered by this Trait.
+const REPLY_TRAIT: &str = "echo";
 
 pub struct AppState {
     config_dir: PathBuf,
     data_root: PathBuf,
     settings: Mutex<Settings>,
     open_projects: Mutex<HashMap<Uuid, Arc<Project>>>,
+    calls: Arc<TraitCalls>,
+    pub sidecar: Arc<Supervisor>,
 }
 
 impl AppState {
@@ -35,11 +42,28 @@ impl AppState {
         let documents = path
             .document_dir()
             .map_err(|e| AppError::storage(e.to_string()))?;
+        let log_dir = path
+            .app_log_dir()
+            .map_err(|e| AppError::storage(e.to_string()))?;
+        let launch = if cfg!(debug_assertions) {
+            Launch::dev()
+        } else {
+            let resources = path
+                .resource_dir()
+                .map_err(|e| AppError::storage(e.to_string()))?;
+            Launch::release(&resources)
+        };
+        let log = Arc::new(SidecarLog::new(&log_dir));
+        let calls = Arc::new(TraitCalls::new(Box::new(NoSecrets), Arc::clone(&log), CANCEL_TIMEOUT));
+        let sidecar = Supervisor::new(launch, false, Timing::for_build(), Arc::clone(&calls), log);
+        sidecar.spawn();
         Ok(Self {
             settings: Mutex::new(Settings::load_or_create(&config_dir)?),
             data_root: projects::ensure_data_root(&documents)?,
             config_dir,
             open_projects: Mutex::new(HashMap::new()),
+            calls,
+            sidecar,
         })
     }
 
@@ -138,10 +162,19 @@ pub async fn send_message(
     conversation_id: Uuid,
     input: SendMessageInput,
 ) -> AppResult<Message> {
+    if state.sidecar.status().state != SidecarState::Ready {
+        return Err(AppError::new(
+            "sidecar_unavailable",
+            "Mini-Me cannot answer yet. Wait until it is ready, then send your message.",
+        ));
+    }
     let project = state.project(project_id)?;
     let message =
         conversations::send_message(&project, conversation_id, input, state.settings().user_id)?;
-    echo::spawn(project, conversation_id, message.id, message.content.clone());
+    let input = serde_json::json!({ "text": message.content });
+    if let Err(err) = state.calls.start(project, conversation_id, &message, REPLY_TRAIT, input) {
+        eprintln!("could not start a reply: {err}");
+    }
     Ok(message)
 }
 
@@ -151,7 +184,33 @@ pub async fn stop_reply(
     project_id: Uuid,
     conversation_id: Uuid,
 ) -> AppResult<()> {
-    conversations::stop_reply(&*state.project(project_id)?, conversation_id)
+    let stopped = conversations::stop_reply(&*state.project(project_id)?, conversation_id)?;
+    for message_id in stopped {
+        state.calls.cancel_message(message_id);
+    }
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_sidecar_status(state: State<'_, AppState>) -> AppResult<SidecarStatus> {
+    Ok(state.sidecar.status())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn subscribe_sidecar_status(
+    state: State<'_, AppState>,
+    on_status: Channel<SidecarStatus>,
+) -> AppResult<()> {
+    state
+        .sidecar
+        .subscribe(Box::new(move |status| on_status.send(status.clone()).is_ok()));
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn restart_sidecar(state: State<'_, AppState>) -> AppResult<()> {
+    state.sidecar.restart();
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]

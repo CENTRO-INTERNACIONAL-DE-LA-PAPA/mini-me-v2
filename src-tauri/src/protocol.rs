@@ -45,6 +45,12 @@ pub enum EventKind {
     MessageCreated { message: Message },
     #[serde(rename = "message.delta")]
     MessageDelta { message_id: Uuid, text: String },
+    #[serde(rename = "message.progress")]
+    MessageProgress {
+        message_id: Uuid,
+        label: String,
+        fraction: Option<f64>,
+    },
     #[serde(rename = "message.completed")]
     MessageCompleted { message_id: Uuid, content: String },
     #[serde(rename = "message.failed")]
@@ -241,6 +247,7 @@ mod tests {
         for expected in [
             "message.created",
             "message.delta",
+            "message.progress",
             "message.completed",
             "message.failed",
             "message.cancelled",

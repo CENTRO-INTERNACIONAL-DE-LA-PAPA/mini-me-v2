@@ -7,6 +7,7 @@ import type {
   ProjectSummary,
   ProtocolEvent,
   SendMessageInput,
+  SidecarStatus,
   Uuid,
 } from "./protocol/types";
 
@@ -53,6 +54,16 @@ export const api = {
     invoke<AssetRef[]>("list_assets", { project_id, query }),
   openAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("open_asset", { project_id, asset_id }),
+
+  getSidecarStatus: () => invoke<SidecarStatus>("get_sidecar_status"),
+  /** Calls `onStatus` with the current sidecar status, then with every change. */
+  subscribeSidecarStatus: (onStatus: (status: SidecarStatus) => void) => {
+    const on_status = new Channel<SidecarStatus>();
+    on_status.onmessage = onStatus;
+    return invoke<void>("subscribe_sidecar_status", { on_status });
+  },
+  /** Starts the sidecar again after it stopped. */
+  restartSidecar: () => invoke<void>("restart_sidecar"),
 };
 
 export function errorMessage(error: unknown): string {

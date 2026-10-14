@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
 import type { ConversationSummary, ProjectSummary } from "../protocol/types";
 import { ChatView } from "./ChatView";
+import { SidecarStatusLine, useSidecarStatus } from "./SidecarStatusLine";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,7 @@ export function ProjectView({ project, onClose }: Props) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const sidecar = useSidecarStatus();
 
   const refresh = useCallback(async () => {
     try {
@@ -74,6 +76,9 @@ export function ProjectView({ project, onClose }: Props) {
             </li>
           ))}
         </ul>
+        <div className="mt-auto pt-3">
+          <SidecarStatusLine status={sidecar} />
+        </div>
       </aside>
       {selected ? (
         <ChatView
