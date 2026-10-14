@@ -44,16 +44,18 @@ export function ChatView({ projectId, conversationId, onActivity }: Props) {
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-6 py-4">
-        {state.messages.map((message) => (
-          <MessageItem key={message.id} projectId={projectId} message={message} />
-        ))}
-        {state.messages.length === 0 && (
-          <p className="p-8 text-center text-sm text-muted-foreground">No messages yet.</p>
-        )}
-        <div ref={bottom} />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 px-8 py-6">
+          {state.messages.map((message) => (
+            <MessageItem key={message.id} projectId={projectId} message={message} />
+          ))}
+          {state.messages.length === 0 && (
+            <p className="p-8 text-center text-muted-foreground">No messages yet.</p>
+          )}
+          <div ref={bottom} />
+        </div>
       </div>
-      {error && <p className="px-6 py-2 text-sm text-destructive">{error}</p>}
+      {error && <p className="px-8 py-2 text-meta text-destructive">{error}</p>}
       <Separator />
       <Composer
         projectId={projectId}

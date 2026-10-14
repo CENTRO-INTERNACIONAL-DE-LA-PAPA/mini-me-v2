@@ -38,7 +38,7 @@ export function ProjectPicker({ onOpen }: Props) {
 
   return (
     <main className="mx-auto mt-[10vh] max-w-lg px-4">
-      <h1 className="mb-6 text-3xl font-semibold">Mini-Me</h1>
+      <h1 className="mb-6 text-page font-bold">Mini-Me</h1>
       <form className="flex gap-2" onSubmit={create}>
         <Input
           value={name}
@@ -52,7 +52,7 @@ export function ProjectPicker({ onOpen }: Props) {
         />
         <Button type="submit">Create Project</Button>
       </form>
-      {error && <p className="my-2 text-sm text-destructive">{error}</p>}
+      {error && <p className="my-2 text-meta text-destructive">{error}</p>}
       <ul className="mt-6 grid gap-1.5">
         {projects.map((project) => (
           <li key={project.id}>
@@ -61,7 +61,7 @@ export function ProjectPicker({ onOpen }: Props) {
             </Button>
           </li>
         ))}
-        {projects.length === 0 && <li className="text-sm text-muted-foreground">No Projects yet.</li>}
+        {projects.length === 0 && <li className="text-muted-foreground">No Projects yet.</li>}
       </ul>
     </main>
   );

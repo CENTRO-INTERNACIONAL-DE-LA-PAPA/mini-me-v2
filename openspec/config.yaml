@@ -67,16 +67,17 @@ context: |
 
   UI stack:
   - Styling: Tailwind CSS v4 with shadcn/ui components built on Base UI (not Radix); add new
-    components with the shadcn CLI so they match. shadcn/ui is a starting point only:
-    restyle every component (colours, typography, spacing, radius, shadows, focus states) so
-    the app has its own identity and never looks like default shadcn/ui.
+    components with the shadcn CLI so they match, then restyle each one to DESIGN.md
+    (colours, typography, spacing, radius, shadows, focus states). DESIGN.md is the visual
+    design system for the whole app.
   - Charts and plots: d3, imported as individual modules (d3-scale, d3-shape, d3-array, ...).
     d3 computes scales, shapes and layouts; React renders the SVG. d3 touches the DOM only
     where it clearly pays off, such as zoom or brushing.
   - Tables: TanStack Table (headless), styled with the same design tokens.
-  - All UI colours come from the shadcn theme tokens in src/index.css; no other palette.
-    Dark mode is the `.dark` class on the root element, which follows the OS setting.
-    Charts and tables take their colours from the same tokens.
+  - All UI colours come from the theme tokens in src/index.css; no other palette. The only
+    exception is each Mini-Me's and Trait's own colour, used only where DESIGN.md allows.
+    The UI is light only; there is no dark theme yet. Charts and tables take their colours
+    from the same tokens.
   - Fonts are bundled with the app, never loaded from a CDN, so the UI renders offline.
   - The UI runs in WebView2 (Windows), WebKit (macOS) and WebKitGTK (Linux); styles must work
     in all three.

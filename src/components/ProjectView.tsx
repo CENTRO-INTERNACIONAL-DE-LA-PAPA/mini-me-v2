@@ -3,7 +3,6 @@ import { api, errorMessage } from "../api";
 import type { ConversationSummary, ProjectSummary } from "../protocol/types";
 import { ChatView } from "./ChatView";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -40,28 +39,35 @@ export function ProjectView({ project, onClose }: Props) {
 
   return (
     <div className="flex h-screen">
-      <aside className="flex w-64 shrink-0 flex-col gap-3 overflow-y-auto bg-card p-4">
-        <Button variant="link" className="h-auto justify-start p-0 text-muted-foreground" onClick={onClose}>
+      <aside className="flex w-[264px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-border bg-sidebar px-3 py-4">
+        <Button variant="link" className="justify-start text-muted-foreground" onClick={onClose}>
           ← Projects
         </Button>
-        <h2 className="text-lg font-semibold">{project.name}</h2>
+        <h2 className="px-2.5 text-section font-bold">{project.name}</h2>
         <Button variant="outline" onClick={create}>
           New conversation
         </Button>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <ul className="grid gap-1">
+        {error && <p className="text-meta text-destructive">{error}</p>}
+        <ul className="grid gap-0.5">
           {conversations.map((conversation) => (
             <li key={conversation.id}>
               <Button
                 variant="ghost"
+                aria-current={conversation.id === selected ? "page" : undefined}
                 className={cn(
-                  "h-auto w-full flex-col items-start gap-0 py-1.5 whitespace-normal",
-                  conversation.id === selected && "bg-accent text-accent-foreground",
+                  "group/item h-auto w-full flex-col items-start gap-0 rounded-md px-2.5 py-[7px] text-left font-normal whitespace-normal",
+                  conversation.id === selected &&
+                    "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
                 )}
                 onClick={() => setSelected(conversation.id)}
               >
                 {conversation.title}
-                <span className="text-xs font-normal text-muted-foreground">
+                <span
+                  className={cn(
+                    "text-meta text-muted-foreground",
+                    conversation.id === selected && "text-muted-on-ink",
+                  )}
+                >
                   {new Date(conversation.last_activity_at).toLocaleString()}
                 </span>
               </Button>
@@ -69,7 +75,6 @@ export function ProjectView({ project, onClose }: Props) {
           ))}
         </ul>
       </aside>
-      <Separator orientation="vertical" />
       {selected ? (
         <ChatView
           key={selected}
@@ -78,7 +83,7 @@ export function ProjectView({ project, onClose }: Props) {
           onActivity={refresh}
         />
       ) : (
-        <section className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        <section className="flex flex-1 items-center justify-center text-muted-foreground">
           Select or create a conversation.
         </section>
       )}

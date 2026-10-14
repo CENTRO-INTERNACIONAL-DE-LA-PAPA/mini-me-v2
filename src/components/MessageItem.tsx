@@ -5,7 +5,6 @@ import { segments } from "../protocol/references";
 import { formatSize } from "./format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 const QUICK_REACTIONS = ["👍", "❤️", "🎉", "🤔", "👎"];
@@ -68,22 +67,23 @@ export function MessageItem({ projectId, message }: Props) {
   const fromUser = message.author.kind === "user";
 
   return (
-    <Card
-      size="sm"
+    <article
       className={cn(
-        "group/message max-w-3xl gap-2 px-4 py-3",
-        fromUser && "self-end bg-accent text-accent-foreground ring-0",
+        "group/message flex flex-col gap-2",
+        fromUser
+          ? "max-w-[560px] self-end rounded-[14px_14px_4px_14px] border border-border px-4 py-3"
+          : "text-ink-2",
       )}
     >
-      <header className="flex items-baseline gap-2 text-xs">
-        <strong>{authorName(message)}</strong>
+      <header className="flex items-baseline gap-2 text-meta">
+        <strong className="text-[14.5px] font-semibold text-foreground">{authorName(message)}</strong>
         {status && (
           <span className={message.status === "failed" ? "text-destructive" : "text-muted-foreground"}>
             {status}
           </span>
         )}
       </header>
-      <p className="whitespace-pre-wrap wrap-anywhere">
+      <p className="text-body whitespace-pre-wrap wrap-anywhere">
         {segments(message.content, message.text_components).map((segment, index) =>
           segment.component ? (
             <Badge
@@ -119,7 +119,9 @@ export function MessageItem({ projectId, message }: Props) {
           <Button
             key={emoji}
             size="xs"
-            variant={mine(emoji) ? "secondary" : "outline"}
+            variant="outline"
+            aria-pressed={mine(emoji)}
+            className="rounded-full"
             onClick={() => toggle(emoji)}
           >
             {emoji} {count}
@@ -133,7 +135,7 @@ export function MessageItem({ projectId, message }: Props) {
           ))}
         </span>
       </footer>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </Card>
+      {error && <p className="text-meta text-destructive">{error}</p>}
+    </article>
   );
 }

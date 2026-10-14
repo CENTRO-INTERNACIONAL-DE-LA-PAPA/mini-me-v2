@@ -127,15 +127,15 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
   }
 
   return (
-    <div className="relative bg-card px-6 pt-3 pb-4">
+    <div className="relative bg-background px-8 pt-3 pb-4">
       {suggestions.length > 0 && (
-        <ul className="absolute bottom-full left-6 grid min-w-60 gap-0.5 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
+        <ul className="absolute bottom-full left-8 grid min-w-60 gap-0.5 rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-float">
           {suggestions.map((asset) => (
             <li key={asset.id}>
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full justify-start"
+                className="w-full justify-start rounded-md font-normal"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pick(asset)}
               >
@@ -161,7 +161,7 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
           ))}
         </div>
       )}
-      {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
+      {error && <p className="mb-2 text-meta text-destructive">{error}</p>}
       <div className="flex items-end gap-2">
         <Button variant="outline" onClick={attach} title="Attach files">
           Attach
@@ -170,7 +170,7 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
           ref={input}
           value={text}
           rows={2}
-          className="max-h-48 min-h-9 flex-1 resize-none"
+          className="max-h-48 min-h-9 flex-1 resize-none rounded-2xl border-border-composer text-body shadow-composer"
           placeholder="Write a message. Type # to reference a file in this Project."
           onChange={(e) => edit(e.target.value, e.target.selectionStart)}
           onKeyDown={onKeyDown}
