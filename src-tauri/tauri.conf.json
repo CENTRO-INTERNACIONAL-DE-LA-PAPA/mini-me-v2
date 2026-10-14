@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "mini-me",
+  "productName": "Mini-Me",
   "version": "0.1.0",
   "identifier": "org.cipotato.mini-me",
   "build": {
@@ -32,6 +32,22 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJCNTM4RDcwM0UyMDFDRTUKUldUbEhDQStjSTFUdXpnbVZlNGp5Q3I3WFdEVWprRXd2c3RMaUtFeVpHSm5hczA4elFvWk1uTHAK",
+      "endpoints": [
+        "https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

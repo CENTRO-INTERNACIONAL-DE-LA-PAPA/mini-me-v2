@@ -8,6 +8,7 @@ import type {
   ProtocolEvent,
   SendMessageInput,
   SidecarStatus,
+  UpdateStatus,
   Uuid,
 } from "./protocol/types";
 
@@ -64,6 +65,16 @@ export const api = {
   },
   /** Starts the sidecar again after it stopped. */
   restartSidecar: () => invoke<void>("restart_sidecar"),
+
+  getUpdateStatus: () => invoke<UpdateStatus>("get_update_status"),
+  /** Calls `onStatus` with the current update status, then with every change. */
+  subscribeUpdateStatus: (onStatus: (status: UpdateStatus) => void) => {
+    const on_status = new Channel<UpdateStatus>();
+    on_status.onmessage = onStatus;
+    return invoke<void>("subscribe_update_status", { on_status });
+  },
+  /** Installs the downloaded update and restarts the app. */
+  restartToUpdate: () => invoke<void>("restart_to_update"),
 };
 
 export function errorMessage(error: unknown): string {

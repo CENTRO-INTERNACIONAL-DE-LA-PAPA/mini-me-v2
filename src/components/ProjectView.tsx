@@ -3,6 +3,7 @@ import { api, errorMessage } from "../api";
 import type { ConversationSummary, ProjectSummary } from "../protocol/types";
 import { ChatView } from "./ChatView";
 import { SidecarStatusLine, useSidecarStatus } from "./SidecarStatusLine";
+import { UpdateStatusLine } from "./UpdateStatusLine";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -76,8 +77,9 @@ export function ProjectView({ project, onClose }: Props) {
             </li>
           ))}
         </ul>
-        <div className="mt-auto pt-3">
+        <div className="mt-auto grid gap-2 pt-3">
           <SidecarStatusLine status={sidecar} />
+          <UpdateStatusLine />
         </div>
       </aside>
       {selected ? (

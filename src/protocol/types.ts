@@ -90,6 +90,14 @@ export interface SidecarStatus {
   sidecar_version: string | null;
 }
 
+/** An update to a newer published release, as tracked by the Rust core. */
+export type UpdateStatus =
+  | { state: "none" }
+  /** `percent` is whole, 0 to 100, or null while the size is unknown. */
+  | { state: "downloading"; version: string; percent: number | null }
+  /** Downloaded and verified, waiting for a restart. */
+  | { state: "ready"; version: string };
+
 /** Error shape returned by every Rust command. */
 export interface AppError {
   code: string;

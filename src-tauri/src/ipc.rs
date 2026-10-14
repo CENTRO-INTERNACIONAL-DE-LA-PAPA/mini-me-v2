@@ -20,6 +20,7 @@ use crate::settings::Settings;
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
 use crate::trait_calls::{CANCEL_TIMEOUT, TraitCalls};
+use crate::updates::{UpdateStatus, Updates};
 
 /// Until Mini-Mes exist, every user message is answered by this Trait.
 const REPLY_TRAIT: &str = "echo";
@@ -31,6 +32,7 @@ pub struct AppState {
     open_projects: Mutex<HashMap<Uuid, Arc<Project>>>,
     calls: Arc<TraitCalls>,
     pub sidecar: Arc<Supervisor>,
+    pub updates: Arc<Updates>,
 }
 
 impl AppState {
@@ -55,8 +57,18 @@ impl AppState {
         };
         let log = Arc::new(SidecarLog::new(&log_dir));
         let calls = Arc::new(TraitCalls::new(Box::new(NoSecrets), Arc::clone(&log), CANCEL_TIMEOUT));
-        let sidecar = Supervisor::new(launch, false, Timing::for_build(), Arc::clone(&calls), log);
+        let sidecar = Supervisor::new(
+            launch,
+            false,
+            Timing::for_build(),
+            Arc::clone(&calls),
+            Arc::clone(&log),
+        );
         sidecar.spawn();
+        let updates = Updates::new(log);
+        if !cfg!(debug_assertions) {
+            updates.spawn(app.clone());
+        }
         Ok(Self {
             settings: Mutex::new(Settings::load_or_create(&config_dir)?),
             data_root: projects::ensure_data_root(&documents)?,
@@ -64,6 +76,7 @@ impl AppState {
             open_projects: Mutex::new(HashMap::new()),
             calls,
             sidecar,
+            updates,
         })
     }
 
@@ -211,6 +224,31 @@ pub async fn subscribe_sidecar_status(
 pub async fn restart_sidecar(state: State<'_, AppState>) -> AppResult<()> {
     state.sidecar.restart();
     Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_update_status(state: State<'_, AppState>) -> AppResult<UpdateStatus> {
+    Ok(state.updates.status())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn subscribe_update_status(
+    state: State<'_, AppState>,
+    on_status: Channel<UpdateStatus>,
+) -> AppResult<()> {
+    state
+        .updates
+        .subscribe(Box::new(move |status| on_status.send(status.clone()).is_ok()));
+    Ok(())
+}
+
+/// Stops the sidecar, installs the downloaded update and restarts. If the install fails the
+/// app still restarts, on the version it was running.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn restart_to_update(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    state.sidecar.shutdown();
+    state.updates.install_pending();
+    app.restart()
 }
 
 #[tauri::command(rename_all = "snake_case")]

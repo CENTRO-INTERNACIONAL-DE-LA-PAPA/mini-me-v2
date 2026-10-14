@@ -4,6 +4,7 @@ import type { ProjectSummary } from "../protocol/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SidecarStatusLine, useSidecarStatus } from "./SidecarStatusLine";
+import { UpdateStatusLine } from "./UpdateStatusLine";
 
 interface Props {
   onOpen: (project: ProjectSummary) => void;
@@ -65,8 +66,9 @@ export function ProjectPicker({ onOpen }: Props) {
         ))}
         {projects.length === 0 && <li className="text-muted-foreground">No Projects yet.</li>}
       </ul>
-      <div className="mt-8">
+      <div className="mt-8 grid gap-2">
         <SidecarStatusLine status={sidecar} />
+        <UpdateStatusLine />
       </div>
     </main>
   );

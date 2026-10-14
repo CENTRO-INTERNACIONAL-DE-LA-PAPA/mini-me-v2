@@ -12,6 +12,7 @@ mod settings;
 mod sidecar;
 mod store;
 mod trait_calls;
+mod updates;
 
 use tauri::{Manager, RunEvent};
 
@@ -20,6 +21,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let state = ipc::AppState::init(app.handle())?;
             app.manage(state);
@@ -42,6 +44,9 @@ pub fn run() {
             ipc::get_sidecar_status,
             ipc::subscribe_sidecar_status,
             ipc::restart_sidecar,
+            ipc::get_update_status,
+            ipc::subscribe_update_status,
+            ipc::restart_to_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -49,6 +54,8 @@ pub fn run() {
             if let RunEvent::Exit = event {
                 if let Some(state) = app.try_state::<ipc::AppState>() {
                     state.sidecar.shutdown();
+                    // After the sidecar stops, so the installer can replace its files.
+                    state.updates.install_pending();
                 }
             }
         });
