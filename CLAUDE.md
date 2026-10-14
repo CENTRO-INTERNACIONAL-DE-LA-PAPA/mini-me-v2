@@ -22,11 +22,8 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
 
 ## Finishing a change
 
-In this order, so everything lands in one commit:
-
 1. Archive the change (`/opsx:archive`), syncing its delta specs into `openspec/specs/`.
 2. Update the change's row in the README Roadmap to "Done" and mark the next one "Next".
-3. Commit and push once.
 
 Commit and PR messages carry no Claude co-author or attribution trailers.
 

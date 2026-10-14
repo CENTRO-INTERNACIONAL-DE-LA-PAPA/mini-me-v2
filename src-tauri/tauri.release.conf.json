@@ -5,7 +5,7 @@
   },
   "bundle": {
     "resources": {
-      "resources/sidecar/**/*": "sidecar/"
+      "resources/sidecar/": "sidecar/"
     }
   }
 }

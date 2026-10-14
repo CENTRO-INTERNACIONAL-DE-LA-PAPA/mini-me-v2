@@ -49,8 +49,8 @@ it.
 
 ## 8. Release bundle
 
-- [ ] 8.1 Write `sidecar/scripts/bundle.py` (D7), the `bundle-sidecar` and `tauri:release` npm scripts, and `src-tauri/tauri.release.conf.json` with the `beforeBuildCommand` and `bundle.resources` entries; verify `npm run bundle-sidecar` produces `src-tauri/resources/sidecar/` with the interpreter, `packages/` and `launch.py`
-- [ ] 8.2 Build a release on macOS (`npm run tauri:release`), open the built app, and confirm the sidecar reaches `ready` and *Echo* answers with `PYTHONPATH` set to a bogus folder; note the bundle size in the README. The first Windows install check (OfficeScan behaviour and the bundled `python.exe` path for the IT allowlist) moves to change 3, which produces the Windows installers
+- [x] 8.1 Write `sidecar/scripts/bundle.py` (D7), the `bundle-sidecar` and `tauri:release` npm scripts, and `src-tauri/tauri.release.conf.json` with the `beforeBuildCommand` and `bundle.resources` entries; verify `npm run bundle-sidecar` produces `src-tauri/resources/sidecar/` with the interpreter, `packages/` and `launch.py`
+- [x] 8.2 Build a release on macOS (`npm run tauri:release`), open the built app, and confirm the sidecar reaches `ready` and *Echo* answers with `PYTHONPATH` set to a bogus folder. The first Windows install check (OfficeScan behaviour and the bundled `python.exe` path for the IT allowlist) moves to change 3, which produces the Windows installers
 
 ## 9. Integration check
 

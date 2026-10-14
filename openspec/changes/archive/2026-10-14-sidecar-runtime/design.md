@@ -130,8 +130,10 @@ EOF the sidecar exits, which covers a Rust core that died (spec: Sidecar ends wi
   `--frozen` uses the lockfile as is and never rewrites it.
 - **Release:** `npm run tauri:release` builds with `src-tauri/tauri.release.conf.json`
   merged in. That file alone adds the `bundle-sidecar` step to `beforeBuildCommand` and the
-  `resources/sidecar/**/*` resources, because Tauri checks resource paths on every build and
-  development builds would fail without a bundled sidecar. `sidecar/scripts/bundle.py`:
+  `resources/sidecar/` directory as a resource, because Tauri checks resource paths on every
+  build and development builds would fail without a bundled sidecar. The resource source is
+  the directory itself, which keeps its tree; a `**/*` glob would flatten every file into one
+  folder. `sidecar/scripts/bundle.py`:
   1. `uv python install <pinned> --install-dir` into a build folder, which gives a
      python-build-standalone runtime;
   2. copies it to `src-tauri/resources/sidecar/python/`, without unused stdlib parts;
