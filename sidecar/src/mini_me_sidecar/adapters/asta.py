@@ -45,6 +45,8 @@ class FindPapers(Adapter):
     )
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Asta's packages load only when a call runs, so the sidecar starts quickly and
+        # sessions that never use Asta never load them.
         from asta.literature.client import AstaPaperFinder
         from asta.utils.config import get_api_config
 
@@ -79,6 +81,7 @@ class Theorize(Adapter):
     )
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported here for the same reason as in `FindPapers.run`.
         from asta_agent.a2a.client import A2AClient
         from asta.utils.config import get_api_config
 
