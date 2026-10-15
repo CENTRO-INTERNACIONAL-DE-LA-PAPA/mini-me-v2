@@ -236,13 +236,13 @@ proposed, reviewed, implemented, verified and archived before the next one start
 | 4 | First real Trait | AI provider keys in the OS keychain, a Settings screen with provider and model selection, one AI-backed Trait (for example *Summarize*), Mini-Me definitions with the shared Trait library and one-Step Workflows, `@`-mentions of Mini-Mes, optional Mini-Me reactions to your messages | Done |
 | 5 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Done |
 | 6 | Conversation context | Adapters ask the core for a Conversation's earlier messages when they need them (a `core.request` method, as for Assets), a convention for replies from other Mini-Mes in the same Conversation, a size budget per call, how files referenced in earlier messages are carried over, and Jev deciding whether a message needs previous context at all | Next |
-| 7 | First Interactive Component | A table whose cells, rows and columns can be selected and referenced | Planned |
-| 8 | Asta integration | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) vendored and pinned in the sidecar, signing in with your Ai2 account, and confirmation before any action with an extra cost | Planned |
-| 9 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |
+| 7 | Asta integration | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) vendored and pinned in the sidecar, signing in with your Ai2 account, and confirmation before any action with an extra cost | Planned |
+| 8 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |
+| 9 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Planned |
 | 10 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved either in memory (lost if the app closes) or through the core in `project.sqlite`, decided in that change | Planned |
 | 11 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
-| 12 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
-| 13 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Planned |
+| 12 | First Interactive Component | A table whose cells, rows and columns can be selected and referenced | Planned |
+| 13 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
 | 14 | Project Overview | The view of everything a Project has produced | Planned |
 
 Later: code execution (Python and R) with OS-level sandboxing, collaboration through a relay
