@@ -4,8 +4,9 @@
   <img src=".github/assets/mini-me-blobs.png" alt="Mini-Me" width="100%">
 </p>
 
-Mini-Me is a local-first, customizable desktop research tool for scientists at the
-[International Potato Center (CIP)](https://cipotato.org).
+Mini-Me (v2) is a local-first, customizable desktop research tool for scientists at the
+[International Potato Center (CIP)](https://cipotato.org), building on its predecessor,
+[Mini-Me Desktop](https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-desktop).
 
 Instead of asking scientists to adopt a new way of working, Mini-Me lets them build
 **Mini-Mes**: small versions of themselves that carry out research the way they already
