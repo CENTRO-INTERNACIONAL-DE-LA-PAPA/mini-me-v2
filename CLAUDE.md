@@ -45,5 +45,10 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
   Do not move tests into separate folders or files. Frontend tests are `*.test.ts` files
   next to the code they test.
 - Write and review comments with the `timeless-comments` skill.
+- Put imports at the top of the file. Import inside a function or condition only for a
+  reason you can name, and state it in a comment: an optional or platform-specific module,
+  a package that is slow to load and that most runs never use, or an import that must run
+  after something else (such as reserving stdout in the sidecar). In TypeScript the
+  equivalent is a dynamic `import()`, used only to split off code that loads on demand.
 - Keep tests minimal (Rust unit tests and frontend tests for core logic) until the user
   says the architecture is stable.
