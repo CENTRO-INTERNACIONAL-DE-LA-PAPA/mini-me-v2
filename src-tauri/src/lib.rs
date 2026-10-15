@@ -1,3 +1,4 @@
+mod ai2;
 mod assets;
 mod conversations;
 mod db;
@@ -54,6 +55,9 @@ pub fn run() {
             ipc::remove_api_key,
             ipc::set_routing_threshold,
             ipc::set_show_jev_answers,
+            ipc::ai2_start_sign_in,
+            ipc::subscribe_ai2_status,
+            ipc::ai2_sign_out,
             ipc::get_update_status,
             ipc::subscribe_update_status,
             ipc::restart_to_update,

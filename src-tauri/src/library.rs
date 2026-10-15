@@ -141,7 +141,7 @@ mod tests {
         let library = Library::builtin();
         assert_eq!(library.problems(), Vec::<String>::new());
         let names: Vec<&str> = library.traits.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(names, ["Summarize", "Assist"]);
+        assert_eq!(names, ["Summarize", "Assist", "Find Papers", "Theorize"]);
     }
 
     #[test]
@@ -155,6 +155,8 @@ mod tests {
         assert_eq!(step("Scribe").name, "Summarize");
         let assist = step("Assistant");
         assert_eq!((assist.name.as_str(), assist.adapter.as_str()), ("Assist", "prompt"));
+        assert_eq!(step("Researcher").adapter, "asta-paper-finder");
+        assert_eq!(step("Theorist").adapter, "asta-theorizer");
     }
 
     #[test]

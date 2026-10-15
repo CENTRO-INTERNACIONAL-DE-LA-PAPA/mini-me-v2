@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   AppError,
+  Ai2Status,
   AiSettings,
   AssetRef,
   KeyAccount,
@@ -81,6 +82,16 @@ export const api = {
   removeApiKey: (provider: KeyAccount) => invoke<void>("remove_api_key", { provider }),
   setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
   setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
+
+  /** Opens Ai2's sign-in page; the status then turns `pending` and later `signed_in`. */
+  ai2StartSignIn: () => invoke<void>("ai2_start_sign_in"),
+  /** Calls `onStatus` with the current Ai2 account status, then with every change. */
+  subscribeAi2Status: (onStatus: (status: Ai2Status) => void) => {
+    const on_status = new Channel<Ai2Status>();
+    on_status.onmessage = onStatus;
+    return invoke<void>("subscribe_ai2_status", { on_status });
+  },
+  ai2SignOut: () => invoke<void>("ai2_sign_out"),
 
 
   getUpdateStatus: () => invoke<UpdateStatus>("get_update_status"),

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, errorMessage } from "../api";
-import type { AiSettings, KeyAccount, ProviderId } from "../protocol/types";
+import type { Ai2Status, AiSettings, KeyAccount, ProviderId } from "../protocol/types";
 
 const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "openai", name: "OpenAI" },
@@ -70,6 +70,7 @@ export function SettingsView({ onClose }: Props) {
             </ul>
           </section>
           <RoutingSection settings={settings} onChanged={refresh} />
+          <Ai2Section />
         </>
       )}
     </main>
@@ -140,6 +141,77 @@ function ModelSection({ settings, onSaved }: { settings: AiSettings; onSaved: ()
         {status && <span className="text-meta text-muted-foreground">{status}</span>}
       </div>
     </form>
+  );
+}
+
+function Ai2Section() {
+  const [status, setStatus] = useState<Ai2Status | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api.subscribeAi2Status((next) => active && setStatus(next)).catch((e) => {
+      setError(errorMessage(e));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function run(action: () => Promise<void>) {
+    try {
+      setError(null);
+      await action();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  return (
+    <section className="mt-10">
+      <h2 className="mb-1 text-section font-bold">Ai2 account</h2>
+      <p className="mb-4 text-meta text-muted-foreground">
+        Researcher and Theorist use Ai2's Asta services, which need an Ai2 account. Their
+        messages are sent to Ai2; file contents are not.
+      </p>
+      <div className="grid gap-2 rounded-xl border border-border px-4 py-3">
+        {status?.state === "signed_in" && (
+          <div className="flex items-center gap-2">
+            <span aria-hidden className="size-[7px] rounded-full bg-success" />
+            <span className="flex-1 text-ui">
+              Signed in as {status.email ?? "your Ai2 account"}
+            </span>
+            <Button variant="ghost" onClick={() => run(api.ai2SignOut)}>
+              Sign out
+            </Button>
+          </div>
+        )}
+        {status?.state === "pending" && (
+          <div className="grid gap-1 text-ui">
+            <p>
+              Confirm the code <strong className="font-mono">{status.user_code}</strong> on the
+              Ai2 page that opened in your browser.
+            </p>
+            <p className="text-meta text-muted-foreground">
+              No page? Open {status.verification_uri} and enter the code.
+            </p>
+          </div>
+        )}
+        {(status === null || status.state === "signed_out") && (
+          <div className="flex items-center gap-2">
+            <span aria-hidden className="size-[7px] rounded-full bg-off" />
+            <span className="flex-1 text-ui">Not signed in</span>
+            <Button variant="outline" onClick={() => run(api.ai2StartSignIn)}>
+              Sign in
+            </Button>
+          </div>
+        )}
+        {status?.state === "signed_out" && status.error && (
+          <p className="text-meta text-destructive">{status.error}</p>
+        )}
+        {error && <p className="text-meta text-destructive">{error}</p>}
+      </div>
+    </section>
   );
 }
 

@@ -16,6 +16,23 @@
       "adapter": "prompt",
       "instructions": "You are a research assistant for scientists at the International Potato Center (CIP). Answer the user's message helpfully and accurately: questions, explanations, drafting, brainstorming, or anything else they ask. When files follow the message, each introduced by a line with its name, use them where they are relevant. Be concise and well structured, and write in the language of the user's message. Say plainly when you do not know something or when an answer would need data you do not have, and never invent references, numbers or results."
     }
+,
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a04",
+      "name": "Find Papers",
+      "description": "Returns a list of papers and related academic sources on a topic.",
+      "color": "oklch(0.55 0.1 230)",
+      "adapter": "asta-paper-finder",
+      "instructions": null
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a05",
+      "name": "Theorize",
+      "description": "Builds theories from the given information.",
+      "color": "oklch(0.52 0.12 340)",
+      "adapter": "asta-theorizer",
+      "instructions": null
+    }
   ],
   "mini_mes": [
     {
@@ -31,6 +48,20 @@
       "description": "Answers general questions and requests that no other Mini-Me specializes in",
       "colors": { "tint": "#D6F1EE", "solid": "#1F9E8F", "ink": "#12675D" },
       "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b04",
+      "name": "Researcher",
+      "description": "Finds research papers on a topic with Ai2's Paper Finder",
+      "colors": { "tint": "#FFE1D8", "solid": "#FF5A36", "ink": "#B3300F" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a04" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b05",
+      "name": "Theorist",
+      "description": "Builds scientific theories from the literature with Ai2's Theorizer",
+      "colors": { "tint": "#FFF0C2", "solid": "#F5B800", "ink": "#7A5A00" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a05" }] }
     }
   ]
 }

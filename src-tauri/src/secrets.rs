@@ -13,13 +13,15 @@ pub const PROVIDERS: [(&str, &str); 4] = [
     ("openrouter", "OpenRouter"),
 ];
 
-/// Every key the keychain holds: the AI providers, then Typesafe for routing.
-const KEY_ACCOUNTS: [(&str, &str); 5] = [
+/// Every key the keychain holds: the AI providers, Typesafe for routing, and the Ai2
+/// account's tokens for Asta.
+const KEY_ACCOUNTS: [(&str, &str); 6] = [
     PROVIDERS[0],
     PROVIDERS[1],
     PROVIDERS[2],
     PROVIDERS[3],
     ("typesafe", "Typesafe"),
+    ("ai2", "Ai2"),
 ];
 
 /// Keychain entries are stored under this service, one per key account.

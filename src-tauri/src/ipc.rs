@@ -10,6 +10,7 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
 
+use crate::ai2::{Ai2, Ai2Status, AppSecrets};
 use crate::assets;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
 use crate::error::{AppError, AppResult};
@@ -33,6 +34,7 @@ pub struct AppState {
     routing: Arc<Routing>,
     pub sidecar: Arc<Supervisor>,
     pub updates: Arc<Updates>,
+    ai2: Arc<Ai2>,
 }
 
 impl AppState {
@@ -57,8 +59,11 @@ impl AppState {
         };
         let log = Arc::new(SidecarLog::new(&log_dir));
         let library = Arc::new(Library::builtin());
+        let ai2 = Ai2::system();
         let calls = Arc::new(TraitCalls::new(
-            Box::new(KeychainSecrets),
+            Box::new(AppSecrets {
+                ai2: Arc::clone(&ai2),
+            }),
             Arc::clone(&log),
             CANCEL_TIMEOUT,
             Arc::clone(&library),
@@ -84,6 +89,7 @@ impl AppState {
             routing: Routing::new(library),
             sidecar,
             updates,
+            ai2,
         })
     }
 
@@ -260,13 +266,47 @@ pub async fn set_ai_model(
     settings.save(&state.config_dir)
 }
 
+/// Starts signing in to the Ai2 account and opens the page where the user confirms the code.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn ai2_start_sign_in(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    let ai2 = Arc::clone(&state.ai2);
+    let page = tauri::async_runtime::spawn_blocking(move || ai2.start_sign_in())
+        .await
+        .map_err(|e| AppError::new("ai2_unavailable", e.to_string()))??;
+    app.opener()
+        .open_url(page, None::<&str>)
+        .map_err(|e| AppError::new("open_failed", e.to_string()))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn subscribe_ai2_status(
+    state: State<'_, AppState>,
+    on_status: Channel<Ai2Status>,
+) -> AppResult<()> {
+    state
+        .ai2
+        .subscribe(Box::new(move |status| on_status.send(status.clone()).is_ok()));
+    Ok(())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn ai2_sign_out(state: State<'_, AppState>) -> AppResult<()> {
+    state.ai2.sign_out()
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn save_api_key(provider: String, key: String) -> AppResult<()> {
+    if provider == crate::ai2::AI2_ACCOUNT {
+        return Err(AppError::invalid_input("The Ai2 account is managed by signing in and out."));
+    }
     KeychainSecrets::save(&provider, &key)
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn remove_api_key(provider: String) -> AppResult<()> {
+    if provider == crate::ai2::AI2_ACCOUNT {
+        return Err(AppError::invalid_input("The Ai2 account is managed by signing in and out."));
+    }
     KeychainSecrets::remove(&provider)
 }
 

@@ -24,7 +24,7 @@ use crate::link::{
     SidecarFrame,
 };
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
-use crate::secrets::{SecretSource, provider_name};
+use crate::secrets::{SecretSource, is_provider, provider_name};
 use crate::sidecar::SidecarLog;
 use crate::store::Project;
 
@@ -161,10 +161,12 @@ impl TraitCalls {
     ) -> AppResult<Uuid> {
         let (sink, needs_model) = {
             let inner = self.lock();
+            // Only adapters that call an AI provider run the model chosen in Settings; others
+            // may declare keys such as the Ai2 account without needing one.
             let needs_model = inner
                 .adapters
                 .get(&spec.adapter)
-                .is_some_and(|info| !info.providers.is_empty());
+                .is_some_and(|info| info.providers.iter().any(|p| is_provider(p)));
             (inner.sink.clone(), needs_model)
         };
         let Some(sink) = sink else {
@@ -468,8 +470,8 @@ impl TraitCalls {
         self.secret_value(ROUTING_KEY)
     }
 
-    /// A call may get only the secret of its own model's provider, and only if its adapter
-    /// declared that provider.
+    /// A call may get only secrets its adapter declared: for an AI provider, only the one of
+    /// its own model; other keys, such as the Ai2 account, whenever declared.
     fn secret(
         &self,
         adapter: &str,
@@ -481,7 +483,8 @@ impl TraitCalls {
             .adapters
             .get(adapter)
             .is_some_and(|info| info.providers.iter().any(|p| *p == params.provider));
-        if !declared || provider != Some(params.provider.as_str()) {
+        let allowed = !is_provider(&params.provider) || provider == Some(params.provider.as_str());
+        if !declared || !allowed {
             return Err(AppError::new(
                 "secret_not_allowed",
                 format!("This Trait cannot use the {} API key.", provider_name(&params.provider)),
@@ -1031,5 +1034,21 @@ mod tests {
         assert_eq!(contents, ["summarize the trial", "It worked."]);
         assert_eq!(history["messages"][0]["name"], json!("You"));
         assert_eq!(history["truncated"], json!(false));
+    }
+
+    #[test]
+    fn an_adapter_with_only_a_non_ai_key_runs_without_a_model_and_gets_that_key() {
+        let secrets = MemorySecrets(HashMap::from([("ai2".to_string(), "ai2-token".to_string())]));
+        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        f.calls.connect(
+            Arc::clone(&f.sink) as Arc<dyn FrameSink>,
+            vec![info("asta-paper-finder", &["ai2"])],
+        );
+        let mut without_model = spec("asta-paper-finder", json!({ "text": "late blight" }));
+        without_model.model = None;
+        let (call, reply) = f.start_spec(without_model);
+        assert_eq!(f.status(reply), MessageStatus::Streaming);
+        let response = f.calls.respond("r".into(), call, "secret.get", json!({ "provider": "ai2" }));
+        assert_eq!(result(response)["value"], json!("ai2-token"));
     }
 }

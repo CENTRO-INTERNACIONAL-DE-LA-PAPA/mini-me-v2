@@ -162,3 +162,10 @@ export interface AiSettings {
   /** Developer setting: store and show Jev's raw answers under each message. */
   show_answers: boolean;
 }
+
+/** The Ai2 account Asta's services sign in with. */
+export type Ai2Status =
+  | { state: "signed_out"; error: string | null }
+  /** Waiting for the user to confirm `user_code` on Ai2's sign-in page. */
+  | { state: "pending"; user_code: string; verification_uri: string }
+  | { state: "signed_in"; email: string | null };
