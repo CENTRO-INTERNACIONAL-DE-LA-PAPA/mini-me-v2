@@ -4,6 +4,7 @@ token storage and CLI are never used."""
 
 import asyncio
 import json
+import re
 import sys
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
@@ -20,6 +21,11 @@ TEXT_INPUT: dict[str, Any] = {
 }
 
 MAX_PAPERS = 20
+# The most papers a `paper-sources` component holds, which keeps its data small.
+MAX_SOURCES = 50
+
+# Errors with which the core refuses a component; the reply then falls back to its text.
+COMPONENT_REFUSED = {"component_not_allowed", "invalid_component"}
 PAPER_FINDER_TIMEOUT_S = 300
 
 # The Theorizer's end-to-end skill: it finds papers, extracts evidence and forms theories.
@@ -29,6 +35,10 @@ THEORIZER_SKILL = "literature-theory-generation"
 # Poll the Theorizer's task this often, and give up after this long.
 THEORIZER_POLL_S = 5.0
 THEORIZER_LIMIT_S = 60 * 60
+
+# A failed Asta request that may succeed later (a dropped connection, or a 5xx or 429 answer)
+# is tried again after each of these delays.
+RETRY_DELAYS_S = (2.0, 5.0)
 
 T = TypeVar("T")
 
@@ -59,6 +69,7 @@ class FindPapers(Adapter):
         result = await _until_cancelled(
             ctx,
             lambda: _call(
+                ctx,
                 finder.find_papers,
                 query,
                 timeout=PAPER_FINDER_TIMEOUT_S,
@@ -69,7 +80,15 @@ class FindPapers(Adapter):
             return
         widget = result.get("widget") or {}
         _log_shape("paper finder result", (widget.get("results") or [None])[:1])
-        ctx.write(papers_reply(widget.get("results") or [], widget.get("response_text") or ""))
+        papers = widget.get("results") or []
+        narrative = _summary(str(widget.get("response_text") or ""))
+        if not papers:
+            ctx.write(papers_reply([], narrative))
+            return
+        count = len(papers)
+        ctx.write(narrative or f"Found {count} paper{'' if count == 1 else 's'}.")
+        text = papers_reply(papers, "")
+        await _component_or_text(ctx, "paper-sources", papers_data(papers), text)
 
 
 class Theorize(Adapter):
@@ -95,7 +114,12 @@ class Theorize(Adapter):
             "kind": THEORIZER_SKILL,
             "data": {"theory_query": str(input.get("text", ""))},
         }
-        task = await _call(client.send_message, json.dumps(envelope))
+        # Sending is never repeated: a retry after a lost answer would start a second task.
+        task = await _until_cancelled(
+            ctx, lambda: _call(ctx, client.send_message, json.dumps(envelope), retry=False)
+        )
+        if task is None:
+            return
         _log_task(task)
 
         loop = asyncio.get_running_loop()
@@ -113,7 +137,11 @@ class Theorize(Adapter):
             except TimeoutError:
                 pass
             previous = task
-            task = await _call(client.get_task, task.get("id") or "")
+            task_id = task.get("id") or ""
+            polled = await _until_cancelled(ctx, lambda: _call(ctx, client.get_task, task_id))
+            if polled is None:
+                return
+            task = polled
             if _task_summary(task) != _task_summary(previous):
                 _log_task(task)
             minutes = int((loop.time() - started) // 60)
@@ -133,8 +161,20 @@ class Theorize(Adapter):
                 "asta_unavailable",
                 f"The Theorizer stopped ({state}){': ' + detail if detail else ''}.",
             )
-        _log_shape("theorizer artifacts", task.get("artifacts"))
-        ctx.write(theories_reply(task.get("artifacts") or []))
+        artifacts = task.get("artifacts") or []
+        _log_shape("theorizer artifacts", artifacts)
+        store, texts = theory_store(artifacts)
+        data = theories_data(store)
+        if data is None:
+            ctx.write(_without_theories(texts))
+        else:
+            ctx.write(theories_summary(data, store))
+            await _component_or_text(ctx, "theories", data, theories_markdown(data))
+        try:
+            content = json.dumps(artifacts, ensure_ascii=False).encode()
+            await ctx.write_asset("theory-store.json", "application/json", content)
+        except CoreRequestError as error:
+            print(f"[asta] could not save the Theory Store: {error}", file=sys.stderr, flush=True)
 
 
 async def _token(ctx: CallContext) -> str:
@@ -149,15 +189,60 @@ async def _token(ctx: CallContext) -> str:
         raise
 
 
-async def _call(function: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-    """Runs one of Asta's blocking client calls off the event loop, turning its errors into
-    ones the user can act on."""
+async def _call(
+    ctx: CallContext, function: Callable[..., T], *args: Any, retry: bool = True, **kwargs: Any
+) -> T:
+    """Runs one of Asta's blocking client calls off the event loop and turns its error into
+    one the user can act on. With `retry`, a failure that may pass is tried again after each
+    of `RETRY_DELAYS_S`; a cancelled call stops waiting and raises the last error."""
+    for delay in (*(RETRY_DELAYS_S if retry else ()), None):
+        try:
+            return await asyncio.to_thread(function, *args, **kwargs)
+        except TraitError:
+            raise
+        except Exception as error:
+            again = delay is not None and _transient(error)
+            # The message names the request and the HTTP status, never the token.
+            detail = f"{type(error).__name__}: {str(error)[:300]}"
+            note = f"; trying again in {delay:g} s" if again else ""
+            print(f"[asta] request failed: {detail}{note}", file=sys.stderr, flush=True)
+            if not again or await _cancelled_within(ctx, delay):
+                raise _asta_error(error) from None
+    raise AssertionError("unreachable")
+
+
+async def _cancelled_within(ctx: CallContext, seconds: float) -> bool:
+    """Waits up to `seconds`, and whether the call was cancelled meanwhile."""
     try:
-        return await asyncio.to_thread(function, *args, **kwargs)
-    except TraitError:
-        raise
-    except Exception as error:
-        raise _asta_error(error) from None
+        await asyncio.wait_for(ctx.cancelled.wait(), seconds)
+        return True
+    except TimeoutError:
+        return False
+
+
+def _status(error: BaseException) -> int | None:
+    """The HTTP status of an Asta client error: urllib's HTTPError raised directly, wrapped,
+    or carried as `code`."""
+    for source in (error, error.__cause__):
+        code = getattr(source, "code", None)
+        if isinstance(code, int):
+            return code
+    return None
+
+
+def _transient(error: BaseException) -> bool:
+    """Whether trying again may help: a dropped connection, a server error or a rate limit,
+    but not a timeout (Paper Finder already waits minutes) or a refused request."""
+    if _timed_out(error):
+        return False
+    status = _status(error)
+    return status is None or status == 429 or status >= 500
+
+
+def _timed_out(error: BaseException) -> bool:
+    """Whether `error`, the error it wraps, or urllib's `reason` for it is a timeout."""
+    causes = (error, error.__cause__, getattr(error, "reason", None))
+    return any(isinstance(cause, TimeoutError) for cause in causes)
 
 
 async def _until_cancelled(ctx: CallContext, work: Callable[[], Awaitable[T]]) -> T | None:
@@ -174,9 +259,7 @@ async def _until_cancelled(ctx: CallContext, work: Callable[[], Awaitable[T]]) -
 
 
 def _asta_error(error: Exception) -> TraitError:
-    # Asta's clients raise urllib's HTTPError directly, wrap it, or carry its code.
-    status = getattr(error, "code", None) or getattr(error.__cause__, "code", None)
-    if status in (401, 403):
+    if _status(error) in (401, 403):
         return TraitError(
             "ai2_auth",
             "Ai2 did not accept your sign-in. Sign in to your Ai2 account again in Settings.",
@@ -213,28 +296,63 @@ def _get(data: dict[str, Any], *keys: str) -> Any:
     return None
 
 
+def _summary(narrative: str) -> str:
+    """The verdict at the top of Paper Finder's `response_text`, such as "I found 18 papers
+    that look like perfect matches". The rest, after a `---` line, restates the query."""
+    return re.split(r"(?m)^\s*---+\s*$", narrative, maxsplit=1)[0].strip()
+
+
+async def _component_or_text(ctx: CallContext, kind: str, data: Any, text: str) -> None:
+    """Adds a version 1 component of `kind`, or writes `text` below the reply's first line
+    when the core refuses the component."""
+    try:
+        await ctx.component(kind, 1, data, text)
+    except CoreRequestError as error:
+        if error.code not in COMPONENT_REFUSED:
+            raise
+        print(f"[asta] {kind} component refused: {error}", file=sys.stderr, flush=True)
+        ctx.write("\n\n" + text)
+
+
+def _paper(paper: dict[str, Any]) -> dict[str, Any]:
+    """One Paper Finder result in the fields of a `paper-sources` paper."""
+    authors = [
+        str(a.get("name") if isinstance(a, dict) else a) for a in (paper.get("authors") or [])
+    ]
+    year = _get(paper, "year")
+    corpus_id = _get(paper, "corpus_id", "corpusId")
+    link = _get(paper, "url") or (
+        f"https://www.semanticscholar.org/p/{corpus_id}" if corpus_id else None
+    )
+    return {
+        "title": str(_get(paper, "title") or "Untitled"),
+        "authors": authors,
+        "year": int(year) if str(year or "").isdigit() else None,
+        "venue": str(_get(paper, "venue") or "") or None,
+        "url": str(link) if link else None,
+        "reason": _relevance(paper) or None,
+    }
+
+
+def papers_data(papers: list[dict[str, Any]]) -> dict[str, Any]:
+    """The `paper-sources` version 1 data for Paper Finder's results, most relevant first."""
+    return {"papers": [_paper(paper) for paper in papers[:MAX_SOURCES]]}
+
+
 def papers_reply(papers: list[dict[str, Any]], narrative: str) -> str:
     """Markdown for Paper Finder's results, most relevant first."""
     if not papers:
         return "No papers were found. Try rephrasing the topic or making it more specific."
     lines = [narrative.strip(), ""] if narrative.strip() else []
-    for number, paper in enumerate(papers[:MAX_PAPERS], start=1):
-        title = str(_get(paper, "title") or "Untitled")
-        authors = [
-            str(a.get("name") if isinstance(a, dict) else a) for a in (paper.get("authors") or [])
-        ]
+    for number, paper in enumerate(map(_paper, papers[:MAX_PAPERS]), start=1):
+        authors = paper["authors"]
         names = ", ".join(authors[:3]) + (" et al." if len(authors) > 3 else "")
-        year = _get(paper, "year")
-        venue = _get(paper, "venue")
-        corpus_id = _get(paper, "corpus_id", "corpusId")
-        link = _get(paper, "url") or (
-            f"https://www.semanticscholar.org/p/{corpus_id}" if corpus_id else None
-        )
-        heading = f"{number}. **{title}**" + (f" ({year})" if year else "")
-        details = " · ".join(str(d) for d in (names, venue, link) if d)
+        year = f" ({paper['year']})" if paper["year"] else ""
+        heading = f"{number}. **{paper['title']}**{year}"
+        details = " · ".join(str(d) for d in (names, paper["venue"], paper["url"]) if d)
         lines.append(heading + (f" — {details}" if details else ""))
-        if reason := _relevance(paper):
-            lines.append(f"   {reason}")
+        if paper["reason"]:
+            lines.append(f"   {paper['reason']}")
     if len(papers) > MAX_PAPERS:
         lines.append("")
         lines.append(f"…and {len(papers) - MAX_PAPERS} more.")
@@ -256,12 +374,14 @@ def _relevance(paper: dict[str, Any]) -> str:
     return abstract.split(". ")[0].rstrip(".") + "." if abstract else ""
 
 
-def theories_reply(artifacts: list[dict[str, Any]]) -> str:
-    """Markdown for the Theorizer's Theory Store: each theory and its statements in plain
-    language, every statement's supporting evidence cited by number, and the cited papers
-    listed at the end. The store's papers, extractions and evaluations are otherwise left
-    out, since they run to megabytes."""
-    store: dict[str, list[dict[str, Any]]] = {}
+def theory_store(artifacts: list[dict[str, Any]]) -> tuple[dict[str, list[Any]], list[str]]:
+    """The Theorizer's Theory Store gathered by section (`theories`, `paperstore`,
+    `extractionresults`, …, names reduced by `_norm`), and the text parts of its artifacts.
+
+    The store arrives as parts that each hold some sections, and a section can appear in
+    several parts as it is updated; entries are merged by their ID, a later part replacing an
+    earlier one."""
+    sections: dict[str, dict[str, dict[str, Any]]] = {}
     texts: list[str] = []
     for artifact in artifacts:
         for part in artifact.get("parts") or []:
@@ -271,11 +391,28 @@ def theories_reply(artifacts: list[dict[str, Any]]) -> str:
                 texts.append(part["text"].strip())
             if isinstance(part.get("data"), dict):
                 for key, value in part["data"].items():
-                    store.setdefault(_norm(key), []).extend(_entries(value))
-    theories = store.get("theories") or []
-    if not theories:
-        return "\n\n".join(texts) or "The Theorizer finished without theories."
+                    if isinstance(value, dict):
+                        items = list(value.items())
+                    elif isinstance(value, list):
+                        items = [(None, entry) for entry in value]
+                    else:
+                        continue
+                    section = sections.setdefault(_norm(key), {})
+                    for entry_id, entry in items:
+                        if not isinstance(entry, dict):
+                            continue
+                        # An entry without any ID is kept as a new one rather than merged.
+                        found = _field(entry, "id") or _field(entry, "uuid") or entry_id
+                        section[str(found) if found else f"#{len(section)}"] = entry
+    return {name: list(entries.values()) for name, entries in sections.items()}, texts
 
+
+def theories_data(store: dict[str, list[Any]]) -> dict[str, Any] | None:
+    """The `theories` version 1 data for a Theory Store: each theory's wording, statements
+    and supporting evidence, with `refs` numbering the cited papers in `references` in the
+    order they are first cited. None when the store holds no theories."""
+    if not store.get("theories"):
+        return None
     paper_of_evidence = {
         str(_field(item, "uuid")): _paper_key(_field(result, "paper_id"))
         for result in store.get("extractionresults") or []
@@ -285,37 +422,92 @@ def theories_reply(artifacts: list[dict[str, Any]]) -> str:
     papers = {_paper_key(_field(p, "id")): p for p in store.get("paperstore") or []}
     cited: list[str] = []
 
-    def citations(uuids: Any) -> str:
-        numbers = []
+    def refs(uuids: Any) -> list[int]:
+        numbers: list[int] = []
         for uuid in uuids if isinstance(uuids, list) else []:
             paper = paper_of_evidence.get(str(uuid))
             if paper in papers:
                 if paper not in cited:
                     cited.append(paper)
-                number = cited.index(paper) + 1
-                if number not in numbers:
-                    numbers.append(number)
-        return f" [{', '.join(map(str, sorted(numbers)))}]" if numbers else ""
+                if cited.index(paper) + 1 not in numbers:
+                    numbers.append(cited.index(paper) + 1)
+        return sorted(numbers)
 
-    count = len(theories)
-    lines = [f"The Theorizer formed {count} theor{'y' if count == 1 else 'ies'}."]
-    for number, theory in enumerate(theories, start=1):
-        # The theory's own wording sits in its first component, next to its bookkeeping.
-        details = {**theory, **(_entries(_field(theory, "components"))[:1] or [{}])[0]}
-        name = _plain(details, "theory_name") or _field(details, "name") or f"Theory {number}"
-        lines += ["", f"## {number}. {name}"]
-        if description := _plain(details, "theory_description"):
-            lines += ["", description]
-        for statement in _entries(_field(details, "theory_statements")):
-            if text := _plain(statement, "theory_statement"):
-                lines += ["", f"- **{text}**"]
-            for evidence in _entries(_field(statement, "supporting_evidence")):
-                if text := str(_field(evidence, "text") or "").strip():
-                    lines.append(f"  - {text}{citations(_field(evidence, 'uuids'))}")
-    if cited:
-        lines += ["", "**References**", ""]
-        lines += [f"{n}. {_reference(papers[key])}" for n, key in enumerate(cited, start=1)]
-    return "\n".join(lines)
+    theories = []
+    for number, theory in enumerate(store["theories"], start=1):
+        # The theory's own wording sits in `components`, next to its bookkeeping.
+        components = _field(theory, "components")
+        if isinstance(components, list):
+            components = (_entries(components)[:1] or [{}])[0]
+        details = {**theory, **(components if isinstance(components, dict) else {})}
+        name = _wording(details, "theory_name") or {
+            "plain": str(_field(details, "name") or f"Theory {number}"),
+            "technical": None,
+        }
+        statements = []
+        for statement in map(_unwrapped, _entries(_field(details, "theory_statements"))):
+            text = _wording(statement, "theory_statement")
+            if not text:
+                continue
+            evidence = [
+                {"text": str(_field(item, "text")).strip(), "refs": refs(_field(item, "uuids"))}
+                for item in _entries(_field(statement, "supporting_evidence"))
+                if str(_field(item, "text") or "").strip()
+            ]
+            statements.append({"text": text, "evidence": evidence})
+        theories.append(
+            {
+                "name": name,
+                "description": _wording(details, "theory_description"),
+                "statements": statements,
+            }
+        )
+    return {"theories": theories, "references": [_reference(papers[key]) for key in cited]}
+
+
+def theories_markdown(data: dict[str, Any]) -> str:
+    """Markdown for `theories` data in plain language: each theory, its statements with their
+    evidence cited by number, and the cited papers at the end."""
+    lines: list[str] = []
+    for number, theory in enumerate(data["theories"], start=1):
+        lines += [f"## {number}. {theory['name']['plain']}"]
+        if theory["description"]:
+            lines += ["", theory["description"]["plain"]]
+        for statement in theory["statements"]:
+            lines += ["", f"- **{statement['text']['plain']}**"]
+            for evidence in statement["evidence"]:
+                cites = f" [{', '.join(map(str, evidence['refs']))}]" if evidence["refs"] else ""
+                lines.append(f"  - {evidence['text']}{cites}")
+        lines.append("")
+    if data["references"]:
+        lines += ["**References**", ""]
+        for number, reference in enumerate(data["references"], start=1):
+            year = f" ({reference['year']})" if reference["year"] else ""
+            link = f" — {reference['url']}" if reference["url"] else ""
+            lines.append(f"{number}. **{reference['title']}**{year}{link}")
+    return "\n".join(lines).strip()
+
+
+def theories_reply(artifacts: list[dict[str, Any]]) -> str:
+    """The whole reply as Markdown: a line counting the theories, then `theories_markdown`,
+    or the artifacts' text when there are no theories."""
+    store, texts = theory_store(artifacts)
+    data = theories_data(store)
+    if data is None:
+        return _without_theories(texts)
+    return theories_summary(data, store) + "\n\n" + theories_markdown(data)
+
+
+def _without_theories(texts: list[str]) -> str:
+    """The reply when the Theory Store holds no theories: its text parts, if any."""
+    return "\n\n".join(texts) or "The Theorizer finished without theories."
+
+
+def theories_summary(data: dict[str, Any], store: dict[str, list[Any]]) -> str:
+    count = len(data["theories"])
+    papers = len(store.get("paperstore") or [])
+    from_papers = f" from {papers} paper{'' if papers == 1 else 's'}" if papers else ""
+    return f"The Theorizer formed {count} theor{'y' if count == 1 else 'ies'}{from_papers}."
 
 
 def _norm(key: Any) -> str:
@@ -331,16 +523,29 @@ def _field(data: Any, name: str) -> Any:
     return next((v for k, v in data.items() if _norm(k) == wanted and v is not None), None)
 
 
+def _unwrapped(statement: dict[str, Any]) -> dict[str, Any]:
+    """A theory statement without the one-key wrapper naming its kind, such as `{"law": …}`."""
+    if _field(statement, "theory_statement") is None and len(statement) == 1:
+        inner = next(iter(statement.values()))
+        if isinstance(inner, dict):
+            return inner
+    return statement
+
+
 def _entries(value: Any) -> list[dict[str, Any]]:
     """The records in a Theory Store section, which is either a list or a dict keyed by ID."""
     items = value.values() if isinstance(value, dict) else value if isinstance(value, list) else []
     return [item for item in items if isinstance(item, dict)]
 
 
-def _plain(data: dict[str, Any], name: str) -> str:
-    """The plain-language version of a field, or its technical wording when there is none."""
-    value = _field(data, f"{name}_plain_language") or _field(data, name)
-    return str(value).strip() if value else ""
+def _wording(data: dict[str, Any], name: str) -> dict[str, str | None] | None:
+    """A field's `{ plain, technical }` wording; `plain` falls back to the technical text,
+    and `technical` is None when only one version exists. None when the field is empty."""
+    technical = str(_field(data, name) or "").strip()
+    plain = str(_field(data, f"{name}_plain_language") or "").strip() or technical
+    if not plain:
+        return None
+    return {"plain": plain, "technical": technical if technical and technical != plain else None}
 
 
 def _paper_key(paper_id: Any) -> str:
@@ -349,7 +554,9 @@ def _paper_key(paper_id: Any) -> str:
     return key.removeprefix("paper")
 
 
-def _reference(paper: dict[str, Any]) -> str:
+def _reference(paper: dict[str, Any]) -> dict[str, Any]:
+    """A cited paper as a `theories` reference: title, year and a DOI or Semantic Scholar
+    link."""
     metadata = _field(paper, "s2_metadata") or {}
     title = str(_field(paper, "title") or _field(metadata, "title") or "Untitled").strip()
     year = _field(paper, "publication_year") or _field(metadata, "year")
@@ -361,7 +568,11 @@ def _reference(paper: dict[str, Any]) -> str:
         else _field(metadata, "url")
         or (f"https://www.semanticscholar.org/p/{corpus_id}" if corpus_id else None)
     )
-    return f"**{title}**" + (f" ({year})" if year else "") + (f" — {link}" if link else "")
+    return {
+        "title": title,
+        "year": int(year) if str(year or "").isdigit() else None,
+        "url": str(link) if link else None,
+    }
 
 
 def _task_summary(task: dict[str, Any]) -> tuple[Any, str, tuple[str, ...]]:
@@ -397,7 +608,7 @@ def _log_shape(label: str, value: Any) -> None:
         if depth > 12:
             return "…"
         if isinstance(item, dict):
-            if len(item) > 12:
+            if len(item) > 30:
                 first = next(iter(item.items()))
                 return {f"<{len(item)} keys, first {first[0]!r}>": shape(first[1], depth + 1)}
             return {k: shape(v, depth + 1) for k, v in item.items()}

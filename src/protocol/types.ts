@@ -33,6 +33,16 @@ export interface TextComponent {
   end: number;
 }
 
+/** An Interactive Component below a reply's text. `data` matches the schema of `kind` at
+ * `version`; `text` stands in for it where the kind has no renderer. */
+export interface Component {
+  id: Uuid;
+  kind: string;
+  version: number;
+  data: unknown;
+  text: string;
+}
+
 export interface Message {
   id: Uuid;
   author: Author;
@@ -41,6 +51,7 @@ export interface Message {
   reply_to: Uuid | null;
   attachments: AssetRef[];
   text_components: TextComponent[];
+  components: Component[];
 }
 
 export interface ErrorInfo {
@@ -73,6 +84,7 @@ export type KnownEvent = Envelope &
     | { type: "message.failed"; payload: { message_id: Uuid; error: ErrorInfo } }
     | { type: "message.cancelled"; payload: { message_id: Uuid } }
     | { type: "attachment.added"; payload: { message_id: Uuid; asset: AssetRef } }
+    | { type: "component.added"; payload: { message_id: Uuid; component: Component } }
     | { type: "reaction.added"; payload: { message_id: Uuid; emoji: string; by: Author } }
     | { type: "reaction.removed"; payload: { message_id: Uuid; emoji: string; by: Author } }
     | { type: "routing.answered"; payload: JevAnswers & { message_id: Uuid } }

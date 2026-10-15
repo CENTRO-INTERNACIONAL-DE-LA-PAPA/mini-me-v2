@@ -22,6 +22,7 @@
       "description": "Returns a list of papers and related academic sources on a topic.",
       "color": "oklch(0.55 0.1 230)",
       "adapter": "asta-paper-finder",
+      "components": ["paper-sources"],
       "instructions": null
     },
     {
@@ -30,6 +31,7 @@
       "description": "Builds theories from the given information.",
       "color": "oklch(0.52 0.12 340)",
       "adapter": "asta-theorizer",
+      "components": ["theories"],
       "instructions": null
     }
   ],

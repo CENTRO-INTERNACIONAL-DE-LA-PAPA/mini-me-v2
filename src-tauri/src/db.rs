@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -65,7 +65,20 @@ CREATE TABLE assets (
     rel_path    TEXT NOT NULL,
     created_at  INTEGER NOT NULL
 );
-"#];
+"#,
+    r#"
+CREATE TABLE components (
+    id          TEXT PRIMARY KEY,
+    message_id  TEXT NOT NULL REFERENCES messages(id),
+    kind        TEXT NOT NULL,
+    version     INTEGER NOT NULL,
+    data        TEXT NOT NULL,
+    text        TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+);
+CREATE INDEX components_by_message ON components(message_id, created_at);
+"#,
+];
 
 fn user_version(conn: &Connection) -> AppResult<i32> {
     Ok(conn.pragma_query_value(None, "user_version", |row| row.get(0))?)
@@ -116,12 +129,42 @@ mod tests {
         let tables: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN \
-                 ('project', 'conversations', 'events', 'messages', 'reactions', 'assets')",
+                 ('project', 'conversations', 'events', 'messages', 'reactions', 'assets', \
+                 'components')",
                 [],
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(tables, 6);
+        assert_eq!(tables, 7);
+    }
+
+    #[test]
+    fn a_version_1_database_keeps_its_messages_when_migrated() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(MIGRATIONS[0]).unwrap();
+            conn.pragma_update(None, "user_version", 1).unwrap();
+            conn.execute_batch(
+                "INSERT INTO conversations (id, title, created_at, last_activity_at) \
+                 VALUES ('c', 'Trial', 1, 1); \
+                 INSERT INTO messages (id, conversation_id, author_kind, author_id, content, \
+                 status, attachments, text_components, created_at) \
+                 VALUES ('m', 'c', 'user', 'u', 'late blight', 'complete', '[]', '[]', 1);",
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), 2);
+        let content: String = conn
+            .query_row("SELECT content FROM messages WHERE id = 'm'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(content, "late blight");
+        let components: i64 = conn
+            .query_row("SELECT COUNT(*) FROM components", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(components, 0);
     }
 
     #[test]

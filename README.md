@@ -164,13 +164,21 @@ have it read. Mini-Me comes with four:
   It needs an API key and a model (see above). PDFs and images are not read yet.
 - **Assistant** answers general questions and requests that no other Mini-Me specializes in,
   using the files you reference when they help. It needs an API key and a model too.
-- **Researcher** finds papers on the topic of your message with Ai2's Paper Finder and
-  lists them with links and the passage that makes each one relevant. It needs an Ai2
-  account (see above).
+- **Researcher** finds papers on the topic of your message with Ai2's Paper Finder. It
+  shows the five most relevant as cards with the passage that makes each one relevant;
+  click a card to open the paper in your browser, or **Show all sources** for the rest. It
+  needs an Ai2 account (see above).
 - **Theorist** builds scientific theories on the question in your message with Ai2's
   Theorizer: it reads the literature, extracts evidence and replies with each theory, its
-  statements and the papers that support them. It shows its progress while it works,
-  which can take 20 minutes or more. It needs an Ai2 account too.
+  statements and the evidence for them, cited by number to the papers listed below. Each
+  theory starts in plain language; switch it to **Technical** for the precise wording.
+  The Theorizer's full result is attached as `theory-store.json`. Theorist shows its
+  progress while it works, which can take 20 minutes or more. It needs an Ai2 account too.
+
+Cards, theories and similar rich results are **Interactive Components**, shown below a
+reply's text. Mini-Mes that read the Conversation, such as Assistant, can refer to them in a
+follow-up ("@Assistant summarize the third paper"). Researcher and Theorist only search, so
+ask them for new papers or theories, not about earlier results.
 
 Researcher and Theorist send the text of your message to Ai2; file contents are never
 sent. Don't ask them about unpublished results you aren't allowed to share with Ai2.
@@ -257,8 +265,8 @@ proposed, reviewed, implemented, verified and archived before the next one start
 | 5 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Done |
 | 6 | Conversation context | Adapters ask the core for a Conversation's earlier messages when they need them (a `core.request` method, as for Assets), a convention for replies from other Mini-Mes in the same Conversation, a size budget per call, how files referenced in earlier messages are carried over, and Jev deciding whether a message needs previous context at all | Done |
 | 7 | Asta integration and Traits | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) pinned in the sidecar, signing in with your Ai2 account, *Find Papers* (Paper Finder) with Researcher and *Theorize* (Theorizer) with Theorist | Done |
-| 8 | First Interactive Components | Interactive Components shown below a reply's text, from a catalogue of versioned kinds that are as easy to add as adapters; Paper sources for *Find Papers* and Theories for *Theorize*; Mini-Mes saving generated files as Assets | Next |
-| 9 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Planned |
+| 8 | First Interactive Components | Interactive Components shown below a reply's text: hand-coded, versioned kinds that built-in Traits list and use; Paper sources for *Find Papers* and Theories for *Theorize*; Mini-Mes saving generated files as Assets | Done |
+| 9 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Next |
 | 10 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved through the core in `project.sqlite`, so it survives closing the app | Planned |
 | 11 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
 | 12 | Tables | A table Interactive Component whose cells, rows and columns can be selected and referenced | Planned |

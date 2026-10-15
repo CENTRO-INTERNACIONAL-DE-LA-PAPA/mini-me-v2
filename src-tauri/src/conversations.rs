@@ -6,10 +6,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::assets;
+use crate::components;
 use crate::error::{AppError, AppResult};
 use crate::protocol::{
-    Author, AuthorKind, ErrorInfo, EventKind, Message, MessageStatus, TextComponent,
-    TextComponentKind, new_id, now_ms,
+    AssetRef, Author, AuthorKind, Component, ErrorInfo, EventKind, Message, MessageStatus,
+    TextComponent, TextComponentKind, new_id, now_ms,
 };
 use crate::store::{Project, ProjectState};
 
@@ -141,6 +142,7 @@ pub fn send_message(
         reply_to: None,
         attachments,
         text_components: input.text_components,
+        components: Vec::new(),
     };
     state.persist(
         conversation_id,
@@ -153,10 +155,8 @@ pub fn send_message(
 
 /// Loads a message and checks it is a reply that is still streaming.
 fn streaming_reply(state: &ProjectState, message_id: Uuid) -> AppResult<Uuid> {
-    match state.load_message(message_id)? {
-        Some((conversation, message)) if message.status == MessageStatus::Streaming => {
-            Ok(conversation)
-        }
+    match state.message_place(message_id)? {
+        Some((conversation, MessageStatus::Streaming)) => Ok(conversation),
         Some(_) => Err(AppError::new("reply_finished", "This reply has already finished.")),
         None => Err(AppError::not_found("Message not found")),
     }
@@ -177,6 +177,7 @@ pub fn start_reply(
         reply_to: Some(reply_to),
         attachments: Vec::new(),
         text_components: Vec::new(),
+        components: Vec::new(),
     };
     let id = message.id;
     project
@@ -198,11 +199,59 @@ pub fn append_delta(project: &Project, message_id: Uuid, text: &str) -> AppResul
     Ok(())
 }
 
+/// Adds an Interactive Component `(kind, version, data, text)` to a streaming reply, if
+/// `allowed` (the kinds the reply's Trait lists) holds its kind; returns its new ID.
+pub fn add_component(
+    project: &Project,
+    message_id: Uuid,
+    allowed: &[String],
+    (kind, version, data, text): (&str, u32, serde_json::Value, String),
+) -> AppResult<Uuid> {
+    components::check(kind, allowed, &data, &text)?;
+    let mut state = project.lock();
+    let conversation = streaming_reply(&state, message_id)?;
+    let component = Component {
+        id: new_id(),
+        kind: kind.to_string(),
+        version,
+        data,
+        text,
+    };
+    let id = component.id;
+    state.persist(conversation, EventKind::ComponentAdded { message_id, component })?;
+    Ok(id)
+}
+
+/// Stores a file a Trait produced as a generated Asset and attaches it to its streaming
+/// reply. If the reply ends before the attachment is persisted, the Asset is removed again.
+pub fn attach_generated(
+    project: &Project,
+    message_id: Uuid,
+    name: &str,
+    media_type: &str,
+    bytes: &[u8],
+) -> AppResult<AssetRef> {
+    streaming_reply(&project.lock(), message_id)?;
+    let asset = assets::write_generated(project, name, media_type, bytes)?;
+    let attached = {
+        let mut state = project.lock();
+        streaming_reply(&state, message_id).and_then(|conversation| {
+            let event = EventKind::AttachmentAdded { message_id, asset: asset.clone() };
+            state.persist(conversation, event)
+        })
+    };
+    if let Err(err) = attached {
+        let _ = assets::remove(project, asset.id);
+        return Err(err);
+    }
+    Ok(asset)
+}
+
 pub fn complete_reply(project: &Project, message_id: Uuid) -> AppResult<()> {
     let mut state = project.lock();
     let conversation = streaming_reply(&state, message_id)?;
     let content = state
-        .load_message(message_id)?
+        .load_message_with(message_id, false)?
         .map(|(_, message)| message.content)
         .unwrap_or_default();
     state.persist(conversation, EventKind::MessageCompleted { message_id, content })?;
@@ -324,6 +373,7 @@ pub fn system_reply(
         reply_to: Some(reply_to),
         attachments: Vec::new(),
         text_components: Vec::new(),
+        components: Vec::new(),
     };
     project.lock().persist(
         conversation_id,
@@ -360,7 +410,7 @@ pub fn add_reaction(project: &Project, message_id: Uuid, emoji: &str, by: Author
     validate_emoji(emoji)?;
     let mut state = project.lock();
     let (conversation, _) = state
-        .load_message(message_id)?
+        .message_place(message_id)?
         .ok_or_else(|| AppError::not_found("Message not found"))?;
     if state.has_reaction(message_id, emoji, &by)? {
         return Ok(());
@@ -385,7 +435,7 @@ pub fn remove_reaction(
 ) -> AppResult<()> {
     let mut state = project.lock();
     let (conversation, _) = state
-        .load_message(message_id)?
+        .message_place(message_id)?
         .ok_or_else(|| AppError::not_found("Message not found"))?;
     if !state.has_reaction(message_id, emoji, &by)? {
         return Ok(());

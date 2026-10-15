@@ -12,8 +12,8 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::paths::ProjectPaths;
 use crate::protocol::{
-    AssetRef, Author, AuthorKind, ENVELOPE_VERSION, Event, EventKind, Message, MessageStatus,
-    Origin, TextComponent, new_id, now_ms,
+    AssetRef, Author, AuthorKind, Component, ENVELOPE_VERSION, Event, EventKind, Message,
+    MessageStatus, Origin, TextComponent, new_id, now_ms,
 };
 
 /// Receives delivered events. Returns `false` when the subscriber is gone and should be
@@ -163,7 +163,38 @@ impl ProjectState {
         Ok(event)
     }
 
+    /// The Conversation and status of a message, without reading its content or components.
+    pub fn message_place(&self, message_id: Uuid) -> AppResult<Option<(Uuid, MessageStatus)>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT conversation_id, status FROM messages WHERE id = ?1",
+                params![message_id.to_string()],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()?;
+        let Some((conversation, status)) = row else {
+            return Ok(None);
+        };
+        let corrupt = || AppError::storage("stored message is not readable");
+        let conversation = Uuid::parse_str(&conversation).map_err(|_| corrupt())?;
+        Ok(Some((conversation, MessageStatus::parse(&status).ok_or_else(corrupt)?)))
+    }
+
+    /// A message with all of its components' data; the app itself reads messages through
+    /// `message_place` and `load_message_with`.
+    #[cfg(test)]
     pub fn load_message(&self, message_id: Uuid) -> AppResult<Option<(Uuid, Message)>> {
+        self.load_message_with(message_id, true)
+    }
+
+    /// A message, with its components' `data` when `component_data` is set and `null` instead
+    /// otherwise (their `text` is always read).
+    pub fn load_message_with(
+        &self,
+        message_id: Uuid,
+        component_data: bool,
+    ) -> AppResult<Option<(Uuid, Message)>> {
         let row = self
             .conn
             .query_row(
@@ -201,9 +232,44 @@ impl ProjectState {
             reply_to: reply_to.map(|id| Uuid::parse_str(&id)).transpose().map_err(|_| corrupt())?,
             attachments: serde_json::from_str::<Vec<AssetRef>>(&attachments)?,
             text_components: serde_json::from_str::<Vec<TextComponent>>(&components)?,
+            components: self.message_components(message_id, component_data)?,
         };
         let conversation = Uuid::parse_str(&conversation).map_err(|_| corrupt())?;
         Ok(Some((conversation, message)))
+    }
+
+    /// A message's Interactive Components, in the order they were added; with `data` `null`
+    /// unless `with_data` is set.
+    fn message_components(&self, message_id: Uuid, with_data: bool) -> AppResult<Vec<Component>> {
+        let mut stmt = self.conn.prepare(if with_data {
+            "SELECT id, kind, version, data, text FROM components WHERE message_id = ?1 \
+             ORDER BY rowid"
+        } else {
+            "SELECT id, kind, version, 'null', text FROM components WHERE message_id = ?1 \
+             ORDER BY rowid"
+        })?;
+        let rows = stmt.query_map(params![message_id.to_string()], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, u32>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?;
+        let mut components = Vec::new();
+        for row in rows {
+            let (id, kind, version, data, text) = row?;
+            components.push(Component {
+                id: Uuid::parse_str(&id)
+                    .map_err(|_| AppError::storage("stored component is not readable"))?,
+                kind,
+                version,
+                data: serde_json::from_str(&data)?,
+                text,
+            });
+        }
+        Ok(components)
     }
 
     /// IDs of messages still streaming, optionally limited to one Conversation.
@@ -226,7 +292,8 @@ impl ProjectState {
         Ok(result)
     }
 
-    /// Every message of the Conversation, in the order they were created.
+    /// Every message of the Conversation, in the order they were created. Their components
+    /// carry only `text` (`data` is `null`), which is all a history needs.
     pub fn conversation_messages(&self, conversation_id: Uuid) -> AppResult<Vec<Message>> {
         let mut stmt = self
             .conn
@@ -238,7 +305,7 @@ impl ProjectState {
         for id in ids {
             let id = Uuid::parse_str(&id)
                 .map_err(|_| AppError::storage("stored message is not readable"))?;
-            if let Some((_, message)) = self.load_message(id)? {
+            if let Some((_, message)) = self.load_message_with(id, false)? {
                 messages.push(message);
             }
         }
@@ -317,6 +384,21 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
             tx.execute(
                 "UPDATE messages SET attachments = ?2 WHERE id = ?1",
                 params![message_id.to_string(), serde_json::to_string(&attachments)?],
+            )?;
+        }
+        EventKind::ComponentAdded { message_id, component } => {
+            tx.execute(
+                "INSERT INTO components (id, message_id, kind, version, data, text, created_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    component.id.to_string(),
+                    message_id.to_string(),
+                    component.kind,
+                    component.version,
+                    serde_json::to_string(&component.data)?,
+                    component.text,
+                    event.ts
+                ],
             )?;
         }
         EventKind::ReactionAdded { message_id, emoji, by } => {
@@ -424,5 +506,53 @@ mod tests {
 
         let seqs: Vec<i64> = collector.events().iter().map(|e| e.seq).collect();
         assert_eq!(seqs, vec![3, 4, 5]);
+    }
+
+    #[test]
+    fn components_are_rebuilt_in_the_order_they_were_added() {
+        let (_dir, project) = temp_project();
+        let conversation = conversations::create(&project).unwrap().id;
+        let input = conversations::SendMessageInput {
+            content: "papers on late blight".into(),
+            attachments: Vec::new(),
+            text_components: Vec::new(),
+        };
+        let question =
+            conversations::send_message(&project, conversation, input, new_id()).unwrap();
+        let author = Author {
+            kind: AuthorKind::MiniMe,
+            id: "researcher".into(),
+        };
+        let reply =
+            conversations::start_reply(&project, conversation, question.id, author).unwrap();
+
+        let component = |kind: &str, text: &str| Component {
+            id: new_id(),
+            kind: kind.into(),
+            version: 1,
+            data: serde_json::json!({ "papers": [] }),
+            text: text.into(),
+        };
+        let first = component("paper-sources", "first");
+        let second = component("theories", "second");
+        {
+            let mut state = project.lock();
+            for component in [&first, &second] {
+                let kind = EventKind::ComponentAdded {
+                    message_id: reply,
+                    component: component.clone(),
+                };
+                state.persist(conversation, kind).unwrap();
+            }
+        }
+
+        let (_, message) = project.lock().load_message(reply).unwrap().unwrap();
+        assert_eq!(message.components, vec![first.clone(), second]);
+
+        let history = project.lock().conversation_messages(conversation).unwrap();
+        let in_history = &history.iter().find(|m| m.id == reply).unwrap().components[0];
+        assert_eq!((in_history.text.as_str(), &in_history.data), ("first", &serde_json::Value::Null));
+        let (_, question) = project.lock().load_message(question.id).unwrap().unwrap();
+        assert!(question.components.is_empty());
     }
 }

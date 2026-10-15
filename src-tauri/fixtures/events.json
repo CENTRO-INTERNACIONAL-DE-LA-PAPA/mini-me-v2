@@ -34,7 +34,8 @@
             "start": 10,
             "end": 26
           }
-        ]
+        ],
+        "components": []
       }
     }
   },
@@ -58,7 +59,8 @@
         "status": "streaming",
         "reply_to": "0199d0a0-0000-7000-8000-000000000101",
         "attachments": [],
-        "text_components": []
+        "text_components": [],
+        "components": []
       }
     }
   },
@@ -174,7 +176,8 @@
         "status": "complete",
         "reply_to": null,
         "attachments": [],
-        "text_components": []
+        "text_components": [],
+        "components": []
       }
     }
   },
@@ -198,7 +201,8 @@
         "status": "streaming",
         "reply_to": "0199d0a0-0000-7000-8000-000000000103",
         "attachments": [],
-        "text_components": []
+        "text_components": [],
+        "components": []
       }
     }
   },
@@ -238,7 +242,8 @@
         "status": "streaming",
         "reply_to": "0199d0a0-0000-7000-8000-000000000103",
         "attachments": [],
-        "text_components": []
+        "text_components": [],
+        "components": []
       }
     }
   },
@@ -275,6 +280,40 @@
     "payload": {
       "message_id": "0199d0a0-0000-7000-8000-000000000105",
       "error": { "code": "interrupted", "message": "The app closed before this reply finished." }
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000014",
+    "type": "component.added",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 14,
+    "ts": 1760000001300,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message_id": "0199d0a0-0000-7000-8000-000000000105",
+      "component": {
+        "id": "0199d0a0-0000-7000-8000-000000000301",
+        "kind": "paper-sources",
+        "version": 1,
+        "data": {
+          "papers": [
+            {
+              "title": "Late blight resistance in wild potato",
+              "authors": ["A. Rivera", "B. Chen"],
+              "year": 2021,
+              "venue": "Potato Research",
+              "url": "https://doi.org/10.1000/example",
+              "reason": "Maps resistance genes in Solanum wild species."
+            }
+          ]
+        },
+        "text": "1. **Late blight resistance in wild potato** (2021)"
+      }
     }
   }
 ]

@@ -146,6 +146,31 @@ class CallContext:
         """The Conversation's earlier messages, `{ messages, truncated }`, oldest first."""
         return await self._requests.send(self.call_id, "conversation.history", {})
 
+    async def component(self, kind: str, version: int, data: Any, text: str) -> str:
+        """Adds an Interactive Component below the reply's text and returns its ID. `kind`
+        must be listed in the Trait's `components`, and `data` must have the shape that the
+        kind's renderer for `version` draws (`src/components/interactive/<kind>.tsx`). `text`
+        is a plain-text version of it, used in conversation history and wherever the kind is
+        not shown. Raises `CoreRequestError` with `component_not_allowed` or
+        `invalid_component` when the core refuses it; the Trait can then write `text`
+        instead."""
+        result = await self._requests.send(
+            self.call_id,
+            "component.add",
+            {"kind": kind, "version": version, "data": data, "text": text},
+        )
+        return str(result["component_id"])
+
+    async def write_asset(self, name: str, media_type: str, data: bytes) -> dict[str, Any]:
+        """Saves `data` (at most 32 MiB) in the Project as the file `name`, attaches it to the
+        reply, and returns the Asset `{ id, name, media_type, size_bytes }`."""
+        result = await self._requests.send(
+            self.call_id,
+            "asset.write",
+            {"name": name, "media_type": media_type, "data": base64.b64encode(data).decode()},
+        )
+        return result["asset"]
+
     async def secret(self, provider: str) -> Secret:
         """The secret for `provider`, which must be in the Trait's declared providers."""
         result = await self._requests.send(self.call_id, "secret.get", {"provider": provider})

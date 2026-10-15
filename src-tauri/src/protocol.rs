@@ -60,6 +60,11 @@ pub enum EventKind {
     MessageCancelled { message_id: Uuid },
     #[serde(rename = "attachment.added")]
     AttachmentAdded { message_id: Uuid, asset: AssetRef },
+    #[serde(rename = "component.added")]
+    ComponentAdded {
+        message_id: Uuid,
+        component: Component,
+    },
     #[serde(rename = "reaction.added")]
     ReactionAdded {
         message_id: Uuid,
@@ -164,6 +169,9 @@ pub struct Message {
     pub attachments: Vec<AssetRef>,
     #[serde(default)]
     pub text_components: Vec<TextComponent>,
+    /// Missing in `message.created` events stored before Interactive Components existed.
+    #[serde(default)]
+    pub components: Vec<Component>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -172,6 +180,18 @@ pub struct AssetRef {
     pub name: String,
     pub media_type: String,
     pub size_bytes: i64,
+}
+
+/// An Interactive Component shown below a reply's text. `data` matches the JSON Schema of
+/// `kind` at `version` in the catalogue; `text` stands in for it wherever the kind is not
+/// rendered, such as conversation history.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Component {
+    pub id: Uuid,
+    pub kind: String,
+    pub version: u32,
+    pub data: Value,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -237,6 +257,20 @@ mod tests {
     }
 
     #[test]
+    fn a_message_stored_without_components_has_none() {
+        let message: Message = serde_json::from_value(json!({
+            "id": new_id(),
+            "author": { "kind": "user", "id": "u" },
+            "content": "late blight",
+            "status": "complete",
+            "attachments": [],
+            "text_components": []
+        }))
+        .unwrap();
+        assert!(message.components.is_empty());
+    }
+
+    #[test]
     fn ids_are_v7_and_ordered() {
         let first = new_id();
         let second = new_id();
@@ -263,6 +297,7 @@ mod tests {
             "message.failed",
             "message.cancelled",
             "attachment.added",
+            "component.added",
             "reaction.added",
             "reaction.removed",
         ] {

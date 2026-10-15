@@ -48,7 +48,16 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
     case "message.created":
       return {
         ...next,
-        messages: [...state.messages, { ...known.payload.message, reactions: [], progress: null }],
+        messages: [
+          ...state.messages,
+          {
+            ...known.payload.message,
+            // Events stored before Interactive Components existed have no `components`.
+            components: known.payload.message.components ?? [],
+            reactions: [],
+            progress: null,
+          },
+        ],
       };
     case "message.delta": {
       const { message_id, text } = known.payload;
@@ -103,6 +112,16 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
         messages: updateMessage(state, message_id, (m) => ({
           ...m,
           attachments: [...m.attachments, asset],
+        })),
+      };
+    }
+    case "component.added": {
+      const { message_id, component } = known.payload;
+      return {
+        ...next,
+        messages: updateMessage(state, message_id, (m) => ({
+          ...m,
+          components: [...m.components, component],
         })),
       };
     }

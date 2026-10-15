@@ -13,7 +13,9 @@ The Rust core SHALL hold a shared Trait library. Each Trait definition SHALL hav
 - a `name` (imperative verb in Title Case) and a `description`;
 - a `color` (one mid-tone solid);
 - the `adapter` that runs it;
-- its `instructions` (text, or none for adapters that take none).
+- its `instructions` (text, or none for adapters that take none);
+- its `components`: the Interactive Component kinds its answers may include, possibly
+  empty. Only built-in Traits SHALL list any.
 
 The library is read-only in this version and contains *Summarize*, *Assist*, *Find Papers*
 and *Theorize*.
@@ -22,6 +24,11 @@ and *Theorize*.
 - **WHEN** the app starts
 - **THEN** the library contains *Summarize* and *Assist* (adapter `prompt`), *Find Papers*
   (adapter `asta-paper-finder`) and *Theorize* (adapter `asta-theorizer`)
+
+#### Scenario: Components of the built-in Traits
+- **WHEN** the app starts
+- **THEN** *Find Papers* lists `paper-sources`, *Theorize* lists `theories`, and
+  *Summarize* and *Assist* list none
 
 ### Requirement: Mini-Me definitions
 Each Mini-Me SHALL have:

@@ -32,7 +32,8 @@
               "start": 10,
               "end": 26
             }
-          ]
+          ],
+          "components": []
         },
         "needs_context": false,
         "mini_me_name": "Scribe"

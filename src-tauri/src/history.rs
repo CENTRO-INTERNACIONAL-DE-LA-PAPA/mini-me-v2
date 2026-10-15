@@ -43,12 +43,13 @@ pub fn history(messages: &[Message], before: Uuid, library: &Library, budget: us
     let mut total = 0;
     for message in earlier.collect::<Vec<_>>().into_iter().rev() {
         total += 1;
-        let size = message.content.chars().count();
+        let entry = entry(message, library);
+        let size = entry.content.chars().count();
         if used + size > budget {
             break;
         }
         used += size;
-        kept.push(entry(message, library));
+        kept.push(entry);
     }
     let truncated = kept.len() < total;
     kept.reverse();
@@ -72,16 +73,25 @@ fn entry(message: &Message, library: &Library) -> HistoryEntry {
     HistoryEntry {
         author,
         name,
-        content: message.content.clone(),
+        content: content(message),
         files: conversations::file_names(message),
         complete: message.status == MessageStatus::Complete,
     }
 }
 
+/// A message's text followed by the `text` of each of its Interactive Components, so a
+/// follow-up can refer to what a component showed.
+fn content(message: &Message) -> String {
+    let parts = std::iter::once(message.content.as_str())
+        .chain(message.components.iter().map(|c| c.text.as_str()))
+        .filter(|part| !part.is_empty());
+    parts.collect::<Vec<_>>().join("\n\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{AssetRef, Author, new_id};
+    use crate::protocol::{AssetRef, Author, Component, new_id};
 
     const SCRIBE: &str = "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01";
 
@@ -97,6 +107,7 @@ mod tests {
             reply_to: None,
             attachments: Vec::new(),
             text_components: Vec::new(),
+            components: Vec::new(),
         }
     }
 
@@ -153,6 +164,31 @@ mod tests {
         assert!(history.messages[1].complete);
         assert!(!history.messages[3].complete);
         assert_eq!(history.messages[3].content, "The main cause");
+    }
+
+    #[test]
+    fn a_reply_includes_the_text_of_its_components_within_the_budget() {
+        let mut reply = scribe("Found 2 papers.", MessageStatus::Complete);
+        reply.components.push(Component {
+            id: new_id(),
+            kind: "paper-sources".into(),
+            version: 1,
+            data: serde_json::json!({ "papers": [] }),
+            text: "1. Late blight\n2. Wild potato".into(),
+        });
+        let all = [user("papers?"), reply, user("summarize the second paper")];
+        let library = Library::builtin();
+
+        let history = history(&all, all[2].id, &library, HISTORY_BUDGET_CHARS);
+        assert_eq!(
+            history.messages[1].content,
+            "Found 2 papers.\n\n1. Late blight\n2. Wild potato"
+        );
+
+        let only_text = "Found 2 papers.".chars().count();
+        let tight = super::history(&all, all[2].id, &library, only_text + 7);
+        assert!(tight.messages.is_empty());
+        assert!(tight.truncated);
     }
 
     #[test]

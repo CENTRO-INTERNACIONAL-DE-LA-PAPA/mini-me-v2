@@ -254,6 +254,7 @@ impl Routing {
                 name: trait_def.name.clone(),
                 instructions: trait_def.instructions.clone(),
             },
+            components: trait_def.components.clone(),
             model,
             input: json!({ "text": input_text(message) }),
             needs_context,
@@ -421,6 +422,7 @@ mod tests {
             reply_to: None,
             attachments: Vec::new(),
             text_components,
+            components: Vec::new(),
         }
     }
 

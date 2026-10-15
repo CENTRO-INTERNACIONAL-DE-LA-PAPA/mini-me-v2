@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 3;
+pub const SIDECAR_PROTOCOL: u32 = 4;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -115,7 +115,8 @@ pub enum CoreFrame {
 }
 
 /// Frames the sidecar sends to the core. Types this version does not know, including the
-/// reserved `call.input_requested` and `call.component`, parse as `Unknown`.
+/// reserved `call.input_requested`, parse as `Unknown`. Interactive Components arrive as the
+/// `component.add` request, so a `call.component` frame is `Unknown` too.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SidecarFrame {

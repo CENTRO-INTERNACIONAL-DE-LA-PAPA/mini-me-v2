@@ -6,6 +6,7 @@ import type { MessageView } from "../protocol/eventStore";
 import { segments } from "../protocol/references";
 import type { JevAnswers, MiniMe } from "../protocol/types";
 import { formatSize } from "./format";
+import { InteractiveComponent } from "./interactive/InteractiveComponent";
 import { useMiniMes } from "./useMiniMes";
 
 const STATUS_LABEL: Record<string, string | undefined> = {
@@ -110,6 +111,13 @@ export function MessageItem({ projectId, message }: Props) {
           ),
         )}
       </p>
+      {message.components.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {message.components.map((component) => (
+            <InteractiveComponent key={component.id} component={component} />
+          ))}
+        </div>
+      )}
       {message.status === "streaming" && message.progress && (
         <p role="status" className="text-meta text-muted-foreground">
           {message.progress.label}

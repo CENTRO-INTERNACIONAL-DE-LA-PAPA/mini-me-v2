@@ -29,6 +29,8 @@ use crate::sidecar::SidecarLog;
 use crate::store::Project;
 
 pub const ASSET_CHUNK_BYTES: u64 = 1024 * 1024;
+/// The largest file a Trait may write with `asset.write`.
+const MAX_WRITE_BYTES: usize = 32 * 1024 * 1024;
 
 /// How long a cancelled call may take to end before the core stops waiting for it.
 pub const CANCEL_TIMEOUT: Duration = Duration::from_secs(5);
@@ -58,6 +60,8 @@ struct Call {
     adapter: String,
     /// The provider of the call's model; the only one whose secret the call may get.
     provider: Option<String>,
+    /// The Interactive Component kinds the call's Trait lists; the only ones it may add.
+    components: Vec<String>,
     cancelling: bool,
 }
 
@@ -66,6 +70,8 @@ pub struct CallSpec {
     pub author: Author,
     pub adapter: String,
     pub trait_def: CallTrait,
+    /// The Interactive Component kinds the Trait's answers may include.
+    pub components: Vec<String>,
     /// The model chosen in Settings, or `None` when none is set. Sent only to adapters that
     /// declare providers.
     pub model: Option<CallModel>,
@@ -89,6 +95,21 @@ pub struct TraitCalls {
     secrets: Box<dyn SecretSource>,
     log: Arc<SidecarLog>,
     cancel_timeout: Duration,
+}
+
+#[derive(Deserialize)]
+struct ComponentAddParams {
+    kind: String,
+    version: u32,
+    data: Value,
+    text: String,
+}
+
+#[derive(Deserialize)]
+struct AssetWriteParams {
+    name: String,
+    media_type: String,
+    data: String,
 }
 
 #[derive(Deserialize)]
@@ -203,6 +224,7 @@ impl TraitCalls {
                 message_id: reply,
                 adapter: spec.adapter.clone(),
                 provider: model.as_ref().map(|m| m.provider.clone()),
+                components: spec.components.clone(),
                 cancelling: false,
             },
         );
@@ -426,12 +448,13 @@ impl TraitCalls {
         let (call, is_route) = {
             let inner = self.lock();
             let call = inner.calls.get(&call_id).map(|c| {
-                let place = (c.conversation_id, c.answers);
+                let place = (c.conversation_id, c.answers, c.message_id, c.components.clone());
                 (Arc::clone(&c.project), c.adapter.clone(), c.provider.clone(), place)
             });
             (call, inner.routes.contains_key(&call_id))
         };
-        let Some((project, adapter, provider, (conversation_id, answers))) = call else {
+        let Some((project, adapter, provider, (conversation_id, answers, reply, kinds))) = call
+        else {
             if is_route {
                 return self.answer_route(method, params);
             }
@@ -445,6 +468,21 @@ impl TraitCalls {
                 Ok(serde_json::to_value(history)?)
             }
             "secret.get" => self.secret(&adapter, provider.as_deref(), parse_params(params)?),
+            "asset.write" => {
+                let p: AssetWriteParams = parse_params(params)?;
+                let bytes = decode_asset(&p.data)?;
+                let asset =
+                    conversations::attach_generated(&project, reply, &p.name, &p.media_type, &bytes)
+                        .map_err(reply_ended)?;
+                Ok(json!({ "asset": asset }))
+            }
+            "component.add" => {
+                let p: ComponentAddParams = parse_params(params)?;
+                let component = (p.kind.as_str(), p.version, p.data, p.text);
+                let id = conversations::add_component(&project, reply, &kinds, component)
+                    .map_err(reply_ended)?;
+                Ok(json!({ "component_id": id }))
+            }
             other => Err(AppError::new(
                 "unknown_method",
                 format!("The core has no request method called '{other}'."),
@@ -507,6 +545,31 @@ impl TraitCalls {
     }
 }
 
+/// The bytes of a written Asset, refused with `invalid_input` past `MAX_WRITE_BYTES`.
+fn decode_asset(data: &str) -> AppResult<Vec<u8>> {
+    let too_large = || AppError::invalid_input("A file a Trait writes may be at most 32 MiB.");
+    if data.len() / 4 * 3 > MAX_WRITE_BYTES + 3 {
+        return Err(too_large());
+    }
+    let bytes = BASE64
+        .decode(data)
+        .map_err(|_| AppError::invalid_input("The file's data is not valid base64."))?;
+    if bytes.len() > MAX_WRITE_BYTES {
+        return Err(too_large());
+    }
+    Ok(bytes)
+}
+
+/// A reply that was stopped while its call winds down takes no more output, as if the call
+/// had ended.
+fn reply_ended(err: AppError) -> AppError {
+    if err.code == "reply_finished" {
+        AppError::new("call_not_active", "This Trait call has ended.")
+    } else {
+        err
+    }
+}
+
 fn parse_params<T: for<'de> Deserialize<'de>>(params: Value) -> AppResult<T> {
     serde_json::from_value(params).map_err(|e| AppError::invalid_input(e.to_string()))
 }
@@ -548,6 +611,7 @@ pub mod test_support {
                 name: "Test".to_string(),
                 instructions: None,
             },
+            components: vec!["paper-sources".to_string()],
             model: Some(CallModel {
                 provider: "dummy".to_string(),
                 model: "dummy-model".to_string(),
@@ -810,6 +874,105 @@ mod tests {
             CoreFrame::CoreResponse { result: Some(result), error: None, .. } => result,
             other => panic!("expected a result, got {other:?}"),
         }
+    }
+
+    fn papers() -> Value {
+        json!({ "papers": [{ "title": "Late blight resistance in wild potato", "year": 2021 }] })
+    }
+
+    fn add_component(f: &Fixture, call_id: Uuid, params: Value) -> CoreFrame {
+        f.calls.respond("r".into(), call_id, "component.add", params)
+    }
+
+    #[test]
+    fn a_valid_component_is_added_to_the_reply() {
+        let f = quick();
+        let (call_id, reply) = f.start("echo");
+        let params = json!({
+            "kind": "paper-sources", "version": 1, "data": papers(), "text": "1. Late blight"
+        });
+        let id = result(add_component(&f, call_id, params))["component_id"].clone();
+
+        let (_, message) = f.project.lock().load_message(reply).unwrap().unwrap();
+        assert_eq!(message.components.len(), 1);
+        assert_eq!(json!(message.components[0].id), id);
+        assert_eq!(message.components[0].kind, "paper-sources");
+    }
+
+    #[test]
+    fn components_the_trait_does_not_list_or_without_text_are_refused() {
+        let f = quick();
+        let (call_id, reply) = f.start("echo");
+        let theories = json!({ "kind": "theories", "version": 1, "data": {}, "text": "t" });
+        assert_eq!(
+            error_code(add_component(&f, call_id, theories)).as_deref(),
+            Some("component_not_allowed")
+        );
+
+        let empty = json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": " " });
+        assert_eq!(
+            error_code(add_component(&f, call_id, empty)).as_deref(),
+            Some("invalid_component")
+        );
+
+        let (_, message) = f.project.lock().load_message(reply).unwrap().unwrap();
+        assert!(message.components.is_empty());
+        assert_eq!(message.status, MessageStatus::Streaming);
+    }
+
+    #[test]
+    fn a_component_after_the_call_ended_is_refused() {
+        let f = quick();
+        let (call_id, reply) = f.start("echo");
+        f.calls.handle(SidecarFrame::CallDone { call_id });
+        let params =
+            json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": "t" });
+        assert_eq!(
+            error_code(add_component(&f, call_id, params)).as_deref(),
+            Some("call_not_active")
+        );
+        let (_, message) = f.project.lock().load_message(reply).unwrap().unwrap();
+        assert!(message.components.is_empty());
+    }
+
+    fn write_asset(f: &Fixture, call_id: Uuid, name: &str, content: &[u8]) -> CoreFrame {
+        let data = BASE64.encode(content);
+        let params = json!({ "name": name, "media_type": "application/json", "data": data });
+        f.calls.respond("r".into(), call_id, "asset.write", params)
+    }
+
+    #[test]
+    fn a_written_asset_is_attached_to_the_reply() {
+        let f = quick();
+        let (call_id, reply) = f.start("echo");
+        let written = result(write_asset(&f, call_id, "theory-store.json", b"{\"theories\": []}"));
+        assert_eq!(written["asset"]["name"], "theory-store.json");
+
+        let (_, message) = f.project.lock().load_message(reply).unwrap().unwrap();
+        assert_eq!(message.attachments.len(), 1);
+        let path = assets::file_path(&f.project, message.attachments[0].id).unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), b"{\"theories\": []}");
+    }
+
+    #[test]
+    fn an_asset_written_after_the_call_ended_is_refused_and_not_stored() {
+        let f = quick();
+        let (call_id, _) = f.start("echo");
+        f.calls.handle(SidecarFrame::CallDone { call_id });
+        let response = write_asset(&f, call_id, "theory-store.json", b"{}");
+        assert_eq!(error_code(response).as_deref(), Some("call_not_active"));
+        assert!(assets::list(&f.project, None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_asset_with_a_path_in_its_name_is_refused() {
+        let f = quick();
+        let (call_id, reply) = f.start("echo");
+        let response = write_asset(&f, call_id, "../../notes.txt", b"x");
+        assert_eq!(error_code(response).as_deref(), Some("invalid_input"));
+        assert!(assets::list(&f.project, None).unwrap().is_empty());
+        let (_, message) = f.project.lock().load_message(reply).unwrap().unwrap();
+        assert!(message.attachments.is_empty());
     }
 
     #[test]

@@ -33,6 +33,19 @@ describe("applyEvent with the shared fixture", () => {
     expect(answer.attachments.map((a) => a.name)).toEqual(["summary.md"]);
   });
 
+  it("adds a component to its reply, after the fixture's other events", () => {
+    expect(interrupted.components).toHaveLength(1);
+    expect(interrupted.components[0]).toMatchObject({ kind: "paper-sources", version: 1 });
+    expect(answer.components).toEqual([]);
+  });
+
+  it("gives messages from events without components an empty list", () => {
+    const created = events[0] as ProtocolEvent & { payload: { message: object } };
+    const { components: _, ...message } = created.payload.message as { components?: unknown };
+    const old = { ...created, payload: { message } };
+    expect(replay([old]).messages[0].components).toEqual([]);
+  });
+
   it("adds and removes reactions", () => {
     expect(answer.reactions).toEqual([]);
   });

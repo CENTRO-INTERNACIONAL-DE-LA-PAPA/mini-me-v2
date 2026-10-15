@@ -14,6 +14,10 @@ pub struct TraitDef {
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
     pub instructions: Option<String>,
+    /// The Interactive Component kinds this Trait's answers may include. Only built-in
+    /// Traits list any.
+    #[serde(default)]
+    pub components: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -142,6 +146,25 @@ mod tests {
         assert_eq!(library.problems(), Vec::<String>::new());
         let names: Vec<&str> = library.traits.iter().map(|t| t.name.as_str()).collect();
         assert_eq!(names, ["Summarize", "Assist", "Find Papers", "Theorize"]);
+    }
+
+    #[test]
+    fn only_the_asta_traits_list_components() {
+        let library = Library::builtin();
+        let lists: Vec<(&str, Vec<&str>)> = library
+            .traits
+            .iter()
+            .map(|t| (t.name.as_str(), t.components.iter().map(String::as_str).collect()))
+            .collect();
+        assert_eq!(
+            lists,
+            [
+                ("Summarize", vec![]),
+                ("Assist", vec![]),
+                ("Find Papers", vec!["paper-sources"]),
+                ("Theorize", vec!["theories"]),
+            ]
+        );
     }
 
     #[test]

@@ -1,5 +1,6 @@
 mod ai2;
 mod assets;
+mod components;
 mod conversations;
 mod db;
 mod error;
