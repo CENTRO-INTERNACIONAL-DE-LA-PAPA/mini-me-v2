@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import fixture from "../../protocol/fixtures/events.json";
+import fixture from "../../src-tauri/fixtures/events.json";
 import { applyEvent, emptyConversation, type ConversationState } from "./eventStore";
 import type { ProtocolEvent } from "./types";
 

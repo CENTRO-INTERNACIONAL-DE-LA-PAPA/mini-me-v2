@@ -1,5 +1,9 @@
 # Mini-Me (v2)
 
+<p align="center">
+  <img src=".github/assets/mini-me-blobs.png" alt="Mini-Me" width="100%">
+</p>
+
 Mini-Me is a local-first, customizable desktop research tool for scientists at the
 [International Potato Center (CIP)](https://cipotato.org).
 

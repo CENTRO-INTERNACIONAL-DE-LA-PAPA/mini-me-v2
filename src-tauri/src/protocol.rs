@@ -1,5 +1,5 @@
 //! The event protocol shared by the UI, the Rust core and future producers.
-//! `src/protocol/types.ts` mirrors these types; `protocol/fixtures/events.json` keeps both
+//! `src/protocol/types.ts` mirrors these types; `src-tauri/fixtures/events.json` keeps both
 //! sides in agreement.
 
 use serde::{Deserialize, Serialize};
@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn fixture_round_trips_every_event_type() {
         let fixture: Vec<Value> =
-            serde_json::from_str(include_str!("../../protocol/fixtures/events.json")).unwrap();
+            serde_json::from_str(include_str!("../fixtures/events.json")).unwrap();
         let mut types: Vec<String> = Vec::new();
         for original in fixture {
             let event: Event = serde_json::from_value(original.clone())

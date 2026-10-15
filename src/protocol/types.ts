@@ -1,4 +1,4 @@
-// Mirrors src-tauri/src/protocol.rs; protocol/fixtures/events.json is checked by tests on
+// Mirrors src-tauri/src/protocol.rs; src-tauri/fixtures/events.json is checked by tests on
 // both sides.
 
 export type Uuid = string;

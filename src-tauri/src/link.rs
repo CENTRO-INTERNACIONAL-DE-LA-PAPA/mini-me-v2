@@ -1,6 +1,6 @@
 //! Frames of the link between the Rust core and the sidecar: one JSON object per line, each
 //! with a `type`. `sidecar/src/mini_me_sidecar` speaks the same frames, and
-//! `protocol/fixtures/sidecar-frames.json` holds one example of each.
+//! `src-tauri/fixtures/sidecar-frames.json` holds one example of each.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn fixture_round_trips_every_frame_type() {
         let fixture: Value =
-            serde_json::from_str(include_str!("../../protocol/fixtures/sidecar-frames.json"))
+            serde_json::from_str(include_str!("../fixtures/sidecar-frames.json"))
                 .unwrap();
         let mut types = Vec::new();
         for original in fixture["core_to_sidecar"].as_array().unwrap() {
