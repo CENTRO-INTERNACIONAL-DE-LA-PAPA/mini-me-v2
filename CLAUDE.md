@@ -30,8 +30,10 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org):
   `<type>(<optional scope>): <description>`, for example `feat(routing): ask Jev which
   Mini-Me answers` or `docs: link the first Mini-Me version`. Use the types `feat`, `fix`,
-  `docs`, `refactor`, `test`, `build`, `ci`, `perf`, `style` and `chore`. Mark a breaking
-  change with `!` after the type or scope and a `BREAKING CHANGE:` footer.
+  `docs`, `refactor`, `test`, `build`, `ci`, `perf`, `style` and `chore`. Do not use `!`
+  after the type; describe a breaking change in a `BREAKING CHANGE:` footer instead.
+- Branch names are `<type>/<short-kebab-name>`, with the same types, for example
+  `feat/routing` or `fix/sidecar-bundle`.
 - Commit and PR messages carry no Claude co-author or attribution trailers.
 
 ## Code conventions
