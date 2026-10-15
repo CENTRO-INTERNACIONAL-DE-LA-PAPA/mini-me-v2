@@ -239,7 +239,7 @@ proposed, reviewed, implemented, verified and archived before the next one start
 | 7 | Asta integration | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) vendored and pinned in the sidecar, signing in with your Ai2 account, and confirmation before any action with an extra cost | Planned |
 | 8 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |
 | 9 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Planned |
-| 10 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved either in memory (lost if the app closes) or through the core in `project.sqlite`, decided in that change | Planned |
+| 10 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved through the core in `project.sqlite`, so it survives closing the app | Planned |
 | 11 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
 | 12 | First Interactive Component | A table whose cells, rows and columns can be selected and referenced | Planned |
 | 13 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
