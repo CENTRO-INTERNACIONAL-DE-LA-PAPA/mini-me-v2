@@ -23,7 +23,7 @@ MAX_PAPERS = 20
 PAPER_FINDER_TIMEOUT_S = 300
 
 # The Theorizer's end-to-end skill: it finds papers, extracts evidence and forms theories.
-# With its default of 10 papers a run takes about 3–8 minutes.
+# Ai2 documents 3–8 minutes for a run, but real runs take 15–25 minutes.
 THEORIZER_SKILL = "literature-theory-generation"
 
 # Poll the Theorizer's task this often, and give up after this long.
@@ -87,7 +87,7 @@ class Theorize(Adapter):
 
         token = await _token(ctx)
         client = A2AClient(get_api_config("theorizer")["base_url"], api_key=token)
-        ctx.progress("Starting the Theorizer (this usually takes 3–8 minutes)…")
+        ctx.progress("Starting the Theorizer (this can take 20 minutes or more)…")
 
         # Naming the skill keeps the request from being routed to a narrower skill that takes
         # the same input.
@@ -257,39 +257,111 @@ def _relevance(paper: dict[str, Any]) -> str:
 
 
 def theories_reply(artifacts: list[dict[str, Any]]) -> str:
-    """Markdown for the Theorizer's artifacts: their text as is, and structured data rendered
-    as headed sections."""
-    sections: list[str] = []
+    """Markdown for the Theorizer's Theory Store: each theory and its statements in plain
+    language, every statement's supporting evidence cited by number, and the cited papers
+    listed at the end. The store's papers, extractions and evaluations are otherwise left
+    out, since they run to megabytes."""
+    store: dict[str, list[dict[str, Any]]] = {}
+    texts: list[str] = []
     for artifact in artifacts:
         for part in artifact.get("parts") or []:
             if not isinstance(part, dict):
                 continue
             if isinstance(part.get("text"), str) and part["text"].strip():
-                sections.append(part["text"].strip())
-            elif part.get("data") is not None:
-                sections.append(_render(part["data"]))
-    return "\n\n".join(s for s in sections if s) or "The Theorizer finished without theories."
+                texts.append(part["text"].strip())
+            if isinstance(part.get("data"), dict):
+                for key, value in part["data"].items():
+                    store.setdefault(_norm(key), []).extend(_entries(value))
+    theories = store.get("theories") or []
+    if not theories:
+        return "\n\n".join(texts) or "The Theorizer finished without theories."
+
+    paper_of_evidence = {
+        str(_field(item, "uuid")): _paper_key(_field(result, "paper_id"))
+        for result in store.get("extractionresults") or []
+        for item in _entries(_field(result, "extracted_data"))
+        if _field(item, "uuid") is not None
+    }
+    papers = {_paper_key(_field(p, "id")): p for p in store.get("paperstore") or []}
+    cited: list[str] = []
+
+    def citations(uuids: Any) -> str:
+        numbers = []
+        for uuid in uuids if isinstance(uuids, list) else []:
+            paper = paper_of_evidence.get(str(uuid))
+            if paper in papers:
+                if paper not in cited:
+                    cited.append(paper)
+                number = cited.index(paper) + 1
+                if number not in numbers:
+                    numbers.append(number)
+        return f" [{', '.join(map(str, sorted(numbers)))}]" if numbers else ""
+
+    count = len(theories)
+    lines = [f"The Theorizer formed {count} theor{'y' if count == 1 else 'ies'}."]
+    for number, theory in enumerate(theories, start=1):
+        # The theory's own wording sits in its first component, next to its bookkeeping.
+        details = {**theory, **(_entries(_field(theory, "components"))[:1] or [{}])[0]}
+        name = _plain(details, "theory_name") or _field(details, "name") or f"Theory {number}"
+        lines += ["", f"## {number}. {name}"]
+        if description := _plain(details, "theory_description"):
+            lines += ["", description]
+        for statement in _entries(_field(details, "theory_statements")):
+            if text := _plain(statement, "theory_statement"):
+                lines += ["", f"- **{text}**"]
+            for evidence in _entries(_field(statement, "supporting_evidence")):
+                if text := str(_field(evidence, "text") or "").strip():
+                    lines.append(f"  - {text}{citations(_field(evidence, 'uuids'))}")
+    if cited:
+        lines += ["", "**References**", ""]
+        lines += [f"{n}. {_reference(papers[key])}" for n, key in enumerate(cited, start=1)]
+    return "\n".join(lines)
 
 
-def _render(value: Any, depth: int = 0) -> str:
-    """Readable Markdown for nested JSON whose exact shape the Theorizer does not document."""
-    if isinstance(value, dict):
-        lines = []
-        for key, item in value.items():
-            label = str(key).replace("_", " ").capitalize()
-            if isinstance(item, (dict, list)):
-                lines.append(f"{'#' * min(depth + 3, 6)} {label}" if depth < 2 else f"**{label}**")
-                lines.append(_render(item, depth + 1))
-            elif item not in (None, ""):
-                lines.append(f"**{label}:** {item}")
-        return "\n\n".join(lines)
-    if isinstance(value, list):
-        rendered = []
-        for item in value:
-            text = _render(item, depth + 1)
-            rendered.append(text if isinstance(item, dict) else f"- {text}")
-        return "\n".join(rendered)
-    return str(value)
+def _norm(key: Any) -> str:
+    """A field name reduced to lowercase letters and digits, so `paper_id`, `paperId` and
+    `Paper ID` match: the Theory Store mixes snake_case and camelCase."""
+    return "".join(c for c in str(key).lower() if c.isalnum())
+
+
+def _field(data: Any, name: str) -> Any:
+    if not isinstance(data, dict):
+        return None
+    wanted = _norm(name)
+    return next((v for k, v in data.items() if _norm(k) == wanted and v is not None), None)
+
+
+def _entries(value: Any) -> list[dict[str, Any]]:
+    """The records in a Theory Store section, which is either a list or a dict keyed by ID."""
+    items = value.values() if isinstance(value, dict) else value if isinstance(value, list) else []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _plain(data: dict[str, Any], name: str) -> str:
+    """The plain-language version of a field, or its technical wording when there is none."""
+    value = _field(data, f"{name}_plain_language") or _field(data, name)
+    return str(value).strip() if value else ""
+
+
+def _paper_key(paper_id: Any) -> str:
+    """Paper IDs appear both as `paper-<sha>` and as the bare SHA."""
+    key = _norm(paper_id)
+    return key.removeprefix("paper")
+
+
+def _reference(paper: dict[str, Any]) -> str:
+    metadata = _field(paper, "s2_metadata") or {}
+    title = str(_field(paper, "title") or _field(metadata, "title") or "Untitled").strip()
+    year = _field(paper, "publication_year") or _field(metadata, "year")
+    doi = _field(_field(metadata, "external_ids"), "doi") or _field(paper, "doi")
+    corpus_id = _field(paper, "corpus_id") or _field(metadata, "corpus_id")
+    link = (
+        f"https://doi.org/{doi}"
+        if doi
+        else _field(metadata, "url")
+        or (f"https://www.semanticscholar.org/p/{corpus_id}" if corpus_id else None)
+    )
+    return f"**{title}**" + (f" ({year})" if year else "") + (f" — {link}" if link else "")
 
 
 def _task_summary(task: dict[str, Any]) -> tuple[Any, str, tuple[str, ...]]:
@@ -311,14 +383,31 @@ def _log_task(task: dict[str, Any]) -> None:
 
 def _log_shape(label: str, value: Any) -> None:
     """Logs the keys (never the values) of a response, for checking against what the
-    adapters expect."""
+    adapters expect. A list's dict items are merged into one shape, and a dict with many
+    keys (records keyed by ID) shows only its first."""
+
+    def merge(into: dict[str, Any], entry: dict[str, Any]) -> None:
+        for key, val in entry.items():
+            if isinstance(into.get(key), dict) and isinstance(val, dict):
+                merge(into[key], val)
+            else:
+                into.setdefault(key, val)
 
     def shape(item: Any, depth: int = 0) -> Any:
-        if depth > 3:
+        if depth > 12:
             return "…"
         if isinstance(item, dict):
+            if len(item) > 12:
+                first = next(iter(item.items()))
+                return {f"<{len(item)} keys, first {first[0]!r}>": shape(first[1], depth + 1)}
             return {k: shape(v, depth + 1) for k, v in item.items()}
         if isinstance(item, list):
+            dicts = [i for i in item if isinstance(i, dict)]
+            if dicts:
+                merged: dict[str, Any] = {}
+                for entry in dicts:
+                    merge(merged, entry)
+                return [shape(merged, depth + 1)]
             return [shape(item[0], depth + 1)] if item else []
         return type(item).__name__
 
