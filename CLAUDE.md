@@ -35,6 +35,9 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
 - Branch names are `<type>/<short-kebab-name>`, with the same types, for example
   `feat/routing` or `fix/sidecar-bundle`.
 - Commit and PR messages carry no Claude co-author or attribution trailers.
+- Every code change is reviewed manually by the user before it reaches `main`. Do not push
+  to `main` or merge into it until the user has seen the changes and explicitly approved
+  them; show what changed and wait.
 
 ## Code conventions
 
