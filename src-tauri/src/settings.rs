@@ -23,6 +23,38 @@ pub struct Settings {
     pub recent_projects: HashMap<Uuid, i64>,
     #[serde(default)]
     pub ai: AiSettings,
+    #[serde(default)]
+    pub routing: RoutingSettings,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RoutingSettings {
+    /// Below this confidence in Jev's choice of Mini-Me, the user is asked to mention one;
+    /// from 0 to 1.
+    pub threshold: f64,
+    /// A developer aid: store and show Jev's raw answers under each message.
+    #[serde(default)]
+    pub show_answers: bool,
+}
+
+impl Default for RoutingSettings {
+    fn default() -> Self {
+        Self {
+            threshold: 0.5,
+            show_answers: false,
+        }
+    }
+}
+
+impl RoutingSettings {
+    /// Sets the threshold, clamped to 0..=1.
+    pub fn set_threshold(&mut self, threshold: f64) -> AppResult<()> {
+        if !threshold.is_finite() {
+            return Err(AppError::invalid_input("The threshold must be a number from 0 to 1."));
+        }
+        self.threshold = threshold.clamp(0.0, 1.0);
+        Ok(())
+    }
 }
 
 /// The provider and model every AI Trait call uses. API keys are not here: they live in the
@@ -76,6 +108,7 @@ impl Settings {
             user_id: new_id(),
             recent_projects: HashMap::new(),
             ai: AiSettings::default(),
+            routing: RoutingSettings::default(),
         };
         settings.save(config_dir)?;
         Ok(settings)
@@ -130,6 +163,7 @@ mod tests {
         std::fs::write(dir.path().join(FILE_NAME), old).unwrap();
         let settings = Settings::load_or_create(dir.path()).unwrap();
         assert_eq!(settings.ai, AiSettings::default());
+        assert_eq!(settings.routing, RoutingSettings::default());
         assert_eq!(settings.ai.model(), None);
     }
 
@@ -150,5 +184,17 @@ mod tests {
             })
         );
         assert!(AiSettings::new("dummy", "m").is_err());
+    }
+
+    #[test]
+    fn the_threshold_is_clamped_to_zero_to_one() {
+        let mut routing = RoutingSettings::default();
+        routing.set_threshold(1.7).unwrap();
+        assert_eq!(routing.threshold, 1.0);
+        routing.set_threshold(-0.2).unwrap();
+        assert_eq!(routing.threshold, 0.0);
+        routing.set_threshold(0.65).unwrap();
+        assert_eq!(routing.threshold, 0.65);
+        assert!(routing.set_threshold(f64::NAN).is_err());
     }
 }

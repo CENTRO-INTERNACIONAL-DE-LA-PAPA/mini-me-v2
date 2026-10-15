@@ -75,7 +75,17 @@ export type KnownEvent = Envelope &
     | { type: "attachment.added"; payload: { message_id: Uuid; asset: AssetRef } }
     | { type: "reaction.added"; payload: { message_id: Uuid; emoji: string; by: Author } }
     | { type: "reaction.removed"; payload: { message_id: Uuid; emoji: string; by: Author } }
+    | { type: "routing.answered"; payload: JevAnswers & { message_id: Uuid } }
   );
+
+/** Jev's raw answers about a message, shown by the "Show Jev's answers" developer setting. */
+export interface JevAnswers {
+  answers: Record<
+    string,
+    { choice: string; confidence: number; probabilities: Record<string, number> }
+  > | null;
+  error: ErrorInfo | null;
+}
 
 /** Any event on the wire, including types this version of the UI does not know. */
 export type ProtocolEvent = Envelope & { type: string; payload: unknown };
@@ -139,9 +149,16 @@ export interface MiniMe {
 
 export type ProviderId = "openai" | "anthropic" | "google" | "openrouter";
 
-/** The AI settings. Saved keys are only named, never sent to the UI. */
+/** Every key the keychain can hold: the AI providers and Typesafe, which routes messages. */
+export type KeyAccount = ProviderId | "typesafe";
+
+/** The AI and routing settings. Saved keys are only named, never sent to the UI. */
 export interface AiSettings {
   provider: ProviderId;
   model: string;
-  saved_keys: ProviderId[];
+  saved_keys: KeyAccount[];
+  /** Below this confidence in Jev's choice, the user is asked to mention a Mini-Me; 0 to 1. */
+  threshold: number;
+  /** Developer setting: store and show Jev's raw answers under each message. */
+  show_answers: boolean;
 }

@@ -11,7 +11,7 @@ import {
   type ReferenceKind,
   type ReferenceTarget,
 } from "../protocol/references";
-import type { AssetRef } from "../protocol/types";
+import type { AssetRef, Message } from "../protocol/types";
 import { formatSize } from "./format";
 import { sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
 import { useMiniMes } from "./useMiniMes";
@@ -23,10 +23,12 @@ interface Props {
   projectId: string;
   conversationId: string;
   replying: boolean;
-  onSent: () => void;
+  /** Mini-Me is deciding who answers the last message; sending waits until it has. */
+  choosing: boolean;
+  onSent: (message: Message) => void;
 }
 
-export function Composer({ projectId, conversationId, replying, onSent }: Props) {
+export function Composer({ projectId, conversationId, replying, choosing, onSent }: Props) {
   const [text, setText] = useState("");
   const [references, setReferences] = useState<DraftReference[]>([]);
   const [attachments, setAttachments] = useState<AssetRef[]>([]);
@@ -101,11 +103,11 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
   }
 
   async function send() {
-    if (!text.trim() || replying || !ready) {
+    if (!text.trim() || replying || choosing || !ready) {
       return;
     }
     try {
-      await api.sendMessage(projectId, conversationId, {
+      const message = await api.sendMessage(projectId, conversationId, {
         content: text,
         attachments: attachments.map((a) => a.id),
         text_components: toTextComponents(references),
@@ -114,7 +116,7 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
       setReferences([]);
       setAttachments([]);
       setQuery(null);
-      onSent();
+      onSent(message);
     } catch (e) {
       setError(
         errorCode(e) === "reply_in_progress"
@@ -206,7 +208,7 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
             Stop
           </Button>
         ) : (
-          <Button onClick={send} disabled={!text.trim() || !ready}>
+          <Button onClick={send} disabled={!text.trim() || !ready || choosing}>
             Send
           </Button>
         )}

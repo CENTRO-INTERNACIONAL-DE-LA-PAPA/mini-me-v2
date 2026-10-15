@@ -1,12 +1,12 @@
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { api, errorMessage } from "../api";
 import type { MessageView } from "../protocol/eventStore";
 import { segments } from "../protocol/references";
-import type { MiniMe } from "../protocol/types";
+import type { JevAnswers, MiniMe } from "../protocol/types";
 import { formatSize } from "./format";
 import { useMiniMes } from "./useMiniMes";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<string, string | undefined> = {
   streaming: "Replying…",
@@ -19,14 +19,13 @@ interface Props {
   message: MessageView;
 }
 
-/** The author's name, and the Mini-Me when the author is a known one. Replies from before
- * Mini-Mes existed are authored by the `system`/`echo` Trait. */
+/** The author's name, and the Mini-Me when the author is a known one. */
 function author(message: MessageView, miniMes: MiniMe[]): { name: string; miniMe?: MiniMe } {
   switch (message.author.kind) {
     case "user":
       return { name: "You" };
     case "system":
-      return { name: message.author.id === "echo" ? "Echo" : "System" };
+      return { name: message.author.id === "routing" ? "Mini-Me" : "System" };
     default: {
       const miniMe = miniMes.find((m) => m.id === message.author.id);
       return miniMe ? { name: miniMe.name, miniMe } : { name: "Mini-Me" };
@@ -148,6 +147,9 @@ export function MessageItem({ projectId, message }: Props) {
           ))}
         </ul>
       )}
+      {message.jev && (
+        <JevAnswersBlock jev={message.jev} label={(id) => miniMe(id)?.name ?? id} />
+      )}
       {error && <p className="text-meta text-destructive">{error}</p>}
     </article>
   );
@@ -163,5 +165,30 @@ function MentionChip({ text, miniMe }: { text: string; miniMe?: MiniMe }) {
     >
       {text}
     </Badge>
+  );
+}
+
+/** Jev's raw answers, for the "Show Jev's answers" developer setting. */
+function JevAnswersBlock({ jev, label }: { jev: JevAnswers; label: (option: string) => string }) {
+  const percent = (value: number) => `${Math.round(value * 100)}%`;
+  return (
+    <details className="text-meta text-muted-foreground">
+      <summary className="cursor-pointer select-none">[DEBUG] Jev</summary>
+      {jev.error && (
+        <p className="mt-1">
+          {jev.error.code}: {jev.error.message}
+        </p>
+      )}
+      {jev.answers &&
+        Object.entries(jev.answers).map(([question, answer]) => (
+          <p key={question} className="mt-1 font-mono wrap-anywhere">
+            {question}: {label(answer.choice)} ({percent(answer.confidence)}) ·{" "}
+            {Object.entries(answer.probabilities)
+              .sort(([, a], [, b]) => b - a)
+              .map(([option, p]) => `${label(option)} ${percent(p)}`)
+              .join(", ")}
+          </p>
+        ))}
+    </details>
   );
 }

@@ -1,69 +1,266 @@
-//! Which Mini-Me answers a user message, and whether it also reacts to it. Until Typesafe's
-//! Jev is integrated, `stand_in` and `reaction` make the decisions Jev will make.
+//! Which Mini-Me answers a user message, whether it also reacts to it, and whether the
+//! message needs earlier context, as decided by Typesafe's Jev. When Jev is unsure or cannot
+//! be asked, the message gets a reply asking the user to mention a Mini-Me.
 
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use serde_json::json;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::conversations::{self, SendMessageInput};
 use crate::error::{AppError, AppResult};
-use crate::library::{ECHO_MINI_ME, Library, MiniMe};
-use crate::link::{CallModel, CallTrait};
-use crate::protocol::{Author, AuthorKind, Message, TextComponentKind};
+use crate::library::Library;
+use crate::link::{CallModel, CallTrait, RouteMiniMe};
+use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
 use crate::store::Project;
-use crate::trait_calls::{CallSpec, TraitCalls};
+use crate::trait_calls::{CallSpec, RouteAnswers, TraitCalls};
 
-/// Rules checked in order; the first that matches picks the emoji.
-const REACTION_RULES: [(&str, &[&str]); 2] = [
-    ("🎉", &["congrats", "congratulations", "it worked", "we did it"]),
-    ("👍", &["thank", "thanks", "great", "awesome", "perfect"]),
-];
+/// How long a message waits for Jev before the user is asked to mention a Mini-Me.
+pub const ROUTE_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Validates and persists a user message, then starts the reply of the Mini-Me that answers
-/// it and adds that Mini-Me's reaction, if any. A reply that cannot start is logged; the
-/// message stays sent.
-pub fn send(
-    calls: &TraitCalls,
-    library: &Library,
-    model: Option<CallModel>,
-    project: Arc<Project>,
-    conversation_id: Uuid,
-    input: SendMessageInput,
-    user_id: Uuid,
-) -> AppResult<Message> {
-    check_mentions(&input, library)?;
-    let message = conversations::send_message(&project, conversation_id, input, user_id)?;
-    let mini_me = answerer(&message, library);
-    let Some(trait_def) = library.step_trait(mini_me) else {
-        eprintln!("{} has no Trait to run", mini_me.name);
-        return Ok(message);
-    };
-    let author = Author {
-        kind: AuthorKind::MiniMe,
-        id: mini_me.id.to_string(),
-    };
-    let spec = CallSpec {
-        author: author.clone(),
-        adapter: trait_def.adapter.clone(),
-        trait_def: CallTrait {
-            id: trait_def.id,
-            name: trait_def.name.clone(),
-            instructions: trait_def.instructions.clone(),
-        },
-        model,
-        input: json!({ "text": input_text(&message) }),
-    };
-    if let Err(err) = calls.start(Arc::clone(&project), conversation_id, &message, spec) {
-        eprintln!("could not start a reply: {err}");
-        return Ok(message);
+/// The reactions Jev may choose besides `none`.
+const REACTIONS: [&str; 7] = ["👍", "🎉", "💛", "😄", "😡", "😢", "🥔"];
+
+/// What a routing decision depends on besides the message.
+#[derive(Debug, Clone)]
+pub struct RouteSettings {
+    pub model: Option<CallModel>,
+    pub threshold: f64,
+    pub timeout: Duration,
+    /// Store Jev's raw answers with the message (a developer setting).
+    pub show_answers: bool,
+}
+
+/// The author ID of the replies that ask the user to mention a Mini-Me.
+const ROUTING_AUTHOR: &str = "routing";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Unsure {
+    /// Jev answered below the confidence threshold.
+    LowConfidence,
+    /// Jev could not be asked, or a reply could not be started.
+    Unavailable,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum Answerer {
+    MiniMe(Uuid),
+    Unsure(Unsure),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Decision {
+    answerer: Answerer,
+    reaction: Option<String>,
+    needs_context: Option<bool>,
+}
+
+pub struct Routing {
+    library: Library,
+    /// Conversations whose latest message is waiting for a routing decision.
+    pending: Mutex<HashSet<Uuid>>,
+}
+
+impl Routing {
+    pub fn new(library: Library) -> Arc<Self> {
+        Arc::new(Self {
+            library,
+            pending: Mutex::new(HashSet::new()),
+        })
     }
-    if let Some(emoji) = reaction(&message.content) {
-        if let Err(err) = conversations::add_reaction(&project, message.id, emoji, author) {
-            eprintln!("could not add {}'s reaction: {err}", mini_me.name);
+
+    pub fn library(&self) -> &Library {
+        &self.library
+    }
+
+    /// Validates and persists a user message, then decides on a background thread who
+    /// answers it. Fails with `reply_in_progress` while an earlier message of the
+    /// Conversation is still waiting for its decision.
+    pub fn send(
+        self: &Arc<Self>,
+        calls: Arc<TraitCalls>,
+        settings: RouteSettings,
+        project: Arc<Project>,
+        conversation_id: Uuid,
+        input: SendMessageInput,
+        user_id: Uuid,
+    ) -> AppResult<Message> {
+        check_mentions(&input, &self.library)?;
+        let message = {
+            let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+            if pending.contains(&conversation_id) {
+                return Err(AppError::new(
+                    "reply_in_progress",
+                    "Wait until Mini-Me has chosen who answers your last message.",
+                ));
+            }
+            let message = conversations::send_message(&project, conversation_id, input, user_id)?;
+            pending.insert(conversation_id);
+            message
+        };
+        let this = Arc::clone(self);
+        let sent = message.clone();
+        std::thread::spawn(move || {
+            this.route(&calls, &settings, &project, conversation_id, &sent);
+            this.pending
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&conversation_id);
+        });
+        Ok(message)
+    }
+
+    /// Asks Jev and starts the reply, or replies asking the user to mention a Mini-Me.
+    fn route(
+        &self,
+        calls: &TraitCalls,
+        settings: &RouteSettings,
+        project: &Arc<Project>,
+        conversation_id: Uuid,
+        message: &Message,
+    ) {
+        let mentioned = first_mention(message);
+        let mut ask = vec!["reaction".to_string(), "needs_context".to_string()];
+        if mentioned.is_none() {
+            ask.insert(0, "mini_me".to_string());
+        }
+        let mini_mes = self
+            .library
+            .summaries()
+            .into_iter()
+            .map(|m| RouteMiniMe {
+                id: m.id,
+                name: m.name,
+                description: m.description,
+            })
+            .collect();
+        let routed = calls.route(state(message), mini_mes, ask, settings.timeout);
+        if settings.show_answers {
+            let (answers, error) = match &routed {
+                Ok(answers) => (json!(answers), None),
+                Err(err) => (
+                    Value::Null,
+                    Some(ErrorInfo {
+                        code: err.code.clone(),
+                        message: err.message.clone(),
+                    }),
+                ),
+            };
+            if let Err(err) = conversations::record_jev_answers(
+                project,
+                conversation_id,
+                message.id,
+                answers,
+                error,
+            ) {
+                eprintln!("could not store Jev's answers: {err}");
+            }
+        }
+        let answers = match routed {
+            Ok(answers) => Some(answers),
+            Err(err) => {
+                eprintln!("no routing decision: {err}");
+                None
+            }
+        };
+        let decision = decide(
+            answers.as_ref(),
+            mentioned,
+            settings.threshold,
+            &self.library,
+        );
+        let mini_me_id = match decision.answerer {
+            Answerer::MiniMe(id) => id,
+            Answerer::Unsure(why) => {
+                self.ask_for_mention(project, conversation_id, message.id, why);
+                return;
+            }
+        };
+        let started = self.start_reply(
+            calls,
+            settings.model.clone(),
+            project,
+            conversation_id,
+            message,
+            mini_me_id,
+            decision.needs_context,
+        );
+        match started {
+            Ok(author) => {
+                if let Some(emoji) = decision.reaction {
+                    if let Err(err) =
+                        conversations::add_reaction(project, message.id, &emoji, author)
+                    {
+                        eprintln!("could not add the reaction: {err}");
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("could not start a reply: {err}");
+                self.ask_for_mention(project, conversation_id, message.id, Unsure::Unavailable);
+            }
         }
     }
-    Ok(message)
+
+    fn ask_for_mention(
+        &self,
+        project: &Project,
+        conversation_id: Uuid,
+        message_id: Uuid,
+        why: Unsure,
+    ) {
+        let content = mention_request(&self.library, why);
+        if let Err(err) = conversations::system_reply(
+            project,
+            conversation_id,
+            message_id,
+            ROUTING_AUTHOR,
+            &content,
+        ) {
+            eprintln!("could not ask for a mention: {err}");
+        }
+    }
+
+    /// Starts `mini_me_id`'s reply to `message`; returns the reply's author.
+    fn start_reply(
+        &self,
+        calls: &TraitCalls,
+        model: Option<CallModel>,
+        project: &Arc<Project>,
+        conversation_id: Uuid,
+        message: &Message,
+        mini_me_id: Uuid,
+        needs_context: Option<bool>,
+    ) -> AppResult<Author> {
+        let mini_me = self
+            .library
+            .mini_me(mini_me_id)
+            .ok_or_else(|| AppError::not_found("Mini-Me not found"))?;
+        let trait_def = self
+            .library
+            .step_trait(mini_me)
+            .ok_or_else(|| AppError::not_found(format!("{} has no Trait to run", mini_me.name)))?;
+        let author = Author {
+            kind: AuthorKind::MiniMe,
+            id: mini_me.id.to_string(),
+        };
+        let spec = CallSpec {
+            author: author.clone(),
+            adapter: trait_def.adapter.clone(),
+            trait_def: CallTrait {
+                id: trait_def.id,
+                name: trait_def.name.clone(),
+                instructions: trait_def.instructions.clone(),
+            },
+            model,
+            input: json!({ "text": input_text(message) }),
+            needs_context,
+        };
+        calls.start(Arc::clone(project), conversation_id, message, spec)?;
+        Ok(author)
+    }
 }
 
 /// Rejects a message that mentions a Mini-Me the library does not have.
@@ -78,37 +275,84 @@ fn check_mentions(input: &SendMessageInput, library: &Library) -> AppResult<()> 
     Ok(())
 }
 
-/// The first Mini-Me mentioned in the message, or the stand-in's pick.
-fn answerer<'a>(message: &Message, library: &'a Library) -> &'a MiniMe {
+fn first_mention(message: &Message) -> Option<Uuid> {
     message
         .text_components
         .iter()
         .filter(|c| c.kind == TextComponentKind::MiniMe)
         .min_by_key(|c| c.start)
-        .and_then(|c| library.mini_me(c.id))
-        .unwrap_or_else(|| stand_in(library))
+        .map(|c| c.id)
 }
 
-/// Stands in for Jev's choice: always the Echo Mini-Me.
-fn stand_in(library: &Library) -> &MiniMe {
-    library
-        .mini_me(ECHO_MINI_ME)
-        .expect("the built-in library has the Echo Mini-Me")
+/// What Jev sees of a message: its text without mentions and the names of its files. File
+/// contents stay on the user's computer.
+fn state(message: &Message) -> Value {
+    let mut files: Vec<String> = message.attachments.iter().map(|a| a.name.clone()).collect();
+    for component in &message.text_components {
+        if component.kind == TextComponentKind::Asset {
+            let name = component.label.trim_start_matches('#').to_string();
+            if !files.contains(&name) {
+                files.push(name);
+            }
+        }
+    }
+    json!({ "message": input_text(message), "files": files })
 }
 
-/// The emoji the answering Mini-Me reacts with, matching whole words or phrases regardless
-/// of case.
-fn reaction(content: &str) -> Option<&'static str> {
-    let words: Vec<String> = content
-        .split(|c: char| !c.is_alphanumeric() && c != '\'')
-        .filter(|w| !w.is_empty())
-        .map(str::to_lowercase)
-        .collect();
-    let spaced = format!(" {} ", words.join(" "));
-    REACTION_RULES
-        .iter()
-        .find(|(_, keywords)| keywords.iter().any(|k| spaced.contains(&format!(" {k} "))))
-        .map(|(emoji, _)| *emoji)
+/// Turns Jev's answers (`None` when Jev could not be asked) into who answers, the reaction
+/// and the context answer. A confidence equal to the threshold passes.
+fn decide(
+    answers: Option<&RouteAnswers>,
+    mentioned: Option<Uuid>,
+    threshold: f64,
+    library: &Library,
+) -> Decision {
+    let answer = |question: &str| answers.and_then(|a| a.get(question));
+
+    let answerer = if let Some(id) = mentioned {
+        Answerer::MiniMe(id)
+    } else if let Some(choice) = answer("mini_me") {
+        let chosen = Uuid::parse_str(&choice.choice)
+            .ok()
+            .filter(|id| library.mini_me(*id).is_some());
+        match chosen {
+            Some(id) if choice.confidence >= threshold => Answerer::MiniMe(id),
+            _ => Answerer::Unsure(Unsure::LowConfidence),
+        }
+    } else {
+        Answerer::Unsure(Unsure::Unavailable)
+    };
+
+    let reaction = answer("reaction")
+        .filter(|r| r.confidence >= threshold && REACTIONS.contains(&r.choice.as_str()))
+        .map(|r| r.choice.clone());
+    let needs_context = answer("needs_context").and_then(|c| match c.choice.as_str() {
+        "yes" => Some(true),
+        "no" => Some(false),
+        _ => None,
+    });
+    Decision {
+        answerer,
+        reaction,
+        needs_context,
+    }
+}
+
+/// The reply asking the user to mention a Mini-Me, with the first Mini-Me as an example.
+fn mention_request(library: &Library, why: Unsure) -> String {
+    let example = library
+        .summaries()
+        .first()
+        .map_or_else(String::new, |m| format!(", for example @{}", m.name));
+    match why {
+        Unsure::LowConfidence => {
+            format!("Not sure which Mini-Me should answer this. Mention one with @{example}.")
+        }
+        Unsure::Unavailable => format!(
+            "Couldn't choose a Mini-Me: Typesafe is unavailable or has no key in Settings. \
+             Mention one with @{example}."
+        ),
+    }
 }
 
 /// The message content without its Mini-Me mentions, trimmed. A mention between two spaces
@@ -142,14 +386,18 @@ fn input_text(message: &Message) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+    use std::time::Instant;
+
     use super::*;
-    use crate::link::{AdapterInfo, CoreFrame};
+    use crate::link::{AdapterInfo, ChoiceAnswer, CoreFrame};
     use crate::protocol::{EventKind, MessageStatus, TextComponent, new_id};
     use crate::secrets::NoSecrets;
     use crate::sidecar::SidecarLog;
     use crate::trait_calls::FrameSink;
 
     const SCRIBE: Uuid = uuid::uuid!("5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01");
+    const ASSISTANT: Uuid = uuid::uuid!("5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b03");
 
     /// A message whose `@Name` mentions are found in `content` in order of `mentions`.
     fn message(content: &str, mentions: &[(&str, Uuid)]) -> Message {
@@ -185,41 +433,139 @@ mod tests {
         }
     }
 
-    #[test]
-    fn the_first_mention_answers_and_no_mention_picks_echo() {
-        let library = Library::builtin();
-        let both = message(
-            "@Echo and @Scribe, hello",
-            &[("@Scribe", SCRIBE), ("@Echo", ECHO_MINI_ME)],
-        );
-        assert_eq!(answerer(&both, &library).id, ECHO_MINI_ME);
-        let scribe = message("@Scribe summarize this", &[("@Scribe", SCRIBE)]);
-        assert_eq!(answerer(&scribe, &library).id, SCRIBE);
-        assert_eq!(answerer(&message("late blight spreads", &[]), &library).id, ECHO_MINI_ME);
+    fn answer(choice: &str, confidence: f64, probabilities: &[(&str, f64)]) -> ChoiceAnswer {
+        ChoiceAnswer {
+            choice: choice.to_string(),
+            confidence,
+            probabilities: probabilities
+                .iter()
+                .map(|(k, p)| (k.to_string(), *p))
+                .collect(),
+        }
+    }
+
+    fn answers(entries: Vec<(&str, ChoiceAnswer)>) -> RouteAnswers {
+        entries
+            .into_iter()
+            .map(|(k, a)| (k.to_string(), a))
+            .collect::<BTreeMap<_, _>>()
     }
 
     #[test]
-    fn reactions_follow_the_keyword_rules() {
-        assert_eq!(reaction("Thanks, summarize this"), Some("👍"));
-        assert_eq!(reaction("That was GREAT!"), Some("👍"));
-        assert_eq!(reaction("it worked, thanks!"), Some("🎉"));
-        assert_eq!(reaction("Congratulations to the team"), Some("🎉"));
-        assert_eq!(reaction("late blight spreads"), None);
-        assert_eq!(reaction("a greater yield"), None);
-        assert_eq!(reaction("it workedout"), None);
+    fn jev_picks_the_mini_me_at_or_above_the_threshold() {
+        let library = Library::builtin();
+        let scribe = SCRIBE.to_string();
+        let sure = answers(vec![("mini_me", answer(&scribe, 0.5, &[]))]);
+        assert_eq!(
+            decide(Some(&sure), None, 0.5, &library).answerer,
+            Answerer::MiniMe(SCRIBE)
+        );
+    }
+
+    #[test]
+    fn low_confidence_or_an_unknown_mini_me_is_unsure() {
+        let library = Library::builtin();
+        let unsure = answers(vec![("mini_me", answer(&SCRIBE.to_string(), 0.3, &[]))]);
+        assert_eq!(
+            decide(Some(&unsure), None, 0.5, &library).answerer,
+            Answerer::Unsure(Unsure::LowConfidence)
+        );
+        let unknown = answers(vec![("mini_me", answer(&new_id().to_string(), 0.99, &[]))]);
+        assert_eq!(
+            decide(Some(&unknown), None, 0.5, &library).answerer,
+            Answerer::Unsure(Unsure::LowConfidence)
+        );
+    }
+
+    #[test]
+    fn without_jev_only_a_mentioned_mini_me_answers() {
+        let library = Library::builtin();
+        assert_eq!(
+            decide(None, None, 0.5, &library),
+            Decision {
+                answerer: Answerer::Unsure(Unsure::Unavailable),
+                reaction: None,
+                needs_context: None,
+            }
+        );
+        assert_eq!(
+            decide(None, Some(SCRIBE), 0.5, &library),
+            Decision {
+                answerer: Answerer::MiniMe(SCRIBE),
+                reaction: None,
+                needs_context: None,
+            }
+        );
+    }
+
+    #[test]
+    fn the_mention_request_says_why_and_gives_an_example() {
+        let library = Library::builtin();
+        let unsure = mention_request(&library, Unsure::LowConfidence);
+        assert!(unsure.starts_with("Not sure which Mini-Me"));
+        assert!(unsure.contains("@Scribe"));
+        let unavailable = mention_request(&library, Unsure::Unavailable);
+        assert!(unavailable.contains("Typesafe"));
+        assert!(unavailable.contains("@Scribe"));
+    }
+
+    #[test]
+    fn reactions_and_context_follow_jevs_answers() {
+        let library = Library::builtin();
+        let confident = answers(vec![
+            ("reaction", answer("👍", 0.8, &[])),
+            ("needs_context", answer("yes", 0.6, &[])),
+        ]);
+        let decision = decide(Some(&confident), Some(SCRIBE), 0.5, &library);
+        assert_eq!(decision.reaction.as_deref(), Some("👍"));
+        assert_eq!(decision.needs_context, Some(true));
+
+        let unsure = answers(vec![
+            ("reaction", answer("🎉", 0.4, &[])),
+            ("needs_context", answer("no", 0.9, &[])),
+        ]);
+        let decision = decide(Some(&unsure), Some(SCRIBE), 0.5, &library);
+        assert_eq!(decision.reaction, None);
+        assert_eq!(decision.needs_context, Some(false));
+
+        let none = answers(vec![("reaction", answer("none", 0.99, &[]))]);
+        assert_eq!(
+            decide(Some(&none), Some(SCRIBE), 0.5, &library).reaction,
+            None
+        );
     }
 
     #[test]
     fn mentions_are_removed_from_the_input() {
-        let echo = |content: &str| input_text(&message(content, &[("@Echo", ECHO_MINI_ME)]));
-        assert_eq!(echo("@Echo late blight"), "late blight");
-        assert_eq!(echo("hi @Echo there"), "hi there");
-        assert_eq!(echo("papa 🥔 @Echo ñame"), "papa 🥔 ñame");
+        let assistant = |content: &str| input_text(&message(content, &[("@Assistant", ASSISTANT)]));
+        assert_eq!(assistant("@Assistant late blight"), "late blight");
+        assert_eq!(assistant("hi @Assistant there"), "hi there");
+        assert_eq!(assistant("papa 🥔 @Assistant ñame"), "papa 🥔 ñame");
         let both = message(
-            "@Echo and @Scribe, hello",
-            &[("@Echo", ECHO_MINI_ME), ("@Scribe", SCRIBE)],
+            "@Assistant and @Scribe, hello",
+            &[("@Assistant", ASSISTANT), ("@Scribe", SCRIBE)],
         );
         assert_eq!(input_text(&both), "and , hello");
+        assert_eq!(first_mention(&both), Some(ASSISTANT));
+    }
+
+    #[test]
+    fn jev_gets_the_text_and_file_names_only() {
+        let mut sent = message(
+            "@Assistant summarize #notes.txt",
+            &[("@Assistant", ASSISTANT)],
+        );
+        sent.text_components.push(TextComponent {
+            kind: TextComponentKind::Asset,
+            id: new_id(),
+            label: "#notes.txt".into(),
+            start: 21,
+            end: 31,
+        });
+        assert_eq!(
+            state(&sent),
+            json!({ "message": "summarize #notes.txt", "files": ["notes.txt"] })
+        );
     }
 
     #[test]
@@ -230,13 +576,16 @@ mod tests {
             attachments: Vec::new(),
             text_components: message("@Ghost hi", &[("@Ghost", new_id())]).text_components,
         };
-        assert_eq!(check_mentions(&input, &library).unwrap_err().code, "invalid_input");
+        assert_eq!(
+            check_mentions(&input, &library).unwrap_err().code,
+            "invalid_input"
+        );
         input.text_components[0].id = SCRIBE;
         assert!(check_mentions(&input, &library).is_ok());
     }
 
     #[derive(Default)]
-    struct Recorder(std::sync::Mutex<Vec<CoreFrame>>);
+    struct Recorder(Mutex<Vec<CoreFrame>>);
 
     impl FrameSink for Recorder {
         fn send(&self, frame: &CoreFrame) -> bool {
@@ -245,59 +594,201 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_mention_with_thanks_gets_a_reply_and_a_reaction_from_that_mini_me() {
-        let (_dir, project) = crate::projects::test_support::temp_project();
+    struct Fixture {
+        _dir: tempfile::TempDir,
+        project: Arc<Project>,
+        conversation: Uuid,
+        calls: Arc<TraitCalls>,
+        sink: Arc<Recorder>,
+        routing: Arc<Routing>,
+    }
+
+    fn fixture() -> Fixture {
+        let (dir, project) = crate::projects::test_support::temp_project();
         let project = Arc::new(project);
         let conversation = conversations::create(&project).unwrap().id;
-        let calls = TraitCalls::new(
+        let calls = Arc::new(TraitCalls::new(
             Box::new(NoSecrets),
             Arc::new(SidecarLog::disabled()),
             crate::trait_calls::CANCEL_TIMEOUT,
-        );
+        ));
         let sink = Arc::new(Recorder::default());
-        let echo_adapter = AdapterInfo {
-            id: "echo".into(),
+        let prompt_adapter = AdapterInfo {
+            id: "prompt".into(),
             description: String::new(),
             input_schema: json!({}),
-            providers: Vec::new(),
+            providers: vec!["dummy".into()],
         };
-        calls.connect(Arc::clone(&sink) as Arc<dyn FrameSink>, vec![echo_adapter]);
+        calls.connect(
+            Arc::clone(&sink) as Arc<dyn FrameSink>,
+            vec![prompt_adapter],
+        );
+        Fixture {
+            _dir: dir,
+            project,
+            conversation,
+            calls,
+            sink,
+            routing: Routing::new(Library::builtin()),
+        }
+    }
 
-        let content = "@Echo hi thanks";
-        let input = SendMessageInput {
-            content: content.into(),
-            attachments: Vec::new(),
-            text_components: message(content, &[("@Echo", ECHO_MINI_ME)]).text_components,
-        };
-        let library = Library::builtin();
-        let sent = send(&calls, &library, None, Arc::clone(&project), conversation, input, new_id())
+    impl Fixture {
+        fn send(
+            &self,
+            content: &str,
+            mentions: &[(&str, Uuid)],
+            timeout: Duration,
+        ) -> AppResult<Message> {
+            let input = SendMessageInput {
+                content: content.into(),
+                attachments: Vec::new(),
+                text_components: message(content, mentions).text_components,
+            };
+            let settings = RouteSettings {
+                model: Some(CallModel {
+                    provider: "dummy".into(),
+                    model: "dummy-model".into(),
+                }),
+                threshold: 0.5,
+                timeout,
+                show_answers: false,
+            };
+            self.routing.send(
+                Arc::clone(&self.calls),
+                settings,
+                Arc::clone(&self.project),
+                self.conversation,
+                input,
+                new_id(),
+            )
+        }
+
+        fn events(&self) -> Vec<EventKind> {
+            let events = self
+                .project
+                .lock()
+                .events_after(self.conversation, 0)
+                .unwrap();
+            events.into_iter().map(|e| e.kind).collect()
+        }
+
+        fn wait_for(&self, what: &str, found: impl Fn(&[EventKind]) -> bool) -> Vec<EventKind> {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                let events = self.events();
+                if found(&events) {
+                    return events;
+                }
+                assert!(Instant::now() < deadline, "timed out waiting for {what}");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+
+        fn route_id(&self) -> Uuid {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                let found = self
+                    .sink
+                    .0
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .find_map(|frame| match frame {
+                        CoreFrame::RouteStart { route_id, .. } => Some(*route_id),
+                        _ => None,
+                    });
+                if let Some(route_id) = found {
+                    return route_id;
+                }
+                assert!(Instant::now() < deadline, "no route.start was sent");
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+    }
+
+    fn is_routing_note(events: &[EventKind]) -> bool {
+        events.iter().any(|e| {
+            matches!(e, EventKind::MessageCreated { message }
+                if message.author.kind == AuthorKind::System && message.author.id == ROUTING_AUTHOR)
+        })
+    }
+
+    #[test]
+    fn a_mention_with_a_thumbs_up_gets_a_reply_and_a_reaction_from_that_mini_me() {
+        let f = fixture();
+        let sent = f
+            .send(
+                "@Assistant hi thanks",
+                &[("@Assistant", ASSISTANT)],
+                ROUTE_TIMEOUT,
+            )
             .unwrap();
-
-        let frames = sink.0.lock().unwrap().clone();
-        let [CoreFrame::CallStart { adapter, input, model, .. }] = frames.as_slice() else {
-            panic!("expected one call.start, got {frames:?}");
-        };
-        assert_eq!(adapter, "echo");
-        assert_eq!(input, &json!({ "text": "hi thanks" }));
-        assert_eq!(model, &None);
-
-        let echo = Author {
+        let route_id = f.route_id();
+        f.calls.handle(crate::link::SidecarFrame::RouteDone {
+            route_id,
+            answers: answers(vec![
+                ("reaction", answer("👍", 0.9, &[])),
+                ("needs_context", answer("no", 0.9, &[])),
+            ]),
+        });
+        let assistant = Author {
             kind: AuthorKind::MiniMe,
-            id: ECHO_MINI_ME.to_string(),
+            id: ASSISTANT.to_string(),
         };
-        let events = project.lock().events_after(conversation, 0).unwrap();
-        let reply_author = events.iter().find_map(|e| match &e.kind {
-            EventKind::MessageCreated { message } if message.id != sent.id => {
-                Some(message.author.clone())
+        let events = f.wait_for("the reaction", |events| {
+            events
+                .iter()
+                .any(|e| matches!(e, EventKind::ReactionAdded { .. }))
+        });
+        assert!(events.iter().any(|e| matches!(
+            e,
+            EventKind::ReactionAdded { message_id, emoji, by }
+                if *message_id == sent.id && emoji == "👍" && *by == assistant
+        )));
+        let frames = f.sink.0.lock().unwrap().clone();
+        let start = frames.iter().find_map(|frame| match frame {
+            CoreFrame::CallStart {
+                adapter,
+                input,
+                context,
+                ..
+            } => Some((adapter.clone(), input.clone(), context.needs_context)),
+            _ => None,
+        });
+        assert_eq!(
+            start,
+            Some(("prompt".into(), json!({ "text": "hi thanks" }), Some(false)))
+        );
+    }
+
+    #[test]
+    fn a_second_message_waits_and_an_unanswered_route_asks_for_a_mention() {
+        let f = fixture();
+        let first = f
+            .send("late blight spreads", &[], Duration::from_millis(300))
+            .unwrap();
+        let second = f.send("and another", &[], ROUTE_TIMEOUT);
+        assert_eq!(second.unwrap_err().code, "reply_in_progress");
+
+        let events = f.wait_for("the routing note", is_routing_note);
+        let note = events.iter().find_map(|e| match e {
+            EventKind::MessageCreated { message } if message.author.id == ROUTING_AUTHOR => {
+                Some(message.clone())
             }
             _ => None,
         });
-        assert_eq!(reply_author, Some(echo.clone()));
-        assert!(events.iter().any(|e| matches!(
-            &e.kind,
-            EventKind::ReactionAdded { message_id, emoji, by }
-                if *message_id == sent.id && emoji == "👍" && *by == echo
-        )));
+        let note = note.unwrap();
+        assert_eq!(note.reply_to, Some(first.id));
+        assert_eq!(note.status, MessageStatus::Complete);
+        assert!(note.content.contains("Typesafe"));
+        let started = f
+            .sink
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|frame| matches!(frame, CoreFrame::CallStart { .. }));
+        assert!(!started);
     }
 }

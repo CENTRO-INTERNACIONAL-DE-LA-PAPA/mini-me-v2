@@ -13,18 +13,33 @@ pub const PROVIDERS: [(&str, &str); 4] = [
     ("openrouter", "OpenRouter"),
 ];
 
-/// Keychain entries are stored under this service, one per provider ID.
+/// Every key the keychain holds: the AI providers, then Typesafe for routing.
+const KEY_ACCOUNTS: [(&str, &str); 5] = [
+    PROVIDERS[0],
+    PROVIDERS[1],
+    PROVIDERS[2],
+    PROVIDERS[3],
+    ("typesafe", "Typesafe"),
+];
+
+/// Keychain entries are stored under this service, one per key account.
 const KEYCHAIN_SERVICE: &str = "org.cipotato.mini-me";
 
 pub fn provider_name(id: &str) -> &str {
-    PROVIDERS
+    KEY_ACCOUNTS
         .iter()
-        .find(|(provider, _)| *provider == id)
+        .find(|(account, _)| *account == id)
         .map_or(id, |(_, name)| name)
 }
 
+/// Whether `id` is an AI provider a model can be chosen from.
 pub fn is_provider(id: &str) -> bool {
     PROVIDERS.iter().any(|(provider, _)| *provider == id)
+}
+
+/// Whether the keychain may hold a key for `id`.
+pub fn is_key_account(id: &str) -> bool {
+    KEY_ACCOUNTS.iter().any(|(account, _)| *account == id)
 }
 
 pub struct Secret(String);
@@ -74,7 +89,7 @@ pub struct KeychainSecrets;
 
 impl KeychainSecrets {
     fn entry(provider: &str) -> AppResult<keyring::Entry> {
-        if !is_provider(provider) {
+        if !is_key_account(provider) {
             return Err(AppError::invalid_input(format!("Unknown provider {provider:?}.")));
         }
         keyring::Entry::new(KEYCHAIN_SERVICE, provider).map_err(keychain_error)
@@ -96,9 +111,9 @@ impl KeychainSecrets {
         }
     }
 
-    /// The providers that have a saved key.
+    /// The key accounts that have a saved key.
     pub fn saved() -> Vec<String> {
-        PROVIDERS
+        KEY_ACCOUNTS
             .iter()
             .filter(|(provider, _)| KeychainSecrets.get(provider).is_some())
             .map(|(provider, _)| provider.to_string())
@@ -155,6 +170,9 @@ mod tests {
         assert_eq!(provider_name("openrouter"), "OpenRouter");
         assert_eq!(provider_name("dummy"), "dummy");
         assert!(is_provider("google"));
+        assert_eq!(provider_name("typesafe"), "Typesafe");
+        assert!(is_key_account("typesafe"));
+        assert!(!is_provider("typesafe"));
         assert_eq!(
             KeychainSecrets::save("dummy", "sk-1").unwrap_err().code,
             "invalid_input"

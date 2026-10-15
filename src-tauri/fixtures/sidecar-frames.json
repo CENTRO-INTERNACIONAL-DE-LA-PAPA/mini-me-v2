@@ -33,10 +33,24 @@
               "end": 26
             }
           ]
-        }
+        },
+        "needs_context": false
       }
     },
     { "type": "call.cancel", "call_id": "0199d0a0-0000-7000-8000-000000000301" },
+    {
+      "type": "route.start",
+      "route_id": "0199d0a0-0000-7000-8000-000000000401",
+      "state": { "message": "Summarize #field-trial.csv", "files": ["field-trial.csv"] },
+      "mini_mes": [
+        {
+          "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01",
+          "name": "Scribe",
+          "description": "Summarizes your messages and the files you reference"
+        }
+      ],
+      "ask": ["mini_me", "reaction", "needs_context"]
+    },
     {
       "type": "core.response",
       "request_id": "5f1c2b7e9a0d4c3b8e6f1a2b3c4d5e6f",
@@ -92,6 +106,23 @@
       "call_id": "0199d0a0-0000-7000-8000-000000000301",
       "method": "asset.read",
       "params": { "asset_id": "0199d0a0-0000-7000-8000-000000000201", "offset": 0, "length": 1048576 }
+    },
+    {
+      "type": "route.done",
+      "route_id": "0199d0a0-0000-7000-8000-000000000401",
+      "answers": {
+        "mini_me": {
+          "choice": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01",
+          "confidence": 0.9,
+          "probabilities": { "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01": 0.95 }
+        },
+        "reaction": { "choice": "none", "confidence": 0.8, "probabilities": { "none": 0.9 } }
+      }
+    },
+    {
+      "type": "route.error",
+      "route_id": "0199d0a0-0000-7000-8000-000000000401",
+      "error": { "code": "jev_unavailable", "message": "Typesafe could not be reached." }
     }
   ]
 }

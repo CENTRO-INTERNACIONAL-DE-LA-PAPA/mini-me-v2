@@ -2,10 +2,7 @@
 //! built-in ones are embedded from `library/builtin.json`.
 
 use serde::{Deserialize, Serialize};
-use uuid::{Uuid, uuid};
-
-/// The Mini-Me the routing stand-in picks when a message mentions none.
-pub const ECHO_MINI_ME: Uuid = uuid!("5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b02");
+use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraitDef {
@@ -144,17 +141,20 @@ mod tests {
         let library = Library::builtin();
         assert_eq!(library.problems(), Vec::<String>::new());
         let names: Vec<&str> = library.traits.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(names, ["Summarize", "Echo"]);
+        assert_eq!(names, ["Summarize", "Assist"]);
     }
 
     #[test]
     fn mini_mes_run_their_step_trait() {
         let library = Library::builtin();
-        let echo = library.mini_me(ECHO_MINI_ME).unwrap();
-        assert_eq!(library.step_trait(echo).unwrap().adapter, "echo");
-        let scribe = library.summaries().into_iter().find(|m| m.name == "Scribe").unwrap();
-        let scribe = library.mini_me(scribe.id).unwrap();
-        assert_eq!(library.step_trait(scribe).unwrap().name, "Summarize");
+        let step = |name: &str| {
+            let summary = library.summaries().into_iter().find(|m| m.name == name).unwrap();
+            let mini_me = library.mini_me(summary.id).unwrap();
+            library.step_trait(mini_me).unwrap().clone()
+        };
+        assert_eq!(step("Scribe").name, "Summarize");
+        let assist = step("Assistant");
+        assert_eq!((assist.name.as_str(), assist.adapter.as_str()), ("Assist", "prompt"));
     }
 
     #[test]

@@ -49,6 +49,7 @@ are verbs, so a Workflow reads like a research protocol.
 |---|---|
 | **Find Papers** | Returns a list of papers and related academic sources on a topic. |
 | **Summarize** | Summarizes the given text, without explaining further. |
+| **Assist** | Helps with questions and requests that no other Trait covers. |
 | **Scout** | Suggests a range of ideas to explore (not hypotheses). |
 | **Refute** | Argues that a statement is wrong, using the information it's given. |
 | **Plan** | Creates an architecture or a sequence of steps for a project. |
@@ -57,7 +58,7 @@ are verbs, so a Workflow reads like a research protocol.
 | **Explore Dataverse** | Finds information in Dataverse. |
 | **Wonder** | Comes up with questions to explore a topic further. |
 | **Index Sources** | Indexes sources so they can be referenced later. |
-| **Code** | A generalist that solves problems by writing and running code.\* |
+| **Code** | A assistant that solves problems by writing and running code.\* |
 | **Collect Data** | Builds a dataset from a source. |
 | **Clean Data** | Cleans data, and nothing else. |
 | **Validate Data** | Validates data. |
@@ -140,9 +141,11 @@ folders or logs.
    again. Use **Replace** or **Remove** to change it.
 3. Under **AI model**, choose the provider and type the model ID exactly as the provider
    lists it, then click **Save**.
+4. Under **Choosing a Mini-Me**, paste your [Typesafe](https://typesafe.ai) key. Without
+   it, Mini-Me cannot choose for you and you mention a Mini-Me yourself.
 
 Every AI call goes straight from your computer to that provider and is billed to your own
-account there.
+account there. Typesafe is billed to your own Typesafe account the same way.
 
 ### Asking a Mini-Me
 
@@ -151,11 +154,18 @@ comes with two:
 
 - **Scribe** summarizes your message and the text files you reference with `#` or attach.
   It needs an API key and a model (see above). PDFs and images are not read yet.
-- **Echo** repeats your message back. It needs no key.
+- **Assistant** answers general questions and requests that no other Mini-Me specializes in,
+  using the files you reference when they help. It needs an API key and a model too.
 
-Messages without a mention are answered by Echo for now; choosing the best Mini-Me
-automatically comes in a later version. A Mini-Me may also react to your message with an
-emoji.
+When you don't mention a Mini-Me, Typesafe's Jev chooses the most suitable one. If Jev
+isn't confident enough (see **Confidence threshold** in Settings, 0.5 by default) or can't
+be reached, Mini-Me replies asking you to mention one with `@`. Jev also decides whether
+the Mini-Me reacts to your message with an emoji.
+
+To choose, Jev receives your message's text, the names of the files it references or
+attaches, and the Mini-Mes' names and descriptions. It never receives file contents or
+earlier messages. Don't send personal data or unpublished results you aren't allowed to
+share with Typesafe in a message without a mention.
 
 ## Development
 
@@ -224,8 +234,8 @@ proposed, reviewed, implemented, verified and archived before the next one start
 | 2 | Sidecar runtime | Bundled Python (pinned with `uv`) started and supervised by the Rust core, JSON lines over stdin/stdout with a version handshake, the Trait interface, the echo responder moved into Python as the first Trait. No API keys or costs. | Done |
 | 3 | Releases and auto-update | GitHub Actions builds the Windows per-user installer on each version tag and creates a draft GitHub Release with signed update files; installed apps see it once it is published. Installed apps download updates automatically with progress shown, then ask you to restart (or install when closed). No macOS or Linux release builds: macOS is built locally. Installers are not code-signed: CIP IT allowlists the bundled `python.exe` by path, and the app is named Mini-Me. | Done |
 | 4 | First real Trait | AI provider keys in the OS keychain, a Settings screen with provider and model selection, one AI-backed Trait (for example *Summarize*), Mini-Me definitions with the shared Trait library and one-Step Workflows, `@`-mentions of Mini-Mes, optional Mini-Me reactions to your messages | Done |
-| 5 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Next |
-| 6 | Conversation context | Adapters ask the core for a Conversation's earlier messages when they need them (a `core.request` method, as for Assets), a convention for replies from other Mini-Mes in the same Conversation, a size budget per call, how files referenced in earlier messages are carried over, and Jev deciding whether a message needs previous context at all | Planned |
+| 5 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Done |
+| 6 | Conversation context | Adapters ask the core for a Conversation's earlier messages when they need them (a `core.request` method, as for Assets), a convention for replies from other Mini-Mes in the same Conversation, a size budget per call, how files referenced in earlier messages are carried over, and Jev deciding whether a message needs previous context at all | Next |
 | 7 | First Interactive Component | A table whose cells, rows and columns can be selected and referenced | Planned |
 | 8 | Asta integration | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) vendored and pinned in the sidecar, signing in with your Ai2 account, and confirmation before any action with an extra cost | Planned |
 | 9 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |

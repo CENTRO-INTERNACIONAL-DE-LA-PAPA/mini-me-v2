@@ -1,9 +1,10 @@
 //! Trait calls in flight: starting them, turning their frames into reply events, cancelling
 //! them, and answering the requests a Trait makes to the core while it runs.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -16,7 +17,10 @@ use uuid::Uuid;
 use crate::assets;
 use crate::conversations;
 use crate::error::{AppError, AppResult};
-use crate::link::{AdapterInfo, CallContext, CallModel, CallTrait, CoreFrame, SidecarFrame};
+use crate::link::{
+    AdapterInfo, CallContext, CallModel, CallTrait, ChoiceAnswer, CoreFrame, RouteMiniMe,
+    SidecarFrame,
+};
 use crate::protocol::{Author, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, provider_name};
 use crate::sidecar::SidecarLog;
@@ -28,6 +32,14 @@ pub const ASSET_CHUNK_BYTES: u64 = 1024 * 1024;
 pub const CANCEL_TIMEOUT: Duration = Duration::from_secs(5);
 
 const SIDECAR_STOPPED: &str = "sidecar_stopped";
+
+/// The only key a routing request may get.
+const ROUTING_KEY: &str = "typesafe";
+
+/// Jev's answers to a routing request, by question ID.
+pub type RouteAnswers = BTreeMap<String, ChoiceAnswer>;
+
+type RouteOutcome = Result<RouteAnswers, ErrorInfo>;
 
 /// The writing end of the link to a running sidecar. Returns `false` when the sidecar can
 /// no longer be reached.
@@ -53,6 +65,8 @@ pub struct CallSpec {
     /// declare providers.
     pub model: Option<CallModel>,
     pub input: Value,
+    /// The routing decision's answer to whether the message needs earlier context.
+    pub needs_context: Option<bool>,
 }
 
 #[derive(Default)]
@@ -60,6 +74,8 @@ struct Inner {
     sink: Option<Arc<dyn FrameSink>>,
     adapters: HashMap<String, AdapterInfo>,
     calls: HashMap<Uuid, Call>,
+    /// Routing requests waiting for their `route.done` or `route.error`.
+    routes: HashMap<Uuid, mpsc::Sender<RouteOutcome>>,
 }
 
 pub struct TraitCalls {
@@ -107,6 +123,8 @@ impl TraitCalls {
         let calls: Vec<Call> = {
             let mut inner = self.lock();
             inner.sink = None;
+            // Dropping the senders wakes every waiting routing request.
+            inner.routes.clear();
             inner.calls.drain().map(|(_, call)| call).collect()
         };
         for call in calls {
@@ -175,6 +193,7 @@ impl TraitCalls {
                 project_id: project.id,
                 conversation_id,
                 message: message.clone(),
+                needs_context: spec.needs_context,
             },
         };
         if !sink.send(&frame) {
@@ -187,6 +206,62 @@ impl TraitCalls {
             );
         }
         Ok(reply)
+    }
+
+    /// Asks the sidecar for Jev's answers to the `ask` questions about `state`, waiting at
+    /// most `timeout`. Fails with the sidecar's error, `jev_timeout`, or `sidecar_stopped`.
+    pub fn route(
+        &self,
+        state: Value,
+        mini_mes: Vec<RouteMiniMe>,
+        ask: Vec<String>,
+        timeout: Duration,
+    ) -> AppResult<RouteAnswers> {
+        let route_id = new_id();
+        let (tx, rx) = mpsc::channel();
+        let sink = {
+            let mut inner = self.lock();
+            let Some(sink) = inner.sink.clone() else {
+                return Err(AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime is not ready."));
+            };
+            inner.routes.insert(route_id, tx);
+            sink
+        };
+        let sent = sink.send(&CoreFrame::RouteStart {
+            route_id,
+            state,
+            mini_mes,
+            ask,
+        });
+        let outcome = if sent {
+            rx.recv_timeout(timeout)
+        } else {
+            Err(RecvTimeoutError::Disconnected)
+        };
+        self.lock().routes.remove(&route_id);
+        match outcome {
+            Ok(Ok(answers)) => Ok(answers),
+            Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
+            Err(RecvTimeoutError::Timeout) => Err(AppError::new(
+                "jev_timeout",
+                "Typesafe did not answer in time.",
+            )),
+            Err(RecvTimeoutError::Disconnected) => Err(AppError::new(
+                SIDECAR_STOPPED,
+                "Mini-Me's runtime stopped before choosing a Mini-Me.",
+            )),
+        }
+    }
+
+    fn finish_route(&self, route_id: Uuid, outcome: RouteOutcome) {
+        match self.lock().routes.remove(&route_id) {
+            Some(tx) => {
+                let _ = tx.send(outcome);
+            }
+            None => self
+                .log
+                .line(&format!("ignoring the end of route {route_id}, which is not open")),
+        }
     }
 
     /// Asks the sidecar to cancel the call producing `message_id`, and closes the call if
@@ -277,6 +352,12 @@ impl TraitCalls {
                     let _ = conversations::cancel_reply(&call.project, call.message_id);
                 }
             }
+            SidecarFrame::RouteDone { route_id, answers } => {
+                self.finish_route(route_id, Ok(answers));
+            }
+            SidecarFrame::RouteError { route_id, error } => {
+                self.finish_route(route_id, Err(error));
+            }
             SidecarFrame::CoreRequest {
                 request_id,
                 call_id,
@@ -318,12 +399,20 @@ impl TraitCalls {
     }
 
     fn answer(&self, call_id: Uuid, method: &str, params: Value) -> AppResult<Value> {
-        let (project, adapter, provider) = self
-            .lock()
-            .calls
-            .get(&call_id)
-            .map(|call| (Arc::clone(&call.project), call.adapter.clone(), call.provider.clone()))
-            .ok_or_else(|| AppError::new("call_not_active", "This Trait call has ended."))?;
+        let (call, is_route) = {
+            let inner = self.lock();
+            let call = inner
+                .calls
+                .get(&call_id)
+                .map(|c| (Arc::clone(&c.project), c.adapter.clone(), c.provider.clone()));
+            (call, inner.routes.contains_key(&call_id))
+        };
+        let Some((project, adapter, provider)) = call else {
+            if is_route {
+                return self.answer_route(method, params);
+            }
+            return Err(AppError::new("call_not_active", "This Trait call has ended."));
+        };
         match method {
             "asset.read" => read_asset(&project, parse_params(params)?),
             "secret.get" => self.secret(&adapter, provider.as_deref(), parse_params(params)?),
@@ -332,6 +421,24 @@ impl TraitCalls {
                 format!("The core has no request method called '{other}'."),
             )),
         }
+    }
+
+    /// A routing request may only get the Typesafe key.
+    fn answer_route(&self, method: &str, params: Value) -> AppResult<Value> {
+        if method != "secret.get" {
+            return Err(AppError::new(
+                "unknown_method",
+                format!("A routing request cannot use '{method}'."),
+            ));
+        }
+        let params: SecretGetParams = parse_params(params)?;
+        if params.provider != ROUTING_KEY {
+            return Err(AppError::new(
+                "secret_not_allowed",
+                format!("Routing cannot use the {} API key.", provider_name(&params.provider)),
+            ));
+        }
+        self.secret_value(ROUTING_KEY)
     }
 
     /// A call may get only the secret of its own model's provider, and only if its adapter
@@ -353,12 +460,16 @@ impl TraitCalls {
                 format!("This Trait cannot use the {} API key.", provider_name(&params.provider)),
             ));
         }
-        let secret = self.secrets.get(&params.provider).ok_or_else(|| {
+        self.secret_value(&params.provider)
+    }
+
+    fn secret_value(&self, provider: &str) -> AppResult<Value> {
+        let secret = self.secrets.get(provider).ok_or_else(|| {
             AppError::new(
                 "secret_unavailable",
                 format!(
                     "There is no saved {} API key. Add one in Settings.",
-                    provider_name(&params.provider)
+                    provider_name(provider)
                 ),
             )
         })?;
@@ -412,6 +523,7 @@ pub mod test_support {
                 model: "dummy-model".to_string(),
             }),
             input,
+            needs_context: None,
         }
     }
 }
@@ -777,5 +889,78 @@ mod tests {
             _ => None,
         });
         assert_eq!(sent, Some(None));
+    }
+
+    /// Starts a routing request on another thread; returns its route ID and the outcome.
+    fn start_route(
+        f: &Fixture,
+        timeout: Duration,
+    ) -> (Uuid, std::thread::JoinHandle<AppResult<RouteAnswers>>) {
+        let calls = Arc::clone(&f.calls);
+        let handle = std::thread::spawn(move || {
+            calls.route(json!({ "message": "hi" }), Vec::new(), vec!["reaction".into()], timeout)
+        });
+        let route_id = loop {
+            let found = f.sink.frames().into_iter().find_map(|frame| match frame {
+                CoreFrame::RouteStart { route_id, .. } => Some(route_id),
+                _ => None,
+            });
+            if let Some(route_id) = found {
+                break route_id;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        (route_id, handle)
+    }
+
+    #[test]
+    fn a_routing_request_returns_the_sidecars_answers() {
+        let f = quick();
+        let (route_id, handle) = start_route(&f, CANCEL_TIMEOUT);
+        let answer = ChoiceAnswer {
+            choice: "👍".into(),
+            confidence: 0.9,
+            probabilities: BTreeMap::new(),
+        };
+        let answers = BTreeMap::from([("reaction".to_string(), answer)]);
+        f.calls.handle(SidecarFrame::RouteDone { route_id, answers: answers.clone() });
+        assert_eq!(handle.join().unwrap().unwrap(), answers);
+    }
+
+    #[test]
+    fn a_routing_request_times_out_or_ends_with_the_sidecar() {
+        let f = quick();
+        let (_, handle) = start_route(&f, Duration::from_millis(50));
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "jev_timeout");
+
+        let g = quick();
+        let (_, handle) = start_route(&g, CANCEL_TIMEOUT);
+        g.calls.disconnect();
+        assert_eq!(handle.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
+    }
+
+    #[test]
+    fn a_routing_request_may_only_get_the_typesafe_key() {
+        let secrets = MemorySecrets(HashMap::from([
+            ("typesafe".to_string(), "ts-key".to_string()),
+            ("openai".to_string(), "sk-openai".to_string()),
+        ]));
+        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        let (route_id, handle) = start_route(&f, CANCEL_TIMEOUT);
+        let ask =
+            |method: &str, params: Value| f.calls.respond("r".into(), route_id, method, params);
+        let read = json!({ "asset_id": Uuid::nil(), "offset": 0, "length": 1 });
+        assert_eq!(error_code(ask("asset.read", read)).as_deref(), Some("unknown_method"));
+        assert_eq!(
+            error_code(ask("secret.get", json!({ "provider": "openai" }))).as_deref(),
+            Some("secret_not_allowed")
+        );
+        let key = result(ask("secret.get", json!({ "provider": "typesafe" })));
+        assert_eq!(key["value"], json!("ts-key"));
+        f.calls.handle(SidecarFrame::RouteError {
+            route_id,
+            error: ErrorInfo { code: "jev_unavailable".into(), message: String::new() },
+        });
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "jev_unavailable");
     }
 }

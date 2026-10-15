@@ -36,7 +36,18 @@ function useConversation(projectId: string, conversationId: string) {
 export function ChatView({ projectId, conversationId, onActivity }: Props) {
   const { state, error } = useConversation(projectId, conversationId);
   const bottom = useRef<HTMLDivElement>(null);
+  // The message sent from this view, until Mini-Me decides who answers it. Kept in memory
+  // only, so reopening a Conversation never shows a stale "Choosing" status.
+  const [routing, setRouting] = useState<string | null>(null);
+  const decided = routing !== null && state.messages.some((m) => m.reply_to === routing);
+  const choosing = routing !== null && !decided;
   const replying = state.messages.some((m) => m.status === "streaming");
+
+  useEffect(() => {
+    if (decided) {
+      setRouting(null);
+    }
+  }, [decided]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
@@ -49,6 +60,11 @@ export function ChatView({ projectId, conversationId, onActivity }: Props) {
           {state.messages.map((message) => (
             <MessageItem key={message.id} projectId={projectId} message={message} />
           ))}
+          {choosing && (
+            <p role="status" className="text-meta text-muted-foreground">
+              Choosing a Mini-Me…
+            </p>
+          )}
           {state.messages.length === 0 && (
             <p className="p-8 text-center text-muted-foreground">No messages yet.</p>
           )}
@@ -61,7 +77,11 @@ export function ChatView({ projectId, conversationId, onActivity }: Props) {
         projectId={projectId}
         conversationId={conversationId}
         replying={replying}
-        onSent={onActivity}
+        choosing={choosing}
+        onSent={(message) => {
+          setRouting(message.id);
+          onActivity();
+        }}
       />
     </section>
   );

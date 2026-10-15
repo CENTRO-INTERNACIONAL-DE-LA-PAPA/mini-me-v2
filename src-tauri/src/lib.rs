@@ -51,6 +51,8 @@ pub fn run() {
             ipc::set_ai_model,
             ipc::save_api_key,
             ipc::remove_api_key,
+            ipc::set_routing_threshold,
+            ipc::set_show_jev_answers,
             ipc::get_update_status,
             ipc::subscribe_update_status,
             ipc::restart_to_update,

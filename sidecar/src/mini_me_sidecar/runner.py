@@ -15,10 +15,10 @@ CANCEL_GRACE_S = 2.0
 
 
 class Runner:
-    def __init__(self, link: Link, adapters: dict[str, Adapter]) -> None:
+    def __init__(self, link: Link, adapters: dict[str, Adapter], requests: Requests) -> None:
         self._link = link
         self._adapters = adapters
-        self._requests = Requests(link)
+        self._requests = requests
         self._calls: dict[str, tuple[asyncio.Task[None], CallContext]] = {}
 
     def start(self, frame: dict[str, Any]) -> None:

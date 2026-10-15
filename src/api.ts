@@ -3,6 +3,7 @@ import type {
   AppError,
   AiSettings,
   AssetRef,
+  KeyAccount,
   ConversationSummary,
   Message,
   MiniMe,
@@ -75,9 +76,12 @@ export const api = {
   setAiModel: (provider: ProviderId, model: string) =>
     invoke<void>("set_ai_model", { provider, model }),
   /** Stores the key in the OS keychain; it is never sent back to the UI. */
-  saveApiKey: (provider: ProviderId, key: string) =>
+  saveApiKey: (provider: KeyAccount, key: string) =>
     invoke<void>("save_api_key", { provider, key }),
-  removeApiKey: (provider: ProviderId) => invoke<void>("remove_api_key", { provider }),
+  removeApiKey: (provider: KeyAccount) => invoke<void>("remove_api_key", { provider }),
+  setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
+  setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
+
 
   getUpdateStatus: () => invoke<UpdateStatus>("get_update_status"),
   /** Calls `onStatus` with the current update status, then with every change. */

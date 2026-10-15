@@ -270,6 +270,56 @@ pub fn stop_reply(project: &Project, conversation_id: Uuid) -> AppResult<Vec<Uui
 }
 
 /// Marks replies left streaming by a previous session as failed with code `interrupted`.
+/// Stores Jev's raw answers about `message_id`, for the "Show Jev's answers" developer
+/// setting.
+pub fn record_jev_answers(
+    project: &Project,
+    conversation_id: Uuid,
+    message_id: Uuid,
+    answers: serde_json::Value,
+    error: Option<ErrorInfo>,
+) -> AppResult<()> {
+    project.lock().persist(
+        conversation_id,
+        EventKind::RoutingAnswered {
+            message_id,
+            answers,
+            error,
+        },
+    )?;
+    Ok(())
+}
+
+/// Persists a reply that is complete from the start, written by the app itself rather than
+/// produced by a Trait.
+pub fn system_reply(
+    project: &Project,
+    conversation_id: Uuid,
+    reply_to: Uuid,
+    id: &str,
+    content: &str,
+) -> AppResult<Message> {
+    let message = Message {
+        id: new_id(),
+        author: Author {
+            kind: AuthorKind::System,
+            id: id.to_string(),
+        },
+        content: content.to_string(),
+        status: MessageStatus::Complete,
+        reply_to: Some(reply_to),
+        attachments: Vec::new(),
+        text_components: Vec::new(),
+    };
+    project.lock().persist(
+        conversation_id,
+        EventKind::MessageCreated {
+            message: message.clone(),
+        },
+    )?;
+    Ok(message)
+}
+
 pub fn recover_interrupted(project: &Project) -> AppResult<()> {
     let mut state = project.lock();
     for (_, message_id) in state.streaming_messages(None)? {

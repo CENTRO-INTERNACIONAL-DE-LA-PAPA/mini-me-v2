@@ -16,7 +16,7 @@ use crate::error::{AppError, AppResult};
 use crate::projects::{self, ProjectSummary};
 use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, now_ms};
 use crate::library::{Library, MiniMeSummary};
-use crate::routing;
+use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::secrets::KeychainSecrets;
 use crate::settings::{AiSettings, Settings};
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
@@ -30,7 +30,7 @@ pub struct AppState {
     settings: Mutex<Settings>,
     open_projects: Mutex<HashMap<Uuid, Arc<Project>>>,
     calls: Arc<TraitCalls>,
-    library: Library,
+    routing: Arc<Routing>,
     pub sidecar: Arc<Supervisor>,
     pub updates: Arc<Updates>,
 }
@@ -79,7 +79,7 @@ impl AppState {
             config_dir,
             open_projects: Mutex::new(HashMap::new()),
             calls,
-            library: Library::builtin(),
+            routing: Routing::new(Library::builtin()),
             sidecar,
             updates,
         })
@@ -188,10 +188,15 @@ pub async fn send_message(
     }
     let project = state.project(project_id)?;
     let settings = state.settings();
-    routing::send(
-        &state.calls,
-        &state.library,
-        settings.ai.model(),
+    let route = RouteSettings {
+        model: settings.ai.model(),
+        threshold: settings.routing.threshold,
+        timeout: ROUTE_TIMEOUT,
+        show_answers: settings.routing.show_answers,
+    };
+    state.routing.send(
+        Arc::clone(&state.calls),
+        route,
         project,
         conversation_id,
         input,
@@ -200,8 +205,22 @@ pub async fn send_message(
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub async fn set_routing_threshold(state: State<'_, AppState>, threshold: f64) -> AppResult<()> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.routing.set_threshold(threshold)?;
+    settings.save(&state.config_dir)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> AppResult<()> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.routing.show_answers = show;
+    settings.save(&state.config_dir)
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn list_mini_mes(state: State<'_, AppState>) -> AppResult<Vec<MiniMeSummary>> {
-    Ok(state.library.summaries())
+    Ok(state.routing.library().summaries())
 }
 
 /// The AI settings and which providers have a saved key. Keys themselves never leave the
@@ -211,15 +230,19 @@ pub struct AiSettingsView {
     provider: String,
     model: String,
     saved_keys: Vec<String>,
+    threshold: f64,
+    show_answers: bool,
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettingsView> {
-    let ai = state.settings().ai;
+    let settings = state.settings();
     Ok(AiSettingsView {
-        provider: ai.provider,
-        model: ai.model,
+        provider: settings.ai.provider,
+        model: settings.ai.model,
         saved_keys: KeychainSecrets::saved(),
+        threshold: settings.routing.threshold,
+        show_answers: settings.routing.show_answers,
     })
 }
 

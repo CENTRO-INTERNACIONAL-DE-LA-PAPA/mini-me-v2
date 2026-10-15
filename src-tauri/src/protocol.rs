@@ -3,6 +3,7 @@
 //! sides in agreement.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
 pub const ENVELOPE_VERSION: u32 = 1;
@@ -70,6 +71,15 @@ pub enum EventKind {
         message_id: Uuid,
         emoji: String,
         by: Author,
+    },
+    /// Jev's raw answers about `message_id`, stored only while the "Show Jev's answers"
+    /// developer setting is on. `answers` maps question IDs to `{ choice, confidence,
+    /// probabilities }`, or is null when Jev could not be asked.
+    #[serde(rename = "routing.answered")]
+    RoutingAnswered {
+        message_id: Uuid,
+        answers: Value,
+        error: Option<ErrorInfo>,
     },
 }
 

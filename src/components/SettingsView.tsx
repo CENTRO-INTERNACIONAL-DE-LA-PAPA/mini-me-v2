@@ -1,6 +1,3 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { api, errorMessage } from "../api";
-import type { AiSettings, ProviderId } from "../protocol/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +8,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { api, errorMessage } from "../api";
+import type { AiSettings, KeyAccount, ProviderId } from "../protocol/types";
 
 const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "openai", name: "OpenAI" },
@@ -19,7 +19,8 @@ const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "openrouter", name: "OpenRouter" },
 ];
 
-const providerName = (id: ProviderId) => PROVIDERS.find((p) => p.id === id)?.name ?? id;
+const providerName = (id: KeyAccount) =>
+  id === "typesafe" ? "Typesafe" : (PROVIDERS.find((p) => p.id === id)?.name ?? id);
 
 interface Props {
   onClose: () => void;
@@ -68,6 +69,7 @@ export function SettingsView({ onClose }: Props) {
               ))}
             </ul>
           </section>
+          <RoutingSection settings={settings} onChanged={refresh} />
         </>
       )}
     </main>
@@ -141,12 +143,90 @@ function ModelSection({ settings, onSaved }: { settings: AiSettings; onSaved: ()
   );
 }
 
+function RoutingSection({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
+  const [threshold, setThreshold] = useState(String(settings.threshold));
+  const [status, setStatus] = useState<string | null>(null);
+  const value = Number(threshold);
+  const valid = threshold.trim() !== "" && value >= 0 && value <= 1;
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await api.setRoutingThreshold(value);
+      setStatus("Saved.");
+      onChanged();
+    } catch (e) {
+      setStatus(errorMessage(e));
+    }
+  }
+
+  return (
+    <section className="mt-10">
+      <h2 className="mb-1 text-section font-bold">Choosing a Mini-Me</h2>
+      <p className="mb-4 text-meta text-muted-foreground">
+        When you don't mention a Mini-Me, Typesafe's Jev chooses one. Your message's text and
+        the names of its files are sent to Typesafe; file contents are not.
+      </p>
+      <ul className="mb-4 grid gap-3">
+        <KeyRow
+          provider="typesafe"
+          saved={settings.saved_keys.includes("typesafe")}
+          onChanged={onChanged}
+        />
+      </ul>
+      <form className="grid gap-2" onSubmit={save}>
+        <Label htmlFor="threshold">Confidence threshold</Label>
+        <div className="flex items-center gap-3">
+          <Input
+            id="threshold"
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            className="w-28"
+            value={threshold}
+            aria-invalid={!valid}
+            onChange={(e) => {
+              setThreshold(e.target.value);
+              setStatus(null);
+            }}
+          />
+          <Button type="submit" variant="outline" disabled={!valid || value === settings.threshold}>
+            Save
+          </Button>
+          {status && <span className="text-meta text-muted-foreground">{status}</span>}
+        </div>
+        <p className="text-meta text-muted-foreground">
+          From 0 to 1. When Jev is less sure than this, Mini-Me asks you to mention a Mini-Me
+          with @ instead of guessing.
+        </p>
+      </form>
+      <label className="mt-4 flex items-center gap-2 text-ui">
+        <input
+          type="checkbox"
+          className="size-4 accent-primary"
+          checked={settings.show_answers}
+          onChange={async (e) => {
+            try {
+              await api.setShowJevAnswers(e.target.checked);
+              onChanged();
+            } catch (err) {
+              setStatus(errorMessage(err));
+            }
+          }}
+        />
+        [DEBUG] Show Jev's answers under each message
+      </label>
+    </section>
+  );
+}
+
 function KeyRow({
   provider,
   saved,
   onChanged,
 }: {
-  provider: ProviderId;
+  provider: KeyAccount;
   saved: boolean;
   onChanged: () => void;
 }) {

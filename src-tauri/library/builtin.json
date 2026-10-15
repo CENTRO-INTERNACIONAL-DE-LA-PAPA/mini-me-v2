@@ -9,12 +9,12 @@
       "instructions": "You summarize material for a researcher. Write a short, faithful summary of the material the user gives you: their message and any files that follow it, each introduced by a line with its name. Keep the key findings, numbers, methods and caveats; leave out nothing that changes the meaning, and add nothing that is not in the material. Do not explain, evaluate or extend it. Write in the language of the material. If the user asks for a particular length or focus, follow it. If there is nothing to summarize, say so in one sentence."
     },
     {
-      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a02",
-      "name": "Echo",
-      "description": "Repeats the given text back, one word at a time.",
-      "color": "oklch(0.55 0.05 230)",
-      "adapter": "echo",
-      "instructions": null
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03",
+      "name": "Assist",
+      "description": "Helps with questions and requests that no other Trait covers.",
+      "color": "oklch(0.55 0.1 180)",
+      "adapter": "prompt",
+      "instructions": "You are a research assistant for scientists at the International Potato Center (CIP). Answer the user's message helpfully and accurately: questions, explanations, drafting, brainstorming, or anything else they ask. When files follow the message, each introduced by a line with its name, use them where they are relevant. Be concise and well structured, and write in the language of the user's message. Say plainly when you do not know something or when an answer would need data you do not have, and never invent references, numbers or results."
     }
   ],
   "mini_mes": [
@@ -26,11 +26,11 @@
       "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }] }
     },
     {
-      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b02",
-      "name": "Echo",
-      "description": "Repeats your message back to you",
-      "colors": { "tint": "#E4ECF2", "solid": "#5B7A90", "ink": "#2F4A5C" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a02" }] }
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b03",
+      "name": "Assistant",
+      "description": "Answers general questions and requests that no other Mini-Me specializes in",
+      "colors": { "tint": "#D6F1EE", "solid": "#1F9E8F", "ink": "#12675D" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03" }] }
     }
   ]
 }

@@ -2,6 +2,8 @@
 //! with a `type`. `sidecar/src/mini_me_sidecar` speaks the same frames, and
 //! `src-tauri/fixtures/sidecar-frames.json` holds one example of each.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -9,7 +11,7 @@ use uuid::Uuid;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 2;
+pub const SIDECAR_PROTOCOL: u32 = 3;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -44,6 +46,27 @@ pub struct CallContext {
     pub project_id: Uuid,
     pub conversation_id: Uuid,
     pub message: Message,
+    /// Whether the routing decision said the message needs earlier context; `None` without
+    /// a decision.
+    #[serde(default)]
+    pub needs_context: Option<bool>,
+}
+
+/// A Mini-Me as the routing request describes it to Jev.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouteMiniMe {
+    pub id: Uuid,
+    pub name: String,
+    pub description: String,
+}
+
+/// Jev's answer to one Choice question.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChoiceAnswer {
+    pub choice: String,
+    pub confidence: f64,
+    #[serde(default)]
+    pub probabilities: BTreeMap<String, f64>,
 }
 
 /// Frames the core sends to the sidecar.
@@ -69,6 +92,14 @@ pub enum CoreFrame {
     },
     #[serde(rename = "call.cancel")]
     CallCancel { call_id: Uuid },
+    #[serde(rename = "route.start")]
+    RouteStart {
+        route_id: Uuid,
+        state: Value,
+        mini_mes: Vec<RouteMiniMe>,
+        /// The question IDs to ask: `mini_me`, `reaction`, `needs_context`.
+        ask: Vec<String>,
+    },
     /// Exactly one of `result` and `error` is set.
     #[serde(rename = "core.response")]
     CoreResponse {
@@ -109,6 +140,13 @@ pub enum SidecarFrame {
     CallError { call_id: Uuid, error: ErrorInfo },
     #[serde(rename = "call.cancelled")]
     CallCancelled { call_id: Uuid },
+    #[serde(rename = "route.done")]
+    RouteDone {
+        route_id: Uuid,
+        answers: BTreeMap<String, ChoiceAnswer>,
+    },
+    #[serde(rename = "route.error")]
+    RouteError { route_id: Uuid, error: ErrorInfo },
     #[serde(rename = "core.request")]
     CoreRequest {
         request_id: String,
@@ -212,6 +250,9 @@ mod tests {
             "call.cancelled",
             "core.request",
             "core.response",
+            "route.start",
+            "route.done",
+            "route.error",
         ] {
             assert!(types.iter().any(|t| t == expected), "fixture lacks {expected}");
         }
