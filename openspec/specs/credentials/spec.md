@@ -10,8 +10,9 @@ how both processes keep it from leaking.
 
 ### Requirement: Secrets are released per call
 A Trait SHALL obtain a secret only by sending `core.request` with method `secret.get`, params
-`{ provider }`, during one of its calls. On success the result SHALL be `{ value }`. The
-sidecar SHALL hold the value only for that call and SHALL NOT reuse it in another call.
+`{ provider }`, during one of its calls; the routing module SHALL obtain the Typesafe key the
+same way during a routing request. On success the result SHALL be `{ value }`. The sidecar
+SHALL hold the value only for that call or request and SHALL NOT reuse it in another.
 
 #### Scenario: Secret for a declared provider
 - **WHEN** a running Trait that declares provider `dummy` requests the `dummy` secret and the
@@ -21,6 +22,11 @@ sidecar SHALL hold the value only for that call and SHALL NOT reuse it in anothe
 #### Scenario: Each call asks again
 - **WHEN** the same Trait runs twice
 - **THEN** each call sends its own `secret.get` request
+
+#### Scenario: Routing request
+- **WHEN** a routing request asks for the `typesafe` secret
+- **THEN** the core answers with the saved Typesafe key, and refuses any other provider with
+  `secret_not_allowed`
 
 ### Requirement: Only declared providers
 The Rust core SHALL refuse `secret.get` with code `secret_not_allowed` when the provider is
@@ -78,9 +84,9 @@ account. Keys SHALL be read from the keychain for each `secret.get` and not cach
 - **THEN** Scribe can use Anthropic without the key being entered again
 
 ### Requirement: Managing keys in Settings
-Settings SHALL show, for each provider, whether a key is saved, and let the user save a new
-key, replace it or remove it. The UI SHALL never receive a saved key back from the core;
-keys flow only from the UI to the core.
+Settings SHALL show, for each AI provider and for Typesafe, whether a key is saved, and let
+the user save a new key, replace it or remove it. The UI SHALL never receive a saved key back
+from the core; keys flow only from the UI to the core.
 
 #### Scenario: Saved key is not shown
 - **WHEN** an OpenAI key is saved and the user opens Settings
@@ -89,3 +95,8 @@ keys flow only from the UI to the core.
 #### Scenario: Removing a key
 - **WHEN** the user removes the Google key
 - **THEN** it is deleted from the keychain and Google calls fail with `secret_unavailable`
+
+#### Scenario: Typesafe key
+- **WHEN** the user saves a Typesafe key
+- **THEN** it is stored in the OS keychain under the account `typesafe`, and the next
+  message without a mention is routed by Jev

@@ -183,13 +183,13 @@ defines, start one Trait call for the Trait of that Mini-Me's single Step, and c
 reply with author `{ kind: "mini_me", id: <Mini-Me ID> }`. The call's input is `{ text }`,
 the message content with its Mini-Me mentions removed and surrounding whitespace trimmed.
 
-#### Scenario: Echo answers
-- **WHEN** the user sends "late blight spreads"
-- **THEN** a reply by the Echo Mini-Me streams "late blight spreads" and completes
+#### Scenario: Mentioned Mini-Me answers
+- **WHEN** the user sends "@Assistant what is late blight?"
+- **THEN** a reply by the Assistant Mini-Me streams and completes
 
 #### Scenario: Mention text is not part of the input
-- **WHEN** the user sends "@Echo late blight spreads"
-- **THEN** the Echo Mini-Me's reply is "late blight spreads"
+- **WHEN** the user sends "@Assistant late blight spreads"
+- **THEN** the Assistant's Trait call has the input `{ "text": "late blight spreads" }`
 
 ### Requirement: Trait call outcomes map to message events
 The Rust core SHALL persist a reply's events from its Trait call's frames: `call.delta` as

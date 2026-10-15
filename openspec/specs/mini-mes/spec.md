@@ -15,11 +15,11 @@ The Rust core SHALL hold a shared Trait library. Each Trait definition SHALL hav
 - the `adapter` that runs it;
 - its `instructions` (text, or none for adapters that take none).
 
-The library is read-only in this version and contains *Summarize* and *Echo*.
+The library is read-only in this version and contains *Summarize* and *Assist*.
 
 #### Scenario: Built-in Traits
 - **WHEN** the app starts
-- **THEN** the library contains *Summarize* (adapter `prompt`) and *Echo* (adapter `echo`)
+- **THEN** the library contains *Summarize* and *Assist*, both run by the `prompt` adapter
 
 ### Requirement: Mini-Me definitions
 Each Mini-Me SHALL have:
@@ -39,13 +39,19 @@ library by ID. Mini-Mes are read-only in this version.
 Mini-Me SHALL ship with two Mini-Mes:
 - **Scribe:** "Summarizes your messages and the files you reference"; one Step running
   *Summarize*.
-- **Echo:** "Repeats your message back to you"; one Step running *Echo*.
+- **Assistant:** "Answers general questions and requests that no other Mini-Me specializes in";
+  one Step running *Assist*, whose instructions make it a general research assistant that
+  uses referenced files when relevant and says when it does not know.
 
 Their colours follow DESIGN.md's Mini-Me colour family.
 
 #### Scenario: Mini-Mes available
 - **WHEN** the user types `@` in the composer
-- **THEN** Scribe and Echo are offered
+- **THEN** Scribe and Assistant are offered
+
+#### Scenario: General question
+- **WHEN** the user sends "@Assistant what is late blight?"
+- **THEN** Assistant answers with an explanation from the AI model chosen in Settings
 
 ### Requirement: A Mini-Me is shown by name and colour
 The UI SHALL get the list of Mini-Mes (ID, name, description, colours) from the Rust core.
