@@ -197,6 +197,9 @@ share with Typesafe in a message without a mention.
 
 ## Development
 
+[docs/architecture.md](docs/architecture.md) explains how the UI, the Rust core and the
+Python sidecar work together, and how to add Traits, adapters and Interactive Components.
+
 Requirements: [Node.js](https://nodejs.org), [Rust](https://rustup.rs), the
 [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS, and
 [uv](https://docs.astral.sh/uv/) for the Python sidecar. Users of the installed app need none
