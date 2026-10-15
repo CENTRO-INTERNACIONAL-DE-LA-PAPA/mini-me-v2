@@ -47,13 +47,13 @@ are verbs, so a Workflow reads like a research protocol.
 
 | Trait | What it does |
 |---|---|
-| **Find Papers** | Returns a list of papers and related academic sources on a topic. |
+| **Find Papers** | Returns a list of papers and related academic sources on a topic, using Ai2's Asta Paper Finder. |
 | **Summarize** | Summarizes the given text, without explaining further. |
 | **Assist** | Helps with questions and requests that no other Trait covers. |
 | **Scout** | Suggests a range of ideas to explore (not hypotheses). |
 | **Refute** | Argues that a statement is wrong, using the information it's given. |
 | **Plan** | Creates an architecture or a sequence of steps for a project. |
-| **Theorize** | Builds theories from the given information. |
+| **Theorize** | Builds theories from the literature, with the evidence for each, using Ai2's Asta Theorizer. A run can take 20 minutes or more. |
 | **Document** | Produces a report (PDF) that you can edit in the app and, later, upload to Dataverse. |
 | **Explore Dataverse** | Finds information in Dataverse. |
 | **Wonder** | Comes up with questions to explore a topic further. |
@@ -143,9 +143,14 @@ folders or logs.
    lists it, then click **Save**.
 4. Under **Choosing a Mini-Me**, paste your [Typesafe](https://typesafe.ai) key. Without
    it, Mini-Me cannot choose for you and you mention a Mini-Me yourself.
+5. Under **Ai2 account**, click **Sign in** and confirm the code shown in Mini-Me on the Ai2
+   page that opens in your browser. The row then reads **Signed in as** your email. Your
+   sign-in is kept in the keychain and renewed automatically; **Sign out** removes it.
+   Researcher and Theorist need it.
 
 Every AI call goes straight from your computer to that provider and is billed to your own
-account there. Typesafe is billed to your own Typesafe account the same way.
+account there. Typesafe is billed to your own Typesafe account the same way. Asta's
+documentation lists no charges for Paper Finder or the Theorizer.
 
 ### Asking a Mini-Me
 
@@ -153,12 +158,24 @@ Type `@` in the message box to pick a Mini-Me; the one you mention first answers
 message follows up on earlier ones ("make it shorter", "what about the second point?"),
 the Mini-Me also sees the Conversation's earlier messages, including other Mini-Mes'
 replies; files from earlier messages are known by name only, so reference a file again to
-have it read. Mini-Me comes with two:
+have it read. Mini-Me comes with four:
 
 - **Scribe** summarizes your message and the text files you reference with `#` or attach.
   It needs an API key and a model (see above). PDFs and images are not read yet.
 - **Assistant** answers general questions and requests that no other Mini-Me specializes in,
   using the files you reference when they help. It needs an API key and a model too.
+- **Researcher** finds papers on the topic of your message with Ai2's Paper Finder and
+  lists them with links and the passage that makes each one relevant. It needs an Ai2
+  account (see above).
+- **Theorist** builds scientific theories on the question in your message with Ai2's
+  Theorizer: it reads the literature, extracts evidence and replies with each theory, its
+  statements and the papers that support them. It shows its progress while it works,
+  which can take 20 minutes or more. It needs an Ai2 account too.
+
+Researcher and Theorist send the text of your message to Ai2; file contents are never
+sent. Don't ask them about unpublished results you aren't allowed to share with Ai2.
+Theories and paper summaries come from Ai2's AI, so check them against the cited papers
+before relying on them.
 
 When you don't mention a Mini-Me, Typesafe's Jev chooses the most suitable one. If Jev
 isn't confident enough (see **Confidence threshold** in Settings, 0.5 by default) or can't
@@ -239,17 +256,18 @@ proposed, reviewed, implemented, verified and archived before the next one start
 | 4 | First real Trait | AI provider keys in the OS keychain, a Settings screen with provider and model selection, one AI-backed Trait (for example *Summarize*), Mini-Me definitions with the shared Trait library and one-Step Workflows, `@`-mentions of Mini-Mes, optional Mini-Me reactions to your messages | Done |
 | 5 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Done |
 | 6 | Conversation context | Adapters ask the core for a Conversation's earlier messages when they need them (a `core.request` method, as for Assets), a convention for replies from other Mini-Mes in the same Conversation, a size budget per call, how files referenced in earlier messages are carried over, and Jev deciding whether a message needs previous context at all | Done |
-| 7 | Asta integration | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) vendored and pinned in the sidecar, signing in with your Ai2 account, and confirmation before any action with an extra cost | Next |
-| 8 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |
+| 7 | Asta integration and Traits | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) pinned in the sidecar, signing in with your Ai2 account, *Find Papers* (Paper Finder) with Researcher and *Theorize* (Theorizer) with Theorist | Done |
+| 8 | First Interactive Components | Interactive Components shown below a reply's text, from a catalogue of versioned kinds that are as easy to add as adapters; Paper sources for *Find Papers* and Theories for *Theorize*; Mini-Mes saving generated files as Assets | Next |
 | 9 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Planned |
 | 10 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved through the core in `project.sqlite`, so it survives closing the app | Planned |
 | 11 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
-| 12 | First Interactive Component | A table whose cells, rows and columns can be selected and referenced | Planned |
+| 12 | Tables | A table Interactive Component whose cells, rows and columns can be selected and referenced | Planned |
 | 13 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
 | 14 | Project Overview | The view of everything a Project has produced | Planned |
 
 Later: code execution (Python and R) with OS-level sandboxing, collaboration through a relay
-server, Microsoft SSO, Dataverse upload.
+server, Microsoft SSO, Dataverse upload, Asta's AutoDiscovery with confirmation before any
+action with an extra cost.
 
 ## Acknowledgements
 

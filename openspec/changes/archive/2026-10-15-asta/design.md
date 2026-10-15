@@ -96,12 +96,24 @@ distinction comes from `secrets::is_provider`.
 - **`asta-theorizer`:** gets the token and submits `{"kind":
   "literature-theory-generation", "data": {"theory_query": text}}` with `asta_agent`'s
   `A2AClient`. It then polls the task every 5 seconds, as Asta's CLI does. The skill is
-  named explicitly, because other Theorizer skills take the same input. A run takes about
-  3–8 minutes with the default 10 papers.
+  named explicitly, because other Theorizer skills take the same input. Ai2 documents a run as
+  3–8 minutes with the default 10 papers, but real runs take 15–25 minutes.
   - **Progress:** the Theorizer's status text, or "Got <artifact>" when a new artifact
     appears, plus the minutes elapsed, so a long "Accepted" doesn't look stuck.
-  - **Result:** the final artifacts are rendered as Markdown. The first task records their
-    shape from a real run.
+  - **Result:** the completed task carries one artifact, "Theory Store", whose parts each
+    hold one `data` section: `extraction_schemas`, `paperstore` and `paperstore_lut` (one
+    paper per part), `extraction_results`, `theories`, `theory_evaluations`, `all_ids` and
+    `next_ids`. A real run with 6 theories and 50 papers came to about 1.9 MB, so the reply
+    shows only the theories. Each theory's first `components` entry holds its name,
+    description and `theory_statements`, each in a technical and a `…_plain_language`
+    version. A statement's `supporting_evidence` items carry `text` and `uuids` such as
+    `e28.0`, which name an item in an extraction result's `extracted_data`. That result's
+    `paper_id` leads to the paper in `paperstore`. The reply is Markdown: for each theory,
+    its plain-language name and description, then every statement in plain language with
+    its evidence, cited by number. The cited papers follow, each with title, year and a DOI
+    or Semantic Scholar link. Keys are matched regardless of case and separators, because
+    the store mixes snake_case and camelCase. Parts with only text are shown as they are
+    when there are no theories.
   - **Stop:** stopping ends the polling. The run on Ai2's side is not cancelled, because
     the client has no cancel call.
 - **Error mapping:** HTTP 401/403 → `ai2_auth`; connection errors, timeouts, 5xx and A2A
