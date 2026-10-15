@@ -270,6 +270,20 @@ pub fn stop_reply(project: &Project, conversation_id: Uuid) -> AppResult<Vec<Uui
 }
 
 /// Marks replies left streaming by a previous session as failed with code `interrupted`.
+/// The names of a message's attached and referenced files, without duplicates.
+pub fn file_names(message: &Message) -> Vec<String> {
+    let mut names: Vec<String> = message.attachments.iter().map(|a| a.name.clone()).collect();
+    for component in &message.text_components {
+        if component.kind == TextComponentKind::Asset {
+            let name = component.label.trim_start_matches('#').to_string();
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+    }
+    names
+}
+
 /// Stores Jev's raw answers about `message_id`, for the "Show Jev's answers" developer
 /// setting.
 pub fn record_jev_answers(

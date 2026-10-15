@@ -50,6 +50,9 @@ pub struct CallContext {
     /// a decision.
     #[serde(default)]
     pub needs_context: Option<bool>,
+    /// The name of the Mini-Me whose reply this call produces.
+    #[serde(default)]
+    pub mini_me_name: Option<String>,
 }
 
 /// A Mini-Me as the routing request describes it to Jev.

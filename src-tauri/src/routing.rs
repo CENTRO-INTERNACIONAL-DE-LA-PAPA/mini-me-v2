@@ -58,13 +58,13 @@ struct Decision {
 }
 
 pub struct Routing {
-    library: Library,
+    library: Arc<Library>,
     /// Conversations whose latest message is waiting for a routing decision.
     pending: Mutex<HashSet<Uuid>>,
 }
 
 impl Routing {
-    pub fn new(library: Library) -> Arc<Self> {
+    pub fn new(library: Arc<Library>) -> Arc<Self> {
         Arc::new(Self {
             library,
             pending: Mutex::new(HashSet::new()),
@@ -287,16 +287,7 @@ fn first_mention(message: &Message) -> Option<Uuid> {
 /// What Jev sees of a message: its text without mentions and the names of its files. File
 /// contents stay on the user's computer.
 fn state(message: &Message) -> Value {
-    let mut files: Vec<String> = message.attachments.iter().map(|a| a.name.clone()).collect();
-    for component in &message.text_components {
-        if component.kind == TextComponentKind::Asset {
-            let name = component.label.trim_start_matches('#').to_string();
-            if !files.contains(&name) {
-                files.push(name);
-            }
-        }
-    }
-    json!({ "message": input_text(message), "files": files })
+    json!({ "message": input_text(message), "files": conversations::file_names(message) })
 }
 
 /// Turns Jev's answers (`None` when Jev could not be asked) into who answers, the reaction
@@ -604,6 +595,7 @@ mod tests {
     }
 
     fn fixture() -> Fixture {
+        let library = Arc::new(Library::builtin());
         let (dir, project) = crate::projects::test_support::temp_project();
         let project = Arc::new(project);
         let conversation = conversations::create(&project).unwrap().id;
@@ -611,6 +603,7 @@ mod tests {
             Box::new(NoSecrets),
             Arc::new(SidecarLog::disabled()),
             crate::trait_calls::CANCEL_TIMEOUT,
+            Arc::clone(&library),
         ));
         let sink = Arc::new(Recorder::default());
         let prompt_adapter = AdapterInfo {
@@ -629,7 +622,7 @@ mod tests {
             conversation,
             calls,
             sink,
-            routing: Routing::new(Library::builtin()),
+            routing: Routing::new(library),
         }
     }
 

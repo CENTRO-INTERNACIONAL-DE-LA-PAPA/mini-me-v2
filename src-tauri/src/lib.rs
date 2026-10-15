@@ -2,6 +2,7 @@ mod assets;
 mod conversations;
 mod db;
 mod error;
+mod history;
 mod ipc;
 mod library;
 mod link;

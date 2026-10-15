@@ -85,6 +85,10 @@ class CallContext:
         self.project_id: str | None = context.get("project_id")
         self.conversation_id: str | None = context.get("conversation_id")
         self.message: dict[str, Any] = context.get("message") or {}
+        # Routing's answer to whether the message needs earlier context; None when unknown.
+        self.needs_context: bool | None = context.get("needs_context")
+        # The Mini-Me whose reply this call writes, which tells its own replies from others'.
+        self.mini_me_name: str | None = context.get("mini_me_name")
         self.cancelled = asyncio.Event()
         self.ended = False
         self._link = link
@@ -137,6 +141,10 @@ class CallContext:
             offset += len(data)
             if result.get("eof") or not data:
                 return b"".join(parts)
+
+    async def history(self) -> dict[str, Any]:
+        """The Conversation's earlier messages, `{ messages, truncated }`, oldest first."""
+        return await self._requests.send(self.call_id, "conversation.history", {})
 
     async def secret(self, provider: str) -> Secret:
         """The secret for `provider`, which must be in the Trait's declared providers."""

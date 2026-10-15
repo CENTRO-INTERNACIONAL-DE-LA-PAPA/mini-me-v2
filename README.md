@@ -149,8 +149,11 @@ account there. Typesafe is billed to your own Typesafe account the same way.
 
 ### Asking a Mini-Me
 
-Type `@` in the message box to pick a Mini-Me; the one you mention first answers. Mini-Me
-comes with two:
+Type `@` in the message box to pick a Mini-Me; the one you mention first answers. When a
+message follows up on earlier ones ("make it shorter", "what about the second point?"),
+the Mini-Me also sees the Conversation's earlier messages, including other Mini-Mes'
+replies; files from earlier messages are known by name only, so reference a file again to
+have it read. Mini-Me comes with two:
 
 - **Scribe** summarizes your message and the text files you reference with `#` or attach.
   It needs an API key and a model (see above). PDFs and images are not read yet.
@@ -235,8 +238,8 @@ proposed, reviewed, implemented, verified and archived before the next one start
 | 3 | Releases and auto-update | GitHub Actions builds the Windows per-user installer on each version tag and creates a draft GitHub Release with signed update files; installed apps see it once it is published. Installed apps download updates automatically with progress shown, then ask you to restart (or install when closed). No macOS or Linux release builds: macOS is built locally. Installers are not code-signed: CIP IT allowlists the bundled `python.exe` by path, and the app is named Mini-Me. | Done |
 | 4 | First real Trait | AI provider keys in the OS keychain, a Settings screen with provider and model selection, one AI-backed Trait (for example *Summarize*), Mini-Me definitions with the shared Trait library and one-Step Workflows, `@`-mentions of Mini-Mes, optional Mini-Me reactions to your messages | Done |
 | 5 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Done |
-| 6 | Conversation context | Adapters ask the core for a Conversation's earlier messages when they need them (a `core.request` method, as for Assets), a convention for replies from other Mini-Mes in the same Conversation, a size budget per call, how files referenced in earlier messages are carried over, and Jev deciding whether a message needs previous context at all | Next |
-| 7 | Asta integration | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) vendored and pinned in the sidecar, signing in with your Ai2 account, and confirmation before any action with an extra cost | Planned |
+| 6 | Conversation context | Adapters ask the core for a Conversation's earlier messages when they need them (a `core.request` method, as for Assets), a convention for replies from other Mini-Mes in the same Conversation, a size budget per call, how files referenced in earlier messages are carried over, and Jev deciding whether a message needs previous context at all | Done |
+| 7 | Asta integration | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) vendored and pinned in the sidecar, signing in with your Ai2 account, and confirmation before any action with an extra cost | Next |
 | 8 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |
 | 9 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Planned |
 | 10 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved through the core in `project.sqlite`, so it survives closing the app | Planned |

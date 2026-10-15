@@ -51,11 +51,15 @@ class Prompt(Adapter):
                 f"This is {len(material):,} characters; the limit is {MAX_MATERIAL_CHARS:,}. "
                 "Reference fewer or smaller files.",
             )
+        earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []
         key = await ctx.secret(model.provider)
         instructions = ctx.trait.instructions or ""
+        if ctx.mini_me_name:
+            instructions = f"You are {ctx.mini_me_name}, a Mini-Me.\n\n{instructions}"
+        turns = [("system", instructions), *earlier, ("human", material)]
 
         try:
-            async for text in _stream(model, key.reveal(), instructions, material):
+            async for text in _stream(model, key.reveal(), _merged(turns)):
                 if ctx.cancelled.is_set():
                     return
                 ctx.write(text)
@@ -93,10 +97,50 @@ async def _material(ctx: CallContext, text: str) -> tuple[str, list[str]]:
     return "\n\n".join(p for p in parts if p), unreadable
 
 
-async def _stream(model: Model, key: str, instructions: str, material: str) -> AsyncIterator[str]:
+async def _earlier_turns(ctx: CallContext) -> list[tuple[str, str]]:
+    """The Conversation's earlier messages as chat turns. Only the calling Mini-Me's replies
+    are assistant turns; other Mini-Mes' replies are quoted on the user's side, because models
+    copy any name prefix they see on their own earlier turns."""
+    history = await ctx.history()
+    turns: list[tuple[str, str]] = []
+    for entry in history.get("messages") or []:
+        content = str(entry.get("content", ""))
+        files = entry.get("files") or []
+        if files:
+            content += f"\n(files: {', '.join(files)})"
+        if entry.get("author") == "user":
+            turns.append(("human", content))
+            continue
+        if not entry.get("complete", True):
+            content += " [stopped before finishing]"
+        name = entry.get("name")
+        if name == ctx.mini_me_name:
+            turns.append(("ai", content))
+        else:
+            turns.append(("human", f"{name} replied:\n{content}"))
+    # Saying that older messages were cut also keeps the chat from opening with an assistant
+    # turn, which some providers reject.
+    if history.get("truncated") or (turns and turns[0][0] == "ai"):
+        turns.insert(0, ("human", "(earlier messages were left out)"))
+    return turns
+
+
+def _merged(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """`turns` with consecutive turns of the same role joined, since Anthropic and Google
+    expect user and assistant turns to alternate."""
+    merged: list[tuple[str, str]] = []
+    for role, content in turns:
+        if merged and merged[-1][0] == role and role != "system":
+            merged[-1] = (role, f"{merged[-1][1]}\n\n{content}")
+        else:
+            merged.append((role, content))
+    return merged
+
+
+async def _stream(model: Model, key: str, turns: list[tuple[str, str]]) -> AsyncIterator[str]:
     """The model's answer, chunk by chunk."""
     chat = _chat_model(model, key)
-    async for chunk in chat.astream([("system", instructions), ("human", material)]):
+    async for chunk in chat.astream(turns):
         # `text` joins the chunk's text blocks, whatever shape the provider sends them in.
         text = str(chunk.text)
         if text:

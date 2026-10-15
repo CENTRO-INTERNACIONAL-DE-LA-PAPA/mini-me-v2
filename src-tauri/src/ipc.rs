@@ -56,10 +56,12 @@ impl AppState {
             Launch::release(&resources)
         };
         let log = Arc::new(SidecarLog::new(&log_dir));
+        let library = Arc::new(Library::builtin());
         let calls = Arc::new(TraitCalls::new(
             Box::new(KeychainSecrets),
             Arc::clone(&log),
             CANCEL_TIMEOUT,
+            Arc::clone(&library),
         ));
         let sidecar = Supervisor::new(
             launch,
@@ -79,7 +81,7 @@ impl AppState {
             config_dir,
             open_projects: Mutex::new(HashMap::new()),
             calls,
-            routing: Routing::new(Library::builtin()),
+            routing: Routing::new(library),
             sidecar,
             updates,
         })

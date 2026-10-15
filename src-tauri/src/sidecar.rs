@@ -863,6 +863,7 @@ mod tests {
             Box::new(crate::secrets::test_support::MemorySecrets::dummy()),
             Arc::clone(&log),
             crate::trait_calls::CANCEL_TIMEOUT,
+            Arc::new(crate::library::Library::builtin()),
         ));
         let timing = Timing {
             start_timeout: Duration::from_secs(120),

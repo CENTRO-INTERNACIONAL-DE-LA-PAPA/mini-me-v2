@@ -17,11 +17,13 @@ use uuid::Uuid;
 use crate::assets;
 use crate::conversations;
 use crate::error::{AppError, AppResult};
+use crate::history::{HISTORY_BUDGET_CHARS, history};
+use crate::library::Library;
 use crate::link::{
     AdapterInfo, CallContext, CallModel, CallTrait, ChoiceAnswer, CoreFrame, RouteMiniMe,
     SidecarFrame,
 };
-use crate::protocol::{Author, ErrorInfo, Message, new_id};
+use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, provider_name};
 use crate::sidecar::SidecarLog;
 use crate::store::Project;
@@ -49,6 +51,9 @@ pub trait FrameSink: Send + Sync {
 
 struct Call {
     project: Arc<Project>,
+    conversation_id: Uuid,
+    /// The user message the reply answers.
+    answers: Uuid,
     message_id: Uuid,
     adapter: String,
     /// The provider of the call's model; the only one whose secret the call may get.
@@ -80,6 +85,7 @@ struct Inner {
 
 pub struct TraitCalls {
     inner: Mutex<Inner>,
+    library: Arc<Library>,
     secrets: Box<dyn SecretSource>,
     log: Arc<SidecarLog>,
     cancel_timeout: Duration,
@@ -98,9 +104,15 @@ struct SecretGetParams {
 }
 
 impl TraitCalls {
-    pub fn new(secrets: Box<dyn SecretSource>, log: Arc<SidecarLog>, cancel_timeout: Duration) -> Self {
+    pub fn new(
+        secrets: Box<dyn SecretSource>,
+        log: Arc<SidecarLog>,
+        cancel_timeout: Duration,
+        library: Arc<Library>,
+    ) -> Self {
         Self {
             inner: Mutex::new(Inner::default()),
+            library,
             secrets,
             log,
             cancel_timeout,
@@ -161,6 +173,13 @@ impl TraitCalls {
                 "Mini-Me's runtime is not ready yet.",
             ));
         };
+        let mini_me_name = match spec.author.kind {
+            AuthorKind::MiniMe => Uuid::parse_str(&spec.author.id)
+                .ok()
+                .and_then(|id| self.library.mini_me(id))
+                .map(|m| m.name.clone()),
+            _ => None,
+        };
         let reply = conversations::start_reply(&project, conversation_id, message.id, spec.author)?;
         let model = if needs_model { spec.model } else { None };
         if needs_model && model.is_none() {
@@ -177,6 +196,8 @@ impl TraitCalls {
             call_id,
             Call {
                 project: Arc::clone(&project),
+                conversation_id,
+                answers: message.id,
                 message_id: reply,
                 adapter: spec.adapter.clone(),
                 provider: model.as_ref().map(|m| m.provider.clone()),
@@ -194,6 +215,7 @@ impl TraitCalls {
                 conversation_id,
                 message: message.clone(),
                 needs_context: spec.needs_context,
+                mini_me_name,
             },
         };
         if !sink.send(&frame) {
@@ -401,13 +423,13 @@ impl TraitCalls {
     fn answer(&self, call_id: Uuid, method: &str, params: Value) -> AppResult<Value> {
         let (call, is_route) = {
             let inner = self.lock();
-            let call = inner
-                .calls
-                .get(&call_id)
-                .map(|c| (Arc::clone(&c.project), c.adapter.clone(), c.provider.clone()));
+            let call = inner.calls.get(&call_id).map(|c| {
+                let place = (c.conversation_id, c.answers);
+                (Arc::clone(&c.project), c.adapter.clone(), c.provider.clone(), place)
+            });
             (call, inner.routes.contains_key(&call_id))
         };
-        let Some((project, adapter, provider)) = call else {
+        let Some((project, adapter, provider, (conversation_id, answers))) = call else {
             if is_route {
                 return self.answer_route(method, params);
             }
@@ -415,6 +437,11 @@ impl TraitCalls {
         };
         match method {
             "asset.read" => read_asset(&project, parse_params(params)?),
+            "conversation.history" => {
+                let messages = project.lock().conversation_messages(conversation_id)?;
+                let history = history(&messages, answers, &self.library, HISTORY_BUDGET_CHARS);
+                Ok(serde_json::to_value(history)?)
+            }
             "secret.get" => self.secret(&adapter, provider.as_deref(), parse_params(params)?),
             other => Err(AppError::new(
                 "unknown_method",
@@ -579,6 +606,7 @@ mod tests {
             secrets,
             Arc::new(SidecarLog::disabled()),
             cancel_timeout,
+            Arc::new(Library::builtin()),
         ));
         let sink = Arc::new(Recorder::default());
         calls.connect(
@@ -962,5 +990,46 @@ mod tests {
             error: ErrorInfo { code: "jev_unavailable".into(), message: String::new() },
         });
         assert_eq!(handle.join().unwrap().unwrap_err().code, "jev_unavailable");
+    }
+
+    #[test]
+    fn a_follow_up_call_gets_the_earlier_exchange_as_history() {
+        let f = quick();
+        let ask = |content: &str| {
+            let input = SendMessageInput {
+                content: content.to_string(),
+                attachments: Vec::new(),
+                text_components: Vec::new(),
+            };
+            let message = send_message(&f.project, f.conversation, input, new_id()).unwrap();
+            f.calls
+                .start(Arc::clone(&f.project), f.conversation, &message, spec("echo", json!({})))
+                .unwrap();
+            f.sink
+                .frames()
+                .iter()
+                .rev()
+                .find_map(|frame| match frame {
+                    CoreFrame::CallStart { call_id, .. } => Some(*call_id),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        let first = ask("summarize the trial");
+        f.calls.handle(SidecarFrame::CallDelta { call_id: first, text: "It worked.".into() });
+        f.calls.handle(SidecarFrame::CallDone { call_id: first });
+        let second = ask("make it shorter");
+
+        let response = f.calls.respond("r".into(), second, "conversation.history", json!({}));
+        let history = result(response);
+        let contents: Vec<&str> = history["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["content"].as_str().unwrap())
+            .collect();
+        assert_eq!(contents, ["summarize the trial", "It worked."]);
+        assert_eq!(history["messages"][0]["name"], json!("You"));
+        assert_eq!(history["truncated"], json!(false));
     }
 }

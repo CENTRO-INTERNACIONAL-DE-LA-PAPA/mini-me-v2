@@ -226,6 +226,25 @@ impl ProjectState {
         Ok(result)
     }
 
+    /// Every message of the Conversation, in the order they were created.
+    pub fn conversation_messages(&self, conversation_id: Uuid) -> AppResult<Vec<Message>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM messages WHERE conversation_id = ?1 ORDER BY rowid")?;
+        let ids = stmt
+            .query_map(params![conversation_id.to_string()], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut messages = Vec::with_capacity(ids.len());
+        for id in ids {
+            let id = Uuid::parse_str(&id)
+                .map_err(|_| AppError::storage("stored message is not readable"))?;
+            if let Some((_, message)) = self.load_message(id)? {
+                messages.push(message);
+            }
+        }
+        Ok(messages)
+    }
+
     pub fn has_reaction(&self, message_id: Uuid, emoji: &str, by: &Author) -> AppResult<bool> {
         let found: Option<i64> = self
             .conn
