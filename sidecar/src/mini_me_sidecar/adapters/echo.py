@@ -3,7 +3,7 @@ import re
 from typing import Any
 
 from mini_me_sidecar.context import CallContext
-from mini_me_sidecar.traits.base import Trait, TraitInfo
+from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 
 CHUNK_DELAY_S = 0.06
 
@@ -12,10 +12,9 @@ CHUNK_DELAY_S = 0.06
 CHUNKS = re.compile(r"\S*\s+|\S+")
 
 
-class Echo(Trait):
-    info = TraitInfo(
+class Echo(Adapter):
+    info = AdapterInfo(
         id="echo",
-        name="Echo",
         description="Streams your message back to you, one word at a time.",
         input_schema={
             "type": "object",

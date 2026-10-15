@@ -10,13 +10,13 @@ from typing import BinaryIO
 from mini_me_sidecar import __version__
 from mini_me_sidecar.link import PROTOCOL, Link, log, parse
 from mini_me_sidecar.runner import Runner
-from mini_me_sidecar.traits import load_traits
+from mini_me_sidecar.adapters import load_adapters
 
 
-def run(link_out: BinaryIO, test_traits: bool) -> None:
+def run(link_out: BinaryIO, test_adapters: bool) -> None:
     link = Link(link_out)
     try:
-        asyncio.run(_main(link, test_traits))
+        asyncio.run(_main(link, test_adapters))
     finally:
         # Threads started with `asyncio.to_thread` by a Trait that ignored cancellation would
         # otherwise keep the interpreter alive after the core has gone.
@@ -31,9 +31,9 @@ def _read_stdin(loop: asyncio.AbstractEventLoop, inbox: asyncio.Queue[bytes | No
     loop.call_soon_threadsafe(inbox.put_nowait, None)
 
 
-async def _main(link: Link, test_traits: bool) -> None:
-    traits = load_traits(test_traits)
-    runner = Runner(link, traits)
+async def _main(link: Link, test_adapters: bool) -> None:
+    adapters = load_adapters(test_adapters)
+    runner = Runner(link, adapters)
     loop = asyncio.get_running_loop()
     inbox: asyncio.Queue[bytes | None] = asyncio.Queue()
     threading.Thread(target=_read_stdin, args=(loop, inbox), daemon=True).start()
@@ -55,8 +55,9 @@ async def _main(link: Link, test_traits: bool) -> None:
         match frame["type"]:
             case "ping":
                 link.send({"type": "pong", "nonce": frame.get("nonce")})
-            case "traits.list":
-                link.send({"type": "traits", "traits": [t.info.to_json() for t in traits.values()]})
+            case "adapters.list":
+                infos = [a.info.to_json() for a in adapters.values()]
+                link.send({"type": "adapters", "adapters": infos})
             case "call.start":
                 runner.start(frame)
             case "call.cancel":

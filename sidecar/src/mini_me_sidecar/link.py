@@ -6,7 +6,7 @@ import sys
 import threading
 from typing import Any, BinaryIO
 
-PROTOCOL = 1
+PROTOCOL = 2
 
 REDACTED = "[redacted]"
 

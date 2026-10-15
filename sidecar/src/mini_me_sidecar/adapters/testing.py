@@ -1,4 +1,5 @@
-"""Traits that exercise the runtime from the Rust tests. Registered only with `--test-traits`."""
+"""Adapters that exercise the runtime from the Rust tests. Registered only with
+`--test-adapters`."""
 
 import asyncio
 import hashlib
@@ -6,33 +7,32 @@ import os
 from typing import Any
 
 from mini_me_sidecar.context import CallContext
-from mini_me_sidecar.traits.base import Trait, TraitInfo
+from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 
 ANY_INPUT: dict[str, Any] = {"type": "object"}
 
 
-def _info(id: str, name: str, description: str, providers: tuple[str, ...] = ()) -> TraitInfo:
-    return TraitInfo(id=id, name=name, description=description, input_schema=ANY_INPUT,
-                     providers=providers)
+def _info(id: str, description: str, providers: tuple[str, ...] = ()) -> AdapterInfo:
+    return AdapterInfo(id=id, description=description, input_schema=ANY_INPUT,
+                       providers=providers)
 
 
-class Fail(Trait):
-    info = _info("test-fail", "Fail", "Raises an error.")
+class Fail(Adapter):
+    info = _info("test-fail", "Raises an error.")
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
-        raise RuntimeError("This Trait always fails.")
+        raise RuntimeError("This adapter always fails.")
 
 
-class Hang(Trait):
-    info = _info("test-hang", "Hang", "Waits until it is cancelled.")
+class Hang(Adapter):
+    info = _info("test-hang", "Waits until it is cancelled.")
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
         await ctx.cancelled.wait()
 
 
-class IgnoreCancellation(Trait):
-    info = _info("test-ignore-cancel", "Ignore Cancellation",
-                 "Keeps running for 30 seconds whatever happens.")
+class IgnoreCancellation(Adapter):
+    info = _info("test-ignore-cancel", "Keeps running for 30 seconds whatever happens.")
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
         loop = asyncio.get_running_loop()
@@ -45,8 +45,8 @@ class IgnoreCancellation(Trait):
             ctx.write(".")
 
 
-class ReportProgress(Trait):
-    info = _info("test-progress", "Report Progress", "Reports progress 100 times in a burst.")
+class ReportProgress(Adapter):
+    info = _info("test-progress", "Reports progress 100 times in a burst.")
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
         for step in range(1, 101):
@@ -54,30 +54,30 @@ class ReportProgress(Trait):
             await asyncio.sleep(0.005)
 
 
-class ReadAsset(Trait):
-    info = _info("test-read-asset", "Read Asset", "Reports the size and SHA-256 of an Asset.")
+class ReadAsset(Adapter):
+    info = _info("test-read-asset", "Reports the size and SHA-256 of an Asset.")
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
         data = await ctx.read_asset(str(input.get("asset_id")))
         ctx.write(f"{len(data)} {hashlib.sha256(data).hexdigest()}")
 
 
-class UseSecret(Trait):
-    info = _info("test-use-secret", "Use Secret",
-                 "Reports the length of the dummy provider's secret.", providers=("dummy",))
+class UseSecret(Adapter):
+    info = _info("test-use-secret", "Reports the length of the dummy provider's secret.",
+                 providers=("dummy",))
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
         secret = await ctx.secret(str(input.get("provider", "dummy")))
         ctx.write(f"secret length {len(secret.reveal())}")
 
 
-class Exit(Trait):
-    info = _info("test-exit", "Exit", "Ends the sidecar process at once.")
+class Exit(Adapter):
+    info = _info("test-exit", "Ends the sidecar process at once.")
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
         os._exit(3)
 
 
-TEST_TRAITS: list[Trait] = [
+TEST_ADAPTERS: list[Adapter] = [
     Fail(), Hang(), IgnoreCancellation(), ReportProgress(), ReadAsset(), UseSecret(), Exit(),
 ]

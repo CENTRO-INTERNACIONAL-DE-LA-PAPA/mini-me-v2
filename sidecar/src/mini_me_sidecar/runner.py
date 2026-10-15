@@ -7,7 +7,7 @@ from typing import Any
 
 from mini_me_sidecar.context import CallContext, Requests, TraitError
 from mini_me_sidecar.link import Link, log
-from mini_me_sidecar.traits.base import Trait
+from mini_me_sidecar.adapters.base import Adapter
 
 # After `call.cancel`, a Trait gets this long to return on its own before its task is
 # cancelled. The core stops waiting for the call after five seconds.
@@ -15,9 +15,9 @@ CANCEL_GRACE_S = 2.0
 
 
 class Runner:
-    def __init__(self, link: Link, traits: dict[str, Trait]) -> None:
+    def __init__(self, link: Link, adapters: dict[str, Adapter]) -> None:
         self._link = link
-        self._traits = traits
+        self._adapters = adapters
         self._requests = Requests(link)
         self._calls: dict[str, tuple[asyncio.Task[None], CallContext]] = {}
 
@@ -26,18 +26,18 @@ class Runner:
         if not isinstance(call_id, str) or call_id in self._calls:
             log(f"ignoring call.start with missing or duplicate call_id {call_id!r}")
             return
-        trait = self._traits.get(frame.get("trait_id", ""))
-        if trait is None:
-            self._end(call_id, "error", code="unknown_trait",
-                      message=f"There is no Trait called {frame.get('trait_id')!r}.")
+        adapter = self._adapters.get(frame.get("adapter", ""))
+        if adapter is None:
+            self._end(call_id, "error", code="unknown_adapter",
+                      message=f"There is no adapter called {frame.get('adapter')!r}.")
             return
-        ctx = CallContext(self._link, self._requests, call_id, frame.get("context") or {})
-        task = asyncio.create_task(self._run(trait, ctx, frame.get("input") or {}))
+        ctx = CallContext(self._link, self._requests, call_id, frame)
+        task = asyncio.create_task(self._run(adapter, ctx, frame.get("input") or {}))
         self._calls[call_id] = (task, ctx)
 
-    async def _run(self, trait: Trait, ctx: CallContext, input: dict[str, Any]) -> None:
+    async def _run(self, adapter: Adapter, ctx: CallContext, input: dict[str, Any]) -> None:
         try:
-            await trait.run(ctx, input)
+            await adapter.run(ctx, input)
         except asyncio.CancelledError:
             outcome: dict[str, str] = {"kind": "cancelled"}
         except TraitError as error:

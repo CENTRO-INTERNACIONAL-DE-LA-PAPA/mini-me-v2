@@ -1,12 +1,18 @@
 {
   "core_to_sidecar": [
-    { "type": "traits.list" },
+    { "type": "adapters.list" },
     { "type": "ping", "nonce": "17" },
     { "type": "shutdown" },
     {
       "type": "call.start",
       "call_id": "0199d0a0-0000-7000-8000-000000000301",
-      "trait_id": "echo",
+      "adapter": "prompt",
+      "trait": {
+        "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01",
+        "name": "Summarize",
+        "instructions": "Write a short, faithful summary."
+      },
+      "model": { "provider": "anthropic", "model": "example-model" },
       "input": { "text": "Summarize #field-trial.csv" },
       "context": {
         "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
@@ -45,11 +51,10 @@
   "sidecar_to_core": [
     { "type": "hello", "protocol": 1, "sidecar_version": "0.1.0", "python_version": "3.14.0" },
     {
-      "type": "traits",
-      "traits": [
+      "type": "adapters",
+      "adapters": [
         {
           "id": "echo",
-          "name": "Echo",
           "description": "Streams your message back to you, one word at a time.",
           "input_schema": {
             "type": "object",

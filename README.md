@@ -127,6 +127,31 @@ the update is installed as it closes. Your Projects and settings are kept.
 API keys are stored in your operating system's keychain. They are never written to project
 folders or logs.
 
+### Setting up an AI provider
+
+1. Open **Settings** (the gear next to the Project list or in the Project sidebar).
+2. Under **API keys**, paste the key for your provider (OpenAI, Anthropic, Google or
+   OpenRouter) and click **Save**. The row then shows **Saved**; the key is never shown
+   again. Use **Replace** or **Remove** to change it.
+3. Under **AI model**, choose the provider and type the model ID exactly as the provider
+   lists it, then click **Save**.
+
+Every AI call goes straight from your computer to that provider and is billed to your own
+account there.
+
+### Asking a Mini-Me
+
+Type `@` in the message box to pick a Mini-Me; the one you mention first answers. Mini-Me
+comes with two:
+
+- **Scribe** summarizes your message and the text files you reference with `#` or attach.
+  It needs an API key and a model (see above). PDFs and images are not read yet.
+- **Echo** repeats your message back. It needs no key.
+
+Messages without a mention are answered by Echo for now; choosing the best Mini-Me
+automatically comes in a later version. A Mini-Me may also react to your message with an
+emoji.
+
 ## Development
 
 Requirements: [Node.js](https://nodejs.org), [Rust](https://rustup.rs), the
@@ -193,16 +218,17 @@ proposed, reviewed, implemented, verified and archived before the next one start
 | 1 | Event protocol and project storage | Event envelope and delivery, Mini-Me Data and Project folders, Conversations, Assets, `#` references, reactions, minimal UI with a temporary echo responder | Done |
 | 2 | Sidecar runtime | Bundled Python (pinned with `uv`) started and supervised by the Rust core, JSON lines over stdin/stdout with a version handshake, the Trait interface, the echo responder moved into Python as the first Trait. No API keys or costs. | Done |
 | 3 | Releases and auto-update | GitHub Actions builds the Windows per-user installer on each version tag and creates a draft GitHub Release with signed update files; installed apps see it once it is published. Installed apps download updates automatically with progress shown, then ask you to restart (or install when closed). No macOS or Linux release builds: macOS is built locally. Installers are not code-signed: CIP IT allowlists the bundled `python.exe` by path, and the app is named Mini-Me. | Done |
-| 4 | First real Trait | AI provider keys in the OS keychain, a Settings screen with provider and model selection, one AI-backed Trait (for example *Summarize*), Mini-Me definitions with the shared Trait library and one-Step Workflows, `@`-mentions of Mini-Mes, optional Mini-Me reactions to your messages | Next |
-| 5 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Planned |
-| 6 | First Interactive Component | A table whose cells, rows and columns can be selected and referenced | Planned |
-| 7 | Asta integration | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) vendored and pinned in the sidecar, signing in with your Ai2 account, and confirmation before any action with an extra cost | Planned |
-| 8 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |
-| 9 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel) | Planned |
-| 10 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
-| 11 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
-| 12 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Planned |
-| 13 | Project Overview | The view of everything a Project has produced | Planned |
+| 4 | First real Trait | AI provider keys in the OS keychain, a Settings screen with provider and model selection, one AI-backed Trait (for example *Summarize*), Mini-Me definitions with the shared Trait library and one-Step Workflows, `@`-mentions of Mini-Mes, optional Mini-Me reactions to your messages | Done |
+| 5 | Routing | Typesafe Jev picks a Mini-Me when none is mentioned; below a confidence threshold, you choose | Next |
+| 6 | Conversation context | Adapters ask the core for a Conversation's earlier messages when they need them (a `core.request` method, as for Assets), a convention for replies from other Mini-Mes in the same Conversation, a size budget per call, how files referenced in earlier messages are carried over, and Jev deciding whether a message needs previous context at all | Planned |
+| 7 | First Interactive Component | A table whose cells, rows and columns can be selected and referenced | Planned |
+| 8 | Asta integration | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) vendored and pinned in the sidecar, signing in with your Ai2 account, and confirmation before any action with an extra cost | Planned |
+| 9 | Asta Traits | *Find Papers* (paper search, Paper Finder) and *Theorize* | Planned |
+| 10 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved either in memory (lost if the app closes) or through the core in `project.sqlite`, decided in that change | Planned |
+| 11 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
+| 12 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
+| 13 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Planned |
+| 14 | Project Overview | The view of everything a Project has produced | Planned |
 
 Later: code execution (Python and R) with OS-level sandboxing, collaboration through a relay
 server, Microsoft SSO, Dataverse upload.

@@ -4,15 +4,17 @@ import type { ConversationSummary, ProjectSummary } from "../protocol/types";
 import { ChatView } from "./ChatView";
 import { SidecarStatusLine, useSidecarStatus } from "./SidecarStatusLine";
 import { UpdateStatusLine } from "./UpdateStatusLine";
+import { SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface Props {
   project: ProjectSummary;
   onClose: () => void;
+  onSettings: () => void;
 }
 
-export function ProjectView({ project, onClose }: Props) {
+export function ProjectView({ project, onClose, onSettings }: Props) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,9 +45,20 @@ export function ProjectView({ project, onClose }: Props) {
   return (
     <div className="flex h-screen">
       <aside className="flex w-[264px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-border bg-sidebar px-3 py-4">
-        <Button variant="link" className="justify-start text-muted-foreground" onClick={onClose}>
-          ← Projects
-        </Button>
+        <div className="flex items-center justify-between">
+          <Button variant="link" className="justify-start text-muted-foreground" onClick={onClose}>
+            ← Projects
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Settings"
+            title="Settings"
+            onClick={onSettings}
+          >
+            <SettingsIcon />
+          </Button>
+        </div>
         <h2 className="px-2.5 text-section font-bold">{project.name}</h2>
         <Button variant="outline" onClick={create}>
           New conversation

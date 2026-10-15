@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use crate::link::{self, CoreFrame, SIDECAR_PROTOCOL, SidecarFrame, TraitInfo};
+use crate::link::{self, AdapterInfo, CoreFrame, SIDECAR_PROTOCOL, SidecarFrame};
 use crate::protocol::now_ms;
 use crate::trait_calls::{FrameSink, TraitCalls};
 
@@ -105,7 +105,7 @@ impl Launch {
 
     /// `-I` keeps the user's `PYTHON*` variables and user site-packages out; `-X utf8` makes
     /// stderr UTF-8 whatever the system code page.
-    pub fn command(&self, test_traits: bool) -> Command {
+    pub fn command(&self, test_adapters: bool) -> Command {
         let mut command = match self {
             Launch::Dev { project_dir } => {
                 let mut command = Command::new("uv");
@@ -130,8 +130,8 @@ impl Launch {
                 command
             }
         };
-        if test_traits {
-            command.arg("--test-traits");
+        if test_adapters {
+            command.arg("--test-adapters");
         }
         #[cfg(windows)]
         {
@@ -262,10 +262,10 @@ pub enum HandshakeError {
 pub struct Handshake {
     pub protocol: u32,
     pub sidecar_version: String,
-    pub traits: Vec<TraitInfo>,
+    pub adapters: Vec<AdapterInfo>,
 }
 
-/// Waits for `hello`, checks the protocol version, then lists the Traits. Frames other than
+/// Waits for `hello`, checks the protocol version, then lists the adapters. Frames other than
 /// the ones expected are logged and skipped.
 pub fn handshake(
     rx: &Receiver<Incoming>,
@@ -307,17 +307,17 @@ pub fn handshake(
     };
     check_protocol(protocol, SIDECAR_PROTOCOL, dev).map_err(HandshakeError::Incompatible)?;
 
-    sink.send(&CoreFrame::TraitsList {});
+    sink.send(&CoreFrame::AdaptersList {});
     loop {
         match next(log)? {
-            SidecarFrame::Traits { traits } => {
+            SidecarFrame::Adapters { adapters } => {
                 return Ok(Handshake {
                     protocol,
                     sidecar_version,
-                    traits,
+                    adapters,
                 });
             }
-            other => log.line(&format!("ignoring {other:?} while listing Traits")),
+            other => log.line(&format!("ignoring {other:?} while listing adapters")),
         }
     }
 }
@@ -360,7 +360,7 @@ struct Control {
 
 pub struct Supervisor {
     launch: Launch,
-    test_traits: bool,
+    test_adapters: bool,
     timing: Timing,
     calls: Arc<TraitCalls>,
     log: Arc<SidecarLog>,
@@ -373,14 +373,14 @@ pub struct Supervisor {
 impl Supervisor {
     pub fn new(
         launch: Launch,
-        test_traits: bool,
+        test_adapters: bool,
         timing: Timing,
         calls: Arc<TraitCalls>,
         log: Arc<SidecarLog>,
     ) -> Arc<Self> {
         Arc::new(Self {
             launch,
-            test_traits,
+            test_adapters,
             timing,
             calls,
             log,
@@ -563,7 +563,7 @@ impl Supervisor {
     }
 
     fn run_once(&self, backoff: &mut Backoff) -> Outcome {
-        let mut child = match self.launch.command(self.test_traits).spawn() {
+        let mut child = match self.launch.command(self.test_adapters).spawn() {
             Ok(child) => child,
             Err(err) => return Outcome::Failed(format!("could not start the process: {err}")),
         };
@@ -622,7 +622,7 @@ impl Supervisor {
         };
 
         self.calls
-            .connect(Arc::clone(&sink) as Arc<dyn FrameSink>, ready.traits);
+            .connect(Arc::clone(&sink) as Arc<dyn FrameSink>, ready.adapters);
         backoff.ready(Instant::now());
         self.set_status(SidecarStatus {
             state: SidecarState::Ready,
@@ -652,7 +652,7 @@ impl Supervisor {
                     Some(SidecarFrame::Unknown) => {
                         self.log.line(&format!("ignoring unknown frame: {line}"));
                     }
-                    Some(frame @ (SidecarFrame::Hello { .. } | SidecarFrame::Traits { .. })) => {
+                    Some(frame @ (SidecarFrame::Hello { .. } | SidecarFrame::Adapters { .. })) => {
                         self.log.line(&format!("ignoring unexpected {frame:?}"));
                     }
                     Some(frame) => self.calls.handle(frame),
@@ -794,18 +794,18 @@ mod tests {
     }
 
     #[test]
-    fn handshake_lists_traits_after_a_matching_hello() {
+    fn handshake_lists_adapters_after_a_matching_hello() {
         let (tx, rx) = std::sync::mpsc::channel();
         tx.send(Incoming::Line("garbage\n".into())).unwrap();
         tx.send(hello(SIDECAR_PROTOCOL)).unwrap();
-        tx.send(line(json!({ "type": "traits", "traits": [{
-            "id": "echo", "name": "Echo", "description": "", "input_schema": {}, "providers": []
+        tx.send(line(json!({ "type": "adapters", "adapters": [{
+            "id": "echo", "description": "", "input_schema": {}, "providers": []
         }] })))
         .unwrap();
         let sink = Recorder::default();
         let ready = handshake(&rx, &sink, soon(), false, &SidecarLog::disabled()).unwrap();
-        assert_eq!(ready.traits[0].id, "echo");
-        assert_eq!(*sink.0.lock().unwrap(), vec![CoreFrame::TraitsList {}]);
+        assert_eq!(ready.adapters[0].id, "echo");
+        assert_eq!(*sink.0.lock().unwrap(), vec![CoreFrame::AdaptersList {}]);
     }
 
     #[test]
@@ -833,7 +833,7 @@ mod tests {
         assert_eq!(err.err(), Some(HandshakeError::Closed));
     }
 
-    /// A supervisor running the real sidecar from `sidecar/` with the test Traits, plus a
+    /// A supervisor running the real sidecar from `sidecar/` with the test adapters, plus a
     /// Project to reply in. Needs `uv`; these tests are `#[ignore]`d for that reason.
     struct Real {
         _dir: tempfile::TempDir,
@@ -888,8 +888,8 @@ mod tests {
             });
         }
 
-        /// Starts `trait_id` in a new Conversation; returns the reply's ID.
-        fn start(&self, trait_id: &str, input: serde_json::Value) -> uuid::Uuid {
+        /// Starts `adapter` in a new Conversation; returns the reply's ID.
+        fn start(&self, adapter: &str, input: serde_json::Value) -> uuid::Uuid {
             use crate::conversations::{SendMessageInput, create, send_message};
             let conversation = create(&self.project).unwrap().id;
             let text = input["text"].as_str().unwrap_or("go").to_string();
@@ -905,7 +905,12 @@ mod tests {
             )
             .unwrap();
             self.calls
-                .start(Arc::clone(&self.project), conversation, &message, trait_id, input)
+                .start(
+                    Arc::clone(&self.project),
+                    conversation,
+                    &message,
+                    crate::trait_calls::test_support::spec(adapter, input),
+                )
                 .unwrap()
         }
 
@@ -982,7 +987,7 @@ mod tests {
         assert_eq!(real.wait_ended(echo).status, MessageStatus::Complete);
         assert_eq!(real.supervisor.status().state, SidecarState::Ready);
 
-        let unknown = real.start("no-such-trait", json!({}));
+        let unknown = real.start("no-such-adapter", json!({}));
         assert_eq!(real.wait_ended(unknown).status, MessageStatus::Failed);
     }
 

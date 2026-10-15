@@ -61,7 +61,7 @@ and only after `hello` arrives within the start timeout.
 
 #### Scenario: Matching versions
 - **WHEN** the sidecar sends `hello` with the protocol version the core implements
-- **THEN** the core lists the sidecar's Traits and the sidecar becomes ready
+- **THEN** the core lists the sidecar's adapters and the sidecar becomes ready
 
 #### Scenario: No hello in time
 - **WHEN** the sidecar does not send `hello` within the start timeout

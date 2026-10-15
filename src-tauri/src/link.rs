@@ -9,18 +9,34 @@ use uuid::Uuid;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 1;
+pub const SIDECAR_PROTOCOL: u32 = 2;
 
 pub const REDACTED: &str = "[redacted]";
 
+/// A sidecar adapter, as discovery reports it. Traits are defined in the core's library and
+/// name the adapter that runs them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TraitInfo {
+pub struct AdapterInfo {
     pub id: String,
-    pub name: String,
     pub description: String,
     pub input_schema: Value,
     #[serde(default)]
     pub providers: Vec<String>,
+}
+
+/// The Trait a call runs, from the core's Trait library.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CallTrait {
+    pub id: Uuid,
+    pub name: String,
+    pub instructions: Option<String>,
+}
+
+/// The provider and model chosen in Settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallModel {
+    pub provider: String,
+    pub model: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -34,8 +50,8 @@ pub struct CallContext {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum CoreFrame {
-    #[serde(rename = "traits.list")]
-    TraitsList {},
+    #[serde(rename = "adapters.list")]
+    AdaptersList {},
     #[serde(rename = "ping")]
     Ping { nonce: String },
     #[serde(rename = "shutdown")]
@@ -43,7 +59,11 @@ pub enum CoreFrame {
     #[serde(rename = "call.start")]
     CallStart {
         call_id: Uuid,
-        trait_id: String,
+        adapter: String,
+        #[serde(rename = "trait")]
+        trait_def: CallTrait,
+        /// Set for adapters that declare providers.
+        model: Option<CallModel>,
         input: Value,
         context: CallContext,
     },
@@ -71,8 +91,8 @@ pub enum SidecarFrame {
         sidecar_version: String,
         python_version: String,
     },
-    #[serde(rename = "traits")]
-    Traits { traits: Vec<TraitInfo> },
+    #[serde(rename = "adapters")]
+    Adapters { adapters: Vec<AdapterInfo> },
     #[serde(rename = "pong")]
     Pong { nonce: String },
     #[serde(rename = "call.delta")]
@@ -178,8 +198,8 @@ mod tests {
         }
         for expected in [
             "hello",
-            "traits.list",
-            "traits",
+            "adapters.list",
+            "adapters",
             "ping",
             "pong",
             "shutdown",

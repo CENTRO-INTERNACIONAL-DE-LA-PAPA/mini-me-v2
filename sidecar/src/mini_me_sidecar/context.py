@@ -4,6 +4,7 @@ import asyncio
 import base64
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from mini_me_sidecar.link import REDACTED, Link
@@ -43,13 +44,44 @@ class CoreRequestError(TraitError):
     """The core refused a request. Left uncaught, it ends the call with the core's code."""
 
 
+@dataclass(frozen=True)
+class TraitDefinition:
+    """The Trait being run, as defined in the Rust core's Trait library."""
+
+    id: str
+    name: str
+    instructions: str | None
+
+
+@dataclass(frozen=True)
+class Model:
+    """The provider and model chosen in Settings, for adapters that declare providers."""
+
+    provider: str
+    model: str
+
+
 class CallContext:
     """One Trait call. `cancelled` is set when the call is cancelled; a long-running Trait
     checks it between units of work and returns early. Blocking work must go through
     `asyncio.to_thread`, so the sidecar keeps answering the core while the Trait runs."""
 
-    def __init__(self, link: Link, requests: "Requests", call_id: str, context: dict[str, Any]):
+    def __init__(self, link: Link, requests: "Requests", call_id: str, start: dict[str, Any]):
+        """`start` is the `call.start` frame."""
+        context = start.get("context") or {}
+        trait = start.get("trait") or {}
+        model = start.get("model")
         self.call_id = call_id
+        self.trait = TraitDefinition(
+            id=str(trait.get("id", "")),
+            name=str(trait.get("name", "")),
+            instructions=trait.get("instructions"),
+        )
+        self.model = (
+            Model(provider=str(model.get("provider", "")), model=str(model.get("model", "")))
+            if isinstance(model, dict)
+            else None
+        )
         self.project_id: str | None = context.get("project_id")
         self.conversation_id: str | None = context.get("conversation_id")
         self.message: dict[str, Any] = context.get("message") or {}

@@ -7,8 +7,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
+use crate::link::CallModel;
 use crate::protocol::{Origin, new_id};
+use crate::secrets::is_provider;
 
 const FILE_NAME: &str = "settings.json";
 
@@ -19,6 +21,46 @@ pub struct Settings {
     /// Project ID → last time it was opened (Unix ms).
     #[serde(default)]
     pub recent_projects: HashMap<Uuid, i64>,
+    #[serde(default)]
+    pub ai: AiSettings,
+}
+
+/// The provider and model every AI Trait call uses. API keys are not here: they live in the
+/// OS keychain.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AiSettings {
+    pub provider: String,
+    /// Empty until the user types a model ID.
+    pub model: String,
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        Self {
+            provider: "openai".to_string(),
+            model: String::new(),
+        }
+    }
+}
+
+impl AiSettings {
+    pub fn new(provider: &str, model: &str) -> AppResult<Self> {
+        if !is_provider(provider) {
+            return Err(AppError::invalid_input(format!("Unknown provider {provider:?}.")));
+        }
+        Ok(Self {
+            provider: provider.to_string(),
+            model: model.trim().to_string(),
+        })
+    }
+
+    /// The model for AI Trait calls, or `None` while no model is set.
+    pub fn model(&self) -> Option<CallModel> {
+        (!self.model.is_empty()).then(|| CallModel {
+            provider: self.provider.clone(),
+            model: self.model.clone(),
+        })
+    }
 }
 
 impl Settings {
@@ -33,6 +75,7 @@ impl Settings {
             installation_id: new_id(),
             user_id: new_id(),
             recent_projects: HashMap::new(),
+            ai: AiSettings::default(),
         };
         settings.save(config_dir)?;
         Ok(settings)
@@ -77,5 +120,35 @@ mod tests {
         settings.save(dir.path()).unwrap();
         let loaded = Settings::load_or_create(dir.path()).unwrap();
         assert_eq!(loaded.recent_projects.get(&project), Some(&42));
+    }
+
+    #[test]
+    fn settings_without_ai_load_with_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = r#"{ "installation_id": "0199d0a0-0000-7000-8000-0000000000e1",
+                      "user_id": "0199d0a0-0000-7000-8000-0000000000e2" }"#;
+        std::fs::write(dir.path().join(FILE_NAME), old).unwrap();
+        let settings = Settings::load_or_create(dir.path()).unwrap();
+        assert_eq!(settings.ai, AiSettings::default());
+        assert_eq!(settings.ai.model(), None);
+    }
+
+    #[test]
+    fn the_model_is_saved_without_any_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut settings = Settings::load_or_create(dir.path()).unwrap();
+        settings.ai = AiSettings::new("anthropic", "  example-model ").unwrap();
+        settings.save(dir.path()).unwrap();
+        let saved = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        assert!(!saved.to_lowercase().contains("key"));
+        let loaded = Settings::load_or_create(dir.path()).unwrap();
+        assert_eq!(
+            loaded.ai.model(),
+            Some(CallModel {
+                provider: "anthropic".into(),
+                model: "example-model".into()
+            })
+        );
+        assert!(AiSettings::new("dummy", "m").is_err());
     }
 }

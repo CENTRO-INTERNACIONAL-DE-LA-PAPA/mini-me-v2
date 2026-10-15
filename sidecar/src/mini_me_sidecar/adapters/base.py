@@ -1,4 +1,5 @@
-"""The Trait adapter interface. Every Trait, whatever its provider, implements `Trait`."""
+"""The adapter interface. Every Trait, whatever its provider, is run by an `Adapter`: the
+Trait's definition (its instructions) comes from the Rust core with each call."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -8,12 +9,11 @@ from mini_me_sidecar.context import CallContext
 
 
 @dataclass(frozen=True)
-class TraitInfo:
-    """What discovery reports. `name` is an imperative verb in Title Case; `providers` are
-    the provider IDs the Trait may request secrets for."""
+class AdapterInfo:
+    """What discovery reports. `providers` are the provider IDs the adapter may request
+    secrets for."""
 
     id: str
-    name: str
     description: str
     input_schema: dict[str, Any]
     providers: tuple[str, ...] = field(default=())
@@ -21,15 +21,14 @@ class TraitInfo:
     def to_json(self) -> dict[str, Any]:
         return {
             "id": self.id,
-            "name": self.name,
             "description": self.description,
             "input_schema": self.input_schema,
             "providers": list(self.providers),
         }
 
 
-class Trait(ABC):
-    info: ClassVar[TraitInfo]
+class Adapter(ABC):
+    info: ClassVar[AdapterInfo]
 
     @abstractmethod
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:

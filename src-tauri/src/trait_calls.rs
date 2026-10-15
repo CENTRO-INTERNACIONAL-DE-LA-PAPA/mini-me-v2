@@ -16,9 +16,9 @@ use uuid::Uuid;
 use crate::assets;
 use crate::conversations;
 use crate::error::{AppError, AppResult};
-use crate::link::{CallContext, CoreFrame, SidecarFrame, TraitInfo};
-use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
-use crate::secrets::SecretSource;
+use crate::link::{AdapterInfo, CallContext, CallModel, CallTrait, CoreFrame, SidecarFrame};
+use crate::protocol::{Author, ErrorInfo, Message, new_id};
+use crate::secrets::{SecretSource, provider_name};
 use crate::sidecar::SidecarLog;
 use crate::store::Project;
 
@@ -38,14 +38,27 @@ pub trait FrameSink: Send + Sync {
 struct Call {
     project: Arc<Project>,
     message_id: Uuid,
-    trait_id: String,
+    adapter: String,
+    /// The provider of the call's model; the only one whose secret the call may get.
+    provider: Option<String>,
     cancelling: bool,
+}
+
+/// What a reply is produced by: the Trait to run, through which adapter, with which model.
+pub struct CallSpec {
+    pub author: Author,
+    pub adapter: String,
+    pub trait_def: CallTrait,
+    /// The model chosen in Settings, or `None` when none is set. Sent only to adapters that
+    /// declare providers.
+    pub model: Option<CallModel>,
+    pub input: Value,
 }
 
 #[derive(Default)]
 struct Inner {
     sink: Option<Arc<dyn FrameSink>>,
-    traits: HashMap<String, TraitInfo>,
+    adapters: HashMap<String, AdapterInfo>,
     calls: HashMap<Uuid, Call>,
 }
 
@@ -82,11 +95,11 @@ impl TraitCalls {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Starts using a sidecar that has completed the handshake and listed its Traits.
-    pub fn connect(&self, sink: Arc<dyn FrameSink>, traits: Vec<TraitInfo>) {
+    /// Starts using a sidecar that has completed the handshake and listed its adapters.
+    pub fn connect(&self, sink: Arc<dyn FrameSink>, adapters: Vec<AdapterInfo>) {
         let mut inner = self.lock();
         inner.sink = Some(sink);
-        inner.traits = traits.into_iter().map(|t| (t.id.clone(), t)).collect();
+        inner.adapters = adapters.into_iter().map(|a| (a.id.clone(), a)).collect();
     }
 
     /// Forgets the sidecar and fails every reply whose call was still open.
@@ -106,46 +119,64 @@ impl TraitCalls {
         }
     }
 
-    /// Creates the reply to `message` and starts a call of `trait_id` to produce it.
+    /// Creates the reply to `message` and starts the call that produces it. An adapter that
+    /// needs a model gets none when Settings has none; the reply then fails with
+    /// `model_not_set` and no call is started.
     pub fn start(
         &self,
         project: Arc<Project>,
         conversation_id: Uuid,
         message: &Message,
-        trait_id: &str,
-        input: Value,
+        spec: CallSpec,
     ) -> AppResult<Uuid> {
-        let Some(sink) = self.lock().sink.clone() else {
+        let (sink, needs_model) = {
+            let inner = self.lock();
+            let needs_model = inner
+                .adapters
+                .get(&spec.adapter)
+                .is_some_and(|info| !info.providers.is_empty());
+            (inner.sink.clone(), needs_model)
+        };
+        let Some(sink) = sink else {
             return Err(AppError::new(
                 "sidecar_unavailable",
                 "Mini-Me's runtime is not ready yet.",
             ));
         };
-        let author = Author {
-            kind: AuthorKind::System,
-            id: trait_id.to_string(),
-        };
-        let reply = conversations::start_reply(&project, conversation_id, message.id, author)?;
+        let reply = conversations::start_reply(&project, conversation_id, message.id, spec.author)?;
+        let model = if needs_model { spec.model } else { None };
+        if needs_model && model.is_none() {
+            let _ = conversations::fail_reply(
+                &project,
+                reply,
+                "model_not_set",
+                "Choose an AI model in Settings first.",
+            );
+            return Ok(reply);
+        }
         let call_id = new_id();
+        self.lock().calls.insert(
+            call_id,
+            Call {
+                project: Arc::clone(&project),
+                message_id: reply,
+                adapter: spec.adapter.clone(),
+                provider: model.as_ref().map(|m| m.provider.clone()),
+                cancelling: false,
+            },
+        );
         let frame = CoreFrame::CallStart {
             call_id,
-            trait_id: trait_id.to_string(),
-            input,
+            adapter: spec.adapter,
+            trait_def: spec.trait_def,
+            model,
+            input: spec.input,
             context: CallContext {
                 project_id: project.id,
                 conversation_id,
                 message: message.clone(),
             },
         };
-        self.lock().calls.insert(
-            call_id,
-            Call {
-                project: Arc::clone(&project),
-                message_id: reply,
-                trait_id: trait_id.to_string(),
-                cancelling: false,
-            },
-        );
         if !sink.send(&frame) {
             self.lock().calls.remove(&call_id);
             let _ = conversations::fail_reply(
@@ -287,15 +318,15 @@ impl TraitCalls {
     }
 
     fn answer(&self, call_id: Uuid, method: &str, params: Value) -> AppResult<Value> {
-        let (project, trait_id) = self
+        let (project, adapter, provider) = self
             .lock()
             .calls
             .get(&call_id)
-            .map(|call| (Arc::clone(&call.project), call.trait_id.clone()))
+            .map(|call| (Arc::clone(&call.project), call.adapter.clone(), call.provider.clone()))
             .ok_or_else(|| AppError::new("call_not_active", "This Trait call has ended."))?;
         match method {
             "asset.read" => read_asset(&project, parse_params(params)?),
-            "secret.get" => self.secret(&trait_id, parse_params(params)?),
+            "secret.get" => self.secret(&adapter, provider.as_deref(), parse_params(params)?),
             other => Err(AppError::new(
                 "unknown_method",
                 format!("The core has no request method called '{other}'."),
@@ -303,22 +334,32 @@ impl TraitCalls {
         }
     }
 
-    fn secret(&self, trait_id: &str, params: SecretGetParams) -> AppResult<Value> {
+    /// A call may get only the secret of its own model's provider, and only if its adapter
+    /// declared that provider.
+    fn secret(
+        &self,
+        adapter: &str,
+        provider: Option<&str>,
+        params: SecretGetParams,
+    ) -> AppResult<Value> {
         let declared = self
             .lock()
-            .traits
-            .get(trait_id)
+            .adapters
+            .get(adapter)
             .is_some_and(|info| info.providers.iter().any(|p| *p == params.provider));
-        if !declared {
+        if !declared || provider != Some(params.provider.as_str()) {
             return Err(AppError::new(
                 "secret_not_allowed",
-                format!("This Trait cannot use the {} secret.", params.provider),
+                format!("This Trait cannot use the {} API key.", provider_name(&params.provider)),
             ));
         }
         let secret = self.secrets.get(&params.provider).ok_or_else(|| {
             AppError::new(
                 "secret_unavailable",
-                format!("There is no saved secret for {}.", params.provider),
+                format!(
+                    "There is no saved {} API key. Add one in Settings.",
+                    provider_name(&params.provider)
+                ),
             )
         })?;
         Ok(json!({ "value": secret.expose() }))
@@ -348,6 +389,34 @@ fn read_asset(project: &Project, params: AssetReadParams) -> AppResult<Value> {
 }
 
 #[cfg(test)]
+pub mod test_support {
+    use super::*;
+    use crate::protocol::AuthorKind;
+
+    /// A call of `adapter`, authored by a Mini-Me called `adapter`, with the dummy provider's
+    /// model.
+    pub fn spec(adapter: &str, input: Value) -> CallSpec {
+        CallSpec {
+            author: Author {
+                kind: AuthorKind::MiniMe,
+                id: adapter.to_string(),
+            },
+            adapter: adapter.to_string(),
+            trait_def: CallTrait {
+                id: Uuid::nil(),
+                name: "Test".to_string(),
+                instructions: None,
+            },
+            model: Some(CallModel {
+                provider: "dummy".to_string(),
+                model: "dummy-model".to_string(),
+            }),
+            input,
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
@@ -355,6 +424,7 @@ mod tests {
     use crate::protocol::{EventKind, MessageStatus};
     use crate::secrets::NoSecrets;
     use crate::secrets::test_support::MemorySecrets;
+    use super::test_support::spec;
 
     #[derive(Default)]
     struct Recorder(Mutex<Vec<CoreFrame>>);
@@ -372,10 +442,9 @@ mod tests {
         }
     }
 
-    fn info(id: &str, providers: &[&str]) -> TraitInfo {
-        TraitInfo {
+    fn info(id: &str, providers: &[&str]) -> AdapterInfo {
+        AdapterInfo {
             id: id.to_string(),
-            name: "Echo".to_string(),
             description: String::new(),
             input_schema: json!({ "type": "object" }),
             providers: providers.iter().map(|p| p.to_string()).collect(),
@@ -402,7 +471,11 @@ mod tests {
         let sink = Arc::new(Recorder::default());
         calls.connect(
             Arc::clone(&sink) as Arc<dyn FrameSink>,
-            vec![info("echo", &[]), info("test-use-secret", &["dummy"])],
+            vec![
+                info("echo", &[]),
+                info("test-use-secret", &["dummy"]),
+                info("prompt", &["dummy", "openai"]),
+            ],
         );
         Fixture {
             _dir: dir,
@@ -414,8 +487,12 @@ mod tests {
     }
 
     impl Fixture {
-        /// Sends a user message and starts `trait_id` for it; returns (call ID, reply ID).
-        fn start(&self, trait_id: &str) -> (Uuid, Uuid) {
+        /// Sends a user message and starts `adapter` for it; returns (call ID, reply ID).
+        fn start(&self, adapter: &str) -> (Uuid, Uuid) {
+            self.start_spec(spec(adapter, json!({ "text": "late blight spreads" })))
+        }
+
+        fn start_spec(&self, spec: CallSpec) -> (Uuid, Uuid) {
             let input = SendMessageInput {
                 content: "late blight spreads".to_string(),
                 attachments: Vec::new(),
@@ -426,13 +503,7 @@ mod tests {
             let message = send_message(&self.project, conversation, input, new_id()).unwrap();
             let reply = self
                 .calls
-                .start(
-                    Arc::clone(&self.project),
-                    conversation,
-                    &message,
-                    trait_id,
-                    json!({ "text": message.content }),
-                )
+                .start(Arc::clone(&self.project), conversation, &message, spec)
                 .unwrap();
             let call_id = self
                 .sink
@@ -579,7 +650,7 @@ mod tests {
         let message = f.project.lock().load_message(first).unwrap().unwrap().1;
         let err = f
             .calls
-            .start(Arc::clone(&f.project), f.conversation, &message, "echo", json!({}))
+            .start(Arc::clone(&f.project), f.conversation, &message, spec("echo", json!({})))
             .unwrap_err();
         assert_eq!(err.code, "sidecar_unavailable");
     }
@@ -660,5 +731,51 @@ mod tests {
         let (call, _) = g.start("test-use-secret");
         let response = g.calls.respond("r".into(), call, "secret.get", json!({ "provider": "dummy" }));
         assert_eq!(error_code(response).as_deref(), Some("secret_unavailable"));
+    }
+
+    #[test]
+    fn secrets_go_only_to_the_calls_own_provider() {
+        let f = fixture(Box::new(MemorySecrets::dummy()), CANCEL_TIMEOUT);
+        let (call, _) = f.start("prompt");
+        let response =
+            f.calls.respond("r".into(), call, "secret.get", json!({ "provider": "openai" }));
+        assert_eq!(error_code(response).as_deref(), Some("secret_not_allowed"));
+        let response =
+            f.calls.respond("r".into(), call, "secret.get", json!({ "provider": "dummy" }));
+        assert_eq!(result(response)["value"], json!("sk-dummy-0123456789"));
+    }
+
+    #[test]
+    fn a_missing_model_fails_the_reply_without_a_call() {
+        let f = quick();
+        let mut without_model = spec("prompt", json!({ "text": "summarize" }));
+        without_model.model = None;
+        let sent_before = f.sink.frames().len();
+        let input = SendMessageInput {
+            content: "summarize".to_string(),
+            attachments: Vec::new(),
+            text_components: Vec::new(),
+        };
+        let message = send_message(&f.project, f.conversation, input, new_id()).unwrap();
+        let reply = f
+            .calls
+            .start(Arc::clone(&f.project), f.conversation, &message, without_model)
+            .unwrap();
+        match f.reply_events(reply).last().unwrap() {
+            EventKind::MessageFailed { error, .. } => assert_eq!(error.code, "model_not_set"),
+            other => panic!("expected message.failed, got {other:?}"),
+        }
+        assert_eq!(f.sink.frames().len(), sent_before);
+    }
+
+    #[test]
+    fn adapters_without_providers_get_no_model() {
+        let f = quick();
+        f.start("echo");
+        let sent = f.sink.frames().into_iter().find_map(|frame| match frame {
+            CoreFrame::CallStart { model, .. } => Some(model),
+            _ => None,
+        });
+        assert_eq!(sent, Some(None));
     }
 }

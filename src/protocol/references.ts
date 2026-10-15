@@ -1,25 +1,47 @@
-import type { AssetRef, TextComponent } from "./types";
+import type { AssetRef, MiniMe, TextComponent } from "./types";
 
-/** A `#` reference inside the composer text. Offsets are JavaScript string indices. */
+export type ReferenceKind = TextComponent["kind"];
+
+/** A `#` file reference or an `@` Mini-Me mention inside the composer text. Offsets are
+ * JavaScript string indices. */
 export interface DraftReference {
+  kind: ReferenceKind;
   id: string;
   label: string;
   start: number;
   end: number;
 }
 
-/** The `#query` being typed right before the cursor, if any. */
-export function activeQuery(text: string, cursor: number): { start: number; query: string } | null {
-  const match = /(^|\s)#([^\s#]*)$/.exec(text.slice(0, cursor));
+/** What a reference points to, before it has a position in the text. */
+export type ReferenceTarget = Pick<DraftReference, "kind" | "id" | "label">;
+
+export const assetTarget = (asset: AssetRef): ReferenceTarget => ({
+  kind: "asset",
+  id: asset.id,
+  label: `#${asset.name}`,
+});
+
+export const miniMeTarget = (miniMe: MiniMe): ReferenceTarget => ({
+  kind: "mini_me",
+  id: miniMe.id,
+  label: `@${miniMe.name}`,
+});
+
+/** The `#query` or `@query` being typed right before the cursor, if any. */
+export function activeQuery(
+  text: string,
+  cursor: number,
+): { start: number; query: string; kind: ReferenceKind } | null {
+  const match = /(^|\s)([#@])([^\s#@]*)$/.exec(text.slice(0, cursor));
   if (!match) {
     return null;
   }
-  const start = cursor - match[2].length - 1;
-  return { start, query: match[2] };
+  const start = cursor - match[3].length - 1;
+  return { start, query: match[3], kind: match[2] === "#" ? "asset" : "mini_me" };
 }
 
 /**
- * Replaces `text[start..end]` (the typed `#query`) with the Asset's label followed by a space,
+ * Replaces `text[start..end]` (the typed query) with the target's label followed by a space,
  * and records the reference.
  */
 export function insertReference(
@@ -27,13 +49,12 @@ export function insertReference(
   references: DraftReference[],
   start: number,
   end: number,
-  asset: AssetRef,
+  target: ReferenceTarget,
 ): { text: string; references: DraftReference[]; cursor: number } {
-  const label = `#${asset.name}`;
-  const inserted = `${label} `;
+  const inserted = `${target.label} `;
   const nextText = text.slice(0, start) + inserted + text.slice(end);
   const shifted = updateReferences(text, nextText, references);
-  const reference = { id: asset.id, label, start, end: start + label.length };
+  const reference = { ...target, start, end: start + target.label.length };
   return {
     text: nextText,
     references: [...shifted, reference].sort((a, b) => a.start - b.start),
@@ -79,7 +100,13 @@ export function updateReferences(
 }
 
 export function toTextComponents(references: DraftReference[]): TextComponent[] {
-  return references.map((ref): TextComponent => ({ kind: "asset", ...ref }));
+  return references.map(({ kind, id, label, start, end }): TextComponent => ({
+    kind,
+    id,
+    label,
+    start,
+    end,
+  }));
 }
 
 /** Splits content into plain text and reference segments, for rendering chips. */

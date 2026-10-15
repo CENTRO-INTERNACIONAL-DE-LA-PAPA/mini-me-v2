@@ -8,8 +8,8 @@ use uuid::Uuid;
 use crate::assets;
 use crate::error::{AppError, AppResult};
 use crate::protocol::{
-    Author, AuthorKind, ErrorInfo, EventKind, Message, MessageStatus, TextComponent, new_id,
-    now_ms,
+    Author, AuthorKind, ErrorInfo, EventKind, Message, MessageStatus, TextComponent,
+    TextComponentKind, new_id, now_ms,
 };
 use crate::store::{Project, ProjectState};
 
@@ -92,8 +92,14 @@ fn validate_text_components(
         if component.label.trim().is_empty() {
             return Err(AppError::invalid_input("A reference has no label."));
         }
-        // Deserialization rejects every `kind` except `asset`, so each `id` is an Asset ID.
-        assets::find(state, component.id)?;
+        match component.kind {
+            TextComponentKind::Asset => {
+                assets::find(state, component.id)?;
+            }
+            // Mini-Mes are not Project data; `routing::send` checks mentions against the
+            // library before the message gets here.
+            TextComponentKind::MiniMe => {}
+        }
     }
     Ok(())
 }
@@ -335,7 +341,6 @@ pub fn remove_reaction(
 mod tests {
     use super::*;
     use crate::projects::test_support::temp_project;
-    use crate::protocol::TextComponentKind;
     use crate::store::test_support::Collector;
 
     fn text(content: &str) -> SendMessageInput {

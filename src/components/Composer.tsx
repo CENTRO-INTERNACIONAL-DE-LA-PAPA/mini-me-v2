@@ -2,14 +2,19 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { api, errorCode, errorMessage } from "../api";
 import {
   activeQuery,
+  assetTarget,
   insertReference,
+  miniMeTarget,
   toTextComponents,
   updateReferences,
   type DraftReference,
+  type ReferenceKind,
+  type ReferenceTarget,
 } from "../protocol/references";
 import type { AssetRef } from "../protocol/types";
 import { formatSize } from "./format";
 import { sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
+import { useMiniMes } from "./useMiniMes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,29 +30,39 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
   const [text, setText] = useState("");
   const [references, setReferences] = useState<DraftReference[]>([]);
   const [attachments, setAttachments] = useState<AssetRef[]>([]);
-  const [query, setQuery] = useState<{ start: number; query: string } | null>(null);
-  const [suggestions, setSuggestions] = useState<AssetRef[]>([]);
+  const [query, setQuery] = useState<{ start: number; query: string; kind: ReferenceKind } | null>(
+    null,
+  );
+  const [assetSuggestions, setAssetSuggestions] = useState<AssetRef[]>([]);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const sidecar = useSidecarStatus();
   const ready = sidecarReady(sidecar);
+  const miniMes = useMiniMes();
 
   useEffect(() => {
-    if (!query) {
-      setSuggestions([]);
+    if (query?.kind !== "asset") {
+      setAssetSuggestions([]);
       return;
     }
     let current = true;
     api
       .listAssets(projectId, query.query)
-      .then((assets) => current && setSuggestions(assets.slice(0, 8)))
-      .catch(() => current && setSuggestions([]));
+      .then((assets) => current && setAssetSuggestions(assets.slice(0, 8)))
+      .catch(() => current && setAssetSuggestions([]));
     return () => {
       current = false;
     };
   }, [projectId, query]);
 
-  /** The `#query` at the cursor, unless the `#` belongs to an existing reference. */
+  const suggestions: ReferenceTarget[] =
+    query?.kind === "mini_me"
+      ? miniMes
+          .filter((m) => m.name.toLowerCase().includes(query.query.toLowerCase()))
+          .map(miniMeTarget)
+      : assetSuggestions.map(assetTarget);
+
+  /** The query at the cursor, unless its `#` or `@` belongs to an existing reference. */
   function queryAt(value: string, cursor: number, refs: DraftReference[]) {
     const found = activeQuery(value, cursor);
     return found && !refs.some((r) => r.start === found.start) ? found : null;
@@ -61,12 +76,12 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
     setError(null);
   }
 
-  function pick(asset: AssetRef) {
+  function pick(target: ReferenceTarget) {
     if (!query) {
       return;
     }
     const cursor = input.current?.selectionStart ?? text.length;
-    const result = insertReference(text, references, query.start, cursor, asset);
+    const result = insertReference(text, references, query.start, cursor, target);
     setText(result.text);
     setReferences(result.references);
     setQuery(null);
@@ -133,16 +148,16 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
     <div className="relative bg-background px-8 pt-3 pb-4">
       {suggestions.length > 0 && (
         <ul className="absolute bottom-full left-8 grid min-w-60 gap-0.5 rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-float">
-          {suggestions.map((asset) => (
-            <li key={asset.id}>
+          {suggestions.map((target) => (
+            <li key={target.id}>
               <Button
                 variant="ghost"
                 size="sm"
                 className="w-full justify-start rounded-md font-normal"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(asset)}
+                onClick={() => pick(target)}
               >
-                #{asset.name}
+                {target.label}
               </Button>
             </li>
           ))}
@@ -179,7 +194,7 @@ export function Composer({ projectId, conversationId, replying, onSent }: Props)
           value={text}
           rows={2}
           className="max-h-48 min-h-9 flex-1 resize-none rounded-2xl border-border-composer text-body shadow-composer"
-          placeholder="Write a message. Type # to reference a file in this Project."
+          placeholder="Write a message. Type @ to ask a Mini-Me, # to reference a file."
           onChange={(e) => edit(e.target.value, e.target.selectionStart)}
           onKeyDown={onKeyDown}
           onSelect={(e) =>

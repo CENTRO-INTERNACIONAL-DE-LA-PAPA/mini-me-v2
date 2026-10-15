@@ -1,0 +1,36 @@
+{
+  "traits": [
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01",
+      "name": "Summarize",
+      "description": "Summarizes the given text, without explaining further.",
+      "color": "oklch(0.5 0.1 260)",
+      "adapter": "prompt",
+      "instructions": "You summarize material for a researcher. Write a short, faithful summary of the material the user gives you: their message and any files that follow it, each introduced by a line with its name. Keep the key findings, numbers, methods and caveats; leave out nothing that changes the meaning, and add nothing that is not in the material. Do not explain, evaluate or extend it. Write in the language of the material. If the user asks for a particular length or focus, follow it. If there is nothing to summarize, say so in one sentence."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a02",
+      "name": "Echo",
+      "description": "Repeats the given text back, one word at a time.",
+      "color": "oklch(0.55 0.05 230)",
+      "adapter": "echo",
+      "instructions": null
+    }
+  ],
+  "mini_mes": [
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01",
+      "name": "Scribe",
+      "description": "Summarizes your messages and the files you reference",
+      "colors": { "tint": "#E3DFFF", "solid": "#6E5BFF", "ink": "#4A3AE0" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b02",
+      "name": "Echo",
+      "description": "Repeats your message back to you",
+      "colors": { "tint": "#E4ECF2", "solid": "#5B7A90", "ink": "#2F4A5C" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a02" }] }
+    }
+  ]
+}

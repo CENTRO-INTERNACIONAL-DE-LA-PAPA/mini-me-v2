@@ -15,15 +15,14 @@ use crate::conversations::{self, ConversationSummary, SendMessageInput};
 use crate::error::{AppError, AppResult};
 use crate::projects::{self, ProjectSummary};
 use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, now_ms};
-use crate::secrets::NoSecrets;
-use crate::settings::Settings;
+use crate::library::{Library, MiniMeSummary};
+use crate::routing;
+use crate::secrets::KeychainSecrets;
+use crate::settings::{AiSettings, Settings};
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
 use crate::trait_calls::{CANCEL_TIMEOUT, TraitCalls};
 use crate::updates::{UpdateStatus, Updates};
-
-/// Until Mini-Mes exist, every user message is answered by this Trait.
-const REPLY_TRAIT: &str = "echo";
 
 pub struct AppState {
     config_dir: PathBuf,
@@ -31,6 +30,7 @@ pub struct AppState {
     settings: Mutex<Settings>,
     open_projects: Mutex<HashMap<Uuid, Arc<Project>>>,
     calls: Arc<TraitCalls>,
+    library: Library,
     pub sidecar: Arc<Supervisor>,
     pub updates: Arc<Updates>,
 }
@@ -56,7 +56,11 @@ impl AppState {
             Launch::release(&resources)
         };
         let log = Arc::new(SidecarLog::new(&log_dir));
-        let calls = Arc::new(TraitCalls::new(Box::new(NoSecrets), Arc::clone(&log), CANCEL_TIMEOUT));
+        let calls = Arc::new(TraitCalls::new(
+            Box::new(KeychainSecrets),
+            Arc::clone(&log),
+            CANCEL_TIMEOUT,
+        ));
         let sidecar = Supervisor::new(
             launch,
             false,
@@ -75,6 +79,7 @@ impl AppState {
             config_dir,
             open_projects: Mutex::new(HashMap::new()),
             calls,
+            library: Library::builtin(),
             sidecar,
             updates,
         })
@@ -182,13 +187,62 @@ pub async fn send_message(
         ));
     }
     let project = state.project(project_id)?;
-    let message =
-        conversations::send_message(&project, conversation_id, input, state.settings().user_id)?;
-    let input = serde_json::json!({ "text": message.content });
-    if let Err(err) = state.calls.start(project, conversation_id, &message, REPLY_TRAIT, input) {
-        eprintln!("could not start a reply: {err}");
-    }
-    Ok(message)
+    let settings = state.settings();
+    routing::send(
+        &state.calls,
+        &state.library,
+        settings.ai.model(),
+        project,
+        conversation_id,
+        input,
+        settings.user_id,
+    )
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn list_mini_mes(state: State<'_, AppState>) -> AppResult<Vec<MiniMeSummary>> {
+    Ok(state.library.summaries())
+}
+
+/// The AI settings and which providers have a saved key. Keys themselves never leave the
+/// core.
+#[derive(serde::Serialize)]
+pub struct AiSettingsView {
+    provider: String,
+    model: String,
+    saved_keys: Vec<String>,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettingsView> {
+    let ai = state.settings().ai;
+    Ok(AiSettingsView {
+        provider: ai.provider,
+        model: ai.model,
+        saved_keys: KeychainSecrets::saved(),
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_ai_model(
+    state: State<'_, AppState>,
+    provider: String,
+    model: String,
+) -> AppResult<()> {
+    let ai = AiSettings::new(&provider, &model)?;
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.ai = ai;
+    settings.save(&state.config_dir)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn save_api_key(provider: String, key: String) -> AppResult<()> {
+    KeychainSecrets::save(&provider, &key)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn remove_api_key(provider: String) -> AppResult<()> {
+    KeychainSecrets::remove(&provider)
 }
 
 #[tauri::command(rename_all = "snake_case")]

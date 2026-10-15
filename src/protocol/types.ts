@@ -26,7 +26,7 @@ export interface AssetRef {
 
 /** `start` and `end` are UTF-16 code unit offsets, i.e. plain JavaScript string indices. */
 export interface TextComponent {
-  kind: "asset";
+  kind: "asset" | "mini_me";
   id: Uuid;
   label: string;
   start: number;
@@ -121,4 +121,27 @@ export interface SendMessageInput {
   content: string;
   attachments: Uuid[];
   text_components: TextComponent[];
+}
+
+export interface MiniMeColors {
+  tint: string;
+  solid: string;
+  ink: string;
+}
+
+/** A Mini-Me as the UI lists and shows it. */
+export interface MiniMe {
+  id: Uuid;
+  name: string;
+  description: string;
+  colors: MiniMeColors;
+}
+
+export type ProviderId = "openai" | "anthropic" | "google" | "openrouter";
+
+/** The AI settings. Saved keys are only named, never sent to the UI. */
+export interface AiSettings {
+  provider: ProviderId;
+  model: string;
+  saved_keys: ProviderId[];
 }

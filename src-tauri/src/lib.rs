@@ -3,10 +3,12 @@ mod conversations;
 mod db;
 mod error;
 mod ipc;
+mod library;
 mod link;
 mod paths;
 mod projects;
 mod protocol;
+mod routing;
 mod secrets;
 mod settings;
 mod sidecar;
@@ -44,6 +46,11 @@ pub fn run() {
             ipc::get_sidecar_status,
             ipc::subscribe_sidecar_status,
             ipc::restart_sidecar,
+            ipc::list_mini_mes,
+            ipc::get_ai_settings,
+            ipc::set_ai_model,
+            ipc::save_api_key,
+            ipc::remove_api_key,
             ipc::get_update_status,
             ipc::subscribe_update_status,
             ipc::restart_to_update,

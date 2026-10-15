@@ -1,11 +1,14 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   AppError,
+  AiSettings,
   AssetRef,
   ConversationSummary,
   Message,
+  MiniMe,
   ProjectSummary,
   ProtocolEvent,
+  ProviderId,
   SendMessageInput,
   SidecarStatus,
   UpdateStatus,
@@ -65,6 +68,16 @@ export const api = {
   },
   /** Starts the sidecar again after it stopped. */
   restartSidecar: () => invoke<void>("restart_sidecar"),
+
+  listMiniMes: () => invoke<MiniMe[]>("list_mini_mes"),
+
+  getAiSettings: () => invoke<AiSettings>("get_ai_settings"),
+  setAiModel: (provider: ProviderId, model: string) =>
+    invoke<void>("set_ai_model", { provider, model }),
+  /** Stores the key in the OS keychain; it is never sent back to the UI. */
+  saveApiKey: (provider: ProviderId, key: string) =>
+    invoke<void>("save_api_key", { provider, key }),
+  removeApiKey: (provider: ProviderId) => invoke<void>("remove_api_key", { provider }),
 
   getUpdateStatus: () => invoke<UpdateStatus>("get_update_status"),
   /** Calls `onStatus` with the current update status, then with every change. */

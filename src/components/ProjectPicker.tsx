@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, errorMessage } from "../api";
 import type { ProjectSummary } from "../protocol/types";
+import { SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SidecarStatusLine, useSidecarStatus } from "./SidecarStatusLine";
@@ -8,9 +9,10 @@ import { UpdateStatusLine } from "./UpdateStatusLine";
 
 interface Props {
   onOpen: (project: ProjectSummary) => void;
+  onSettings: () => void;
 }
 
-export function ProjectPicker({ onOpen }: Props) {
+export function ProjectPicker({ onOpen, onSettings }: Props) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,18 @@ export function ProjectPicker({ onOpen }: Props) {
 
   return (
     <main className="mx-auto mt-[10vh] max-w-lg px-4">
-      <h1 className="mb-6 text-page font-bold">Mini-Me</h1>
+      <header className="mb-6 flex items-center justify-between">
+        <h1 className="text-page font-bold">Mini-Me</h1>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Settings"
+          title="Settings"
+          onClick={onSettings}
+        >
+          <SettingsIcon />
+        </Button>
+      </header>
       <form className="flex gap-2" onSubmit={create}>
         <Input
           value={name}

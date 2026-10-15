@@ -168,6 +168,7 @@ pub struct AssetRef {
 #[serde(rename_all = "snake_case")]
 pub enum TextComponentKind {
     Asset,
+    MiniMe,
 }
 
 /// An inline reference inside a message. `start` and `end` are UTF-16 code unit offsets into
