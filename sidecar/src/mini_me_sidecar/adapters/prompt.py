@@ -3,6 +3,7 @@ the text Assets it references as the user prompt, streamed from the provider cho
 Settings."""
 
 import re
+import sys
 from typing import Any, AsyncIterator
 
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
@@ -23,6 +24,13 @@ HTTP_STATUS = re.compile(r"\b([45]\d\d)\b")
 
 # Anthropic requires an output limit; this leaves room for long summaries.
 ANTHROPIC_MAX_TOKENS = 4096
+
+# How many times to ask before giving up on a model that answers with no text at all.
+EMPTY_ANSWER_TRIES = 2
+
+# Finish reasons with which a provider's safety filter declines to answer; asking again gets
+# the same verdict.
+REFUSED = {"content_filter", "refusal"}
 
 
 class Prompt(Adapter):
@@ -58,15 +66,40 @@ class Prompt(Adapter):
             instructions = f"You are {ctx.mini_me_name}, a Mini-Me.\n\n{instructions}"
         turns = [("system", instructions), *earlier, ("human", material)]
 
-        try:
-            async for text in _stream(model, key.reveal(), _merged(turns)):
-                if ctx.cancelled.is_set():
-                    return
-                ctx.write(text)
-        except TraitError:
-            raise
-        except Exception as error:
-            raise _provider_error(error, model) from None
+        name = PROVIDER_NAMES[model.provider]
+        for _ in range(EMPTY_ANSWER_TRIES):
+            wrote = False
+            ending: dict[str, Any] = {}
+            try:
+                async for text, metadata in _stream(model, key.reveal(), _merged(turns)):
+                    if ctx.cancelled.is_set():
+                        return
+                    if text:
+                        ctx.write(text)
+                        wrote = True
+                    ending.update(metadata)
+            except TraitError:
+                raise
+            except Exception as error:
+                raise _provider_error(error, model) from None
+            if wrote:
+                break
+            # A provider can end a stream with no text and no error, for example when it
+            # reports a failure only through the finish reason.
+            print(f"[prompt] {name} sent an empty answer: {ending}", file=sys.stderr, flush=True)
+            if ending.get("finish_reason") in REFUSED or ending.get("stop_reason") in REFUSED:
+                raise TraitError(
+                    "provider_refused",
+                    f"{model.model} declined to answer: {name}'s content filter stopped it. "
+                    "Rephrase it, ask in a new Conversation, or choose another model in "
+                    "Settings.",
+                )
+        else:
+            raise TraitError(
+                "provider_empty",
+                f"{name} sent an empty answer twice. Try again, or choose another model in "
+                "Settings.",
+            )
 
         if unreadable:
             names = ", ".join(unreadable)
@@ -137,14 +170,23 @@ def _merged(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return merged
 
 
-async def _stream(model: Model, key: str, turns: list[tuple[str, str]]) -> AsyncIterator[str]:
-    """The model's answer, chunk by chunk."""
+# Chunk metadata worth logging when an answer is empty; none of it holds the key or text.
+ENDING_FIELDS = ("finish_reason", "stop_reason", "model_name", "error")
+
+
+async def _stream(
+    model: Model, key: str, turns: list[tuple[str, str]]
+) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    """The model's answer, chunk by chunk, with each chunk's finish reason, model name and
+    token counts when the provider sends them."""
     chat = _chat_model(model, key)
     async for chunk in chat.astream(turns):
+        metadata = getattr(chunk, "response_metadata", None) or {}
+        ending = {k: metadata[k] for k in ENDING_FIELDS if metadata.get(k) is not None}
+        if usage := getattr(chunk, "usage_metadata", None):
+            ending["usage"] = dict(usage)
         # `text` joins the chunk's text blocks, whatever shape the provider sends them in.
-        text = str(chunk.text)
-        if text:
-            yield text
+        yield str(chunk.text), ending
 
 
 def _chat_model(model: Model, key: str) -> Any:
