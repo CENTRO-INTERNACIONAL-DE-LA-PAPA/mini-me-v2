@@ -25,7 +25,14 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
 1. Archive the change (`/opsx:archive`), syncing its delta specs into `openspec/specs/`.
 2. Update the change's row in the README Roadmap to "Done" and mark the next one "Next".
 
-Commit and PR messages carry no Claude co-author or attribution trailers.
+## Commits
+
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org):
+  `<type>(<optional scope>): <description>`, for example `feat(routing): ask Jev which
+  Mini-Me answers` or `docs: link the first Mini-Me version`. Use the types `feat`, `fix`,
+  `docs`, `refactor`, `test`, `build`, `ci`, `perf`, `style` and `chore`. Mark a breaking
+  change with `!` after the type or scope and a `BREAKING CHANGE:` footer.
+- Commit and PR messages carry no Claude co-author or attribution trailers.
 
 ## Code conventions
 
