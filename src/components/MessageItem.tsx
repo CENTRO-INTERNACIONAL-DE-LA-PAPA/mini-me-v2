@@ -66,7 +66,7 @@ export function MessageItem({ projectId, message }: Props) {
       className={cn(
         "relative flex flex-col gap-2",
         fromUser
-          ? "max-w-[560px] self-end rounded-[14px_14px_4px_14px] border border-border px-4 py-3"
+          ? "max-w-[560px] self-end rounded-[14px_14px_4px_14px] border border-border bg-card px-4 py-3"
           : "text-ink-2",
       )}
     >
@@ -147,7 +147,7 @@ export function MessageItem({ projectId, message }: Props) {
             <li
               key={emoji}
               title={reactors(emoji)}
-              className="pointer-events-auto rounded-full border border-border bg-background px-1.5 text-meta leading-5 shadow-xs"
+              className="pointer-events-auto rounded-full border border-border bg-card px-1.5 text-meta leading-5 shadow-xs"
             >
               {emoji}
               {count > 1 && ` ${count}`}

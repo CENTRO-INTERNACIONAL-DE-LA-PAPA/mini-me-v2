@@ -174,7 +174,7 @@ function Ai2Section() {
         Researcher and Theorist use Ai2's Asta services, which need an Ai2 account. Their
         messages are sent to Ai2; file contents are not.
       </p>
-      <div className="grid gap-2 rounded-xl border border-border px-4 py-3">
+      <div className="grid gap-2 rounded-xl border border-border bg-card px-4 py-3">
         {status?.state === "signed_in" && (
           <div className="flex items-center gap-2">
             <span aria-hidden className="size-[7px] rounded-full bg-success" />
@@ -329,7 +329,7 @@ function KeyRow({
   }
 
   return (
-    <li className="rounded-xl border border-border px-4 py-3">
+    <li className="rounded-xl border border-border bg-card px-4 py-3">
       <form className="grid gap-2" onSubmit={save}>
         <div className="flex items-center gap-2">
           <Label htmlFor={`key-${provider}`} className="flex-1">
