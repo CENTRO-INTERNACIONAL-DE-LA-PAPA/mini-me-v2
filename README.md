@@ -1,7 +1,5 @@
-# Mini-Me (v2)
-
 <p align="center">
-  <img src=".github/assets/mini-me-blobs.png" alt="Mini-Me" width="100%">
+  <img src=".github/assets/mini-me-banner-crew.png" alt="Mini-Me Banner" width="100%">
 </p>
 
 Mini-Me (v2) is a local-first, customizable desktop research tool for scientists at the
