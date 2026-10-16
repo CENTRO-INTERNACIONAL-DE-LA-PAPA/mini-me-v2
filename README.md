@@ -206,8 +206,11 @@ of these: release builds bundle their own Python.
 ```bash
 npm install
 cd sidecar && uv sync --frozen && cd ..   # once, and after the sidecar's dependencies change
-npm run tauri dev
+npm run tauri:dev
 ```
+
+`tauri:dev` runs the app with the development icon and the window title "Mini-Me (Dev)", so
+you can tell it apart from an installed copy.
 
 In development the app starts the sidecar from `sidecar/` with `uv run`. Its log is
 `sidecar.log` in the app's log directory; set `MINI_ME_LOG_FRAMES=1` to also log every frame

@@ -14,10 +14,11 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
 
 ## Builds and tests
 
-- Do not run `cargo build`, `cargo test`, `npm install`, `npm test`, `npm run build` or
-  `npm run tauri dev` yourself unless the user says it is allowed on the current machine:
-  antivirus software has blocked builds started by Claude. Ask the user to run them (for
-  example `! cd src-tauri && cargo test`) and read the output they paste back.
+- Do not run `cargo build`, `cargo test`, `npm install`, `npm test`, `npm run build`,
+  `npm run tauri dev` or `npm run tauri:dev` yourself unless the user says it is allowed on
+  the current machine: antivirus software has blocked builds started by Claude. Ask the user
+  to run them (for example `! cd src-tauri && cargo test`) and read the output they paste
+  back.
 - Mark a task done only after the user's run confirms it.
 
 ## Finishing a change

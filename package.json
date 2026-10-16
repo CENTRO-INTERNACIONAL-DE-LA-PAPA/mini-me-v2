@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:release": "tauri build --config src-tauri/tauri.release.conf.json",
     "bundle-sidecar": "uv run --project sidecar --frozen python -I sidecar/scripts/bundle.py",
     "check-version": "node scripts/check-version.mjs",
