@@ -40,8 +40,9 @@ for you. If it isn't confident enough, it asks you to choose.
 
 ## Traits
 
-These are the built-in Traits planned so far. Each one focuses on a single task. Trait names
-are verbs, so a Workflow reads like a research protocol.
+Each Trait focuses on a single task, and Trait names are verbs, so a Workflow reads like a
+research protocol. The tables below show some of the built-in Traits, available or planned;
+the library will hold more, and you'll be able to create your own.
 
 | Trait | What it does |
 |---|---|
@@ -56,14 +57,29 @@ are verbs, so a Workflow reads like a research protocol.
 | **Explore Dataverse** | Finds information in Dataverse. |
 | **Wonder** | Comes up with questions to explore a topic further. |
 | **Index Sources** | Indexes sources so they can be referenced later. |
-| **Code** | A assistant that solves problems by writing and running code.\* |
-| **Collect Data** | Builds a dataset from a source. |
-| **Clean Data** | Cleans data, and nothing else. |
-| **Validate Data** | Validates data. |
-| **Model** | Comes up with a model. |
-| **Predict** | Predicts values using a model. |
-| **Analyze Data** | Analyzes data. |
+| **Code** | An assistant that solves problems by writing and running code.\* |
 | **Experiment** | Designs experiments to verify a hypothesis. |
+
+The data Traits follow the Data Lifecycle, one step each, so a Workflow can join the ones
+a study needs into its own lifecycle:
+
+| Stage | Trait | What it does |
+|---|---|---|
+| Acquire | **Collect Data** | Builds a dataset from a source. |
+| Inspect | **Profile Data** | Reports a dataset's shape, column types, missing values and duplicates. |
+| | **Validate Data** | Runs rule checks on a dataset and reports which pass and which fail. |
+| Prepare | **Clean Data** | Applies cleaning actions and saves the result as a new version, never overwriting the original. |
+| | **Join Data** | Joins two tables on key columns and reports the keys that don't match. |
+| Explore | **Describe Variables** | Gives statistics and the distribution of each column. |
+| | **Find Correlations** | Finds relationships between pairs of variables. |
+| | **Detect Outliers** | Flags unusual rows. |
+| | **Find Clusters** | Groups similar rows. |
+| Explain | **Compare Groups** | Compares groups with effect sizes and confidence intervals. |
+| | **Find Drivers** | Finds which variables relate to an outcome. |
+| | **Check Confounders** | Compares adjusted and unadjusted estimates to reveal confounding. |
+| | **Analyze Trends** | Describes how values change over time. |
+| Model | **Model** | Comes up with a model.\* |
+| | **Predict** | Predicts values using a model.\* |
 
 \* Running code (Python and R) is planned, but it isn't part of the first version.
 
@@ -156,22 +172,13 @@ Type `@` in the message box to pick a Mini-Me; the one you mention first answers
 message follows up on earlier ones ("make it shorter", "what about the second point?"),
 the Mini-Me also sees the Conversation's earlier messages, including other Mini-Mes'
 replies; files from earlier messages are known by name only, so reference a file again to
-have it read. Mini-Me comes with four:
+have it read.
 
-- **Scribe** summarizes your message and the text files you reference with `#` or attach.
-  It needs an API key and a model (see above). PDFs and images are not read yet.
-- **Assistant** answers general questions and requests that no other Mini-Me specializes in,
-  using the files you reference when they help. It needs an API key and a model too.
-- **Researcher** finds papers on the topic of your message with Ai2's Paper Finder. It
-  shows the five most relevant as cards with the passage that makes each one relevant;
-  click a card to open the paper in your browser, or **Show all sources** for the rest. It
-  needs an Ai2 account (see above).
-- **Theorist** builds scientific theories on the question in your message with Ai2's
-  Theorizer: it reads the literature, extracts evidence and replies with each theory, its
-  statements and the evidence for them, cited by number to the papers listed below. Each
-  theory starts in plain language; switch it to **Technical** for the precise wording.
-  The Theorizer's full result is attached as `theory-store.json`. Theorist shows its
-  progress while it works, which can take 20 minutes or more. It needs an Ai2 account too.
+Mini-Me comes with predefined Mini-Mes; type `@` to see them. Most use the AI model chosen
+in Settings, so they need an API key and a model (see above). Those built on Asta, such as
+Researcher and Theorist, need an Ai2 account instead. Mini-Mes read the text files you
+reference with `#` or attach; PDFs and images are not read yet. Answers come from AI
+models, so check them before relying on them.
 
 Cards, theories and similar rich results are **Interactive Components**, shown below a
 reply's text. Mini-Mes that read the Conversation, such as Assistant, can refer to them in a
@@ -270,12 +277,13 @@ proposed, reviewed, implemented, verified and archived before the next one start
 | 6 | Conversation context | Adapters ask the core for a Conversation's earlier messages when they need them (a `core.request` method, as for Assets), a convention for replies from other Mini-Mes in the same Conversation, a size budget per call, how files referenced in earlier messages are carried over, and Jev deciding whether a message needs previous context at all | Done |
 | 7 | Asta integration and Traits | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) pinned in the sidecar, signing in with your Ai2 account, *Find Papers* (Paper Finder) with Researcher and *Theorize* (Theorizer) with Theorist | Done |
 | 8 | First Interactive Components | Interactive Components shown below a reply's text: hand-coded, versioned kinds that built-in Traits list and use; Paper sources for *Find Papers* and Theories for *Theorize*; Mini-Mes saving generated files as Assets | Done |
-| 9 | Built-in Traits | The remaining Traits from the table above that need no code execution or Dataverse | Next |
-| 10 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved through the core in `project.sqlite`, so it survives closing the app | Planned |
-| 11 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
-| 12 | Tables | A table Interactive Component whose cells, rows and columns can be selected and referenced | Planned |
-| 13 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
-| 14 | Project Overview | The view of everything a Project has produced | Planned |
+| 9 | Built-in Traits | *Scout*, *Refute*, *Plan*, *Wonder* and *Experiment*, each with its own Mini-Me (Explorer, Skeptic, Planner, Inquirer and Experimenter); the Traits that later changes build join the library as placeholders | Done |
+| 10 | Data Traits: inspect and prepare | *Profile Data*, *Validate Data*, *Clean Data* and *Join Data* as tools built into the sidecar, with no code written by the AI model; a table Interactive Component (TanStack Table) whose cells, rows and columns can be selected and referenced | Next |
+| 11 | Data Traits: explore and explain | *Describe Variables*, *Find Correlations*, *Detect Outliers*, *Find Clusters*, *Compare Groups*, *Find Drivers*, *Check Confounders* and *Analyze Trends* | Planned |
+| 12 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved through the core in `project.sqlite`, so it survives closing the app | Planned |
+| 13 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
+| 14 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
+| 15 | Project Overview | The view of everything a Project has produced | Planned |
 
 Later: code execution (Python and R) with OS-level sandboxing, collaboration through a relay
 server, Microsoft SSO, Dataverse upload, Asta's AutoDiscovery with confirmation before any

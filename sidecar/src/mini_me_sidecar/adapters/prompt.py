@@ -25,6 +25,13 @@ HTTP_STATUS = re.compile(r"\b([45]\d\d)\b")
 # Anthropic requires an output limit; this leaves room for long summaries.
 ANTHROPIC_MAX_TOKENS = 4096
 
+# Told to the model before every Trait's instructions. Introduced by name alone, models tend
+# to open with a title restating the request ("Skeptic's response to …").
+REPLY_RULE = (
+    "Start directly with your answer, with no title, heading or introduction that restates "
+    "the request."
+)
+
 # How many times to ask before giving up on a model that answers with no text at all.
 EMPTY_ANSWER_TRIES = 2
 
@@ -61,9 +68,10 @@ class Prompt(Adapter):
             )
         earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []
         key = await ctx.secret(model.provider)
-        instructions = ctx.trait.instructions or ""
+        preamble = REPLY_RULE
         if ctx.mini_me_name:
-            instructions = f"You are {ctx.mini_me_name}, a Mini-Me.\n\n{instructions}"
+            preamble = f"You are {ctx.mini_me_name}, a Mini-Me. {REPLY_RULE}"
+        instructions = f"{preamble}\n\n{ctx.trait.instructions or ''}"
         turns = [("system", instructions), *earlier, ("human", material)]
 
         name = PROVIDER_NAMES[model.provider]

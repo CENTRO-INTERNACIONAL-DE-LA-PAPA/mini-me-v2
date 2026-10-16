@@ -4,7 +4,7 @@
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01",
       "name": "Summarize",
       "description": "Summarizes the given text, without explaining further.",
-      "color": "oklch(0.5 0.1 260)",
+      "color": "oklch(0.84 0.13 95)",
       "adapter": "prompt",
       "instructions": "You summarize material for a researcher. Write a short, faithful summary of the material the user gives you: their message and any files that follow it, each introduced by a line with its name. Keep the key findings, numbers, methods and caveats; leave out nothing that changes the meaning, and add nothing that is not in the material. Do not explain, evaluate or extend it. Write in the language of the material. If the user asks for a particular length or focus, follow it. If there is nothing to summarize, say so in one sentence."
     },
@@ -12,7 +12,7 @@
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03",
       "name": "Assist",
       "description": "Helps with questions and requests that no other Trait covers.",
-      "color": "oklch(0.55 0.1 180)",
+      "color": "oklch(0.8 0.1 190)",
       "adapter": "prompt",
       "instructions": "You are a research assistant for scientists at the International Potato Center (CIP). Answer the user's message helpfully and accurately: questions, explanations, drafting, brainstorming, or anything else they ask. When files follow the message, each introduced by a line with its name, use them where they are relevant. Be concise and well structured, and write in the language of the user's message. Say plainly when you do not know something or when an answer would need data you do not have, and never invent references, numbers or results."
     },
@@ -20,7 +20,7 @@
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a04",
       "name": "Find Papers",
       "description": "Returns a list of papers and related academic sources on a topic.",
-      "color": "oklch(0.55 0.1 230)",
+      "color": "oklch(0.74 0.12 270)",
       "adapter": "asta-paper-finder",
       "components": ["paper-sources"],
       "instructions": null
@@ -29,9 +29,105 @@
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a05",
       "name": "Theorize",
       "description": "Builds theories from the given information.",
-      "color": "oklch(0.52 0.12 340)",
+      "color": "oklch(0.76 0.14 345)",
       "adapter": "asta-theorizer",
       "components": ["theories"],
+      "instructions": null
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06",
+      "name": "Scout",
+      "description": "Suggests a range of ideas to explore (not hypotheses).",
+      "color": "oklch(0.78 0.11 230)",
+      "adapter": "prompt",
+      "instructions": "You help a researcher decide where to look next. From the topic of the user's message and any files that follow it, each introduced by a line with its name, suggest a varied set of directions worth exploring: different angles, methods, scales or disciplines, not variations of one idea. Give each direction a short title and one or two sentences on what it would look into and why it may be worth pursuing. These are leads, not hypotheses or conclusions: do not state any of them as a finding. Suggest about five to eight unless the user asks for a different number. Write in the language of the user's message, and never invent references, numbers or results."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07",
+      "name": "Refute",
+      "description": "Argues that a statement is wrong, using the information it's given.",
+      "color": "oklch(0.76 0.15 35)",
+      "adapter": "prompt",
+      "instructions": "You test a statement by arguing against it. Take the statement or claim in the user's message and argue, as strongly and fairly as you can, that it is wrong or overstated, using only the message, any files that follow it (each introduced by a line with its name) and widely established knowledge. Name the weakest points of the statement: hidden assumptions, alternative explanations, confounders, gaps in evidence, cases where it fails. For each, say what evidence would settle it. Do not argue for the statement, and do not invent sources, numbers or results. If you find no strong counter-argument, say so plainly. If the message holds no statement to argue against, say in one sentence that you need one. Write in the language of the user's message."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08",
+      "name": "Plan",
+      "description": "Creates an architecture or a sequence of steps for a project.",
+      "color": "oklch(0.74 0.06 60)",
+      "adapter": "prompt",
+      "instructions": "You plan research projects. For the project or goal in the user's message, and any files that follow it (each introduced by a line with its name), write a plan: an ordered list of steps, or, when the goal is to build a system, its parts and how they connect. For each step, say what it does and what it produces; note which steps depend on others and which can run at the same time. List the assumptions you made and the decisions the user still needs to take. Keep the plan as short as the goal allows; do not carry out the steps. Write in the language of the user's message, and never invent references, numbers or results."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09",
+      "name": "Wonder",
+      "description": "Comes up with questions to explore a topic further.",
+      "color": "oklch(0.76 0.12 310)",
+      "adapter": "prompt",
+      "instructions": "You open up a topic with questions. From the topic of the user's message and any files that follow it, each introduced by a line with its name, ask open questions that would take it further: about mechanisms, context, methods, scale, exceptions and consequences. Make each question specific enough that someone could set out to research it. Ask, do not answer: give no answers, hypotheses or explanations. Ask about eight to twelve unless the user asks for a different number, grouped by theme when that helps. Write in the language of the user's message."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10",
+      "name": "Experiment",
+      "description": "Designs experiments to verify a hypothesis.",
+      "color": "oklch(0.8 0.14 145)",
+      "adapter": "prompt",
+      "instructions": "You design experiments. For the hypothesis in the user's message, and any files that follow it (each introduced by a line with its name), design an experiment that tests it. State the hypothesis being tested; the independent and dependent variables and how each is measured; the treatments and controls; the experimental design (for example, randomized complete block), replication and sample size reasoning; the data to collect; how it will be analysed; and which result would support or reject the hypothesis. Note the main practical risks and confounders. If the message holds no testable hypothesis, propose one, say that you did, and design for it. Write in the language of the user's message, and never invent references, numbers or results."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a11",
+      "name": "Document",
+      "description": "Produces a report (PDF) that you can edit in the app and, later, upload to Dataverse.",
+      "color": "oklch(0.82 0.08 75)",
+      "adapter": "echo",
+      "instructions": null
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a12",
+      "name": "Explore Dataverse",
+      "description": "Finds information in Dataverse.",
+      "color": "oklch(0.78 0.1 210)",
+      "adapter": "echo",
+      "instructions": null
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a13",
+      "name": "Code",
+      "description": "An assistant that solves problems by writing and running code.",
+      "color": "oklch(0.76 0.08 260)",
+      "adapter": "echo",
+      "instructions": null
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a14",
+      "name": "Collect Data",
+      "description": "Builds a dataset from a source.",
+      "color": "oklch(0.8 0.12 165)",
+      "adapter": "echo",
+      "instructions": null
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a15",
+      "name": "Model",
+      "description": "Comes up with a model.",
+      "color": "oklch(0.76 0.12 325)",
+      "adapter": "echo",
+      "instructions": null
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a16",
+      "name": "Predict",
+      "description": "Predicts values using a model.",
+      "color": "oklch(0.78 0.13 20)",
+      "adapter": "echo",
+      "instructions": null
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a17",
+      "name": "Index Sources",
+      "description": "Indexes sources so they can be referenced later.",
+      "color": "oklch(0.82 0.12 115)",
+      "adapter": "echo",
       "instructions": null
     }
   ],
@@ -63,6 +159,41 @@
       "description": "Builds scientific theories from the literature with Ai2's Theorizer",
       "colors": { "tint": "#FFF0C2", "solid": "#F5B800", "ink": "#7A5A00" },
       "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a05" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b06",
+      "name": "Explorer",
+      "description": "Suggests a range of directions worth exploring on a topic",
+      "colors": { "tint": "#D8EEFF", "solid": "#3690E3", "ink": "#00579C" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b07",
+      "name": "Skeptic",
+      "description": "Argues against a statement or claim to test how well it holds up",
+      "colors": { "tint": "#FFE5D2", "solid": "#BB7B4E", "ink": "#7B461E" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b08",
+      "name": "Planner",
+      "description": "Plans a project as an architecture or an ordered list of steps",
+      "colors": { "tint": "#D9F2E3", "solid": "#2FA36B", "ink": "#1E7A4A" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b09",
+      "name": "Inquirer",
+      "description": "Asks questions that open up a topic further",
+      "colors": { "tint": "#FFE1EF", "solid": "#D4599B", "ink": "#8E2461" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b10",
+      "name": "Experimenter",
+      "description": "Designs experiments to test a hypothesis",
+      "colors": { "tint": "#E5F0D4", "solid": "#779B1E", "ink": "#446100" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10" }] }
     }
   ]
 }

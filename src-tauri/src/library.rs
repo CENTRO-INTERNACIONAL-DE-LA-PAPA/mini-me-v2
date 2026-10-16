@@ -127,8 +127,16 @@ impl Library {
                 problems.push(format!("{} does not have exactly one Step", m.name));
             }
             for step in &m.workflow.steps {
-                if self.trait_def(step.trait_id).is_none() {
-                    problems.push(format!("{} runs an unknown Trait {}", m.name, step.trait_id));
+                match self.trait_def(step.trait_id) {
+                    None => {
+                        problems.push(format!("{} runs an unknown Trait {}", m.name, step.trait_id))
+                    }
+                    // Placeholder Traits run on `echo` until they are built, so no Mini-Me
+                    // may offer them.
+                    Some(t) if t.adapter == "echo" => {
+                        problems.push(format!("{} runs the placeholder Trait {}", m.name, t.name))
+                    }
+                    Some(_) => {}
                 }
             }
         }
@@ -145,7 +153,27 @@ mod tests {
         let library = Library::builtin();
         assert_eq!(library.problems(), Vec::<String>::new());
         let names: Vec<&str> = library.traits.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(names, ["Summarize", "Assist", "Find Papers", "Theorize"]);
+        assert_eq!(
+            names,
+            [
+                "Summarize",
+                "Assist",
+                "Find Papers",
+                "Theorize",
+                "Scout",
+                "Refute",
+                "Plan",
+                "Wonder",
+                "Experiment",
+                "Document",
+                "Explore Dataverse",
+                "Code",
+                "Collect Data",
+                "Model",
+                "Predict",
+                "Index Sources",
+            ]
+        );
     }
 
     #[test]
@@ -154,16 +182,12 @@ mod tests {
         let lists: Vec<(&str, Vec<&str>)> = library
             .traits
             .iter()
+            .filter(|t| !t.components.is_empty())
             .map(|t| (t.name.as_str(), t.components.iter().map(String::as_str).collect()))
             .collect();
         assert_eq!(
             lists,
-            [
-                ("Summarize", vec![]),
-                ("Assist", vec![]),
-                ("Find Papers", vec!["paper-sources"]),
-                ("Theorize", vec!["theories"]),
-            ]
+            [("Find Papers", vec!["paper-sources"]), ("Theorize", vec!["theories"])]
         );
     }
 
@@ -180,6 +204,41 @@ mod tests {
         assert_eq!((assist.name.as_str(), assist.adapter.as_str()), ("Assist", "prompt"));
         assert_eq!(step("Researcher").adapter, "asta-paper-finder");
         assert_eq!(step("Theorist").adapter, "asta-theorizer");
+        for (mini_me, name) in [
+            ("Explorer", "Scout"),
+            ("Skeptic", "Refute"),
+            ("Planner", "Plan"),
+            ("Inquirer", "Wonder"),
+            ("Experimenter", "Experiment"),
+        ] {
+            let t = step(mini_me);
+            assert_eq!((t.name.as_str(), t.adapter.as_str()), (name, "prompt"));
+            assert!(t.instructions.is_some());
+        }
+    }
+
+    #[test]
+    fn placeholder_traits_run_on_echo_without_instructions() {
+        let library = Library::builtin();
+        let placeholders: Vec<&str> = library
+            .traits
+            .iter()
+            .filter(|t| t.adapter == "echo")
+            .inspect(|t| assert_eq!(t.instructions, None))
+            .map(|t| t.name.as_str())
+            .collect();
+        assert_eq!(
+            placeholders,
+            [
+                "Document",
+                "Explore Dataverse",
+                "Code",
+                "Collect Data",
+                "Model",
+                "Predict",
+                "Index Sources",
+            ]
+        );
     }
 
     #[test]
@@ -188,9 +247,12 @@ mod tests {
         library.traits[1].id = library.traits[0].id;
         library.traits[0].name = "summarize".into();
         library.mini_mes[0].workflow.steps.clear();
+        let document = library.traits.iter().find(|t| t.name == "Document").unwrap().id;
+        library.mini_mes[1].workflow.steps[0].trait_id = document;
         let problems = library.problems();
         assert!(problems.iter().any(|p| p.contains("share an ID")));
         assert!(problems.iter().any(|p| p.contains("Title Case")));
         assert!(problems.iter().any(|p| p.contains("exactly one Step")));
+        assert!(problems.iter().any(|p| p.contains("placeholder Trait Document")));
     }
 }
