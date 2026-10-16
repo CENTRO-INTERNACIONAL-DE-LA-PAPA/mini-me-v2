@@ -158,6 +158,9 @@ export function MessageItem({ projectId, message }: Props) {
       {message.jev && (
         <JevAnswersBlock jev={message.jev} label={(id) => miniMe(id)?.name ?? id} />
       )}
+      {message.failure && (
+        <p className="text-meta text-destructive">{message.failure.message}</p>
+      )}
       {error && <p className="text-meta text-destructive">{error}</p>}
     </article>
   );

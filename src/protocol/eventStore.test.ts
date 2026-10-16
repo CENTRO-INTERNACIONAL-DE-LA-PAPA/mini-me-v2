@@ -55,6 +55,11 @@ describe("applyEvent with the shared fixture", () => {
     expect(stopped.status).toBe("cancelled");
     expect(interrupted.status).toBe("failed");
   });
+
+  it("keeps why a reply failed", () => {
+    expect(interrupted.failure?.message).toBe("The app closed before this reply finished.");
+    expect(followUp.failure).toBeUndefined();
+  });
 });
 
 describe("applyEvent ordering", () => {

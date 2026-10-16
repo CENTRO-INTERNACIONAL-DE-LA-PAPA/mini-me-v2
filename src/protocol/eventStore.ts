@@ -1,4 +1,12 @@
-import type { Author, JevAnswers, KnownEvent, Message, Progress, ProtocolEvent } from "./types";
+import type {
+  Author,
+  ErrorInfo,
+  JevAnswers,
+  KnownEvent,
+  Message,
+  Progress,
+  ProtocolEvent,
+} from "./types";
 
 export interface Reaction {
   emoji: string;
@@ -11,6 +19,8 @@ export interface MessageView extends Message {
   progress: Progress | null;
   /** Jev's raw answers about this message, when the developer setting stored them. */
   jev?: JevAnswers;
+  /** Why the reply failed, once it has. */
+  failure?: ErrorInfo;
 }
 
 export interface ConversationState {
@@ -94,6 +104,7 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
           ...m,
           status: "failed",
           progress: null,
+          failure: known.payload.error,
         })),
       };
     case "message.cancelled":
