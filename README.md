@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/mini-me-banner-crew.png" alt="Mini-Me Banner" width="100%">
+  <img src=".github/assets/mini-me-banner-peek.png" alt="Mini-Me Banner" width="100%">
 </p>
 
 Mini-Me (v2) is a local-first, customizable desktop research tool for scientists at the
@@ -331,3 +331,7 @@ for routing.
 
 Parts of this project's planning and documentation were prepared with the help of
 generative AI. AI-assisted content is reviewed before it is relied on.
+
+<p align="center">
+  <img src=".github/assets/mini-me-crew.png" alt="Mini-Me Banner" width="100%">
+</p>
