@@ -279,12 +279,13 @@ proposed, reviewed, implemented, verified and archived before the next one start
 | 8 | First Interactive Components | Interactive Components shown below a reply's text: hand-coded, versioned kinds that built-in Traits list and use; Paper sources for *Find Papers* and Theories for *Theorize*; Mini-Mes saving generated files as Assets | Done |
 | 9 | Built-in Traits | *Scout*, *Refute*, *Plan*, *Wonder* and *Experiment*, each with its own Mini-Me (Explorer, Skeptic, Planner, Inquirer and Experimenter); the Traits that later changes build join the library as placeholders | Done |
 | 10 | Data Traits: inspect and prepare | *Profile Data*, *Validate Data*, *Clean Data* and *Join Data* as tools built into the sidecar, with no code written by the AI model; a table Interactive Component (TanStack Table) whose cells, rows and columns can be selected and referenced | Done |
-| 11 | Data Traits: explore and explain | *Describe Variables*, *Find Correlations*, *Detect Outliers*, *Find Clusters*, *Compare Groups*, *Find Drivers*, *Check Confounders* and *Analyze Trends* | Next |
-| 12 | Table selections | Selecting cells, rows and columns in a table Interactive Component and referencing them in a message as `#selection` Text Components, which the core resolves so Traits can work on just that part | Planned |
-| 13 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved through the core in `project.sqlite`, so it survives closing the app | Planned |
-| 14 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
-| 15 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
-| 16 | Project Overview | The view of everything a Project has produced | Planned |
+| 11 | Editors and Workflows | Mini-Me and Trait editors: create, edit, duplicate and delete them, stored as data by the Rust core and offered to routing. Multi-Step Workflows and control Steps (approval, condition, loop, parallel), set up as a simple list of Steps in the Mini-Me editor until the visual Workflow editor exists. Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved through the core in `project.sqlite`, so it survives closing the app | Next |
+| 12 | Charts | A chart Interactive Component that Traits fill with data and that reacts to its own controls | Planned |
+| 13 | Project Overview | The view of everything a Project has produced | Planned |
+| 14 | Table selections | Selecting cells, rows and columns in a table Interactive Component and referencing them in a message, which the core resolves so Traits can work on just that part. Each kind of reference has its own sign: `@` for a Mini-Me, `#` for a file and `$` for data, written `$table_name[row_start:row_end,col_start:col_end]`, for example `$field-trial-cleaned[1:20,2:5]` (usually inserted by selecting rather than typed) | Planned |
+| 15 | Data Traits: explore and explain | *Describe Variables*, *Find Correlations*, *Detect Outliers*, *Find Clusters*, *Compare Groups*, *Find Drivers*, *Check Confounders* and *Analyze Trends* | Planned |
+| 16 | Visual Workflow editor | The graph editor for Workflows on a canvas, with Step nodes, connectors and an inspector, replacing the list of Steps in the Mini-Me editor | Planned |
+| 17 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
 
 Later: code execution (Python and R) with OS-level sandboxing, collaboration through a relay
 server, Microsoft SSO, Dataverse upload, Asta's AutoDiscovery with confirmation before any
