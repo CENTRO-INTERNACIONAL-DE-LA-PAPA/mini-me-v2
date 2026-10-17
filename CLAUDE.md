@@ -49,6 +49,10 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
   own branch from `dev` and reaches `dev` through a pull request into `dev`. Ask the user
   before opening a PR, and merge it only once the user has reviewed and approved it, with a
   merge commit (`gh pr merge --merge`).
+- Every PR targets `dev`. The only PR into `main` is the one that merges `dev` into `main`,
+  opened only when the user asks for it.
+- CI (`.github/workflows/ci.yml`) runs the tests on every pull request into `dev` or
+  `main`; direct pushes to `dev` are not tested.
 - When unsure whether a change is small, ask.
 - Issues and PRs follow the templates below. Titles follow the Conventional Commits format
   used for commits, for example `fix(ui): show why a reply failed`. GitHub pre-fills the same
