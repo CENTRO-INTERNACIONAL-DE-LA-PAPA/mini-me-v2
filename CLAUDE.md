@@ -25,6 +25,7 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
 
 1. Archive the change (`/opsx:archive`), syncing its delta specs into `openspec/specs/`.
 2. Update the change's row in the README Roadmap to "Done" and mark the next one "Next".
+3. Ask the user, then open the change's pull request into `dev` (see below).
 
 ## Commits
 
@@ -35,10 +36,70 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
   after the type; describe a breaking change in a `BREAKING CHANGE:` footer instead.
 - Branch names are `<type>/<short-kebab-name>`, with the same types, for example
   `feat/routing` or `fix/sidecar-bundle`.
-- Commit and PR messages carry no Claude co-author or attribution trailers.
-- Every code change is reviewed manually by the user before it reaches `main`. Do not push
-  to `main` or merge into it until the user has seen the changes and explicitly approved
-  them; show what changed and wait.
+- Commit, issue and PR messages carry no Claude co-author or attribution trailers.
+
+## Branches and pull requests
+
+- `dev` is where all work lands. Every change goes through `dev` first; nothing is pushed
+  or merged to `main` by Claude. When enough has gathered on `dev`, the user merges `dev`
+  into `main` and cuts a release.
+- Small, non-breaking changes (documentation, comments, README and Roadmap edits, sample
+  files, config that changes no behaviour) are committed and pushed directly to `dev`.
+- Anything that changes logic or behaviour, and every roadmap change, is developed on its
+  own branch from `dev` and reaches `dev` through a pull request into `dev`. Ask the user
+  before opening a PR, and merge it only once the user has reviewed and approved it, with a
+  merge commit (`gh pr merge --merge`).
+- When unsure whether a change is small, ask.
+- Issues and PRs follow the templates below. Titles follow the Conventional Commits format
+  used for commits, for example `fix(ui): show why a reply failed`. GitHub pre-fills the same
+  templates from `.github/ISSUE_TEMPLATE/issue.md` and `.github/pull_request_template.md`;
+  keep them in step with this file.
+
+### Issue template
+
+```markdown
+## Summary
+One or two sentences: what is wrong, or what is wanted.
+
+## Context
+Why it matters, and links to the Roadmap row, OpenSpec change or related issues.
+
+## Steps to reproduce
+(Bugs only.)
+1. …
+
+**Expected:** …
+**Actual:** …
+
+## Scope
+- In: …
+- Out: …
+
+## Acceptance criteria
+- [ ] …
+```
+
+### Pull request template
+
+```markdown
+## Summary
+What this changes and why, in one to three sentences.
+
+Closes #… · Roadmap #… · OpenSpec change: `openspec/changes/<name>/`
+(Keep only the links that apply.)
+
+## Changes
+- …
+
+## How it was tested
+- [ ] `cd src-tauri && cargo test`
+- [ ] `npm test`
+- [ ] `cd sidecar && uv run pytest`
+- [ ] In the app: …
+
+## Notes for review
+Risks, follow-ups, decisions the reviewer should know about, screenshots.
+```
 
 ## Code conventions
 
