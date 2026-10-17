@@ -40,6 +40,8 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
 
 ## Branches and pull requests
 
+- Ask the user before every commit, push, merge or pull request, saying what goes where,
+  and wait for a yes. The rules below say where changes go, not that asking can be skipped.
 - `dev` is where all work lands. Every change goes through `dev` first; nothing is pushed
   or merged to `main` by Claude. When enough has gathered on `dev`, the user merges `dev`
   into `main` and cuts a release.
