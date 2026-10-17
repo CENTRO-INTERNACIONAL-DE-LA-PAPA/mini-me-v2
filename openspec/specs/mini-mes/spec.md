@@ -19,20 +19,23 @@ The Rust core SHALL hold a shared Trait library. Each Trait definition SHALL hav
   empty. Only built-in Traits SHALL list any.
 
 The library is read-only in this version. It contains *Summarize*, *Assist*, *Find
-Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder* and *Experiment*, and the
-placeholder Traits.
+Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment*, *Profile Data*,
+*Validate Data*, *Clean Data* and *Join Data*, and the placeholder Traits.
 
 #### Scenario: Built-in Traits
 - **WHEN** the app starts
 - **THEN** the library contains *Summarize*, *Assist*, *Scout*, *Refute*, *Plan*,
   *Wonder* and *Experiment* (adapter `prompt`), *Find Papers* (adapter
-  `asta-paper-finder`), *Theorize* (adapter `asta-theorizer`), and the placeholder Traits
-  (adapter `echo`)
+  `asta-paper-finder`), *Theorize* (adapter `asta-theorizer`), *Profile Data* (adapter
+  `data-profile`), *Validate Data* (adapter `data-validate`), *Clean Data* (adapter
+  `data-clean`), *Join Data* (adapter `data-join`), and the placeholder Traits (adapter
+  `echo`)
 
 #### Scenario: Components of the built-in Traits
 - **WHEN** the app starts
-- **THEN** *Find Papers* lists `paper-sources`, *Theorize* lists `theories`, and every
-  other Trait lists none
+- **THEN** *Find Papers* lists `paper-sources`, *Theorize* lists `theories`, *Profile
+  Data*, *Validate Data*, *Clean Data* and *Join Data* list `table`, and every other Trait
+  lists none
 
 ### Requirement: Mini-Me definitions
 Each Mini-Me SHALL have:
@@ -49,7 +52,7 @@ library by ID. Mini-Mes are read-only in this version.
 - **THEN** its single Step's Trait is the one called
 
 ### Requirement: Predefined Mini-Mes
-Mini-Me SHALL ship with nine Mini-Mes:
+Mini-Me SHALL ship with thirteen Mini-Mes:
 - **Scribe:** "Summarizes your messages and the files you reference"; one Step running
   *Summarize*.
 - **Assistant:** "Answers general questions and requests that no other Mini-Me specializes
@@ -68,13 +71,20 @@ Mini-Me SHALL ship with nine Mini-Mes:
 - **Inquirer:** "Asks questions that open up a topic further"; one Step running *Wonder*.
 - **Experimenter:** "Designs experiments to test a hypothesis"; one Step running
   *Experiment*.
+- **Profiler:** "Describes what is in a data table: its columns, types, missing values and
+  duplicates"; one Step running *Profile Data*.
+- **Validator:** "Checks a data table against rules and reports which checks fail"; one
+  Step running *Validate Data*.
+- **Curator:** "Cleans a data table and saves the result as a new file"; one Step running
+  *Clean Data*.
+- **Linker:** "Joins two data tables on their key columns"; one Step running *Join Data*.
 
 Their colours follow DESIGN.md's Mini-Me colour family, and no two share a colour.
 
 #### Scenario: Mini-Mes available
 - **WHEN** the user types `@` in the composer
-- **THEN** Scribe, Assistant, Researcher, Theorist, Explorer, Skeptic, Planner, Inquirer
-  and Experimenter are offered
+- **THEN** Scribe, Assistant, Researcher, Theorist, Explorer, Skeptic, Planner, Inquirer,
+  Experimenter, Profiler, Validator, Curator and Linker are offered
 
 #### Scenario: General question
 - **WHEN** the user sends "@Assistant what is late blight?"

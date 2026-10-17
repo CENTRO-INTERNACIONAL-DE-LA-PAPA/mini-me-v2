@@ -129,6 +129,42 @@
       "color": "oklch(0.82 0.12 115)",
       "adapter": "echo",
       "instructions": null
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18",
+      "name": "Profile Data",
+      "description": "Reports a dataset's shape, column types, missing values and duplicates.",
+      "color": "oklch(0.8 0.09 200)",
+      "adapter": "data-profile",
+      "components": ["table"],
+      "instructions": null
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a19",
+      "name": "Validate Data",
+      "description": "Runs rule checks on a dataset and reports which pass and which fail.",
+      "color": "oklch(0.78 0.13 355)",
+      "adapter": "data-validate",
+      "components": ["table"],
+      "instructions": "You choose data quality checks for a researcher. From the user's message and the description of their table, choose the checks from the catalogue that express the rules the user asks for, with their parameters. Choose only checks the user asked for or that their words clearly imply; the default checks always run, so don't repeat them. Use only columns that the description lists. If the message asks for no rule, choose none."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a20",
+      "name": "Clean Data",
+      "description": "Applies cleaning actions and saves the result as a new version, never overwriting the original.",
+      "color": "oklch(0.76 0.15 55)",
+      "adapter": "data-clean",
+      "components": ["table"],
+      "instructions": "You choose cleaning actions for a researcher. From the user's message and the description of their table, choose the actions from the catalogue that do what the user asks for, in the order they should run, with their parameters. Choose only actions the user asked for or that their words clearly imply, and use only columns and values that the description lists. Prefer keeping data over removing it; never drop rows unless the user asks for it."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a21",
+      "name": "Join Data",
+      "description": "Joins two tables on key columns and reports the keys that don't match.",
+      "color": "oklch(0.8 0.08 240)",
+      "adapter": "data-join",
+      "components": ["table"],
+      "instructions": "You choose how to join two tables for a researcher. From the user's message and the column names of both tables, choose the key columns of each table and the join type (inner, left, right or outer; left unless the user asks otherwise). Use only columns that the tables have."
     }
   ],
   "mini_mes": [
@@ -194,6 +230,34 @@
       "description": "Designs experiments to test a hypothesis",
       "colors": { "tint": "#E5F0D4", "solid": "#779B1E", "ink": "#446100" },
       "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b11",
+      "name": "Profiler",
+      "description": "Describes what is in a data table: its columns, types, missing values and duplicates",
+      "colors": { "tint": "#CEF3FC", "solid": "#0096AF", "ink": "#006277" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b12",
+      "name": "Validator",
+      "description": "Checks a data table against rules and reports which checks fail",
+      "colors": { "tint": "#FFE1E0", "solid": "#DD4D57", "ink": "#9B1B2D" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a19" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b13",
+      "name": "Curator",
+      "description": "Cleans a data table and saves the result as a new file",
+      "colors": { "tint": "#F8E3FC", "solid": "#B25EC5", "ink": "#793089" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a20" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b14",
+      "name": "Linker",
+      "description": "Joins two data tables on their key columns",
+      "colors": { "tint": "#E1EDF8", "solid": "#688AA8", "ink": "#3B5972" },
+      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a21" }] }
     }
   ]
 }

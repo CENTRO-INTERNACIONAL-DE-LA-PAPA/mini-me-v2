@@ -1,5 +1,6 @@
 from mini_me_sidecar.adapters.asta import FindPapers, Theorize
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
+from mini_me_sidecar.adapters.data import CleanData, JoinData, ProfileData, ValidateData
 from mini_me_sidecar.adapters.echo import Echo
 from mini_me_sidecar.adapters.prompt import Prompt
 from mini_me_sidecar.adapters.testing import TEST_ADAPTERS
@@ -8,7 +9,16 @@ __all__ = ["Adapter", "AdapterInfo", "load_adapters"]
 
 
 def load_adapters(test_adapters: bool) -> dict[str, Adapter]:
-    adapters: list[Adapter] = [Echo(), Prompt(), FindPapers(), Theorize()]
+    adapters: list[Adapter] = [
+        Echo(),
+        Prompt(),
+        FindPapers(),
+        Theorize(),
+        ProfileData(),
+        ValidateData(),
+        CleanData(),
+        JoinData(),
+    ]
     if test_adapters:
         adapters.extend(TEST_ADAPTERS)
     by_id: dict[str, Adapter] = {}

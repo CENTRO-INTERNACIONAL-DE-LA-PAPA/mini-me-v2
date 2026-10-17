@@ -1,0 +1,53 @@
+plot_id;site;block;variety;planting_date;blight_severity_pct;yield_t_ha;farmer_name
+1;La Molina;1;Yungay ;2024-10-21;NA;22.7;Farmer A
+2;Cajamarca;1;Yungay;2024-11-07;11;24.1;Farmer D
+3;Huancayo;1;yungay;2024-11-14;7;14.3;Farmer B
+4;La Molina;1;Yungay;2024-11-19;50;32.8;Farmer A
+5;Cajamarca;1;Yungay ;2024-10-14;18;30.4;Farmer C
+6;Huancayo;1;Yungay ;2024-09-19;24;30.5;Farmer A
+7;La Molina;1;yungay;2024-11-02;26;-;Farmer D
+8;Cajamarca;1;UNICA;2024-11-15;46;37.6;Farmer B
+9;Huancayo;1;Canchán;2024-09-19;67;35.1;Farmer C
+10;La Molina;1;canchan;2024-11-03;65;36.1;Farmer B
+11;Cajamarca;1;Yungay ;2024-10-14;NA;37.0;Farmer C
+12;Huancayo;1;Perricholi;2024-11-16;74;23.2;Farmer A
+13;La Molina;2;UNICA;2024-11-22;NA;43.2;Farmer C
+14;Cajamarca;2;UNICA;2024-10-23;49;33.4;Farmer D
+15;Huancayo;2;yungay;2024-10-02;27;23.7;Farmer B
+16;La Molina;2;UNICA;2024-09-06;NA;25.1;Farmer C
+17;Cajamarca;2;Única;2024-11-09;NA;41.2;Farmer D
+18;Huancayo;2;Yungay ;2024-09-06;NA;43.6;Farmer B
+19;La Molina;2;Yungay ;2024-10-10;18;-;Farmer C
+20;Cajamarca;2;Perricholi;2024-09-23;NA;32.1;Farmer A
+21;Huancayo;2;Única;2024-10-13;13;27.1;Farmer D
+22;La Molina;2;yungay;2024-09-15;14;14.1;Farmer A
+23;Cajamarca;2;Yungay ;2024-11-04;46;999;Farmer A
+24;Huancayo;2;Única;2024-09-21;NA;40.9;Farmer C
+25;La Molina;3;yungay;2024-10-15;61;27.6;Farmer A
+26;Cajamarca;3;Perricholi;2024-11-09;NA;16.8;Farmer A
+27;Huancayo;3;Perricholi;2024-09-23;NA;18.8;Farmer C
+28;La Molina;3;yungay;2024-11-28;66;44.3;Farmer B
+29;Cajamarca;3;Canchán;2024-11-18;NA;23.7;Farmer B
+30;Huancayo;3;Canchán;2024-09-27;51;32.2;Farmer D
+31;La Molina;3;Yungay;2024-09-26;60;120.4;Farmer B
+32;Cajamarca;3;Perricholi;2024-10-26;44;34.9;Farmer B
+33;Huancayo;3;UNICA;2024-09-11;NA;15.4;Farmer A
+34;La Molina;3;Perricholi;2024-11-03;NA;27.8;Farmer B
+35;Cajamarca;3;Yungay ;2024-10-26;NA;27.8;Farmer D
+36;Huancayo;3;yungay;2024-11-06;21;27.3;Farmer B
+37;La Molina;4;UNICA;2024-11-05;76;31.5;Farmer C
+38;Cajamarca;4;Yungay ;2024-09-01;NA;17.1;Farmer B
+39;Huancayo;4;Canchán;2024-09-01;27;26.3;Farmer B
+40;La Molina;4;Perricholi;2024-10-18;53;37.2;Farmer C
+41;Cajamarca;4;Única;2024-11-05;NA;41.6;Farmer A
+42;Huancayo;4;Yungay ;2024-11-01;19;40.8;Farmer D
+43;La Molina;4;yungay;2024-11-02;NA;32.4;Farmer D
+44;Cajamarca;4;yungay;2024-11-02;24;37.9;Farmer A
+45;Huancayo;4;UNICA;2024-11-01;56;37.5;Farmer B
+46;La Molina;4;UNICA;2024-11-18;61;34.9;Farmer C
+47;Cajamarca;4;Canchán;2024-10-05;15;42.5;Farmer D
+48;Huancayo;4;Canchán;2024-10-03;27;22.4;Farmer B
+5;Cajamarca;1;Yungay ;2024-10-14;18;30.4;Farmer C
+11;Cajamarca;1;Yungay ;2024-10-14;NA;37.0;Farmer C
+11;Cajamarca;1;Yungay ;2024-10-14;NA;37.0;Farmer C
+3;Huancayo;1;yungay;2024-11-14;7;30.0;Farmer B

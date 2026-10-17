@@ -278,12 +278,13 @@ proposed, reviewed, implemented, verified and archived before the next one start
 | 7 | Asta integration and Traits | [allenai/asta-plugins](https://github.com/allenai/asta-plugins) pinned in the sidecar, signing in with your Ai2 account, *Find Papers* (Paper Finder) with Researcher and *Theorize* (Theorizer) with Theorist | Done |
 | 8 | First Interactive Components | Interactive Components shown below a reply's text: hand-coded, versioned kinds that built-in Traits list and use; Paper sources for *Find Papers* and Theories for *Theorize*; Mini-Mes saving generated files as Assets | Done |
 | 9 | Built-in Traits | *Scout*, *Refute*, *Plan*, *Wonder* and *Experiment*, each with its own Mini-Me (Explorer, Skeptic, Planner, Inquirer and Experimenter); the Traits that later changes build join the library as placeholders | Done |
-| 10 | Data Traits: inspect and prepare | *Profile Data*, *Validate Data*, *Clean Data* and *Join Data* as tools built into the sidecar, with no code written by the AI model; a table Interactive Component (TanStack Table) whose cells, rows and columns can be selected and referenced | Next |
-| 11 | Data Traits: explore and explain | *Describe Variables*, *Find Correlations*, *Detect Outliers*, *Find Clusters*, *Compare Groups*, *Find Drivers*, *Check Confounders* and *Analyze Trends* | Planned |
-| 12 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved through the core in `project.sqlite`, so it survives closing the app | Planned |
-| 13 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
-| 14 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
-| 15 | Project Overview | The view of everything a Project has produced | Planned |
+| 10 | Data Traits: inspect and prepare | *Profile Data*, *Validate Data*, *Clean Data* and *Join Data* as tools built into the sidecar, with no code written by the AI model; a table Interactive Component (TanStack Table) whose cells, rows and columns can be selected and referenced | Done |
+| 11 | Data Traits: explore and explain | *Describe Variables*, *Find Correlations*, *Detect Outliers*, *Find Clusters*, *Compare Groups*, *Find Drivers*, *Check Confounders* and *Analyze Trends* | Next |
+| 12 | Table selections | Selecting cells, rows and columns in a table Interactive Component and referencing them in a message as `#selection` Text Components, which the core resolves so Traits can work on just that part | Planned |
+| 13 | Editors | Mini-Me and Trait editors, the visual Workflow editor, multi-Step Workflows and control Steps (approval, condition, loop, parallel). Workflows run as LangGraph graphs in the sidecar, so the link carries a Mini-Me run instead of single Trait calls; a paused run (approval) is saved through the core in `project.sqlite`, so it survives closing the app | Planned |
+| 14 | Document mode | The *Document* Trait, the document panel with comment threads and Mini-Me edits, PDF export | Planned |
+| 15 | Charts | A chart Interactive Component that Traits fill with data and that reacts to selections and controls | Planned |
+| 16 | Project Overview | The view of everything a Project has produced | Planned |
 
 Later: code execution (Python and R) with OS-level sandboxing, collaboration through a relay
 server, Microsoft SSO, Dataverse upload, Asta's AutoDiscovery with confirmation before any

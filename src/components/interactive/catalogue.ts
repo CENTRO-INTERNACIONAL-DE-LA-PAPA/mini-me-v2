@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import * as paperSources from "./paper-sources";
+import * as table from "./table";
 import * as theories from "./theories";
 
 /** Draws one version of a kind. `data` comes from the adapter of a built-in Trait that lists
@@ -14,6 +15,7 @@ export type Renderers = Record<number, Renderer>;
 export const catalogue = new Map<string, Renderers>([
   ["paper-sources", paperSources.renderers],
   ["theories", theories.renderers],
+  ["table", table.renderers],
 ]);
 
 /** The renderer for a kind and version, or null when this version of the app has none. */

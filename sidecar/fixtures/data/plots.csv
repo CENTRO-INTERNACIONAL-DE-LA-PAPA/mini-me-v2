@@ -1,0 +1,51 @@
+plot_id,site,soil,altitude_m
+1,La Molina,sandy loam,3250
+2,Cajamarca,sandy loam,240
+3,Huancayo,sandy loam,3250
+4,La Molina,clay loam,240
+5,Cajamarca,loam,2750
+6,Huancayo,clay loam,240
+7,La Molina,loam,240
+8,Cajamarca,clay loam,3250
+9,Huancayo,loam,2750
+10,La Molina,sandy loam,2750
+11,Cajamarca,loam,2750
+12,Huancayo,clay loam,240
+13,La Molina,clay loam,2750
+14,Cajamarca,loam,240
+15,Huancayo,sandy loam,3250
+16,La Molina,loam,240
+17,Cajamarca,loam,3250
+18,Huancayo,sandy loam,2750
+19,La Molina,clay loam,3250
+20,Cajamarca,sandy loam,240
+21,Huancayo,clay loam,3250
+22,La Molina,clay loam,240
+23,Cajamarca,clay loam,3250
+24,Huancayo,loam,2750
+25,La Molina,clay loam,3250
+26,Cajamarca,clay loam,240
+27,Huancayo,loam,3250
+28,La Molina,sandy loam,2750
+29,Cajamarca,clay loam,3250
+30,Huancayo,loam,3250
+31,La Molina,clay loam,240
+32,Cajamarca,sandy loam,3250
+33,Huancayo,clay loam,240
+34,La Molina,clay loam,3250
+35,Cajamarca,sandy loam,240
+36,Huancayo,loam,2750
+37,La Molina,clay loam,240
+38,Cajamarca,clay loam,240
+39,Huancayo,sandy loam,2750
+40,La Molina,sandy loam,3250
+41,Cajamarca,clay loam,3250
+42,Huancayo,sandy loam,2750
+43,La Molina,loam,2750
+44,Cajamarca,loam,3250
+45,Huancayo,loam,3250
+46,La Molina,loam,3250
+47,Cajamarca,loam,240
+48,Huancayo,clay loam,3250
+49,La Molina,clay loam,3250
+50,Cajamarca,loam,3250

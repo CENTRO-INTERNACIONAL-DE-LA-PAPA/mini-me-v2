@@ -112,7 +112,7 @@ export function MessageItem({ projectId, message }: Props) {
         )}
       </p>
       {message.components.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-3">
           {message.components.map((component) => (
             <InteractiveComponent key={component.id} component={component} />
           ))}

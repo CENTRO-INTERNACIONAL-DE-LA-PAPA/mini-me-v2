@@ -172,12 +172,16 @@ mod tests {
                 "Model",
                 "Predict",
                 "Index Sources",
+                "Profile Data",
+                "Validate Data",
+                "Clean Data",
+                "Join Data",
             ]
         );
     }
 
     #[test]
-    fn only_the_asta_traits_list_components() {
+    fn only_the_asta_and_data_traits_list_components() {
         let library = Library::builtin();
         let lists: Vec<(&str, Vec<&str>)> = library
             .traits
@@ -187,7 +191,14 @@ mod tests {
             .collect();
         assert_eq!(
             lists,
-            [("Find Papers", vec!["paper-sources"]), ("Theorize", vec!["theories"])]
+            [
+                ("Find Papers", vec!["paper-sources"]),
+                ("Theorize", vec!["theories"]),
+                ("Profile Data", vec!["table"]),
+                ("Validate Data", vec!["table"]),
+                ("Clean Data", vec!["table"]),
+                ("Join Data", vec!["table"]),
+            ]
         );
     }
 
@@ -214,6 +225,15 @@ mod tests {
             let t = step(mini_me);
             assert_eq!((t.name.as_str(), t.adapter.as_str()), (name, "prompt"));
             assert!(t.instructions.is_some());
+        }
+        for (mini_me, name, adapter) in [
+            ("Profiler", "Profile Data", "data-profile"),
+            ("Validator", "Validate Data", "data-validate"),
+            ("Curator", "Clean Data", "data-clean"),
+            ("Linker", "Join Data", "data-join"),
+        ] {
+            let t = step(mini_me);
+            assert_eq!((t.name.as_str(), t.adapter.as_str()), (name, adapter));
         }
     }
 
