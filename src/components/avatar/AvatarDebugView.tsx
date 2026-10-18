@@ -116,7 +116,7 @@ interface ColorPickerProps {
 function ColorPicker({ value, onChange }: ColorPickerProps) {
   const swatch =
     "size-7 rounded-full outline-offset-2 aria-pressed:outline-2 aria-pressed:outline-ring";
-  const current = value ?? COLOR_FAMILIES.find((f) => f.name === "Red")!;
+  const current = value ?? COLOR_FAMILIES.find((f) => f.name === "Yellow")!;
   return (
     <section className="grid gap-3">
       <h2 className="text-section font-bold">Colour</h2>
