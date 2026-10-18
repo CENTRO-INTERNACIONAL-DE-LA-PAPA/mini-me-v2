@@ -8,9 +8,11 @@ import type { JevAnswers, MiniMe } from "../protocol/types";
 import { formatSize } from "./format";
 import { InteractiveComponent } from "./interactive/InteractiveComponent";
 import { useMiniMes } from "./useMiniMes";
+import { WorkflowProgress, showsProgress } from "./WorkflowProgress";
 
 const STATUS_LABEL: Record<string, string | undefined> = {
   streaming: "Replying…",
+  paused: "Waiting for your approval",
   cancelled: "Stopped",
   failed: "Failed",
 };
@@ -88,6 +90,13 @@ export function MessageItem({ projectId, message }: Props) {
           </span>
         )}
       </header>
+      {showsProgress(message.steps) && (
+        <WorkflowProgress
+          steps={message.steps}
+          replyStatus={message.status}
+          color={authorMiniMe?.colors.solid}
+        />
+      )}
       <p className="text-body whitespace-pre-wrap wrap-anywhere">
         {segments(message.content, message.text_components).map((segment, index) =>
           segment.component?.kind === "mini_me" ? (
@@ -114,7 +123,13 @@ export function MessageItem({ projectId, message }: Props) {
       {message.components.length > 0 && (
         <div className="flex min-w-0 flex-col gap-3">
           {message.components.map((component) => (
-            <InteractiveComponent key={component.id} component={component} />
+            <InteractiveComponent
+              key={component.id}
+              component={component}
+              projectId={projectId}
+              messageId={message.id}
+              replyStatus={message.status}
+            />
           ))}
         </div>
       )}

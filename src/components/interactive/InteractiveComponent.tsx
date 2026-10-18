@@ -1,5 +1,5 @@
 import { Component as ReactComponent, type ReactNode } from "react";
-import type { Component } from "../../protocol/types";
+import type { Component, MessageStatus } from "../../protocol/types";
 import { rendererFor } from "./catalogue";
 
 /** A component's plain-text version, shown when its kind or version has no renderer here
@@ -29,15 +29,29 @@ class RenderBoundary extends ReactComponent<BoundaryProps, { failed: boolean }> 
   }
 }
 
+interface Props {
+  component: Component;
+  projectId?: string;
+  messageId?: string;
+  replyStatus?: MessageStatus;
+}
+
 /** One Interactive Component, drawn by its kind's renderer for its version. */
-export function InteractiveComponent({ component }: { component: Component }) {
+export function InteractiveComponent({ component, projectId, messageId, replyStatus }: Props) {
   const Renderer = rendererFor(component.kind, component.version);
   if (!Renderer) {
     return <Fallback text={component.text} />;
   }
   return (
     <RenderBoundary text={component.text}>
-      <Renderer data={component.data} />
+      <Renderer
+        data={component.data}
+        answer={component.answer}
+        projectId={projectId}
+        messageId={messageId}
+        componentId={component.id}
+        replyStatus={replyStatus}
+      />
     </RenderBoundary>
   );
 }

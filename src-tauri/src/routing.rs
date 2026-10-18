@@ -12,10 +12,10 @@ use uuid::Uuid;
 use crate::conversations::{self, SendMessageInput};
 use crate::error::{AppError, AppResult};
 use crate::library::Library;
-use crate::link::{CallModel, CallTrait, RouteMiniMe};
+use crate::link::{CallModel, RouteMiniMe};
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
+use crate::runs::{RouteAnswers, RunSpec, Runs};
 use crate::store::Project;
-use crate::trait_calls::{CallSpec, RouteAnswers, TraitCalls};
 
 /// How long a message waits for Jev before the user is asked to mention a Mini-Me.
 pub const ROUTE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -80,7 +80,7 @@ impl Routing {
     /// Conversation is still waiting for its decision.
     pub fn send(
         self: &Arc<Self>,
-        calls: Arc<TraitCalls>,
+        calls: Arc<Runs>,
         settings: RouteSettings,
         project: Arc<Project>,
         conversation_id: Uuid,
@@ -115,7 +115,7 @@ impl Routing {
     /// Asks Jev and starts the reply, or replies asking the user to mention a Mini-Me.
     fn route(
         &self,
-        calls: &TraitCalls,
+        calls: &Runs,
         settings: &RouteSettings,
         project: &Arc<Project>,
         conversation_id: Uuid,
@@ -226,7 +226,7 @@ impl Routing {
     /// Starts `mini_me_id`'s reply to `message`; returns the reply's author.
     fn start_reply(
         &self,
-        calls: &TraitCalls,
+        calls: &Runs,
         model: Option<CallModel>,
         project: &Arc<Project>,
         conversation_id: Uuid,
@@ -234,32 +234,14 @@ impl Routing {
         mini_me_id: Uuid,
         needs_context: Option<bool>,
     ) -> AppResult<Author> {
-        let mini_me = self
-            .library
-            .mini_me(mini_me_id)
-            .ok_or_else(|| AppError::not_found("Mini-Me not found"))?;
-        let trait_def = self
-            .library
-            .step_trait(mini_me)
-            .ok_or_else(|| AppError::not_found(format!("{} has no Trait to run", mini_me.name)))?;
         let author = Author {
             kind: AuthorKind::MiniMe,
-            id: mini_me.id.to_string(),
+            id: mini_me_id.to_string(),
         };
-        let spec = CallSpec {
-            author: author.clone(),
-            adapter: trait_def.adapter.clone(),
-            trait_def: CallTrait {
-                id: trait_def.id,
-                name: trait_def.name.clone(),
-                instructions: trait_def.instructions.clone(),
-            },
-            components: trait_def.components.clone(),
-            model,
-            input: json!({ "text": input_text(message) }),
-            needs_context,
-        };
-        calls.start(Arc::clone(project), conversation_id, message, spec)?;
+        let input = json!({ "text": input_text(message) });
+        let spec =
+            RunSpec::for_mini_me(&self.library, mini_me_id, author.clone(), input, needs_context)?;
+        calls.start(Arc::clone(project), conversation_id, message, spec, model)?;
         Ok(author)
     }
 }
@@ -386,7 +368,7 @@ mod tests {
     use crate::protocol::{EventKind, MessageStatus, TextComponent, new_id};
     use crate::secrets::NoSecrets;
     use crate::sidecar::SidecarLog;
-    use crate::trait_calls::FrameSink;
+    use crate::runs::FrameSink;
 
     const SCRIBE: Uuid = uuid::uuid!("5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01");
     const ASSISTANT: Uuid = uuid::uuid!("5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b03");
@@ -423,6 +405,7 @@ mod tests {
             attachments: Vec::new(),
             text_components,
             components: Vec::new(),
+            steps: Vec::new(),
         }
     }
 
@@ -591,7 +574,7 @@ mod tests {
         _dir: tempfile::TempDir,
         project: Arc<Project>,
         conversation: Uuid,
-        calls: Arc<TraitCalls>,
+        calls: Arc<Runs>,
         sink: Arc<Recorder>,
         routing: Arc<Routing>,
     }
@@ -601,10 +584,10 @@ mod tests {
         let (dir, project) = crate::projects::test_support::temp_project();
         let project = Arc::new(project);
         let conversation = conversations::create(&project).unwrap().id;
-        let calls = Arc::new(TraitCalls::new(
+        let calls = Arc::new(Runs::new(
             Box::new(NoSecrets),
             Arc::new(SidecarLog::disabled()),
-            crate::trait_calls::CANCEL_TIMEOUT,
+            crate::runs::CANCEL_TIMEOUT,
             Arc::clone(&library),
         ));
         let sink = Arc::new(Recorder::default());
@@ -743,12 +726,11 @@ mod tests {
         )));
         let frames = f.sink.0.lock().unwrap().clone();
         let start = frames.iter().find_map(|frame| match frame {
-            CoreFrame::CallStart {
-                adapter,
-                input,
-                context,
-                ..
-            } => Some((adapter.clone(), input.clone(), context.needs_context)),
+            CoreFrame::RunStart { plan, .. } => Some((
+                plan.traits[0].adapter.clone(),
+                plan.input.clone(),
+                plan.context.needs_context,
+            )),
             _ => None,
         });
         assert_eq!(
@@ -783,7 +765,7 @@ mod tests {
             .lock()
             .unwrap()
             .iter()
-            .any(|frame| matches!(frame, CoreFrame::CallStart { .. }));
+            .any(|frame| matches!(frame, CoreFrame::RunStart { .. }));
         assert!(!started);
     }
 }

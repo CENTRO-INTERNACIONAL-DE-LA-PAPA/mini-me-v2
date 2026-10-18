@@ -62,12 +62,23 @@ class Model:
 
 
 class CallContext:
-    """One Trait call. `cancelled` is set when the call is cancelled; a long-running Trait
-    checks it between units of work and returns early. Blocking work must go through
-    `asyncio.to_thread`, so the sidecar keeps answering the core while the Trait runs."""
+    """One Trait call, made by a Step of a Mini-Me run. `cancelled` is set when the run is
+    cancelled; a long-running Trait checks it between units of work and returns early.
+    Blocking work must go through `asyncio.to_thread`, so the sidecar keeps answering the
+    core while the Trait runs."""
 
-    def __init__(self, link: Link, requests: "Requests", call_id: str, start: dict[str, Any]):
-        """`start` is the `call.start` frame."""
+    def __init__(
+        self,
+        link: Link,
+        requests: "Requests",
+        call_id: str,
+        start: dict[str, Any],
+        run_id: str = "",
+        stream: bool = True,
+    ):
+        """`start` holds the call's `trait`, `model` and `context`. Text the call writes goes
+        into the reply as `run.delta` of `run_id` only when `stream` is set; it is always
+        kept as the call's `output`."""
         context = start.get("context") or {}
         trait = start.get("trait") or {}
         model = start.get("model")
@@ -89,6 +100,10 @@ class CallContext:
         self.needs_context: bool | None = context.get("needs_context")
         # The Mini-Me whose reply this call writes, which tells its own replies from others'.
         self.mini_me_name: str | None = context.get("mini_me_name")
+        # Outputs of the run's earlier Trait Steps, `{ step_id, name, output }`, in the order
+        # they finished.
+        self.steps: list[dict[str, Any]] = context.get("steps") or []
+        self.run_id = run_id
         self.cancelled = asyncio.Event()
         self.ended = False
         self._link = link
@@ -96,11 +111,21 @@ class CallContext:
         self._progress_sent_at = 0.0
         self._pending_progress: tuple[str, float | None] | None = None
         self._progress_timer: asyncio.TimerHandle | None = None
+        self._stream = stream
+        self._written: list[str] = []
+
+    @property
+    def output(self) -> str:
+        """Everything the call has written."""
+        return "".join(self._written)
 
     def write(self, text: str) -> None:
-        """Appends `text` to the reply."""
+        """Appends `text` to the call's output, and to the reply when the call's Step streams
+        into it."""
         if text and not self.ended:
-            self._link.send({"type": "call.delta", "call_id": self.call_id, "text": text})
+            self._written.append(text)
+            if self._stream:
+                self._link.send({"type": "run.delta", "run_id": self.run_id, "text": text})
 
     def progress(self, label: str, fraction: float | None = None) -> None:
         """Reports what the Trait is doing; `fraction` is from 0 to 1, or None if unknown.
@@ -123,7 +148,7 @@ class CallContext:
         self._pending_progress = None
         self._progress_sent_at = time.monotonic()
         self._link.send(
-            {"type": "call.progress", "call_id": self.call_id, "label": label, "fraction": fraction}
+            {"type": "run.progress", "run_id": self.run_id, "label": label, "fraction": fraction}
         )
 
     async def read_asset(self, asset_id: str) -> bytes:

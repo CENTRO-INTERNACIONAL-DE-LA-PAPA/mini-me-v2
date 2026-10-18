@@ -27,16 +27,131 @@ pub struct MiniMeColors {
     pub ink: String,
 }
 
+/// A node in a Workflow: a Trait Step or a control Step. In JSON a Step without `type` is a
+/// Trait Step.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "serde_json::Map<String, serde_json::Value>")]
 pub struct Step {
-    /// The ID of the Trait this Step runs.
-    #[serde(rename = "trait")]
-    pub trait_id: Uuid,
+    /// Unique within its Workflow.
+    pub id: String,
+    /// The name a control Step is shown with; Trait Steps show their Trait's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(flatten)]
+    pub kind: StepKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StepKind {
+    Trait {
+        #[serde(rename = "trait")]
+        trait_id: Uuid,
+    },
+    Approval {
+        prompt: String,
+    },
+    Condition {
+        question: String,
+        branches: Vec<Branch>,
+    },
+    Loop {
+        question: String,
+        max_iterations: u32,
+        steps: Vec<Step>,
+    },
+    Parallel {
+        branches: Vec<Branch>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Branch {
+    pub label: String,
+    pub steps: Vec<Step>,
+}
+
+impl TryFrom<serde_json::Map<String, serde_json::Value>> for Step {
+    type Error = serde_json::Error;
+
+    fn try_from(mut map: serde_json::Map<String, serde_json::Value>) -> Result<Self, Self::Error> {
+        #[derive(Deserialize)]
+        struct Fields {
+            id: String,
+            #[serde(default)]
+            label: Option<String>,
+            #[serde(flatten)]
+            kind: StepKind,
+        }
+        map.entry("type").or_insert_with(|| "trait".into());
+        let Fields { id, label, kind } = serde_json::from_value(map.into())?;
+        Ok(Step { id, label, kind })
+    }
+}
+
+impl Step {
+    /// The name of this Step's type, as in its JSON `type`.
+    pub fn type_name(&self) -> &'static str {
+        match self.kind {
+            StepKind::Trait { .. } => "trait",
+            StepKind::Approval { .. } => "approval",
+            StepKind::Condition { .. } => "condition",
+            StepKind::Loop { .. } => "loop",
+            StepKind::Parallel { .. } => "parallel",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Workflow {
     pub steps: Vec<Step>,
+}
+
+impl Workflow {
+    /// Every Step, nested ones included, depth first in Workflow order.
+    pub fn all_steps(&self) -> Vec<&Step> {
+        fn walk<'a>(steps: &'a [Step], out: &mut Vec<&'a Step>) {
+            for step in steps {
+                out.push(step);
+                match &step.kind {
+                    StepKind::Loop { steps, .. } => walk(steps, out),
+                    StepKind::Condition { branches, .. } | StepKind::Parallel { branches } => {
+                        for branch in branches {
+                            walk(&branch.steps, out);
+                        }
+                    }
+                    StepKind::Trait { .. } | StepKind::Approval { .. } => {}
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&self.steps, &mut out);
+        out
+    }
+
+    /// The Trait IDs of the Trait Steps, each once, in Workflow order.
+    pub fn trait_ids(&self) -> Vec<Uuid> {
+        let mut ids = Vec::new();
+        for step in self.all_steps() {
+            if let StepKind::Trait { trait_id } = step.kind {
+                if !ids.contains(&trait_id) {
+                    ids.push(trait_id);
+                }
+            }
+        }
+        ids
+    }
+
+    pub fn step(&self, id: &str) -> Option<&Step> {
+        self.all_steps().into_iter().find(|s| s.id == id)
+    }
+
+    /// Whether running this Workflow asks the AI model for decisions.
+    pub fn has_decisions(&self) -> bool {
+        self.all_steps()
+            .iter()
+            .any(|s| matches!(s.kind, StepKind::Condition { .. } | StepKind::Loop { .. }))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -81,13 +196,9 @@ impl Library {
         self.traits.iter().find(|t| t.id == id)
     }
 
-    /// The Trait a one-Step Mini-Me runs.
-    pub fn step_trait(&self, mini_me: &MiniMe) -> Option<&TraitDef> {
-        mini_me
-            .workflow
-            .steps
-            .first()
-            .and_then(|step| self.trait_def(step.trait_id))
+    /// The definitions of the Traits a Workflow runs, each once, in Workflow order.
+    pub fn workflow_traits(&self, workflow: &Workflow) -> Vec<&TraitDef> {
+        workflow.trait_ids().into_iter().filter_map(|id| self.trait_def(id)).collect()
     }
 
     pub fn summaries(&self) -> Vec<MiniMeSummary> {
@@ -123,25 +234,86 @@ impl Library {
             }
         }
         for m in &self.mini_mes {
-            if m.workflow.steps.len() != 1 {
-                problems.push(format!("{} does not have exactly one Step", m.name));
+            problems.extend(self.workflow_problems(m));
+        }
+        problems
+    }
+
+    /// The problems with one Mini-Me's Workflow, each naming the Mini-Me and the Step.
+    fn workflow_problems(&self, m: &MiniMe) -> Vec<String> {
+        let mut problems = Vec::new();
+        let steps = m.workflow.all_steps();
+        if m.workflow.steps.is_empty() {
+            problems.push(format!("{}'s Workflow has no Steps", m.name));
+        }
+        if !steps.iter().any(|s| matches!(s.kind, StepKind::Trait { .. })) {
+            problems.push(format!("{}'s Workflow has no Trait Step", m.name));
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        for step in &steps {
+            let at = format!("{}'s Step {:?}", m.name, step.id);
+            if step.id.trim().is_empty() || seen.contains(&step.id.as_str()) {
+                problems.push(format!("{at}: Step IDs must be unique and not empty"));
             }
-            for step in &m.workflow.steps {
-                match self.trait_def(step.trait_id) {
-                    None => {
-                        problems.push(format!("{} runs an unknown Trait {}", m.name, step.trait_id))
-                    }
+            seen.push(&step.id);
+            if step.label.as_deref().is_some_and(|l| l.trim().is_empty()) {
+                problems.push(format!("{at}: the label is empty"));
+            }
+            match &step.kind {
+                StepKind::Trait { trait_id } => match self.trait_def(*trait_id) {
+                    None => problems.push(format!("{at} runs an unknown Trait {trait_id}")),
                     // Placeholder Traits run on `echo` until they are built, so no Mini-Me
                     // may offer them.
                     Some(t) if t.adapter == "echo" => {
-                        problems.push(format!("{} runs the placeholder Trait {}", m.name, t.name))
+                        problems.push(format!("{at} runs the placeholder Trait {}", t.name))
                     }
                     Some(_) => {}
+                },
+                StepKind::Approval { prompt } => {
+                    if prompt.trim().is_empty() {
+                        problems.push(format!("{at}: the prompt is empty"));
+                    }
                 }
+                StepKind::Loop { question, max_iterations, steps } => {
+                    if question.trim().is_empty() {
+                        problems.push(format!("{at}: the question is empty"));
+                    }
+                    if !(1..=10).contains(max_iterations) {
+                        problems.push(format!("{at}: max_iterations must be from 1 to 10"));
+                    }
+                    if steps.is_empty() {
+                        problems.push(format!("{at} has no Steps"));
+                    }
+                }
+                StepKind::Condition { question, branches } => {
+                    if question.trim().is_empty() {
+                        problems.push(format!("{at}: the question is empty"));
+                    }
+                    problems.extend(branch_problems(&at, branches));
+                }
+                StepKind::Parallel { branches } => problems.extend(branch_problems(&at, branches)),
             }
         }
         problems
     }
+}
+
+fn branch_problems(at: &str, branches: &[Branch]) -> Vec<String> {
+    let mut problems = Vec::new();
+    if branches.len() < 2 {
+        problems.push(format!("{at} needs at least two branches"));
+    }
+    for (i, branch) in branches.iter().enumerate() {
+        if branch.label.trim().is_empty() {
+            problems.push(format!("{at}: a branch label is empty"));
+        } else if branches[..i].iter().any(|b| b.label == branch.label) {
+            problems.push(format!("{at}: two branches are labelled {:?}", branch.label));
+        }
+        if branch.steps.is_empty() {
+            problems.push(format!("{at}: branch {:?} has no Steps", branch.label));
+        }
+    }
+    problems
 }
 
 #[cfg(test)]
@@ -208,7 +380,9 @@ mod tests {
         let step = |name: &str| {
             let summary = library.summaries().into_iter().find(|m| m.name == name).unwrap();
             let mini_me = library.mini_me(summary.id).unwrap();
-            library.step_trait(mini_me).unwrap().clone()
+            let traits = library.workflow_traits(&mini_me.workflow);
+            assert_eq!(traits.len(), 1, "{name} runs one Trait");
+            traits[0].clone()
         };
         assert_eq!(step("Scribe").name, "Summarize");
         let assist = step("Assistant");
@@ -235,6 +409,27 @@ mod tests {
             let t = step(mini_me);
             assert_eq!((t.name.as_str(), t.adapter.as_str()), (name, adapter));
         }
+    }
+
+    #[test]
+    fn fourteen_mini_mes_ship_and_investigator_uses_every_control_step() {
+        let library = Library::builtin();
+        let names: Vec<String> = library.summaries().into_iter().map(|m| m.name).collect();
+        assert_eq!(names.len(), 14);
+        assert_eq!(names.last().map(String::as_str), Some("Investigator"));
+
+        let investigator = library.mini_mes.iter().find(|m| m.name == "Investigator").unwrap();
+        let workflow = &investigator.workflow;
+        let types: Vec<&str> = workflow.steps.iter().map(|s| s.type_name()).collect();
+        assert_eq!(types, ["parallel", "trait", "loop", "condition"]);
+        assert!(workflow.all_steps().iter().any(|s| s.type_name() == "approval"));
+        let traits: Vec<&str> =
+            library.workflow_traits(workflow).iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(traits, ["Scout", "Wonder", "Plan", "Refute", "Experiment"]);
+        assert!(matches!(
+            workflow.step("stress-test").map(|s| &s.kind),
+            Some(StepKind::Loop { max_iterations: 2, .. })
+        ));
     }
 
     #[test]
@@ -268,11 +463,73 @@ mod tests {
         library.traits[0].name = "summarize".into();
         library.mini_mes[0].workflow.steps.clear();
         let document = library.traits.iter().find(|t| t.name == "Document").unwrap().id;
-        library.mini_mes[1].workflow.steps[0].trait_id = document;
+        library.mini_mes[1].workflow.steps[0].kind = StepKind::Trait { trait_id: document };
         let problems = library.problems();
         assert!(problems.iter().any(|p| p.contains("share an ID")));
         assert!(problems.iter().any(|p| p.contains("Title Case")));
-        assert!(problems.iter().any(|p| p.contains("exactly one Step")));
+        assert!(problems.iter().any(|p| p.contains("has no Steps")));
         assert!(problems.iter().any(|p| p.contains("placeholder Trait Document")));
+    }
+
+    const SCOUT: &str = "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06";
+    const WONDER: &str = "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09";
+
+    fn with_workflow(workflow: serde_json::Value) -> Library {
+        let mut library = Library::builtin();
+        library.mini_mes[0].workflow = serde_json::from_value(workflow).unwrap();
+        library
+    }
+
+    #[test]
+    fn a_step_without_type_is_a_trait_step() {
+        let workflow: Workflow =
+            serde_json::from_value(serde_json::json!({ "steps": [{ "id": "scout", "trait": SCOUT }] }))
+                .unwrap();
+        let trait_id = SCOUT.parse().unwrap();
+        assert_eq!(workflow.steps[0].kind, StepKind::Trait { trait_id });
+        let sent = serde_json::to_value(&workflow).unwrap();
+        assert_eq!(sent["steps"][0]["type"], "trait");
+    }
+
+    #[test]
+    fn nested_steps_are_parsed_and_listed_in_order() {
+        let library = with_workflow(serde_json::json!({ "steps": [
+            { "id": "open-up", "type": "parallel", "branches": [
+                { "label": "Directions", "steps": [{ "id": "scout", "trait": SCOUT }] },
+                { "label": "Questions", "steps": [{ "id": "wonder", "trait": WONDER }] } ] },
+            { "id": "again", "type": "loop", "question": "Again?", "max_iterations": 2,
+              "steps": [{ "id": "ask", "type": "approval", "prompt": "Go on?" },
+                        { "id": "scout-again", "trait": SCOUT }] } ] }));
+        assert_eq!(library.problems(), Vec::<String>::new());
+        let workflow = &library.mini_mes[0].workflow;
+        let ids: Vec<&str> = workflow.all_steps().iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, ["open-up", "scout", "wonder", "again", "ask", "scout-again"]);
+        let names: Vec<&str> =
+            library.workflow_traits(workflow).iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(names, ["Scout", "Wonder"]);
+        assert!(workflow.has_decisions());
+    }
+
+    #[test]
+    fn broken_workflows_are_reported() {
+        let unknown = with_workflow(serde_json::json!({ "steps": [
+            { "id": "split", "type": "parallel", "branches": [
+                { "label": "A", "steps": [{ "id": "a", "trait": SCOUT }] },
+                { "label": "B", "steps": [{ "id": "b", "trait": Uuid::nil() }] } ] } ] }));
+        assert!(unknown.problems().iter().any(|p| p.contains("Step \"b\" runs an unknown Trait")));
+
+        let duplicate = with_workflow(serde_json::json!({ "steps": [
+            { "id": "scout", "trait": SCOUT }, { "id": "scout", "trait": WONDER } ] }));
+        assert!(duplicate.problems().iter().any(|p| p.contains("must be unique")));
+
+        let endless = with_workflow(serde_json::json!({ "steps": [
+            { "id": "again", "type": "loop", "question": "Again?", "max_iterations": 0,
+              "steps": [{ "id": "scout", "trait": SCOUT }] } ] }));
+        assert!(endless.problems().iter().any(|p| p.contains("max_iterations")));
+
+        let lonely = with_workflow(serde_json::json!({ "steps": [
+            { "id": "pick", "type": "condition", "question": "Which?",
+              "branches": [{ "label": "only", "steps": [{ "id": "scout", "trait": SCOUT }] }] } ] }));
+        assert!(lonely.problems().iter().any(|p| p.contains("at least two branches")));
     }
 }

@@ -42,17 +42,21 @@ Each Mini-Me SHALL have:
 - an `id` (UUID, stable across installations);
 - a `name` and a `description`;
 - colours `tint`, `solid` and `ink`;
-- exactly one Workflow.
+- exactly one Workflow, a list of Steps as Workflows define them.
 
-In this version every Workflow has exactly one Trait Step, which references a Trait in the
-library by ID. Mini-Mes are read-only in this version.
+A Mini-Me's Traits are the Traits its Trait Steps reference. Mini-Mes are read-only in this
+version.
 
 #### Scenario: One-Step Workflow
-- **WHEN** a Mini-Me answers a message
-- **THEN** its single Step's Trait is the one called
+- **WHEN** a Mini-Me whose Workflow has one Trait Step answers a message
+- **THEN** that Step's Trait is the one called
+
+#### Scenario: Multi-Step Workflow
+- **WHEN** Investigator answers a message
+- **THEN** its reply is produced by running each Step of its Workflow
 
 ### Requirement: Predefined Mini-Mes
-Mini-Me SHALL ship with thirteen Mini-Mes:
+Mini-Me SHALL ship with fourteen Mini-Mes:
 - **Scribe:** "Summarizes your messages and the files you reference"; one Step running
   *Summarize*.
 - **Assistant:** "Answers general questions and requests that no other Mini-Me specializes
@@ -78,13 +82,16 @@ Mini-Me SHALL ship with thirteen Mini-Mes:
 - **Curator:** "Cleans a data table and saves the result as a new file"; one Step running
   *Clean Data*.
 - **Linker:** "Joins two data tables on their key columns"; one Step running *Join Data*.
+- **Investigator:** "Investigates a research question in several steps: explores it, plans,
+  tests the plan against criticism and, if you approve, designs an experiment"; the
+  the Workflow described by the Investigator requirements below.
 
 Their colours follow DESIGN.md's Mini-Me colour family, and no two share a colour.
 
 #### Scenario: Mini-Mes available
 - **WHEN** the user types `@` in the composer
 - **THEN** Scribe, Assistant, Researcher, Theorist, Explorer, Skeptic, Planner, Inquirer,
-  Experimenter, Profiler, Validator, Curator and Linker are offered
+  Experimenter, Profiler, Validator, Curator, Linker and Investigator are offered
 
 #### Scenario: General question
 - **WHEN** the user sends "@Assistant what is late blight?"
@@ -131,3 +138,36 @@ replace its adapter, so anything that references the Trait keeps working.
 #### Scenario: Building a placeholder
 - **WHEN** a later change builds *Document*
 - **THEN** *Document* has the same ID as its placeholder and no longer uses `echo`
+
+### Requirement: Investigator explores, then plans
+Investigator's Workflow SHALL start with a parallel Step whose branches are "Directions",
+running *Scout*, and "Questions", running *Wonder*, followed by a *Plan* Step.
+
+#### Scenario: Opening a question
+- **WHEN** the user sends "@Investigator does early planting reduce late blight?"
+- **THEN** *Scout* and *Wonder* run at the same time, then *Plan* runs with both of their
+  outputs
+
+### Requirement: Investigator tests its plan against criticism
+After its first *Plan* Step, Investigator's Workflow SHALL run a loop of *Refute* then
+*Plan*, at most 2 times, whose question asks whether the latest critique found a serious
+flaw that the revised plan may still have.
+
+#### Scenario: Sound plan
+- **WHEN** the model answers `stop` after the first run of the loop
+- **THEN** *Refute* and *Plan* ran once each inside the loop
+
+### Requirement: Investigator designs an experiment only if approved
+Investigator's Workflow SHALL end with a condition asking whether the plan rests on a
+hypothesis that an experiment could test. Its "testable" branch runs an approval, "Design an
+experiment to test this plan's hypothesis?", then *Experiment*; its "not testable" branch
+runs *Wonder*.
+
+#### Scenario: Testable plan, approved
+- **WHEN** the model finds the plan testable and the user approves
+- **THEN** the reply's text is *Experiment*'s design, and its progress card lists every Step
+  that ran
+
+#### Scenario: Not testable
+- **WHEN** the model finds the plan not testable
+- **THEN** no approval is asked, and the reply's text is the questions *Wonder* wrote

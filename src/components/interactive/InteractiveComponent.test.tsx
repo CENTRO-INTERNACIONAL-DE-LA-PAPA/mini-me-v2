@@ -4,7 +4,7 @@ import type { Component } from "../../protocol/types";
 import { InteractiveComponent } from "./InteractiveComponent";
 
 function component(kind: string, version: number): Component {
-  return { id: "c", kind, version, data: { papers: [] }, text: "1. Late blight" };
+  return { id: "c", kind, version, data: { papers: [] }, text: "1. Late blight", answer: null };
 }
 
 describe("InteractiveComponent", () => {
