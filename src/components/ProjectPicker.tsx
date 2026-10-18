@@ -1,18 +1,19 @@
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { BugIcon, SettingsIcon } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, errorMessage } from "../api";
 import type { ProjectSummary } from "../protocol/types";
-import { SettingsIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SidecarStatusLine, useSidecarStatus } from "./SidecarStatusLine";
 import { UpdateStatusLine } from "./UpdateStatusLine";
 
 interface Props {
   onOpen: (project: ProjectSummary) => void;
   onSettings: () => void;
+  onAvatarDebug: () => void;
 }
 
-export function ProjectPicker({ onOpen, onSettings }: Props) {
+export function ProjectPicker({ onOpen, onSettings, onAvatarDebug }: Props) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -45,15 +46,28 @@ export function ProjectPicker({ onOpen, onSettings }: Props) {
     <main className="mx-auto mt-[10vh] max-w-lg px-4">
       <header className="mb-6 flex items-center justify-between">
         <h1 className="text-page font-bold">Mini-Me</h1>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Settings"
-          title="Settings"
-          onClick={onSettings}
-        >
-          <SettingsIcon />
-        </Button>
+        <div className="flex gap-1">
+          {import.meta.env.DEV && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="[DEBUG] Avatars"
+              title="[DEBUG] Avatars"
+              onClick={onAvatarDebug}
+            >
+              <BugIcon />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Settings"
+            title="Settings"
+            onClick={onSettings}
+          >
+            <SettingsIcon />
+          </Button>
+        </div>
       </header>
       <form className="flex gap-2" onSubmit={create}>
         <Input
