@@ -18,11 +18,11 @@ use crate::projects::{self, ProjectSummary};
 use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, now_ms};
 use crate::library::{Library, MiniMeSummary};
 use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
+use crate::runs::{CANCEL_TIMEOUT, Runs};
 use crate::secrets::KeychainSecrets;
 use crate::settings::{AiSettings, Settings};
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
-use crate::trait_calls::{CANCEL_TIMEOUT, TraitCalls};
 use crate::updates::{UpdateStatus, Updates};
 
 pub struct AppState {
@@ -30,7 +30,7 @@ pub struct AppState {
     data_root: PathBuf,
     settings: Mutex<Settings>,
     open_projects: Mutex<HashMap<Uuid, Arc<Project>>>,
-    calls: Arc<TraitCalls>,
+    runs: Arc<Runs>,
     routing: Arc<Routing>,
     pub sidecar: Arc<Supervisor>,
     pub updates: Arc<Updates>,
@@ -60,7 +60,7 @@ impl AppState {
         let log = Arc::new(SidecarLog::new(&log_dir));
         let library = Arc::new(Library::builtin());
         let ai2 = Ai2::system();
-        let calls = Arc::new(TraitCalls::new(
+        let runs = Arc::new(Runs::new(
             Box::new(AppSecrets {
                 ai2: Arc::clone(&ai2),
             }),
@@ -72,7 +72,7 @@ impl AppState {
             launch,
             false,
             Timing::for_build(),
-            Arc::clone(&calls),
+            Arc::clone(&runs),
             Arc::clone(&log),
         );
         sidecar.spawn();
@@ -85,7 +85,7 @@ impl AppState {
             data_root: projects::ensure_data_root(&documents)?,
             config_dir,
             open_projects: Mutex::new(HashMap::new()),
-            calls,
+            runs,
             routing: Routing::new(library),
             sidecar,
             updates,
@@ -203,7 +203,7 @@ pub async fn send_message(
         show_answers: settings.routing.show_answers,
     };
     state.routing.send(
-        Arc::clone(&state.calls),
+        Arc::clone(&state.runs),
         route,
         project,
         conversation_id,
@@ -318,7 +318,38 @@ pub async fn stop_reply(
 ) -> AppResult<()> {
     let stopped = conversations::stop_reply(&*state.project(project_id)?, conversation_id)?;
     for message_id in stopped {
-        state.calls.cancel_message(message_id);
+        state.runs.cancel_message(message_id);
+    }
+    Ok(())
+}
+
+/// Answers the approval a paused reply waits for. Approving resumes its run; rejecting ends
+/// the reply with the Workflow's output so far.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn answer_approval(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    message_id: Uuid,
+    component_id: Uuid,
+    approved: bool,
+) -> AppResult<()> {
+    let project = state.project(project_id)?;
+    // Checked first so the answer is not recorded when the run could not resume.
+    conversations::paused_run(&project, message_id, component_id)?;
+    if approved && state.sidecar.status().state != SidecarState::Ready {
+        return Err(AppError::new(
+            "sidecar_unavailable",
+            "Mini-Me cannot continue yet. Wait until it is ready, then approve again.",
+        ));
+    }
+    let paused = conversations::answer_approval(&project, message_id, component_id, approved)?;
+    if approved {
+        let conversation_id = project
+            .lock()
+            .message_place(message_id)?
+            .map(|(conversation, _)| conversation)
+            .ok_or_else(|| AppError::not_found("Message not found"))?;
+        state.runs.resume(project, conversation_id, paused, state.settings().ai.model());
     }
     Ok(())
 }

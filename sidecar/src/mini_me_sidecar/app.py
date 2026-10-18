@@ -11,7 +11,7 @@ from mini_me_sidecar import __version__
 from mini_me_sidecar.context import Requests
 from mini_me_sidecar.link import PROTOCOL, Link, log, parse
 from mini_me_sidecar.routing import Router
-from mini_me_sidecar.runner import Runner
+from mini_me_sidecar.runs import Runs
 from mini_me_sidecar.adapters import load_adapters
 
 
@@ -36,7 +36,7 @@ def _read_stdin(loop: asyncio.AbstractEventLoop, inbox: asyncio.Queue[bytes | No
 async def _main(link: Link, test_adapters: bool) -> None:
     adapters = load_adapters(test_adapters)
     requests = Requests(link)
-    runner = Runner(link, adapters, requests)
+    runs = Runs(link, adapters, requests)
     router = Router(link, requests)
     loop = asyncio.get_running_loop()
     inbox: asyncio.Queue[bytes | None] = asyncio.Queue()
@@ -62,18 +62,18 @@ async def _main(link: Link, test_adapters: bool) -> None:
             case "adapters.list":
                 infos = [a.info.to_json() for a in adapters.values()]
                 link.send({"type": "adapters", "adapters": infos})
-            case "call.start":
-                runner.start(frame)
+            case "run.start":
+                runs.start(frame)
             case "route.start":
                 router.start(frame)
-            case "call.cancel":
-                runner.cancel(frame.get("call_id"))
+            case "run.cancel":
+                runs.cancel(frame.get("run_id"))
             case "core.response":
-                runner.resolve(frame)
+                runs.resolve(frame)
             case "shutdown":
                 break
             case other:
                 log(f"ignoring unknown frame type {other!r}")
 
-    await runner.close()
+    await runs.close()
     await router.close()

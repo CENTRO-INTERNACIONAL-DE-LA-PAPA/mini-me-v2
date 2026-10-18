@@ -35,7 +35,8 @@
             "end": 26
           }
         ],
-        "components": []
+        "components": [],
+        "steps": []
       }
     }
   },
@@ -60,7 +61,8 @@
         "reply_to": "0199d0a0-0000-7000-8000-000000000101",
         "attachments": [],
         "text_components": [],
-        "components": []
+        "components": [],
+        "steps": []
       }
     }
   },
@@ -177,7 +179,8 @@
         "reply_to": null,
         "attachments": [],
         "text_components": [],
-        "components": []
+        "components": [],
+        "steps": []
       }
     }
   },
@@ -202,7 +205,8 @@
         "reply_to": "0199d0a0-0000-7000-8000-000000000103",
         "attachments": [],
         "text_components": [],
-        "components": []
+        "components": [],
+        "steps": []
       }
     }
   },
@@ -243,7 +247,8 @@
         "reply_to": "0199d0a0-0000-7000-8000-000000000103",
         "attachments": [],
         "text_components": [],
-        "components": []
+        "components": [],
+        "steps": []
       }
     }
   },
@@ -312,8 +317,83 @@
             }
           ]
         },
-        "text": "1. **Late blight resistance in wild potato** (2021)"
+        "text": "1. **Late blight resistance in wild potato** (2021)",
+        "answer": null
       }
     }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000015",
+    "type": "step.started",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 15,
+    "ts": 176000001500,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": { "message_id": "0199d0a0-0000-7000-8000-000000000106", "step_id": "plan", "type": "trait", "name": "Plan" }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000016",
+    "type": "step.completed",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 16,
+    "ts": 176000001600,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": { "message_id": "0199d0a0-0000-7000-8000-000000000106", "step_id": "plan", "output": "1. Choose plots." }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000017",
+    "type": "message.paused",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 17,
+    "ts": 176000001700,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": { "message_id": "0199d0a0-0000-7000-8000-000000000106" }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000018",
+    "type": "component.answered",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 18,
+    "ts": 176000001800,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": {
+      "message_id": "0199d0a0-0000-7000-8000-000000000106",
+      "component_id": "0199d0a0-0000-7000-8000-000000000302",
+      "answer": { "approved": true }
+    }
+  },
+  {
+    "id": "0199d0a0-0000-7000-8000-000000000019",
+    "type": "message.resumed",
+    "v": 1,
+    "project_id": "0199d0a0-0000-7000-8000-0000000000a1",
+    "conversation_id": "0199d0a0-0000-7000-8000-0000000000c1",
+    "seq": 19,
+    "ts": 176000001900,
+    "origin": {
+      "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
+      "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
+    },
+    "payload": { "message_id": "0199d0a0-0000-7000-8000-000000000106" }
   }
 ]

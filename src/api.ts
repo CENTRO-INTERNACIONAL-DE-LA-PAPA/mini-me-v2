@@ -48,6 +48,9 @@ export const api = {
     invoke<Message>("send_message", { project_id, conversation_id, input }),
   stopReply: (project_id: Uuid, conversation_id: Uuid) =>
     invoke<void>("stop_reply", { project_id, conversation_id }),
+  /** Answers the approval a paused reply waits for; approving resumes its Workflow. */
+  answerApproval: (project_id: Uuid, message_id: Uuid, component_id: Uuid, approved: boolean) =>
+    invoke<void>("answer_approval", { project_id, message_id, component_id, approved }),
 
   addReaction: (project_id: Uuid, message_id: Uuid, emoji: string) =>
     invoke<void>("add_reaction", { project_id, message_id, emoji }),

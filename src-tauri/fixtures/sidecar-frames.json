@@ -4,14 +4,62 @@
     { "type": "ping", "nonce": "17" },
     { "type": "shutdown" },
     {
-      "type": "call.start",
-      "call_id": "0199d0a0-0000-7000-8000-000000000301",
-      "adapter": "prompt",
-      "trait": {
-        "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01",
-        "name": "Summarize",
-        "instructions": "Write a short, faithful summary."
+      "type": "run.start",
+      "run_id": "0199d0a0-0000-7000-8000-000000000301",
+      "mini_me": { "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01", "name": "Scribe" },
+      "workflow": {
+        "steps": [
+          { "id": "summarize", "type": "trait", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" },
+          { "id": "ask", "label": "Check", "type": "approval", "prompt": "Shorten it?" },
+          {
+            "id": "again",
+            "type": "loop",
+            "question": "Is it still too long?",
+            "max_iterations": 2,
+            "steps": [
+              { "id": "shorten", "type": "trait", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }
+            ]
+          },
+          {
+            "id": "split",
+            "type": "parallel",
+            "branches": [
+              {
+                "label": "A",
+                "steps": [{ "id": "a", "type": "trait", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }]
+              },
+              {
+                "label": "B",
+                "steps": [
+                  {
+                    "id": "pick",
+                    "type": "condition",
+                    "question": "Which?",
+                    "branches": [
+                      {
+                        "label": "one",
+                        "steps": [{ "id": "b1", "type": "trait", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }]
+                      },
+                      {
+                        "label": "two",
+                        "steps": [{ "id": "b2", "type": "trait", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
+      "traits": [
+        {
+          "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01",
+          "name": "Summarize",
+          "instructions": "Write a short, faithful summary.",
+          "adapter": "prompt"
+        }
+      ],
       "model": { "provider": "anthropic", "model": "example-model" },
       "input": { "text": "Summarize #field-trial.csv" },
       "context": {
@@ -33,13 +81,14 @@
               "end": 26
             }
           ],
-          "components": []
+          "components": [],
+          "steps": []
         },
-        "needs_context": false,
-        "mini_me_name": "Scribe"
-      }
+        "needs_context": false
+      },
+      "resume": { "state": "eyJmb3JtYXQiOjF9", "step_id": "ask", "approved": true }
     },
-    { "type": "call.cancel", "call_id": "0199d0a0-0000-7000-8000-000000000301" },
+    { "type": "run.cancel", "run_id": "0199d0a0-0000-7000-8000-000000000301" },
     {
       "type": "route.start",
       "route_id": "0199d0a0-0000-7000-8000-000000000401",
@@ -82,30 +131,40 @@
       ]
     },
     { "type": "pong", "nonce": "17" },
-    { "type": "call.delta", "call_id": "0199d0a0-0000-7000-8000-000000000301", "text": "Summarize " },
+    { "type": "run.delta", "run_id": "0199d0a0-0000-7000-8000-000000000301", "text": "Summarize " },
     {
-      "type": "call.progress",
-      "call_id": "0199d0a0-0000-7000-8000-000000000301",
+      "type": "run.progress",
+      "run_id": "0199d0a0-0000-7000-8000-000000000301",
       "label": "Reading field-trial.csv",
       "fraction": 0.5
     },
+    { "type": "run.progress", "run_id": "0199d0a0-0000-7000-8000-000000000301", "label": "Thinking", "fraction": null },
     {
-      "type": "call.progress",
-      "call_id": "0199d0a0-0000-7000-8000-000000000301",
-      "label": "Thinking",
-      "fraction": null
+      "type": "step.started",
+      "run_id": "0199d0a0-0000-7000-8000-000000000301",
+      "step_id": "summarize",
+      "call_id": "0199d0a0-0000-7000-8000-000000000311"
     },
-    { "type": "call.done", "call_id": "0199d0a0-0000-7000-8000-000000000301" },
+    { "type": "step.started", "run_id": "0199d0a0-0000-7000-8000-000000000301", "step_id": "ask", "call_id": null },
+    { "type": "step.completed", "run_id": "0199d0a0-0000-7000-8000-000000000301", "step_id": "summarize", "output": "Three plots." },
     {
-      "type": "call.error",
-      "call_id": "0199d0a0-0000-7000-8000-000000000301",
+      "type": "run.paused",
+      "run_id": "0199d0a0-0000-7000-8000-000000000301",
+      "step_id": "ask",
+      "output": "Three plots.",
+      "state": "eyJmb3JtYXQiOjF9"
+    },
+    { "type": "run.done", "run_id": "0199d0a0-0000-7000-8000-000000000301" },
+    {
+      "type": "run.error",
+      "run_id": "0199d0a0-0000-7000-8000-000000000301",
       "error": { "code": "trait_error", "message": "This Trait always fails." }
     },
-    { "type": "call.cancelled", "call_id": "0199d0a0-0000-7000-8000-000000000301" },
+    { "type": "run.cancelled", "run_id": "0199d0a0-0000-7000-8000-000000000301" },
     {
       "type": "core.request",
       "request_id": "5f1c2b7e9a0d4c3b8e6f1a2b3c4d5e6f",
-      "call_id": "0199d0a0-0000-7000-8000-000000000301",
+      "call_id": "0199d0a0-0000-7000-8000-000000000311",
       "method": "asset.read",
       "params": { "asset_id": "0199d0a0-0000-7000-8000-000000000201", "offset": 0, "length": 1048576 }
     },

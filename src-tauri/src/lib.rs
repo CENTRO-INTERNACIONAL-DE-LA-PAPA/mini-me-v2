@@ -12,11 +12,11 @@ mod paths;
 mod projects;
 mod protocol;
 mod routing;
+mod runs;
 mod secrets;
 mod settings;
 mod sidecar;
 mod store;
-mod trait_calls;
 mod updates;
 
 use tauri::{Manager, RunEvent};
@@ -41,6 +41,7 @@ pub fn run() {
             ipc::subscribe_conversation,
             ipc::send_message,
             ipc::stop_reply,
+            ipc::answer_approval,
             ipc::add_reaction,
             ipc::remove_reaction,
             ipc::import_assets,

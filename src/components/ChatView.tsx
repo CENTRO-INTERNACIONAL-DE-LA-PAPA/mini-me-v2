@@ -41,7 +41,7 @@ export function ChatView({ projectId, conversationId, onActivity }: Props) {
   const [routing, setRouting] = useState<string | null>(null);
   const decided = routing !== null && state.messages.some((m) => m.reply_to === routing);
   const choosing = routing !== null && !decided;
-  const replying = state.messages.some((m) => m.status === "streaming");
+  const replying = state.messages.some((m) => m.status === "streaming" || m.status === "paused");
 
   useEffect(() => {
     if (decided) {

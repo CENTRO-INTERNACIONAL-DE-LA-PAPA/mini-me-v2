@@ -64,6 +64,7 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
             ...known.payload.message,
             // Events stored before Interactive Components existed have no `components`.
             components: known.payload.message.components ?? [],
+            steps: known.payload.message.steps ?? [],
             reactions: [],
             progress: null,
           },
@@ -107,6 +108,53 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
           failure: known.payload.error,
         })),
       };
+    case "message.paused":
+      return {
+        ...next,
+        messages: updateMessage(state, known.payload.message_id, (m) =>
+          m.status === "streaming" ? { ...m, status: "paused", progress: null } : m,
+        ),
+      };
+    case "message.resumed":
+      return {
+        ...next,
+        messages: updateMessage(state, known.payload.message_id, (m) =>
+          m.status === "paused" ? { ...m, status: "streaming" } : m,
+        ),
+      };
+    case "step.started": {
+      const { message_id, step_id, type, name } = known.payload;
+      const step = { step_id, type, name, output: null, done: false };
+      return {
+        ...next,
+        messages: updateMessage(state, message_id, (m) => ({ ...m, steps: [...m.steps, step] })),
+      };
+    }
+    case "step.completed": {
+      const { message_id, step_id, output } = known.payload;
+      return {
+        ...next,
+        messages: updateMessage(state, message_id, (m) => {
+          // A Step inside a loop starts once per iteration; the latest run is completed.
+          const index = m.steps.map((s) => s.step_id).lastIndexOf(step_id);
+          if (index < 0) return m;
+          const steps = m.steps.map((s, i) => (i === index ? { ...s, output, done: true } : s));
+          return { ...m, steps };
+        }),
+      };
+    }
+    case "component.answered": {
+      const { message_id, component_id, answer } = known.payload;
+      return {
+        ...next,
+        messages: updateMessage(state, message_id, (m) => ({
+          ...m,
+          components: m.components.map((c) =>
+            c.id === component_id && c.answer == null ? { ...c, answer } : c,
+          ),
+        })),
+      };
+    }
     case "message.cancelled":
       return {
         ...next,

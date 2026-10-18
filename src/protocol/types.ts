@@ -15,7 +15,7 @@ export interface Author {
   id: string;
 }
 
-export type MessageStatus = "streaming" | "complete" | "failed" | "cancelled";
+export type MessageStatus = "streaming" | "paused" | "complete" | "failed" | "cancelled";
 
 export interface AssetRef {
   id: Uuid;
@@ -41,6 +41,18 @@ export interface Component {
   version: number;
   data: unknown;
   text: string;
+  /** The user's answer, for kinds that ask for one; null until answered. */
+  answer: unknown;
+}
+
+/** A Step of a reply's Workflow that has started. `output` is a Trait Step's text, a
+ * condition's chosen branch, a loop's `repeat` or `stop`, or null. */
+export interface MessageStep {
+  step_id: string;
+  type: "trait" | "approval" | "condition" | "loop" | "parallel";
+  name: string;
+  output: string | null;
+  done: boolean;
 }
 
 export interface Message {
@@ -52,6 +64,7 @@ export interface Message {
   attachments: AssetRef[];
   text_components: TextComponent[];
   components: Component[];
+  steps: MessageStep[];
 }
 
 export interface ErrorInfo {
@@ -83,6 +96,20 @@ export type KnownEvent = Envelope &
     | { type: "message.completed"; payload: { message_id: Uuid; content: string } }
     | { type: "message.failed"; payload: { message_id: Uuid; error: ErrorInfo } }
     | { type: "message.cancelled"; payload: { message_id: Uuid } }
+    | { type: "message.paused"; payload: { message_id: Uuid } }
+    | { type: "message.resumed"; payload: { message_id: Uuid } }
+    | {
+        type: "step.started";
+        payload: { message_id: Uuid; step_id: string; type: MessageStep["type"]; name: string };
+      }
+    | {
+        type: "step.completed";
+        payload: { message_id: Uuid; step_id: string; output: string | null };
+      }
+    | {
+        type: "component.answered";
+        payload: { message_id: Uuid; component_id: Uuid; answer: unknown };
+      }
     | { type: "attachment.added"; payload: { message_id: Uuid; asset: AssetRef } }
     | { type: "component.added"; payload: { message_id: Uuid; component: Component } }
     | { type: "reaction.added"; payload: { message_id: Uuid; emoji: string; by: Author } }

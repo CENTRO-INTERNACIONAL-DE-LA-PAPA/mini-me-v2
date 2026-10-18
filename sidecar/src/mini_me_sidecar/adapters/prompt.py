@@ -18,6 +18,15 @@ REPLY_RULE = (
     "the request."
 )
 
+# Told to the model when it runs as a later Step of a Workflow. Trait instructions speak of
+# "the message"; without this, a Step such as Experiment reports that the user's question
+# holds no hypothesis even when an earlier Step's output states one.
+WORKFLOW_RULE = (
+    "You are one Step of {name}'s Workflow. The outputs of its earlier Steps come before the "
+    "user's message: treat them together with the message as your material, and write your "
+    "part of the answer from them. Do not comment on what the user's message alone lacks."
+)
+
 # How many times to ask before giving up on a model that answers with no text at all.
 EMPTY_ANSWER_TRIES = 2
 
@@ -54,11 +63,8 @@ class Prompt(Adapter):
             )
         earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []
         key = await ctx.secret(model.provider)
-        preamble = REPLY_RULE
-        if ctx.mini_me_name:
-            preamble = f"You are {ctx.mini_me_name}, a Mini-Me. {REPLY_RULE}"
-        instructions = f"{preamble}\n\n{ctx.trait.instructions or ''}"
-        turns = [("system", instructions), *earlier, ("human", material)]
+        instructions = _system_prompt(ctx.mini_me_name, bool(ctx.steps), ctx.trait.instructions)
+        turns = _turns(instructions, earlier, ctx.steps, material)
 
         name = PROVIDER_NAMES[model.provider]
         for _ in range(EMPTY_ANSWER_TRIES):
@@ -76,12 +82,20 @@ class Prompt(Adapter):
                 raise
             except Exception as error:
                 raise provider_error(error, model) from None
+            if wrote and _filtered(ending):
+                print(f"[prompt] {name} stopped an answer: {ending}", file=sys.stderr, flush=True)
+                raise TraitError(
+                    "provider_refused",
+                    f"{name}'s content filter stopped {model.model} partway through this "
+                    "answer. Rephrase it, ask in a new Conversation, or choose another model "
+                    "in Settings.",
+                )
             if wrote:
                 break
             # A provider can end a stream with no text and no error, for example when it
             # reports a failure only through the finish reason.
             print(f"[prompt] {name} sent an empty answer: {ending}", file=sys.stderr, flush=True)
-            if ending.get("finish_reason") in REFUSED or ending.get("stop_reason") in REFUSED:
+            if _filtered(ending):
                 raise TraitError(
                     "provider_refused",
                     f"{model.model} declined to answer: {name}'s content filter stopped it. "
@@ -149,6 +163,40 @@ async def _earlier_turns(ctx: CallContext) -> list[tuple[str, str]]:
     # turn, which some providers reject.
     if history.get("truncated") or (turns and turns[0][0] == "ai"):
         turns.insert(0, ("human", "(earlier messages were left out)"))
+    return turns
+
+
+def _system_prompt(mini_me_name: str | None, in_workflow: bool, instructions: str | None) -> str:
+    """The system prompt: who the model is, how to reply, then the Trait's instructions."""
+    preamble = REPLY_RULE
+    if mini_me_name:
+        preamble = f"You are {mini_me_name}, a Mini-Me. {REPLY_RULE}"
+        if in_workflow:
+            preamble += " " + WORKFLOW_RULE.format(name=mini_me_name)
+    elif in_workflow:
+        preamble += " " + WORKFLOW_RULE.format(name="this Mini-Me")
+    return f"{preamble}\n\n{instructions or ''}"
+
+
+def _filtered(ending: dict[str, Any]) -> bool:
+    """Whether the provider ended the stream because a content filter or refusal stopped it."""
+    return ending.get("finish_reason") in REFUSED or ending.get("stop_reason") in REFUSED
+
+
+def _turns(
+    instructions: str,
+    earlier: list[tuple[str, str]],
+    steps: list[dict[str, Any]],
+    material: str,
+) -> list[tuple[str, str]]:
+    """The chat sent to the model: the instructions, the Conversation's earlier messages,
+    the outputs of the Workflow's earlier Steps, then the material to answer."""
+    turns = [("system", instructions), *earlier]
+    if steps:
+        parts = [f"--- {s.get('name', '')} ---\n{s.get('output', '')}" for s in steps]
+        intro = "Outputs of the earlier Steps of your Workflow for this message:"
+        turns.append(("human", "\n\n".join([intro, *parts])))
+    turns.append(("human", material))
     return turns
 
 

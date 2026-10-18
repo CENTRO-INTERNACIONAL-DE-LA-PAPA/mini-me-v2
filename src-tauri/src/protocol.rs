@@ -52,6 +52,11 @@ pub enum EventKind {
         label: String,
         fraction: Option<f64>,
     },
+    /// A streaming reply now waits for the user to answer an approval.
+    #[serde(rename = "message.paused")]
+    MessagePaused { message_id: Uuid },
+    #[serde(rename = "message.resumed")]
+    MessageResumed { message_id: Uuid },
     #[serde(rename = "message.completed")]
     MessageCompleted { message_id: Uuid, content: String },
     #[serde(rename = "message.failed")]
@@ -64,6 +69,30 @@ pub enum EventKind {
     ComponentAdded {
         message_id: Uuid,
         component: Component,
+    },
+    #[serde(rename = "component.answered")]
+    ComponentAnswered {
+        message_id: Uuid,
+        component_id: Uuid,
+        answer: Value,
+    },
+    /// A Step of the reply's Workflow started. `name` is the Trait's name for a Trait Step,
+    /// otherwise the Step's label or its type.
+    #[serde(rename = "step.started")]
+    StepStarted {
+        message_id: Uuid,
+        step_id: String,
+        #[serde(rename = "type")]
+        step_type: String,
+        name: String,
+    },
+    /// The latest started run of `step_id` ended. `output` is a Trait Step's text, a
+    /// condition's chosen branch, a loop's `repeat` or `stop`, or `null`.
+    #[serde(rename = "step.completed")]
+    StepCompleted {
+        message_id: Uuid,
+        step_id: String,
+        output: Option<String>,
     },
     #[serde(rename = "reaction.added")]
     ReactionAdded {
@@ -131,6 +160,7 @@ pub struct Author {
 #[serde(rename_all = "snake_case")]
 pub enum MessageStatus {
     Streaming,
+    Paused,
     Complete,
     Failed,
     Cancelled,
@@ -140,6 +170,7 @@ impl MessageStatus {
     pub fn as_str(self) -> &'static str {
         match self {
             MessageStatus::Streaming => "streaming",
+            MessageStatus::Paused => "paused",
             MessageStatus::Complete => "complete",
             MessageStatus::Failed => "failed",
             MessageStatus::Cancelled => "cancelled",
@@ -149,6 +180,7 @@ impl MessageStatus {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "streaming" => Some(MessageStatus::Streaming),
+            "paused" => Some(MessageStatus::Paused),
             "complete" => Some(MessageStatus::Complete),
             "failed" => Some(MessageStatus::Failed),
             "cancelled" => Some(MessageStatus::Cancelled),
@@ -172,6 +204,19 @@ pub struct Message {
     /// Missing in `message.created` events stored before Interactive Components existed.
     #[serde(default)]
     pub components: Vec<Component>,
+    /// The Steps of the reply's Workflow that have started, in order.
+    #[serde(default)]
+    pub steps: Vec<MessageStep>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MessageStep {
+    pub step_id: String,
+    #[serde(rename = "type")]
+    pub step_type: String,
+    pub name: String,
+    pub output: Option<String>,
+    pub done: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -192,6 +237,9 @@ pub struct Component {
     pub version: u32,
     pub data: Value,
     pub text: String,
+    /// The user's answer, for kinds that ask for one; `null` until answered.
+    #[serde(default)]
+    pub answer: Value,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -298,6 +346,11 @@ mod tests {
             "message.cancelled",
             "attachment.added",
             "component.added",
+            "component.answered",
+            "message.paused",
+            "message.resumed",
+            "step.started",
+            "step.completed",
             "reaction.added",
             "reaction.removed",
         ] {

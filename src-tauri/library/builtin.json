@@ -173,91 +173,143 @@
       "name": "Scribe",
       "description": "Summarizes your messages and the files you reference",
       "colors": { "tint": "#E3DFFF", "solid": "#6E5BFF", "ink": "#4A3AE0" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }] }
+      "workflow": { "steps": [{ "id": "summarize", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b03",
       "name": "Assistant",
       "description": "Answers general questions and requests that no other Mini-Me specializes in",
       "colors": { "tint": "#D6F1EE", "solid": "#1F9E8F", "ink": "#12675D" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03" }] }
+      "workflow": { "steps": [{ "id": "assist", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b04",
       "name": "Researcher",
       "description": "Finds research papers on a topic with Ai2's Paper Finder",
       "colors": { "tint": "#FFE1D8", "solid": "#FF5A36", "ink": "#B3300F" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a04" }] }
+      "workflow": { "steps": [{ "id": "find-papers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a04" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b05",
       "name": "Theorist",
       "description": "Builds scientific theories from the literature with Ai2's Theorizer",
       "colors": { "tint": "#FFF0C2", "solid": "#F5B800", "ink": "#7A5A00" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a05" }] }
+      "workflow": { "steps": [{ "id": "theorize", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a05" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b06",
       "name": "Explorer",
       "description": "Suggests a range of directions worth exploring on a topic",
       "colors": { "tint": "#D8EEFF", "solid": "#3690E3", "ink": "#00579C" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06" }] }
+      "workflow": { "steps": [{ "id": "scout", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b07",
       "name": "Skeptic",
       "description": "Argues against a statement or claim to test how well it holds up",
       "colors": { "tint": "#FFE5D2", "solid": "#BB7B4E", "ink": "#7B461E" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07" }] }
+      "workflow": { "steps": [{ "id": "refute", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b08",
       "name": "Planner",
       "description": "Plans a project as an architecture or an ordered list of steps",
       "colors": { "tint": "#D9F2E3", "solid": "#2FA36B", "ink": "#1E7A4A" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" }] }
+      "workflow": { "steps": [{ "id": "plan", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b09",
       "name": "Inquirer",
       "description": "Asks questions that open up a topic further",
       "colors": { "tint": "#FFE1EF", "solid": "#D4599B", "ink": "#8E2461" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
+      "workflow": { "steps": [{ "id": "wonder", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b10",
       "name": "Experimenter",
       "description": "Designs experiments to test a hypothesis",
       "colors": { "tint": "#E5F0D4", "solid": "#779B1E", "ink": "#446100" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10" }] }
+      "workflow": { "steps": [{ "id": "experiment", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b11",
       "name": "Profiler",
       "description": "Describes what is in a data table: its columns, types, missing values and duplicates",
       "colors": { "tint": "#CEF3FC", "solid": "#0096AF", "ink": "#006277" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18" }] }
+      "workflow": { "steps": [{ "id": "profile-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b12",
       "name": "Validator",
       "description": "Checks a data table against rules and reports which checks fail",
       "colors": { "tint": "#FFE1E0", "solid": "#DD4D57", "ink": "#9B1B2D" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a19" }] }
+      "workflow": { "steps": [{ "id": "validate-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a19" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b13",
       "name": "Curator",
       "description": "Cleans a data table and saves the result as a new file",
       "colors": { "tint": "#F8E3FC", "solid": "#B25EC5", "ink": "#793089" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a20" }] }
+      "workflow": { "steps": [{ "id": "clean-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a20" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b14",
       "name": "Linker",
       "description": "Joins two data tables on their key columns",
       "colors": { "tint": "#E1EDF8", "solid": "#688AA8", "ink": "#3B5972" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a21" }] }
+      "workflow": { "steps": [{ "id": "join-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a21" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b15",
+      "name": "Investigator",
+      "description": "Investigates a research question in several steps: explores it, plans, tests the plan against criticism and, if you approve, designs an experiment",
+      "colors": { "tint": "#EFEDCF", "solid": "#A19500", "ink": "#5F5700" },
+      "workflow": {
+        "steps": [
+          {
+            "id": "open-up",
+            "type": "parallel",
+            "label": "Explore",
+            "branches": [
+              { "label": "Directions", "steps": [{ "id": "scout", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06" }] },
+              { "label": "Questions", "steps": [{ "id": "wonder", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
+            ]
+          },
+          { "id": "plan", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" },
+          {
+            "id": "stress-test",
+            "type": "loop",
+            "label": "Test the plan",
+            "question": "Did the latest critique find a serious flaw that the revised plan may still have?",
+            "max_iterations": 2,
+            "steps": [
+              { "id": "refute", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07" },
+              { "id": "revise", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" }
+            ]
+          },
+          {
+            "id": "testable",
+            "type": "condition",
+            "label": "Testable?",
+            "question": "Does the plan rest on a hypothesis that an experiment could test?",
+            "branches": [
+              {
+                "label": "testable",
+                "steps": [
+                  {
+                    "id": "ask",
+                    "type": "approval",
+                    "label": "Approval",
+                    "prompt": "Design an experiment to test this plan's hypothesis?"
+                  },
+                  { "id": "experiment", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10" }
+                ]
+              },
+              { "label": "not testable", "steps": [{ "id": "more-questions", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

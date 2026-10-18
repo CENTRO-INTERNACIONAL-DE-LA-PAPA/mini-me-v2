@@ -108,6 +108,7 @@ mod tests {
             attachments: Vec::new(),
             text_components: Vec::new(),
             components: Vec::new(),
+            steps: Vec::new(),
         }
     }
 
@@ -175,6 +176,7 @@ mod tests {
             version: 1,
             data: serde_json::json!({ "papers": [] }),
             text: "1. Late blight\n2. Wild potato".into(),
+            answer: serde_json::Value::Null,
         });
         let all = [user("papers?"), reply, user("summarize the second paper")];
         let library = Library::builtin();

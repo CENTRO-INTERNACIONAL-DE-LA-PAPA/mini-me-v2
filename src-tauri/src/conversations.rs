@@ -1,7 +1,7 @@
 //! Conversations and the message lifecycle. Every message change goes through
 //! `ProjectState::persist`, so it is stored as an event before anyone sees it.
 
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -106,7 +106,7 @@ fn validate_text_components(
 }
 
 /// Validates and persists a user message. Fails with `reply_in_progress` while a reply in
-/// the same Conversation is still streaming.
+/// the same Conversation is still streaming or paused.
 pub fn send_message(
     project: &Project,
     conversation_id: Uuid,
@@ -118,7 +118,8 @@ pub fn send_message(
     }
     let mut state = project.lock();
     state.require_conversation(conversation_id)?;
-    if !state.streaming_messages(Some(conversation_id))?.is_empty() {
+    let in_progress = [MessageStatus::Streaming, MessageStatus::Paused];
+    if !state.messages_with_status(&in_progress, Some(conversation_id))?.is_empty() {
         return Err(AppError::new(
             "reply_in_progress",
             "Wait for the current reply to finish, or stop it, before sending another message.",
@@ -143,6 +144,7 @@ pub fn send_message(
         attachments,
         text_components: input.text_components,
         components: Vec::new(),
+        steps: Vec::new(),
     };
     state.persist(
         conversation_id,
@@ -178,6 +180,7 @@ pub fn start_reply(
         attachments: Vec::new(),
         text_components: Vec::new(),
         components: Vec::new(),
+        steps: Vec::new(),
     };
     let id = message.id;
     project
@@ -199,6 +202,39 @@ pub fn append_delta(project: &Project, message_id: Uuid, text: &str) -> AppResul
     Ok(())
 }
 
+/// Records that a Step of a streaming reply's Workflow started.
+pub fn append_step_started(
+    project: &Project,
+    message_id: Uuid,
+    step_id: &str,
+    step_type: &str,
+    name: &str,
+) -> AppResult<()> {
+    let mut state = project.lock();
+    let conversation = streaming_reply(&state, message_id)?;
+    let kind = EventKind::StepStarted {
+        message_id,
+        step_id: step_id.to_string(),
+        step_type: step_type.to_string(),
+        name: name.to_string(),
+    };
+    state.persist(conversation, kind)?;
+    Ok(())
+}
+
+pub fn append_step_completed(
+    project: &Project,
+    message_id: Uuid,
+    step_id: &str,
+    output: Option<String>,
+) -> AppResult<()> {
+    let mut state = project.lock();
+    let conversation = streaming_reply(&state, message_id)?;
+    let kind = EventKind::StepCompleted { message_id, step_id: step_id.to_string(), output };
+    state.persist(conversation, kind)?;
+    Ok(())
+}
+
 /// Adds an Interactive Component `(kind, version, data, text)` to a streaming reply, if
 /// `allowed` (the kinds the reply's Trait lists) holds its kind; returns its new ID.
 pub fn add_component(
@@ -216,6 +252,7 @@ pub fn add_component(
         version,
         data,
         text,
+        answer: serde_json::Value::Null,
     };
     let id = component.id;
     state.persist(conversation, EventKind::ComponentAdded { message_id, component })?;
@@ -305,17 +342,165 @@ pub fn cancel_reply(project: &Project, message_id: Uuid) -> AppResult<()> {
     Ok(())
 }
 
-/// Stops the reply streaming in a Conversation, if any, and returns the stopped replies'
-/// IDs. The producer's later updates are rejected because the reply is no longer streaming.
+/// Stops the reply streaming or paused in a Conversation, if any, and returns the stopped
+/// replies' IDs. The producer's later updates are rejected because the reply is no longer
+/// streaming, and a paused reply's saved run is deleted.
 pub fn stop_reply(project: &Project, conversation_id: Uuid) -> AppResult<Vec<Uuid>> {
     let mut state = project.lock();
     state.require_conversation(conversation_id)?;
+    let in_progress = [MessageStatus::Streaming, MessageStatus::Paused];
     let mut stopped = Vec::new();
-    for (_, message_id) in state.streaming_messages(Some(conversation_id))? {
-        state.persist(conversation_id, EventKind::MessageCancelled { message_id })?;
+    for (_, message_id) in state.messages_with_status(&in_progress, Some(conversation_id))? {
+        let kinds = vec![EventKind::MessageCancelled { message_id }];
+        state.persist_all(conversation_id, kinds, |tx| {
+            tx.execute("DELETE FROM paused_runs WHERE message_id = ?1", params![message_id.to_string()])?;
+            Ok(())
+        })?;
         stopped.push(message_id);
     }
     Ok(stopped)
+}
+
+/// What a reply paused at an approval needs to resume. `run` holds the run's Mini-Me,
+/// Workflow, Traits, input and context; `state` is the sidecar's opaque resume state.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PausedRun {
+    pub message_id: Uuid,
+    pub step_id: String,
+    pub component_id: Uuid,
+    pub run: serde_json::Value,
+    pub output: Option<String>,
+    pub state: String,
+}
+
+/// Pauses a streaming reply at the approval Step `step_id`: adds the `approval` component,
+/// saves `paused`, and persists `message.paused`, all in one transaction.
+pub fn pause_reply(
+    project: &Project,
+    paused: PausedRun,
+    prompt: &str,
+) -> AppResult<()> {
+    let mut state = project.lock();
+    let conversation = streaming_reply(&state, paused.message_id)?;
+    let message_id = paused.message_id;
+    let component = Component {
+        id: paused.component_id,
+        kind: "approval".to_string(),
+        version: 1,
+        data: serde_json::json!({ "step_id": paused.step_id, "prompt": prompt }),
+        text: prompt.to_string(),
+        answer: serde_json::Value::Null,
+    };
+    let kinds = vec![
+        EventKind::ComponentAdded { message_id, component },
+        EventKind::MessagePaused { message_id },
+    ];
+    state.persist_all(conversation, kinds, |tx| {
+        tx.execute(
+            "INSERT INTO paused_runs (message_id, step_id, component_id, run, output, state, \
+             created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                message_id.to_string(),
+                paused.step_id,
+                paused.component_id.to_string(),
+                serde_json::to_string(&paused.run)?,
+                paused.output,
+                paused.state,
+                now_ms()
+            ],
+        )?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// The saved run of a reply paused at the approval `component_id`; `not_paused` when the
+/// reply is not waiting for that approval.
+pub fn paused_run(project: &Project, message_id: Uuid, component_id: Uuid) -> AppResult<PausedRun> {
+    let state = project.lock();
+    paused_locked(&state, message_id, component_id).map(|(_, paused)| paused)
+}
+
+fn paused_locked(
+    state: &ProjectState,
+    message_id: Uuid,
+    component_id: Uuid,
+) -> AppResult<(Uuid, PausedRun)> {
+    let not_paused = || AppError::new("not_paused", "This reply is not waiting for that answer.");
+    let conversation = match state.message_place(message_id)? {
+        Some((conversation, MessageStatus::Paused)) => conversation,
+        _ => return Err(not_paused()),
+    };
+    let row = state
+        .conn
+        .query_row(
+            "SELECT step_id, component_id, run, output, state FROM paused_runs \
+             WHERE message_id = ?1",
+            params![message_id.to_string()],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((step_id, stored_component, run, output, saved)) = row else {
+        return Err(not_paused());
+    };
+    if stored_component != component_id.to_string() {
+        return Err(not_paused());
+    }
+    let paused = PausedRun {
+        message_id,
+        step_id,
+        component_id,
+        run: serde_json::from_str(&run)?,
+        output,
+        state: saved,
+    };
+    Ok((conversation, paused))
+}
+
+/// Records the answer to a paused reply's approval and deletes its saved run. Approving
+/// resumes the reply as streaming; rejecting completes it with the Workflow's output so far.
+/// Returns the saved run, which an approved reply resumes from.
+pub fn answer_approval(
+    project: &Project,
+    message_id: Uuid,
+    component_id: Uuid,
+    approved: bool,
+) -> AppResult<PausedRun> {
+    let mut state = project.lock();
+    let (conversation, paused) = paused_locked(&state, message_id, component_id)?;
+    let mut kinds = vec![
+        EventKind::ComponentAnswered {
+            message_id,
+            component_id,
+            answer: serde_json::json!({ "approved": approved }),
+        },
+        EventKind::StepCompleted { message_id, step_id: paused.step_id.clone(), output: None },
+    ];
+    if approved {
+        kinds.push(EventKind::MessageResumed { message_id });
+    } else {
+        let content = match &paused.output {
+            Some(output) => output.clone(),
+            None => state
+                .load_message_with(message_id, false)?
+                .map(|(_, message)| message.content)
+                .unwrap_or_default(),
+        };
+        kinds.push(EventKind::MessageCompleted { message_id, content });
+    }
+    state.persist_all(conversation, kinds, |tx| {
+        tx.execute("DELETE FROM paused_runs WHERE message_id = ?1", params![message_id.to_string()])?;
+        Ok(())
+    })?;
+    Ok(paused)
 }
 
 /// Marks replies left streaming by a previous session as failed with code `interrupted`.
@@ -374,6 +559,7 @@ pub fn system_reply(
         attachments: Vec::new(),
         text_components: Vec::new(),
         components: Vec::new(),
+        steps: Vec::new(),
     };
     project.lock().persist(
         conversation_id,
@@ -603,6 +789,70 @@ mod tests {
             }
             other => panic!("expected message.failed, got {other:?}"),
         }
+    }
+
+    /// A Conversation whose reply to "q" is paused at an approval.
+    fn paused_reply() -> (tempfile::TempDir, Project, Uuid, PausedRun) {
+        let (dir, project) = temp_project();
+        let conversation = create(&project).unwrap().id;
+        let question = send_message(&project, conversation, text("q"), new_id()).unwrap();
+        let reply = start_reply(&project, conversation, question.id, echo()).unwrap();
+        let paused = PausedRun {
+            message_id: reply,
+            step_id: "ask".into(),
+            component_id: new_id(),
+            run: serde_json::json!({ "input": { "text": "q" } }),
+            output: Some("the plan".into()),
+            state: "opaque".into(),
+        };
+        pause_reply(&project, paused.clone(), "Go on?").unwrap();
+        (dir, project, conversation, paused)
+    }
+
+    fn saved_runs(project: &Project) -> i64 {
+        let state = project.lock();
+        state.conn.query_row("SELECT COUNT(*) FROM paused_runs", [], |row| row.get(0)).unwrap()
+    }
+
+    #[test]
+    fn a_paused_reply_blocks_the_conversation_and_survives_reopening() {
+        let (_dir, project, conversation, paused) = paused_reply();
+        let err = send_message(&project, conversation, text("next"), new_id()).unwrap_err();
+        assert_eq!(err.code, "reply_in_progress");
+
+        recover_interrupted(&project).unwrap();
+        let (_, message) = project.lock().load_message(paused.message_id).unwrap().unwrap();
+        assert_eq!(message.status, MessageStatus::Paused);
+        assert_eq!(message.components[0].kind, "approval");
+        let saved = paused_run(&project, paused.message_id, paused.component_id).unwrap();
+        assert_eq!(saved, paused);
+    }
+
+    #[test]
+    fn stopping_a_paused_reply_deletes_its_saved_run() {
+        let (_dir, project, conversation, paused) = paused_reply();
+        assert_eq!(stop_reply(&project, conversation).unwrap(), vec![paused.message_id]);
+        assert_eq!(saved_runs(&project), 0);
+        let err = answer_approval(&project, paused.message_id, paused.component_id, true)
+            .unwrap_err();
+        assert_eq!(err.code, "not_paused");
+    }
+
+    #[test]
+    fn answering_an_approval_resumes_or_completes_the_reply_once() {
+        let (_dir, project, _conversation, paused) = paused_reply();
+        answer_approval(&project, paused.message_id, paused.component_id, true).unwrap();
+        let (_, message) = project.lock().load_message(paused.message_id).unwrap().unwrap();
+        assert_eq!(message.status, MessageStatus::Streaming);
+        assert_eq!(message.components[0].answer, serde_json::json!({ "approved": true }));
+        assert_eq!(saved_runs(&project), 0);
+        let again = answer_approval(&project, paused.message_id, paused.component_id, true);
+        assert_eq!(again.unwrap_err().code, "not_paused");
+
+        let (_dir, project, _conversation, paused) = paused_reply();
+        answer_approval(&project, paused.message_id, paused.component_id, false).unwrap();
+        let (_, message) = project.lock().load_message(paused.message_id).unwrap().unwrap();
+        assert_eq!((message.status, message.content.as_str()), (MessageStatus::Complete, "the plan"));
     }
 
     #[test]

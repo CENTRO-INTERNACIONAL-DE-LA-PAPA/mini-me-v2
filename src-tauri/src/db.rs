@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 2;
+pub const SCHEMA_VERSION: i32 = 3;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -77,6 +77,32 @@ CREATE TABLE components (
     created_at  INTEGER NOT NULL
 );
 CREATE INDEX components_by_message ON components(message_id, created_at);
+"#,
+    r#"
+CREATE TABLE message_steps (
+    message_id  TEXT NOT NULL REFERENCES messages(id),
+    position    INTEGER NOT NULL,
+    step_id     TEXT NOT NULL,
+    type        TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    output      TEXT,
+    done        INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (message_id, position)
+);
+
+ALTER TABLE components ADD COLUMN answer TEXT;
+
+-- What a reply paused at an approval needs to resume. Not derived from events: it is
+-- deleted once the approval is answered or the reply is stopped.
+CREATE TABLE paused_runs (
+    message_id    TEXT PRIMARY KEY REFERENCES messages(id),
+    step_id       TEXT NOT NULL,
+    component_id  TEXT NOT NULL,
+    run           TEXT NOT NULL,
+    output        TEXT,
+    state         TEXT NOT NULL,
+    created_at    INTEGER NOT NULL
+);
 "#,
 ];
 
@@ -156,7 +182,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), 2);
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
         let content: String = conn
             .query_row("SELECT content FROM messages WHERE id = 'm'", [], |row| row.get(0))
             .unwrap();
@@ -165,6 +191,30 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM components", [], |row| row.get(0))
             .unwrap();
         assert_eq!(components, 0);
+    }
+
+    #[test]
+    fn a_version_2_database_gains_steps_answers_and_paused_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(MIGRATIONS[0]).unwrap();
+            conn.execute_batch(MIGRATIONS[1]).unwrap();
+            conn.pragma_update(None, "user_version", 2).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), 3);
+        let tables: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN \
+                 ('message_steps', 'paused_runs')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(tables, 2);
+        conn.prepare("SELECT answer FROM components").unwrap();
     }
 
     #[test]

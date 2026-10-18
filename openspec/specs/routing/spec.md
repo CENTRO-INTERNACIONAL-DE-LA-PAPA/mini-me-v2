@@ -112,13 +112,13 @@ Mini-Me SHALL come without a reaction.
 - **THEN** Scribe replies with the summary and adds no reaction
 
 ### Requirement: Context answer is passed on
-Jev's `needs_context` answer SHALL be passed to the reply's call as
-`context.needs_context`: `true`, `false`, or `null` when no decision is available. Adapters
-MAY ignore it.
+Jev's `needs_context` answer SHALL be passed to the reply's run as `context.needs_context`,
+and from there to each of its Trait calls: `true`, `false`, or `null` when no decision is
+available. Adapters MAY ignore it.
 
 #### Scenario: Passed to the call
 - **WHEN** Jev answers `needs_context` with `yes`
-- **THEN** the reply's `call.start` carries `context.needs_context: true`
+- **THEN** the reply's `run.start` carries `context.needs_context: true`
 
 ### Requirement: Routing request on the link
 The core SHALL ask for a decision with `route.start`, payload
