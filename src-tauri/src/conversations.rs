@@ -235,15 +235,14 @@ pub fn append_step_completed(
     Ok(())
 }
 
-/// Adds an Interactive Component `(kind, version, data, text)` to a streaming reply, if
-/// `allowed` (the kinds the reply's Trait lists) holds its kind; returns its new ID.
+/// Adds an Interactive Component `(kind, version, data, text)` from a Trait to a streaming
+/// reply; returns its new ID.
 pub fn add_component(
     project: &Project,
     message_id: Uuid,
-    allowed: &[String],
     (kind, version, data, text): (&str, u32, serde_json::Value, String),
 ) -> AppResult<Uuid> {
-    components::check(kind, allowed, &data, &text)?;
+    components::check(kind, &data, &text)?;
     let mut state = project.lock();
     let conversation = streaming_reply(&state, message_id)?;
     let component = Component {

@@ -689,14 +689,16 @@ mod tests {
         let start = frames.iter().find_map(|frame| match frame {
             CoreFrame::RunStart { plan, .. } => Some((
                 plan.traits[0].adapter.clone(),
+                plan.traits[0].tools.clone(),
                 plan.input.clone(),
                 plan.context.needs_context,
             )),
             _ => None,
         });
+        let tools = vec!["save_file".to_string(), "show_table".to_string()];
         assert_eq!(
             start,
-            Some(("prompt".into(), json!({ "text": "hi thanks" }), Some(false)))
+            Some(("prompt".into(), tools, json!({ "text": "hi thanks" }), Some(false)))
         );
     }
 

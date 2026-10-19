@@ -66,7 +66,7 @@ now (`library.rs`).
 
 ```json
 { "id": "…7a04", "name": "Find Papers", "description": "…", "color": "oklch(0.55 0.1 230)",
-  "adapter": "asta-paper-finder", "instructions": null, "components": ["paper-sources"] }
+  "adapter": "asta-paper-finder", "instructions": null, "tools": ["show_papers"] }
 
 { "id": "…7b04", "name": "Researcher", "description": "Finds research papers on a topic…",
   "colors": { "tint": "#FFE1D8", "solid": "#FF5A36", "ink": "#B3300F" },
@@ -78,8 +78,11 @@ now (`library.rs`).
   the `prompt` adapter and differ only in their instructions.
 - **Placeholder Traits** (*Document*, *Code*, *Predict*…) describe planned capabilities.
   They run on `echo` with no instructions until they are built, and no Mini-Me may use one.
-- A Trait's **`components`** lists the Interactive Component kinds its answers may include.
-  Only built-in Traits list any; see [Interactive Components](#interactive-components).
+- A Trait's **`tools`** lists what it can read, save and show; see [Tools](#tools). A
+  Trait on a fixed adapter lists the tools that adapter's code uses; a prompt-based Trait
+  lists the tools its model is offered besides `read_file` and `read_component`, which
+  every prompt-based Trait gets. The library refuses unknown tool names, and prompt-based
+  Traits listing a tool models cannot use.
 - A **Mini-Me** has one Workflow, a list of Steps, each with an `id` unique within the
   Workflow. Most Workflows are a single Trait Step; see [Workflows](#workflows) for the
   others.
@@ -89,8 +92,8 @@ now (`library.rs`).
   10, and empty questions, prompts or labels. A library test
   (`builtin_library_is_consistent`) runs these checks on `builtin.json`.
 
-**Adding a prompt-based Trait needs no code:** add a Trait with `"adapter": "prompt"` and
-its instructions, and a Mini-Me whose Step uses it. Code is only needed for a capability
+**Adding a prompt-based Trait needs no code:** add a Trait with `"adapter": "prompt"`, its
+instructions and its `tools`, and a Mini-Me whose Step uses it. Code is only needed for a capability
 that no adapter has yet.
 
 ## Workflows
@@ -182,7 +185,7 @@ class FindPapers(Adapter):
 | Adapter | Runs | What it does |
 |---|---|---|
 | `echo` | placeholder Traits, tests | streams the input back word by word |
-| `prompt` | *Summarize*, *Assist*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment* | the Trait's instructions, the Conversation's earlier messages, earlier Step outputs and the message with its text files, sent to the model chosen in Settings |
+| `prompt` | *Summarize*, *Assist*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment* | the Trait's instructions, the Conversation's earlier messages, earlier Step outputs, the message and a list of the Conversation's files and components (IDs, no content), sent to the model chosen in Settings with the read tools and the Trait's tools; the model calls tools for up to 8 rounds before it answers |
 | `asta-paper-finder` | *Find Papers* | Ai2's Paper Finder; replies with a `paper-sources` component |
 | `asta-theorizer` | *Theorize* | Ai2's Theorizer; replies with a `theories` component and attaches `theory-store.json` |
 | `data-profile` | *Profile Data* | describes the referenced tables with pandas, without a model |
@@ -191,9 +194,10 @@ class FindPapers(Adapter):
 | `data-join` | *Join Data* | joins two tables on key columns the model chooses |
 | `data-plot` | *Plot* | draws the charts the model chooses; pandas computes their values (`plot.py`) |
 
-The data adapters live in `adapters/data/` and share `tables.py` (reading CSV, TSV and
+The data adapters live in `adapters/data/` and share `tables.py` (parsing CSV, TSV and
 Excel files into pandas), `describe.py` (the description of a table the model sees) and
-`preview.py` (`table` component data). `plot.py` computes each chart type's values, capping
+`preview.py` (`table` component data). They read, save and show through the tools
+(`read_table`, `save_file`, `show_table`, `show_chart`). `plot.py` computes each chart type's values, capping
 line and scatter charts at 5,000 sampled points. The model only chooses entries from a fixed
 catalogue (`catalogue.py`, through structured output in `choose.py`); it never sees rows,
 and every result is computed by pandas or pointblank.
@@ -203,7 +207,9 @@ with `--test-adapters`, as the core's tests do.
 
 ### What a Trait can do: `ctx`
 
-`CallContext` (`context.py`) is the only surface an adapter sees.
+`CallContext` (`context.py`) is the only way a call reaches the core. Adapters read, save and
+show through the [tools](#tools), which use the requests below; adapters call the rest
+directly.
 
 | Call | Effect | On the link |
 |---|---|---|
@@ -220,7 +226,7 @@ with `--test-adapters`, as the core's tests do.
 Frames are one-way. Requests are answered with a result or an error code, which reaches the
 adapter as `CoreRequestError`, so an adapter can react to a refusal.
 
-`ctx` also carries the call's Trait (`ctx.trait.instructions`), the message being answered
+`ctx` also carries the call's Trait (`ctx.trait.instructions`, `ctx.trait.tools`), the message being answered
 (`ctx.message`, with its attachments and Text Components), the answering Mini-Me's name,
 routing's guess at whether the message needs earlier context (`ctx.needs_context`), and the
 outputs of the run's earlier Steps (`ctx.steps`, as `{ step_id, name, output }`).
@@ -256,10 +262,11 @@ gets `call_not_active`.
 ## Interactive Components
 
 An Interactive Component is a rich element below a reply's text, such as source cards,
-theories or a table. Each kind is hand-coded in the UI, and only the built-in Traits that
-list it in their `components` may add one, so component data always comes from adapters we
-wrote and never contains UI code. The one exception is `approval`, which the core adds
-itself when a run pauses.
+theories or a table. Each kind is hand-coded in the UI and added by its show tool
+(`show_table`, `show_chart`, `show_papers`, `show_theories`), so a Trait can add a kind only
+when it lists that tool, component data always comes from code we wrote, and it never
+contains UI code. The one exception is `approval`, which the core adds itself when a run
+pauses and refuses from any Trait.
 
 ### A kind is one file
 
@@ -288,21 +295,26 @@ src/components/interactive/
   produces it builds it in Python.
 - `catalogue.ts` lists the kinds explicitly, so every kind the app knows is in one place. A
   kind that outgrows one file can become a folder without changing anything else.
-- A test reads `builtin.json` and checks that every kind a Trait lists has a renderer.
+- A test (`catalogue.test.ts`) reads `builtin.json` and checks that every kind a Trait's
+  show tools add has a renderer.
 
-To add a kind: write its file, add it to `catalogue.ts`, list it in the `components` of the
-Trait that uses it, and call `ctx.component` from that Trait's adapter. Nothing changes in
-the Rust core, the protocol or the database.
+To add a kind: write its file, add it to `catalogue.ts`, add its show tool to
+`tools/components.py` and its name to `TOOL_NAMES` (`tools/__init__.py`), `TOOLS`
+(`library.rs`) and `SHOW_TOOL_KINDS` (`catalogue.test.ts`), then list the tool on the Trait
+that uses it and call it from that Trait's adapter. Nothing changes in the protocol or the
+database.
 
 ### Adding one to a reply
 
-1. The adapter calls `await ctx.component("paper-sources", 1, data, text)` once its data is
-   complete. Components are not updated after they are added.
-2. The core checks that the reply is still streaming, that the call's Trait lists the kind,
-   that `data` is at most 2 MiB and that `text` is not empty. It does not check the shape of
+1. The adapter calls the kind's show tool, such as `await show_papers(ctx, data, text)`,
+   once its data is complete; the tool sends `component.add`. Components are not updated
+   after they are added.
+2. The core checks that the reply is still streaming, that the kind is not `approval`, that
+   `data` is at most 2 MiB and that `text` is not empty. It does not check the shape of
    `data`: that is a contract between the adapter and the renderer.
 3. **Refused:** the core answers `component_not_allowed` or `invalid_component` and stores
-   nothing. The Asta adapters then write `text` into the reply.
+   nothing; the show tool fails with that code. The Asta adapters and Plot then write `text`
+   into the reply.
 4. **Accepted:** the core stores `component.added` with `{ message_id, component: { id,
    kind, version, data, text } }` and a row in the `components` table, and answers with the
    component's UUIDv7 ID.
@@ -368,12 +380,38 @@ field or request method the other may not have.
 
 ## Tools
 
-Traits have no model tools yet. The glossary gives each Trait "a set of tools", but the
-`prompt` adapter makes a single model call without any, the Asta adapters call Ai2's
-services directly, and the data adapters call pandas and pointblank themselves after the
-model has chosen from their catalogue. When tools are added, they belong in the sidecar, listed per Trait in the library
-and bound to the model by the `prompt` adapter, reaching Project files only through `ctx` so
-the core's confinement still holds.
+A **tool** is one action a Trait takes while it runs. Adapters, tools and `ctx` each have
+one job:
+
+| | Adapter | Tool | `ctx` (`CallContext`) |
+|---|---|---|---|
+| Is | The engine that runs a Trait; what the Trait always does | One action, such as saving a file or showing a table | What the core lets a running call do |
+| Decided by | Its own code | Whoever calls it: adapter code, or a model the adapter offers it to | — |
+| Lives in | `adapters/` | `tools/` | `context.py` |
+
+An adapter reads, saves and shows only through tools; no adapter calls `ctx.read_asset`,
+`ctx.component` or `ctx.write_asset` itself (the test-only adapters in `testing.py` aside).
+Every tool acts through `ctx`, so the core's checks and Project-folder confinement apply.
+
+| Tool | Does | Offered to models |
+|---|---|---|
+| `read_file` | reads a Conversation file: a table's rows (500 at a time) or text (100,000 characters at a time) | always, to prompt-based Traits |
+| `read_component` | reads a Conversation component: a table's rows, or another kind's data | always, to prompt-based Traits |
+| `read_table` | reads a table file into a DataFrame (data Traits) | no |
+| `save_file` | saves a file and attaches it to the reply | as text files (CSV, TSV, TXT, Markdown, JSON) up to 2 MiB |
+| `show_table` | adds a `table`, from a DataFrame, from given rows or from a file | yes |
+| `show_chart`, `show_papers`, `show_theories` | add a `chart`, `paper-sources` or `theories` | no |
+
+- `tools/__init__.py` names the tools; `files.py`, `tables.py` and `components.py` hold
+  them; `model.py` holds the forms offered to models (name, description, JSON Schema).
+  `ToolError` (`base.py`) is a `TraitError`: uncaught in an adapter it ends the call with
+  its code, and the `prompt` adapter returns its message to the model instead.
+- Fixed adapters declare the tools they use (`Adapter.uses_tools`); a test checks their
+  Traits list the same ones in `builtin.json`.
+- The `prompt` adapter offers `read_file`, `read_component` and the Trait's listed tools
+  (`bind_tools`) and loops: the model calls tools, gets their results and continues, for at
+  most 8 rounds, then answers. A model that cannot call tools fails with
+  `tools_unsupported`.
 
 ## Debugging
 

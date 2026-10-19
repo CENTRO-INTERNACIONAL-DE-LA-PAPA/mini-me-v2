@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from mini_me_sidecar.context import CallContext, TraitError
+from mini_me_sidecar.context import TraitError
 
 TABLE_EXTENSIONS = (".csv", ".tsv", ".xlsx")
 
@@ -56,21 +56,6 @@ def table_assets(message: dict[str, Any]) -> list[tuple[str, str]]:
     for attachment in message.get("attachments") or []:
         assets.setdefault(str(attachment.get("id")), str(attachment.get("name", "")))
     return [(i, name) for i, name in assets.items() if name.lower().endswith(TABLE_EXTENSIONS)]
-
-
-async def read_tables(ctx: CallContext, text: str) -> list[Table]:
-    """Every table the call's message points to, in order. Fails when there is none."""
-    tables = []
-    for asset_id, name in table_assets(ctx.message):
-        data = await ctx.read_asset(asset_id)
-        if len(data) > MAX_TABLE_BYTES:
-            raise TraitError(
-                "table_too_large", f"{name} is larger than 100 MiB, the limit for data files."
-            )
-        tables.append(parse_table(name, data, text))
-    if not tables:
-        raise TraitError("no_table", NO_TABLE)
-    return tables
 
 
 def parse_table(name: str, data: bytes, text: str = "") -> Table:

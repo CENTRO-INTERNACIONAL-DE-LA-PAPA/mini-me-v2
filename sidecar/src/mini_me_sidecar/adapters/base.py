@@ -29,6 +29,9 @@ class AdapterInfo:
 
 class Adapter(ABC):
     info: ClassVar[AdapterInfo]
+    # The tools this adapter's own code uses; its Traits list the same ones. An adapter that
+    # offers tools to a model instead takes them from each Trait's definition.
+    uses_tools: ClassVar[tuple[str, ...]] = ()
 
     @abstractmethod
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:

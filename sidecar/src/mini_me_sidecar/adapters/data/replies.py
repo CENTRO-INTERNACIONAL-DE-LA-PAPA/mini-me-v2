@@ -21,15 +21,15 @@ from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
 from mini_me_sidecar.adapters.data.describe import describe
 from mini_me_sidecar.adapters.data.join import join, shared_key
 from mini_me_sidecar.adapters.data.plot import build_chart, chart_text
-from mini_me_sidecar.adapters.data.preview import table_data, table_text
 from mini_me_sidecar.adapters.data.profile import profile as profile_frame
 from mini_me_sidecar.adapters.data.profile import summary
-from mini_me_sidecar.adapters.data.tables import Table, column_type, read_tables, table_file
+from mini_me_sidecar.adapters.data.tables import NO_TABLE, Table, column_type, table_assets, table_file
 from mini_me_sidecar.adapters.data.validate import results_frame, run_checks
-from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
-
-# The core's limit for a file written by a Trait.
-MAX_WRITE_BYTES = 32 * 1024 * 1024
+from mini_me_sidecar.context import CallContext, TraitError
+from mini_me_sidecar.tools.base import ToolError
+from mini_me_sidecar.tools.components import show_chart
+from mini_me_sidecar.tools.files import MAX_FILE_BYTES, save_file
+from mini_me_sidecar.tools.tables import read_table, show_frame
 
 
 async def profile(ctx: CallContext, text: str) -> None:
@@ -38,7 +38,7 @@ async def profile(ctx: CallContext, text: str) -> None:
         ctx.progress(f"Profiling {table.name}")
         columns = await asyncio.to_thread(profile_frame, table.frame)
         ctx.write(_sheet_note(table) + summary(table.name, table.frame) + "\n\n")
-        await _table(ctx, columns, f"Columns of {table.name}")
+        await show_frame(ctx, columns, f"Columns of {table.name}")
 
 
 async def validate(ctx: CallContext, text: str) -> None:
@@ -57,8 +57,8 @@ async def validate(ctx: CallContext, text: str) -> None:
             + (f"{failed} failed." if failed else "all passed.")
             + "\n\n"
         )
-        await _table(ctx, results_frame(results), f"Checks on {table.name}")
-        await ctx.write_asset(f"{table.stem}-validation.html", "text/html", report.encode())
+        await show_frame(ctx, results_frame(results), f"Checks on {table.name}")
+        await save_file(ctx, f"{table.stem}-validation.html", "text/html", report.encode())
     _write_ignored(ctx, [(describe_entry(c), _why(c, tables)) for c in ignored])
 
 
@@ -77,8 +77,8 @@ async def clean(ctx: CallContext, text: str) -> None:
         if entry.note:
             ctx.write(f"- {entry.action}: {entry.note}\n")
     source = await _save(ctx, table, cleaned, "cleaned")
-    await _table(ctx, log_frame(log), "Cleaning actions")
-    await _table(ctx, cleaned, f"Cleaned {table.name}", source)
+    await show_frame(ctx, log_frame(log), "Cleaning actions")
+    await show_frame(ctx, cleaned, f"Cleaned {table.name}", source)
 
 
 async def join_tables(ctx: CallContext, text: str) -> None:
@@ -106,7 +106,7 @@ async def join_tables(ctx: CallContext, text: str) -> None:
         f"- Keys in `{right.name}` without a match: {stats.right_unmatched:,}\n"
     )
     source = await _save(ctx, left, result, "joined", csv_only=True)
-    await _table(ctx, result, f"{left.stem} joined with {right.stem}", source)
+    await show_frame(ctx, result, f"{left.stem} joined with {right.stem}", source)
 
 
 async def plot(ctx: CallContext, text: str) -> None:
@@ -144,17 +144,18 @@ async def plot(ctx: CallContext, text: str) -> None:
         ctx.write("\n")
     for result in results:
         try:
-            await ctx.component("chart", 1, result.data, chart_text(result.data))
-        except CoreRequestError:
+            await show_chart(ctx, result.data, chart_text(result.data))
+        except ToolError:
             ctx.write(chart_text(result.data) + "\n\n")
     _write_ignored(ctx, ignored, "Not drawn")
 
 
-async def _table(
-    ctx: CallContext, frame: pd.DataFrame, title: str, source: str | None = None
-) -> None:
-    data = table_data(frame, title=title, source=source)
-    await ctx.component("table", 1, data, table_text(data))
+async def read_tables(ctx: CallContext, text: str) -> list[Table]:
+    """Every table the call's message points to, in order. Fails when there is none."""
+    tables = [await read_table(ctx, i, name, text) for i, name in table_assets(ctx.message)]
+    if not tables:
+        raise TraitError("no_table", NO_TABLE)
+    return tables
 
 
 async def _save(
@@ -162,10 +163,10 @@ async def _save(
 ) -> str | None:
     """Saves `frame` as a new Asset and returns its name, or None when it is too large."""
     name, media, data = await asyncio.to_thread(table_file, table, frame, suffix, csv_only)
-    if len(data) > MAX_WRITE_BYTES:
+    if len(data) > MAX_FILE_BYTES:
         ctx.write(f"\nThe result is larger than 32 MiB, so `{name}` could not be saved.\n")
         return None
-    await ctx.write_asset(name, media, data)
+    await save_file(ctx, name, media, data)
     return name
 
 

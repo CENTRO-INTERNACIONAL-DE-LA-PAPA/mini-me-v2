@@ -11,6 +11,9 @@ from typing import Any, TypeVar
 
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
+from mini_me_sidecar.tools.base import ToolError
+from mini_me_sidecar.tools.components import show_papers, show_theories
+from mini_me_sidecar.tools.files import save_file
 
 AI2 = "ai2"
 
@@ -47,6 +50,7 @@ STATE_LABELS = {"submitted": "Queued at Ai2", "working": "Working"}
 
 
 class FindPapers(Adapter):
+    uses_tools = ("show_papers",)
     info = AdapterInfo(
         id="asta-paper-finder",
         description="Finds papers on a topic with Ai2's Paper Finder.",
@@ -88,10 +92,11 @@ class FindPapers(Adapter):
         count = len(papers)
         ctx.write(narrative or f"Found {count} paper{'' if count == 1 else 's'}.")
         text = papers_reply(papers, "")
-        await _component_or_text(ctx, "paper-sources", papers_data(papers), text)
+        await _component_or_text(ctx, show_papers, papers_data(papers), text)
 
 
 class Theorize(Adapter):
+    uses_tools = ("show_theories", "save_file")
     info = AdapterInfo(
         id="asta-theorizer",
         description="Builds theories from the literature with Ai2's Theorizer.",
@@ -169,11 +174,11 @@ class Theorize(Adapter):
             ctx.write(_without_theories(texts))
         else:
             ctx.write(theories_summary(data, store))
-            await _component_or_text(ctx, "theories", data, theories_markdown(data))
+            await _component_or_text(ctx, show_theories, data, theories_markdown(data))
         try:
             content = json.dumps(artifacts, ensure_ascii=False).encode()
-            await ctx.write_asset("theory-store.json", "application/json", content)
-        except CoreRequestError as error:
+            await save_file(ctx, "theory-store.json", "application/json", content)
+        except ToolError as error:
             print(f"[asta] could not save the Theory Store: {error}", file=sys.stderr, flush=True)
 
 
@@ -302,15 +307,17 @@ def _summary(narrative: str) -> str:
     return re.split(r"(?m)^\s*---+\s*$", narrative, maxsplit=1)[0].strip()
 
 
-async def _component_or_text(ctx: CallContext, kind: str, data: Any, text: str) -> None:
-    """Adds a version 1 component of `kind`, or writes `text` below the reply's first line
-    when the core refuses the component."""
+async def _component_or_text(
+    ctx: CallContext, show: Callable[[CallContext, Any, str], Awaitable[str]], data: Any, text: str
+) -> None:
+    """Shows a component with the show tool `show`, or writes `text` below the reply's first
+    line when the core refuses the component."""
     try:
-        await ctx.component(kind, 1, data, text)
-    except CoreRequestError as error:
+        await show(ctx, data, text)
+    except ToolError as error:
         if error.code not in COMPONENT_REFUSED:
             raise
-        print(f"[asta] {kind} component refused: {error}", file=sys.stderr, flush=True)
+        print(f"[asta] component refused: {error}", file=sys.stderr, flush=True)
         ctx.write("\n\n" + text)
 
 
