@@ -124,7 +124,7 @@ struct SavedRun {
 /// What a call inside a run may do: a Trait call works through its Trait's adapter; a
 /// condition's or loop's model decision may only get the run's AI key.
 enum CallKind {
-    Trait { adapter: String, components: Vec<String> },
+    Trait { adapter: String },
     Decision,
 }
 
@@ -368,6 +368,7 @@ impl Runs {
                     name: t.name.clone(),
                     instructions: t.instructions.clone(),
                     adapter: t.adapter.clone(),
+                    tools: t.tools.clone(),
                 })
                 .collect(),
             input: spec.input.clone(),
@@ -525,10 +526,7 @@ impl Runs {
             };
             if let Some(call_id) = call_id {
                 let kind = match run.spec.trait_of(&step_id) {
-                    Some(t) => CallKind::Trait {
-                        adapter: t.adapter.clone(),
-                        components: t.components.clone(),
-                    },
+                    Some(t) => CallKind::Trait { adapter: t.adapter.clone() },
                     None => CallKind::Decision,
                 };
                 run.calls.insert(call_id, (step_id.clone(), kind));
@@ -694,8 +692,8 @@ impl Runs {
             answers: Uuid,
             reply: Uuid,
             provider: Option<String>,
-            /// The adapter and component kinds of a Trait call; `None` for a decision.
-            call: Option<(String, Vec<String>)>,
+            /// The adapter of a Trait call; `None` for a decision.
+            call: Option<String>,
         }
         let (place, is_route) = {
             let inner = self.lock();
@@ -706,9 +704,7 @@ impl Runs {
                 reply: run.message_id,
                 provider: run.provider.clone(),
                 call: match kind {
-                    CallKind::Trait { adapter, components } => {
-                        Some((adapter.clone(), components.clone()))
-                    }
+                    CallKind::Trait { adapter } => Some(adapter.clone()),
                     CallKind::Decision => None,
                 },
             });
@@ -720,7 +716,7 @@ impl Runs {
             }
             return Err(AppError::new("call_not_active", "This Trait call has ended."));
         };
-        let Some((adapter, kinds)) = place.call else {
+        let Some(adapter) = place.call else {
             return self.answer_decision(place.provider.as_deref(), method, params);
         };
         let project = place.project;
@@ -771,7 +767,7 @@ impl Runs {
             "component.add" => {
                 let p: ComponentAddParams = parse_params(params)?;
                 let component = (p.kind.as_str(), p.version, p.data, p.text);
-                let id = conversations::add_component(&project, reply, &kinds, component)
+                let id = conversations::add_component(&project, reply, component)
                     .map_err(reply_ended)?;
                 Ok(json!({ "component_id": id }))
             }
@@ -911,8 +907,7 @@ pub mod test_support {
     /// The ID of the one Step of a `spec` run.
     pub const STEP: &str = "test";
 
-    /// A one-Step run of `adapter`, authored by a Mini-Me called `adapter`, whose Trait lists
-    /// `paper-sources`.
+    /// A one-Step run of `adapter`, authored by a Mini-Me called `adapter`.
     pub fn spec(adapter: &str, input: Value) -> RunSpec {
         let trait_def = TraitDef {
             id: Uuid::nil(),
@@ -921,7 +916,7 @@ pub mod test_support {
             color: String::new(),
             adapter: adapter.to_string(),
             instructions: None,
-            components: vec!["paper-sources".to_string()],
+            tools: Vec::new(),
         };
         let step = Step {
             id: STEP.to_string(),
@@ -1302,14 +1297,9 @@ mod tests {
     }
 
     #[test]
-    fn components_the_trait_does_not_list_or_without_text_are_refused() {
+    fn an_approval_or_a_component_without_text_is_refused() {
         let f = quick();
         let (call_id, reply) = f.start_call("echo");
-        let theories = json!({ "kind": "theories", "version": 1, "data": {}, "text": "t" });
-        assert_eq!(
-            error_code(add_component(&f, call_id, theories)).as_deref(),
-            Some("component_not_allowed")
-        );
         let approval = json!({ "kind": "approval", "version": 1, "data": {}, "text": "t" });
         assert_eq!(
             error_code(add_component(&f, call_id, approval)).as_deref(),

@@ -1,13 +1,26 @@
 """Runs prompt-based Traits: the Trait's instructions as the system prompt, the message and
-the text Assets it references as the user prompt, streamed from the provider chosen in
-Settings."""
+a list of the Conversation's files and Interactive Components as the user prompt, answered
+by the provider chosen in Settings. The model reads files and components with the read tools
+when it needs their content, and may use the tools its Trait lists; its text streams into
+the reply."""
 
+import json
+import re
 import sys
 from typing import Any, AsyncIterator
+
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, chat_model, provider_error
 from mini_me_sidecar.context import CallContext, Model, TraitError
+from mini_me_sidecar.tools import READ_TOOLS
 
 MAX_MATERIAL_CHARS = 400_000
 
@@ -27,12 +40,40 @@ WORKFLOW_RULE = (
     "part of the answer from them. Do not comment on what the user's message alone lacks."
 )
 
+# Told to the model on every call: the files and components come as a list, without content.
+FILES_RULE = (
+    "The files and Interactive Components of this Conversation are listed after the user's "
+    "message, newest first, with their IDs but without their content. When the answer depends "
+    "on one, read it with read_file or read_component first; never guess what it contains."
+)
+
 # How many times to ask before giving up on a model that answers with no text at all.
 EMPTY_ANSWER_TRIES = 2
+
+# The most rounds of a call in which the model calls tools; the next round must answer.
+MAX_TOOL_ROUNDS = 8
+
+# Told to the model in the round after its last allowed tool round. The tools stay offered,
+# since some providers reject a chat that holds tool calls but offers no tools; any further
+# tool call is ignored.
+LAST_ROUND = (
+    "You have used all the tool calls this reply may make. Answer now with what you have, "
+    "without calling tools."
+)
+
+# The most files, and the most components, listed for the model.
+MAX_LISTED = 50
 
 # Finish reasons with which a provider's safety filter declines to answer; asking again gets
 # the same verdict.
 REFUSED = {"content_filter", "refusal"}
+
+# How providers word an error for a model that cannot call tools, such as OpenRouter's "No
+# endpoints found that support tool use".
+NO_TOOLS = re.compile(
+    r"support(s|ing)? tool|tool use|tool_use|tools? (are|is) not supported|function call",
+    re.IGNORECASE,
+)
 
 
 class Prompt(Adapter):
@@ -53,89 +94,141 @@ class Prompt(Adapter):
             raise TraitError("model_not_set", "Choose an AI model in Settings first.")
         if model.provider not in PROVIDER_NAMES:
             raise TraitError("provider_unavailable", f"Unknown provider {model.provider!r}.")
+        # Imported here: the tools load pandas through the table helpers, and the sidecar
+        # starts without it.
+        from mini_me_sidecar.tools.model import MODEL_TOOLS
 
-        material, unreadable = await _material(ctx, str(input.get("text", "")))
-        if len(material) > MAX_MATERIAL_CHARS:
+        text = str(input.get("text", ""))
+        if len(text) > MAX_MATERIAL_CHARS:
             raise TraitError(
                 "input_too_large",
-                f"This is {len(material):,} characters; the limit is {MAX_MATERIAL_CHARS:,}. "
-                "Reference fewer or smaller files.",
+                f"This is {len(text):,} characters; the limit is {MAX_MATERIAL_CHARS:,}.",
             )
+        material = _material(text, await ctx.results())
         earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []
         key = await ctx.secret(model.provider)
         instructions = _system_prompt(ctx.mini_me_name, bool(ctx.steps), ctx.trait.instructions)
-        turns = _turns(instructions, earlier, ctx.steps, material)
+        messages = _messages(_merged(_turns(instructions, earlier, ctx.steps, material)))
 
-        name = PROVIDER_NAMES[model.provider]
-        for _ in range(EMPTY_ANSWER_TRIES):
-            wrote = False
-            ending: dict[str, Any] = {}
-            try:
-                async for text, metadata in _stream(model, key.reveal(), _merged(turns)):
-                    if ctx.cancelled.is_set():
-                        return
-                    if text:
-                        ctx.write(text)
-                        wrote = True
-                    ending.update(metadata)
-            except TraitError:
-                raise
-            except Exception as error:
-                raise provider_error(error, model) from None
-            if wrote and _filtered(ending):
-                print(f"[prompt] {name} stopped an answer: {ending}", file=sys.stderr, flush=True)
-                raise TraitError(
-                    "provider_refused",
-                    f"{name}'s content filter stopped {model.model} partway through this "
-                    "answer. Rephrase it, ask in a new Conversation, or choose another model "
-                    "in Settings.",
-                )
-            if wrote:
-                break
-            # A provider can end a stream with no text and no error, for example when it
-            # reports a failure only through the finish reason.
-            print(f"[prompt] {name} sent an empty answer: {ending}", file=sys.stderr, flush=True)
-            if _filtered(ending):
-                raise TraitError(
-                    "provider_refused",
-                    f"{model.model} declined to answer: {name}'s content filter stopped it. "
-                    "Rephrase it, ask in a new Conversation, or choose another model in "
-                    "Settings.",
-                )
-        else:
+        names = [*READ_TOOLS, *(t for t in ctx.trait.tools if t not in READ_TOOLS)]
+        offered = {n: MODEL_TOOLS[n] for n in names if n in MODEL_TOOLS}
+        chat = chat_model(model, key.reveal()).bind_tools([t.schema() for t in offered.values()])
+
+        tool_rounds = 0
+        while not ctx.cancelled.is_set():
+            last = tool_rounds >= MAX_TOOL_ROUNDS
+            if last:
+                messages.append(HumanMessage(LAST_ROUND))
+            reply = await _answer(ctx, chat, messages, model)
+            if reply is None or last or not reply.tool_calls:
+                return
+            tool_rounds += 1
+            messages.append(reply)
+            for call in reply.tool_calls:
+                if ctx.cancelled.is_set():
+                    return
+                result = await _run_tool(ctx, offered, call)
+                messages.append(ToolMessage(content=result, tool_call_id=call["id"]))
+
+
+async def _answer(
+    ctx: CallContext, chat: Any, messages: list[BaseMessage], model: Model
+) -> AIMessage | None:
+    """One round: streams the model's text into the call and returns its whole message, with
+    any tool calls; None when the call was cancelled meanwhile. Asks again when the model
+    sends neither text nor a tool call."""
+    name = PROVIDER_NAMES[model.provider]
+    for _ in range(EMPTY_ANSWER_TRIES):
+        wrote = False
+        ending: dict[str, Any] = {}
+        reply: Any = None
+        try:
+            async for chunk, metadata in _stream(chat, messages):
+                if ctx.cancelled.is_set():
+                    return None
+                # `text` joins the chunk's text blocks, whatever shape the provider sends.
+                if text := str(chunk.text):
+                    ctx.write(text)
+                    wrote = True
+                ending.update(metadata)
+                reply = chunk if reply is None else reply + chunk
+        except TraitError:
+            raise
+        except Exception as error:
+            raise _tools_error(error, model) or provider_error(error, model) from None
+        if wrote and _filtered(ending):
+            print(f"[prompt] {name} stopped an answer: {ending}", file=sys.stderr, flush=True)
             raise TraitError(
-                "provider_empty",
-                f"{name} sent an empty answer twice. Try again, or choose another model in "
+                "provider_refused",
+                f"{name}'s content filter stopped {model.model} partway through this "
+                "answer. Rephrase it, ask in a new Conversation, or choose another model "
+                "in Settings.",
+            )
+        if wrote or (reply is not None and reply.tool_calls):
+            return reply
+        # A provider can end a stream with no text and no error, for example when it
+        # reports a failure only through the finish reason.
+        print(f"[prompt] {name} sent an empty answer: {ending}", file=sys.stderr, flush=True)
+        if _filtered(ending):
+            raise TraitError(
+                "provider_refused",
+                f"{model.model} declined to answer: {name}'s content filter stopped it. "
+                "Rephrase it, ask in a new Conversation, or choose another model in "
                 "Settings.",
             )
+    raise TraitError(
+        "provider_empty",
+        f"{name} sent an empty answer twice. Try again, or choose another model in Settings.",
+    )
 
-        if unreadable:
-            names = ", ".join(unreadable)
-            ctx.write(f"\n\n_Could not read {names}: only text files are supported for now._")
+
+async def _run_tool(ctx: CallContext, offered: dict[str, Any], call: dict[str, Any]) -> str:
+    """Runs one tool call and returns its result, or its failure, as JSON for the model."""
+    tool = offered.get(str(call.get("name")))
+    if tool is None:
+        return json.dumps({"error": f"There is no tool called {call.get('name')!r}."})
+    try:
+        result = await tool.call(ctx, call.get("args") or {})
+    except TraitError as error:
+        # The reply ended: nothing further can be saved or shown.
+        if error.code == "call_not_active":
+            raise
+        return json.dumps({"error": str(error)}, ensure_ascii=False)
+    except TypeError as error:
+        return json.dumps({"error": f"Wrong arguments for {tool.name}: {error}"})
+    return json.dumps(result, ensure_ascii=False, default=str)
 
 
-async def _material(ctx: CallContext, text: str) -> tuple[str, list[str]]:
-    """The user prompt: `text` followed by each referenced or attached text Asset, and the
-    names of the Assets that are not UTF-8 text."""
-    assets: dict[str, str] = {}
-    for attachment in ctx.message.get("attachments") or []:
-        assets.setdefault(str(attachment.get("id")), str(attachment.get("name", "")))
-    for component in ctx.message.get("text_components") or []:
-        if component.get("kind") == "asset":
-            label = str(component.get("label", "")).removeprefix("#")
-            assets.setdefault(str(component.get("id")), label)
+def _tools_error(error: Exception, model: Model) -> TraitError | None:
+    """The error for a model that cannot call tools, or None for any other failure."""
+    if not NO_TOOLS.search(str(error)):
+        return None
+    return TraitError(
+        "tools_unsupported",
+        f"{model.model} cannot use tools, which this Mini-Me needs. Choose another model in "
+        "Settings.",
+    )
 
+
+def _material(text: str, results: dict[str, Any]) -> str:
+    """The user prompt: `text`, then the Conversation's files and components with their IDs,
+    newest first, without their content."""
+    files = (results.get("assets") or [])[:MAX_LISTED]
+    components = (results.get("components") or [])[:MAX_LISTED]
     parts = [text]
-    unreadable: list[str] = []
-    for asset_id, name in assets.items():
-        data = await ctx.read_asset(asset_id)
-        try:
-            content = data.decode("utf-8")
-        except UnicodeDecodeError:
-            unreadable.append(name)
-            continue
-        parts.append(f"--- {name} ---\n{content}")
-    return "\n\n".join(p for p in parts if p), unreadable
+    if files:
+        lines = [
+            f"- {f.get('name')} (ID: {f.get('id')})"
+            + (" — in this message" if f.get("current") else "")
+            for f in files
+        ]
+        parts.append("Files in this Conversation:\n" + "\n".join(lines))
+    if components:
+        lines = [
+            f"- {c.get('kind')} from {c.get('author')} (ID: {c.get('id')})" for c in components
+        ]
+        parts.append("Interactive Components in this Conversation:\n" + "\n".join(lines))
+    return "\n\n".join(p for p in parts if p)
 
 
 async def _earlier_turns(ctx: CallContext) -> list[tuple[str, str]]:
@@ -175,7 +268,7 @@ def _system_prompt(mini_me_name: str | None, in_workflow: bool, instructions: st
             preamble += " " + WORKFLOW_RULE.format(name=mini_me_name)
     elif in_workflow:
         preamble += " " + WORKFLOW_RULE.format(name="this Mini-Me")
-    return f"{preamble}\n\n{instructions or ''}"
+    return f"{preamble} {FILES_RULE}\n\n{instructions or ''}"
 
 
 def _filtered(ending: dict[str, Any]) -> bool:
@@ -212,20 +305,24 @@ def _merged(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return merged
 
 
+def _messages(turns: list[tuple[str, str]]) -> list[BaseMessage]:
+    """`turns` as LangChain messages, which tool calls and their results can follow."""
+    kinds = {"system": SystemMessage, "human": HumanMessage, "ai": AIMessage}
+    return [kinds[role](content) for role, content in turns]
+
+
 # Chunk metadata worth logging when an answer is empty; none of it holds the key or text.
 ENDING_FIELDS = ("finish_reason", "stop_reason", "model_name", "error")
 
 
 async def _stream(
-    model: Model, key: str, turns: list[tuple[str, str]]
-) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    chat: Any, messages: list[BaseMessage]
+) -> AsyncIterator[tuple[Any, dict[str, Any]]]:
     """The model's answer, chunk by chunk, with each chunk's finish reason, model name and
     token counts when the provider sends them."""
-    chat = chat_model(model, key)
-    async for chunk in chat.astream(turns):
+    async for chunk in chat.astream(messages):
         metadata = getattr(chunk, "response_metadata", None) or {}
         ending = {k: metadata[k] for k in ENDING_FIELDS if metadata.get(k) is not None}
         if usage := getattr(chunk, "usage_metadata", None):
             ending["usage"] = dict(usage)
-        # `text` joins the chunk's text blocks, whatever shape the provider sends them in.
-        yield str(chunk.text), ending
+        yield chunk, ending

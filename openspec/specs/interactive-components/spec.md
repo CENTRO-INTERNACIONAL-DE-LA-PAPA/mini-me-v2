@@ -11,9 +11,9 @@ the UI shows them below a reply's text.
 ### Requirement: Kinds of Interactive Components
 Each Interactive Component kind SHALL be hand-coded in the UI, with a kebab-case `kind` name
 and a renderer for each of its versions (positive integers). Component data SHALL come only
-from the adapters of built-in Traits that list the kind, or, for the `approval` kind, from
-the Rust core. Adding a kind SHALL NOT need a change to the event protocol, the link
-protocol or the Project database.
+from a Trait's adapter through the kind's show tool, or, for the `approval` kind, from the
+Rust core. Adding a kind SHALL NOT need a change to the event protocol, the link protocol or
+the Project database.
 
 #### Scenario: Kinds in this version
 - **WHEN** the app starts
@@ -22,7 +22,7 @@ protocol or the Project database.
 
 #### Scenario: Every listed kind is rendered
 - **WHEN** the app is built
-- **THEN** every kind a built-in Trait lists has a renderer for version 1
+- **THEN** every kind that a show tool adds has a renderer for version 1
 
 #### Scenario: No Trait adds an approval
 - **WHEN** a Trait call sends `component.add` with kind `approval`
@@ -42,21 +42,6 @@ component a new UUIDv7, persist it, and answer `{ component_id }`.
 #### Scenario: After the reply ended
 - **WHEN** the sidecar sends `component.add` for a call that has ended
 - **THEN** the core answers with error code `call_not_active`, and nothing is persisted
-
-### Requirement: Only listed kinds are accepted
-The core SHALL reject `component.add` with:
-- `component_not_allowed` when the call's Trait does not list the kind;
-- `invalid_component` when `text` is empty or `data` serialized is larger than 2 MiB.
-
-A rejected component SHALL NOT be persisted, and the call SHALL continue.
-
-#### Scenario: Kind the Trait doesn't list
-- **WHEN** a Find Papers call adds a `theories` component
-- **THEN** the request fails with `component_not_allowed`, and the reply keeps streaming
-
-#### Scenario: Empty text
-- **WHEN** a Find Papers call adds `paper-sources` with an empty `text`
-- **THEN** the request fails with `invalid_component`, and nothing is persisted
 
 ### Requirement: Component event
 A component SHALL be persisted as the event `component.added`, payload `{ message_id,
@@ -247,3 +232,19 @@ Conversation is opened again.
 #### Scenario: Reopening a Conversation
 - **WHEN** the user hides a series, leaves the Conversation and opens it again
 - **THEN** the chart shows its first view with every series
+
+### Requirement: Checks on an added component
+The core SHALL reject `component.add` from a Trait call with:
+- `component_not_allowed` when the kind is `approval`, which only the core creates;
+- `invalid_component` when `text` is empty or `data` serialized is larger than 2 MiB.
+
+The core SHALL NOT check the kind against the Trait. A rejected component SHALL NOT be
+persisted, and the call SHALL continue.
+
+#### Scenario: Any kind from a Trait
+- **WHEN** a Find Papers call adds a `theories` component
+- **THEN** the core accepts it; which kinds a Trait shows is up to its adapter's tools
+
+#### Scenario: Empty text
+- **WHEN** a Find Papers call adds `paper-sources` with an empty `text`
+- **THEN** the request fails with `invalid_component`, and nothing is persisted

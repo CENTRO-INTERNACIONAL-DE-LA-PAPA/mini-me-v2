@@ -19,6 +19,12 @@ context: |
     ordering. They live in a shared library: built-in or user-made, duplicable and editable;
     Mini-Mes reference Traits from that library, so editing a Trait affects every Mini-Me
     that uses it. "Skill" is reserved for LLM/Asta skill files and must not be used for Traits.
+  - Adapter: the sidecar engine that runs a Trait, which every Trait names; what the Trait
+    always does. A developer concept, never shown to users.
+  - Tool: one action a Trait takes while it runs, such as reading a file, saving a file or
+    showing an Interactive Component. Each Trait lists its tools; an adapter's code takes
+    them, or the adapter offers them to its AI model to choose. Adapters read, save and show
+    only through tools.
   - Workflow: how a Mini-Me uses its Traits. Each Mini-Me has exactly one Workflow: a graph
     of Steps that may include conditions, loops, parallel branches and human approvals.
   - Step: a node in a Workflow. A Trait Step runs a Trait (the same Trait may appear in

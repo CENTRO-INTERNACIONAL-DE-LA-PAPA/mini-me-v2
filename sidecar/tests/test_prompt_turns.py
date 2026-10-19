@@ -1,4 +1,14 @@
-from mini_me_sidecar.adapters.prompt import REPLY_RULE, _filtered, _merged, _system_prompt, _turns
+from mini_me_sidecar.adapters.prompt import (
+    FILES_RULE,
+    REPLY_RULE,
+    _filtered,
+    _material,
+    _merged,
+    _system_prompt,
+    _tools_error,
+    _turns,
+)
+from mini_me_sidecar.context import Model
 
 
 def test_earlier_step_outputs_come_after_history_and_before_the_material():
@@ -22,10 +32,34 @@ def test_a_later_step_is_told_it_is_part_of_a_workflow():
     assert "one Step of Investigator's Workflow" in prompt
     assert prompt.endswith("Design an experiment.")
     alone = _system_prompt("Scribe", False, "Summarize.")
-    assert alone == f"You are Scribe, a Mini-Me. {REPLY_RULE}\n\nSummarize."
+    assert alone == f"You are Scribe, a Mini-Me. {REPLY_RULE} {FILES_RULE}\n\nSummarize."
 
 
 def test_a_content_filter_or_refusal_ending_is_recognised():
     assert _filtered({"finish_reason": "content_filter"})
     assert _filtered({"stop_reason": "refusal"})
     assert not _filtered({"finish_reason": "stop"})
+
+
+def test_the_conversations_files_and_components_are_listed_without_content():
+    results = {
+        "assets": [
+            {"id": "a1", "name": "notes.txt", "current": True},
+            {"id": "a2", "name": "trial.csv", "current": False},
+        ],
+        "components": [{"id": "c1", "kind": "table", "author": "Curator"}],
+    }
+    material = _material("summarize #notes.txt", results)
+    assert material.startswith("summarize #notes.txt\n\nFiles in this Conversation:")
+    assert "- notes.txt (ID: a1) — in this message" in material
+    assert "- trial.csv (ID: a2)\n" in material
+    assert material.endswith("- table from Curator (ID: c1)")
+    assert _material("hello", {"assets": [], "components": []}) == "hello"
+
+
+def test_a_model_without_tool_calling_gets_its_own_error():
+    model = Model(provider="openrouter", model="some/model")
+    error = _tools_error(Exception("No endpoints found that support tool use"), model)
+    assert error is not None and error.code == "tools_unsupported"
+    assert "some/model" in str(error)
+    assert _tools_error(Exception("rate limited"), model) is None

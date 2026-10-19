@@ -51,6 +51,9 @@ class TraitDefinition:
     id: str
     name: str
     instructions: str | None
+    # The tools the Trait may use; for a prompt-based Trait, those its model is offered
+    # besides the read tools.
+    tools: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -87,6 +90,7 @@ class CallContext:
             id=str(trait.get("id", "")),
             name=str(trait.get("name", "")),
             instructions=trait.get("instructions"),
+            tools=tuple(str(t) for t in trait.get("tools") or ()),
         )
         self.model = (
             Model(provider=str(model.get("provider", "")), model=str(model.get("model", "")))
@@ -186,13 +190,13 @@ class CallContext:
         )
 
     async def component(self, kind: str, version: int, data: Any, text: str) -> str:
-        """Adds an Interactive Component below the reply's text and returns its ID. `kind`
-        must be listed in the Trait's `components`, and `data` must have the shape that the
-        kind's renderer for `version` draws (`src/components/interactive/<kind>.tsx`). `text`
-        is a plain-text version of it, used in conversation history and wherever the kind is
-        not shown. Raises `CoreRequestError` with `component_not_allowed` or
-        `invalid_component` when the core refuses it; the Trait can then write `text`
-        instead."""
+        """Adds an Interactive Component below the reply's text and returns its ID. Adapters
+        call it through the show tools (`mini_me_sidecar.tools`). `data` must have the shape
+        that the kind's renderer for `version` draws (`src/components/interactive/<kind>.tsx`).
+        `text` is a plain-text version of it, used in conversation history and wherever the
+        kind is not shown. Raises `CoreRequestError` with `component_not_allowed` (an
+        `approval`, which only the core adds) or `invalid_component` when the core refuses
+        it."""
         result = await self._requests.send(
             self.call_id,
             "component.add",

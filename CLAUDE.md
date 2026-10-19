@@ -1,13 +1,14 @@
 # Working on Mini-Me v2
 
-Product overview, concepts and the roadmap are in `README.md`. The glossary, architecture
-rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
+Product overview and concepts are in `README.md`, and the Roadmap in `docs/roadmap.md`.
+The glossary, architecture rules and per-artifact rules are in `openspec/config.yaml`;
+follow them exactly.
 
 ## Picking up work
 
 - Run `openspec list` first. If a change is active, continue it.
-- If none is active, the next change is the first row marked "Next" in the README's Roadmap.
-  Confirm its scope with the user before writing any artifacts.
+- If none is active, the next change is the first row marked "Next" in the Roadmap
+  (`docs/roadmap.md`). Confirm its scope with the user before writing any artifacts.
 - Work one change at a time: propose (`/opsx:propose`), let the user review, apply
   (`/opsx:apply`), have the user verify, then finish (below).
 - During planning, ask instead of assuming; the user prefers questions to guesses.
@@ -24,7 +25,8 @@ rules and per-artifact rules are in `openspec/config.yaml`; follow them exactly.
 ## Finishing a change
 
 1. Archive the change (`/opsx:archive`), syncing its delta specs into `openspec/specs/`.
-2. Update the change's row in the README Roadmap to "Done" and mark the next one "Next".
+2. Update the change's row in the Roadmap (`docs/roadmap.md`) to "Done" and mark the next
+   one "Next".
 3. Ask the user, then open the change's pull request into `dev` (see below).
 
 ## Commits

@@ -35,6 +35,8 @@ pub struct RunTrait {
     pub instructions: Option<String>,
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
+    /// The tools the Trait may use.
+    pub tools: Vec<String>,
 }
 
 /// The provider and model chosen in Settings.

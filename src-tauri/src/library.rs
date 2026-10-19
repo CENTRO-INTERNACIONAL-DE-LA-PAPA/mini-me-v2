@@ -7,6 +7,25 @@ use uuid::Uuid;
 /// Assistant, who answers when routing has no mentioned or confident choice.
 pub const FALLBACK_MINI_ME: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8e1f0d7b03);
 
+/// Every tool a Trait may list; the sidecar's `tools` package knows the same names.
+pub const TOOLS: [&str; 8] = [
+    "read_file",
+    "read_table",
+    "read_component",
+    "save_file",
+    "show_table",
+    "show_chart",
+    "show_papers",
+    "show_theories",
+];
+
+/// The tools a prompt-based Trait may list: those with a form for models. The read tools are
+/// offered to every prompt-based Trait, so it does not list them.
+pub const MODEL_TOOLS: [&str; 2] = ["save_file", "show_table"];
+
+/// The adapter that offers a Trait's tools to its AI model.
+const PROMPT_ADAPTER: &str = "prompt";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraitDef {
     pub id: Uuid,
@@ -17,10 +36,10 @@ pub struct TraitDef {
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
     pub instructions: Option<String>,
-    /// The Interactive Component kinds this Trait's answers may include. Only built-in
-    /// Traits list any.
+    /// The tools this Trait may use: those its adapter's code uses, or, for a prompt-based
+    /// Trait, those its model is offered besides the read tools.
     #[serde(default)]
-    pub components: Vec<String>,
+    pub tools: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -235,6 +254,16 @@ impl Library {
             if !title_case {
                 problems.push(format!("Trait name {:?} is not in Title Case", t.name));
             }
+            for tool in &t.tools {
+                if !TOOLS.contains(&tool.as_str()) {
+                    problems.push(format!("Trait {} lists the unknown tool {tool:?}", t.name));
+                } else if t.adapter == PROMPT_ADAPTER && !MODEL_TOOLS.contains(&tool.as_str()) {
+                    problems.push(format!(
+                        "Trait {} runs on the prompt adapter and cannot list {tool:?}",
+                        t.name
+                    ));
+                }
+            }
         }
         for m in &self.mini_mes {
             problems.extend(self.workflow_problems(m));
@@ -360,26 +389,38 @@ mod tests {
     }
 
     #[test]
-    fn only_the_asta_and_data_traits_list_components() {
+    fn built_in_traits_list_their_tools() {
         let library = Library::builtin();
         let lists: Vec<(&str, Vec<&str>)> = library
             .traits
             .iter()
-            .filter(|t| !t.components.is_empty())
-            .map(|t| (t.name.as_str(), t.components.iter().map(String::as_str).collect()))
+            .filter(|t| !t.tools.is_empty())
+            .map(|t| (t.name.as_str(), t.tools.iter().map(String::as_str).collect()))
             .collect();
+        let table = vec!["read_table", "show_table", "save_file"];
         assert_eq!(
             lists,
             [
-                ("Find Papers", vec!["paper-sources"]),
-                ("Theorize", vec!["theories"]),
-                ("Profile Data", vec!["table"]),
-                ("Validate Data", vec!["table"]),
-                ("Clean Data", vec!["table"]),
-                ("Join Data", vec!["table"]),
-                ("Plot", vec!["chart"]),
+                ("Assist", vec!["save_file", "show_table"]),
+                ("Find Papers", vec!["show_papers"]),
+                ("Theorize", vec!["show_theories", "save_file"]),
+                ("Profile Data", vec!["read_table", "show_table"]),
+                ("Validate Data", table.clone()),
+                ("Clean Data", table.clone()),
+                ("Join Data", table),
+                ("Plot", vec!["read_table", "show_chart"]),
             ]
         );
+    }
+
+    #[test]
+    fn unknown_tools_and_non_model_tools_on_prompt_traits_are_reported() {
+        let mut library = Library::builtin();
+        let assist = library.traits.iter_mut().find(|t| t.name == "Assist").unwrap();
+        assist.tools = vec!["show_chart".into(), "teleport".into()];
+        let problems = library.problems();
+        assert!(problems.iter().any(|p| p.contains("cannot list \"show_chart\"")));
+        assert!(problems.iter().any(|p| p.contains("unknown tool \"teleport\"")));
     }
 
     #[test]

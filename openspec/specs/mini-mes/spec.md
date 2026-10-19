@@ -15,8 +15,13 @@ The Rust core SHALL hold a shared Trait library. Each Trait definition SHALL hav
   describes for Trait icons;
 - the `adapter` that runs it;
 - its `instructions` (text, or none for adapters that take none);
-- its `components`: the Interactive Component kinds its answers may include, possibly
-  empty. Only built-in Traits SHALL list any.
+- its `tools`: the tools it may use, possibly empty. A Trait whose adapter runs fixed code
+  lists the tools that code uses; a prompt-based Trait lists the tools its model is offered
+  besides the read tools, which every prompt-based Trait gets.
+
+What a Trait can read, save or show comes only from its tools; a definition lists no
+Interactive Component kinds. The library SHALL refuse to load with a tool name it does not
+know, or with a prompt-based Trait listing a tool that has no form for models.
 
 The library is read-only in this version. It contains *Summarize*, *Assist*, *Find
 Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment*, *Profile Data*,
@@ -33,9 +38,10 @@ Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment*, *Profile
 
 #### Scenario: Components of the built-in Traits
 - **WHEN** the app starts
-- **THEN** *Find Papers* lists `paper-sources`, *Theorize* lists `theories`, *Profile
-  Data*, *Validate Data*, *Clean Data* and *Join Data* list `table`, *Plot* lists `chart`,
-  and every other Trait lists none
+- **THEN** *Assist* lists `save_file` and `show_table`; *Find Papers* `show_papers`;
+  *Theorize* `show_theories` and `save_file`; *Profile Data* `read_table` and `show_table`;
+  *Validate Data*, *Clean Data* and *Join Data* `read_table`, `show_table` and `save_file`;
+  *Plot* `read_table` and `show_chart`; and every other Trait lists none
 
 ### Requirement: Mini-Me definitions
 Each Mini-Me SHALL have:
@@ -60,8 +66,9 @@ Mini-Me SHALL ship with fifteen Mini-Mes:
 - **Scribe:** "Summarizes your messages and the files you reference"; one Step running
   *Summarize*.
 - **Assistant:** "Answers general questions and requests that no other Mini-Me specializes
-  in"; one Step running *Assist*, whose instructions make it a general research assistant
-  that uses referenced files when relevant and says when it does not know. Assistant also
+  in, and can save files and show tables"; one Step running *Assist*, whose instructions
+  make it a general research assistant that uses its tools when the request needs them,
+  reads referenced files when relevant and says when it does not know. Assistant also
   answers whenever routing has no confident choice.
 - **Researcher:** "Finds research papers on a topic with Ai2's Paper Finder"; one Step
   running *Find Papers*.
@@ -126,8 +133,8 @@ It SHALL show each reply authored by a Mini-Me with that Mini-Me's name and a ma
 ### Requirement: Placeholder Traits
 The Trait library SHALL contain placeholder Traits for Traits that later changes will
 build: *Document*, *Explore Dataverse*, *Code*, *Collect Data*, *Model*, *Predict* and
-*Index Sources*. Each runs on the `echo` adapter, has no instructions and lists no
-components. No predefined Mini-Me's Workflow SHALL reference a placeholder Trait.
+*Index Sources*. Each runs on the `echo` adapter and has no instructions. No predefined
+Mini-Me's Workflow SHALL reference a placeholder Trait.
 
 #### Scenario: Placeholders are in the library
 - **WHEN** the app starts

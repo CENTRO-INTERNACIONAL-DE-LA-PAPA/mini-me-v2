@@ -58,13 +58,15 @@ budget SHALL end the history at that message.
   is `true`
 
 ### Requirement: Earlier files by name only
-History entries SHALL name their files without their content. Only the current message's
-files are read in full, through `asset.read`.
+History entries SHALL name their files without their content. A file's content SHALL reach
+a model only when a Trait reads it with the read-a-file tool, whether the file belongs to
+the current message or an earlier one.
 
 #### Scenario: Earlier file
 - **WHEN** a file was referenced three messages ago and the user asks a follow-up without
   referencing it
-- **THEN** the history names the file, and its content is not sent
+- **THEN** the history names the file, and its content is not sent unless the model reads
+  it
 
 ### Requirement: Results request
 During a Trait call, the sidecar SHALL be able to send `core.request` with method
