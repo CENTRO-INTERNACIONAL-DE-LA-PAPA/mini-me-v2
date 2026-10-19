@@ -189,10 +189,12 @@ class FindPapers(Adapter):
 | `data-validate` | *Validate Data* | runs default checks and checks the model chooses, with pointblank |
 | `data-clean` | *Clean Data* | applies cleaning actions the model chooses and saves the result as a new Asset |
 | `data-join` | *Join Data* | joins two tables on key columns the model chooses |
+| `data-plot` | *Plot* | draws the charts the model chooses; pandas computes their values (`plot.py`) |
 
 The data adapters live in `adapters/data/` and share `tables.py` (reading CSV, TSV and
 Excel files into pandas), `describe.py` (the description of a table the model sees) and
-`preview.py` (`table` component data). The model only chooses entries from a fixed
+`preview.py` (`table` component data). `plot.py` computes each chart type's values, capping
+line and scatter charts at 5,000 sampled points. The model only chooses entries from a fixed
 catalogue (`catalogue.py`, through structured output in `choose.py`); it never sees rows,
 and every result is computed by pandas or pointblank.
 
@@ -268,13 +270,18 @@ src/components/interactive/
   theories.tsx               Theorize's theories
   table.tsx                  the data Traits' tables and previews of larger ones
   approval.tsx               Approve and Reject buttons for a paused run
+  chart.tsx                  Plot's charts: the card, view toggle and legend
+  chart-model.ts             chart data types and the controls' state, without the DOM
+  chart-plot.ts              Observable Plot options and tooltip lines for each chart type
+  chart-figure.tsx           draws the figure with Plot; loaded only when a chart is shown
   *.test.tsx
 ```
 
 - A kind's file exports `renderers`, a React component for each version, and the
   TypeScript types of each version's data. Renderers get `{ data }`, plus `answer`,
   `projectId`, `messageId`, `componentId` and `replyStatus` for kinds the user answers,
-  such as `approval`; the others ignore them. The spec in
+  such as `approval`, and `color`, the solid colour of the Mini-Me that wrote the reply, for
+  kinds that draw in it, such as `chart`; the others ignore them. The spec in
   `openspec/specs/interactive-components/` describes the same shape, and the adapter that
   produces it builds it in Python.
 - `catalogue.ts` lists the kinds explicitly, so every kind the app knows is in one place. A

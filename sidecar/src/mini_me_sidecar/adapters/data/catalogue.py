@@ -1,5 +1,5 @@
-"""The fixed lists the AI model chooses from: data checks, cleaning actions and how to join two
-tables. The model fills these schemas; entries that don't fit the tables are dropped before
+"""The fixed lists the AI model chooses from: data checks, cleaning actions, how to join two
+tables and which charts to draw. The model fills these schemas; entries that don't fit the tables are dropped before
 anything runs."""
 
 import re
@@ -207,6 +207,87 @@ class JoinPlan(BaseModel):
     how: Literal["inner", "left", "right", "outer"]
 
 
+ChartType = Literal["histogram", "bar", "line", "scatter", "box", "heatmap"]
+
+
+
+class Chart(BaseModel):
+    """One chart of the table. Which fields a type uses:
+    - histogram: `x` (number or date), optional `series`;
+    - bar: `x` (text or boolean), `aggregate` of `y` (number), or `count` with no `y`,
+      optional `series`;
+    - line: `x` (date or number), `y` (number), `aggregate` for repeated `x` values,
+      optional `series`;
+    - scatter: `x` and `y` (numbers), optional `series`;
+    - box: `x` (text or boolean groups), `y` (number);
+    - heatmap: `columns` (two or more numbers), drawn as their correlations.
+    Unused fields are null or empty. `alternatives` names other types that show the same
+    columns well; the user can switch to them."""
+
+    type: ChartType
+    title: str
+    x: str | None
+    y: str | None
+    columns: list[str]
+    series: str | None
+    aggregate: Literal["count", "sum", "mean", "median"] | None
+    alternatives: list[ChartType]
+
+
+class ChartPlan(BaseModel):
+    """The charts to draw: the fewest that answer the message."""
+
+    charts: list[Chart]
+
+
+# The column types each axis of a chart type accepts.
+CHART_AXES: dict[str, dict[str, tuple[str, ...]]] = {
+    "histogram": {"x": ("number", "date")},
+    "bar": {"x": ("text", "boolean"), "y": ("number",)},
+    "line": {"x": ("date", "number"), "y": ("number",)},
+    "scatter": {"x": ("number",), "y": ("number",)},
+    "box": {"x": ("text", "boolean"), "y": ("number",)},
+    "heatmap": {},
+}
+
+SERIES_TYPES = ("text", "boolean")
+
+
+def chart_problem(chart: Chart, types: dict[str, str]) -> str | None:
+    """Why `chart` can't be drawn from a table whose columns have `types`, or None when it
+    can."""
+    if chart.type == "heatmap":
+        columns = list(dict.fromkeys(chart.columns))
+        missing = [c for c in columns if c not in types]
+        if missing:
+            return "no column " + ", ".join(f"`{c}`" for c in missing)
+        if len(columns) < 2:
+            return "a heatmap needs at least 2 number columns"
+        wrong = [c for c in columns if types[c] != "number"]
+        if wrong:
+            return ", ".join(f"`{c}`" for c in wrong) + " is not a number column"
+        return None
+    axes = dict(CHART_AXES[chart.type])
+    if chart.type == "bar" and (chart.aggregate or "count") == "count":
+        axes.pop("y")
+    for axis, allowed in axes.items():
+        column = getattr(chart, axis)
+        if column is None:
+            return f"no `{axis}` column given"
+        if column not in types:
+            return f"no column `{column}`"
+        if types[column] not in allowed:
+            return f"`{column}` is a {types[column]} column, and a {chart.type} needs " + (
+                " or ".join(allowed) + f" for `{axis}`"
+            )
+    if chart.series is not None and chart.type != "box":
+        if chart.series not in types:
+            return f"no column `{chart.series}`"
+        if types[chart.series] not in SERIES_TYPES:
+            return f"`{chart.series}` is a {types[chart.series]} column, and series need text"
+    return None
+
+
 def columns_of(entry: BaseModel) -> list[str]:
     """Every column an entry names."""
     names: list[str] = []
@@ -246,6 +327,9 @@ def problem(entry: BaseModel, columns: list[str]) -> str | None:
 
 def describe_entry(entry: BaseModel) -> str:
     """A short label for an entry, such as `in_range(yield, 0–80)`."""
+    if isinstance(entry, Chart):
+        named = entry.columns if entry.type == "heatmap" else [entry.x, entry.y, entry.series]
+        return f"{entry.type}({', '.join(c for c in named if c)})"
     fields = entry.model_dump(exclude={"kind"})
     parts = [f"{k}={v}" for k, v in fields.items() if v is not None]
     kind = getattr(entry, "kind", type(entry).__name__)

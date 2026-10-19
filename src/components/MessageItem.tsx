@@ -129,6 +129,7 @@ export function MessageItem({ projectId, message }: Props) {
               projectId={projectId}
               messageId={message.id}
               replyStatus={message.status}
+              color={authorMiniMe?.colors.solid}
             />
           ))}
         </div>

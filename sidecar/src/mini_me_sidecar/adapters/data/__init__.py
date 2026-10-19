@@ -72,3 +72,18 @@ class JoinData(Adapter):
         from mini_me_sidecar.adapters.data import replies
 
         await replies.join_tables(ctx, str(input.get("text", "")))
+
+
+class PlotData(Adapter):
+    info = AdapterInfo(
+        id="data-plot",
+        description="Draws charts of a table, with values computed by pandas.",
+        input_schema=INPUT_SCHEMA,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.plot(ctx, str(input.get("text", "")))

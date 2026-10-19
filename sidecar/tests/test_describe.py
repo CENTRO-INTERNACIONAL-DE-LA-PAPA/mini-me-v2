@@ -2,7 +2,7 @@ import json
 
 import pandas as pd
 
-from mini_me_sidecar.adapters.data.describe import describe, shared_line
+from mini_me_sidecar.adapters.data.describe import describe
 from mini_me_sidecar.adapters.data.tables import Table
 
 
@@ -19,9 +19,9 @@ def table() -> Table:
 
 
 def test_lists_only_category_values_and_never_rows():
-    description, listed = describe(table())
-    assert listed == ["variety"]
+    description = describe(table())
     columns = {c["name"]: c for c in description["columns"]}
+    assert [c for c in columns if "top_values" in columns[c]] == ["variety"]
     assert "top_values" not in columns["farmer_name"]
     assert "top_values" not in columns["plot_id"]
     assert columns["yield"]["min"] == 0.0 and columns["yield"]["max"] == 39.0
@@ -29,12 +29,6 @@ def test_lists_only_category_values_and_never_rows():
 
 
 def test_names_and_types_only():
-    description, listed = describe(table(), values=False)
-    assert listed == []
+    description = describe(table(), values=False)
     assert description["columns"][0] == {"name": "plot_id", "type": "number"}
 
-
-def test_shared_line():
-    assert shared_line(["variety"]) == (
-        "_Shared with the AI model: column names, types and statistics; values of `variety`._"
-    )

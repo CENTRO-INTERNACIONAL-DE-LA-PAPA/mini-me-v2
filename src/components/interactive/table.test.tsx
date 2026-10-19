@@ -21,10 +21,21 @@ function bodyOrder(html: string): string[] {
 describe("table version 1", () => {
   it("sorts numbers with missing values last, both ways", () => {
     const sorted = (desc: boolean) =>
-      renderToStaticMarkup(<TableView data={data} initialSorting={[{ id: "1", desc }]} />);
+      renderToStaticMarkup(<TableView data={data} initialSorting={{ column: 1, desc }} />);
     const [up, down] = [sorted(false), sorted(true)];
     expect(bodyOrder(up)).toEqual(["a", "c", "b"]);
     expect(bodyOrder(down)).toEqual(["c", "a", "b"]);
+  });
+
+  it("sorts text in natural order, ignoring case", () => {
+    const plots = {
+      columns: [{ name: "plot", type: "text" }],
+      rows: [["plot 10"], ["plot 2"], ["Plot 1"]],
+    };
+    const html = renderToStaticMarkup(
+      <TableView data={plots} initialSorting={{ column: 0, desc: false }} />,
+    );
+    expect(bodyOrder(html)).toEqual(["Plot 1", "plot 2", "plot 10"]);
   });
 
   it("right-aligns numbers and leaves missing cells empty", () => {

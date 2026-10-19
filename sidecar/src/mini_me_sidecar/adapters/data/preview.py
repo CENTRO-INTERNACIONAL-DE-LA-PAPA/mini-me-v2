@@ -23,7 +23,7 @@ def table_data(
     """`{ columns, rows }` with `title`, and with `total_rows` and `source` when the rows are
     a preview of a larger table."""
     columns = [{"name": str(name), "type": column_type(frame[name])} for name in frame.columns]
-    rows = [[_cell(value) for value in row] for row in frame.head(MAX_ROWS).itertuples(False)]
+    rows = [[json_value(value) for value in row] for row in frame.head(MAX_ROWS).itertuples(False)]
     while rows and len(json.dumps(rows)) > MAX_BYTES:
         rows = rows[: len(rows) // 2]
     data: dict[str, Any] = {"columns": columns, "rows": rows}
@@ -48,7 +48,9 @@ def table_text(data: dict[str, Any]) -> str:
     return "\n".join([title, *lines] if title else lines)
 
 
-def _cell(value: Any) -> Any:
+def json_value(value: Any) -> Any:
+    """A cell as a JSON value: missing values and non-finite numbers as null, dates as ISO
+    text."""
     if value is None or value is pd.NaT:
         return None
     if isinstance(value, pd.Timestamp):

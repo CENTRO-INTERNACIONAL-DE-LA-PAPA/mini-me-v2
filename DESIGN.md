@@ -234,6 +234,8 @@ Start from the shadcn defaults and apply these overrides. Suggested CSS variable
 
 **Charts:** sit on a white bordered card (never directly on the workspace). Gridlines `#F1F0EB`, axis `#0A0A0A`, labels 11px muted, baseline series `#D7D6D0`, Mini-Me series in its solid.
 
+**Chart series:** the first series is the Mini-Me's solid; series 2–8 follow in this order: orange `#EB6834`, aqua `#1BAF7A`, blue `#2A78D6`, yellow `#EDA100`, pink `#E87BA4`, green `#008300`, red `#E34948` (tokens `--chart-series-2` to `--chart-series-8`). Past eight, series take generated colours at oklch L 0.64 C 0.15, stepping the hue by the golden angle (137.5°) from 20°. A series keeps its colour when others are hidden. Aqua, yellow and pink are under 3:1 on white, so a series is always named in the legend and the tooltip, never by colour alone. Bars, boxes and heatmap cells are at least 24px wide; a chart with more scrolls sideways inside its card. Tooltips appear only over a mark, in the popover style.
+
 **Tooltip / Popover / Dropdown:** white, 1px border, radius 10, the floating shadow above, 4–5px inner padding, items radius 7. The active item is black.
 
 **Toggle group / Toolbar:** 30px icon buttons, radius 7. The active button is black with a white icon. Groups are separated by 1px × 18px dividers.
