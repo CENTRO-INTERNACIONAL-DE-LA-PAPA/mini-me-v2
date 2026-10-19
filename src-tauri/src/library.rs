@@ -42,6 +42,15 @@ pub struct TraitDef {
     pub tools: Vec<String>,
 }
 
+/// Which heading the `@` list shows a Mini-Me under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MiniMeGroup {
+    Thinking,
+    Literature,
+    Data,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MiniMeColors {
     pub tint: String,
@@ -182,6 +191,7 @@ pub struct MiniMe {
     pub name: String,
     pub description: String,
     pub colors: MiniMeColors,
+    pub group: MiniMeGroup,
     pub workflow: Workflow,
 }
 
@@ -192,6 +202,7 @@ pub struct MiniMeSummary {
     pub name: String,
     pub description: String,
     pub colors: MiniMeColors,
+    pub group: MiniMeGroup,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -231,6 +242,7 @@ impl Library {
                 name: m.name.clone(),
                 description: m.description.clone(),
                 colors: m.colors.clone(),
+                group: m.group,
             })
             .collect()
     }
@@ -421,6 +433,24 @@ mod tests {
         let problems = library.problems();
         assert!(problems.iter().any(|p| p.contains("cannot list \"show_chart\"")));
         assert!(problems.iter().any(|p| p.contains("unknown tool \"teleport\"")));
+    }
+
+    #[test]
+    fn mini_mes_have_groups() {
+        let summaries = Library::builtin().summaries();
+        let group = |name: &str| summaries.iter().find(|m| m.name == name).unwrap().group;
+        assert_eq!(group("Profiler"), MiniMeGroup::Data);
+        assert_eq!(group("Researcher"), MiniMeGroup::Literature);
+        assert_eq!(group("Skeptic"), MiniMeGroup::Thinking);
+    }
+
+    #[test]
+    fn an_unknown_group_fails_to_load() {
+        let mut json: serde_json::Value =
+            serde_json::from_str(include_str!("../library/builtin.json")).unwrap();
+        json["mini_mes"][0]["group"] = "other".into();
+        let error = serde_json::from_value::<Library>(json).unwrap_err().to_string();
+        assert!(error.contains("unknown variant"), "{error}");
     }
 
     #[test]

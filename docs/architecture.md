@@ -69,7 +69,7 @@ now (`library.rs`).
   "adapter": "asta-paper-finder", "instructions": null, "tools": ["show_papers"] }
 
 { "id": "…7b04", "name": "Researcher", "description": "Finds research papers on a topic…",
-  "colors": { "tint": "#FFE1D8", "solid": "#FF5A36", "ink": "#B3300F" },
+  "colors": { "tint": "#FFE1D8", "solid": "#FF5A36", "ink": "#B3300F" }, "group": "literature",
   "workflow": { "steps": [{ "id": "find-papers", "trait": "…7a04" }] } }
 ```
 
@@ -86,6 +86,8 @@ now (`library.rs`).
 - A **Mini-Me** has one Workflow, a list of Steps, each with an `id` unique within the
   Workflow. Most Workflows are a single Trait Step; see [Workflows](#workflows) for the
   others.
+- A Mini-Me's **`group`** (`thinking`, `literature` or `data`) is the heading the `@` list
+  shows it under. It is required: a missing or unknown group fails the library load.
 - When the library loads, `Library::problems()` refuses Workflows that break the rules in
   `openspec/specs/workflows/`: duplicate Step IDs, unknown or placeholder Traits, empty
   lists, branches with fewer than two or duplicate labels, `max_iterations` outside 1 to
@@ -258,6 +260,26 @@ For "@Researcher drought in Andean landraces":
 Runs execute concurrently; every frame carries its `run_id`, and the core ignores frames
 for a run that has ended. `step.completed` ends its call, so a later request from that call
 gets `call_not_active`.
+
+## How messages and Mini-Mes are shown
+
+- **Reply text** from a Mini-Me, and an opened Trait Step's output in the progress card, go
+  through `src/components/Markdown.tsx`: `react-markdown` with `remark-gfm` (tables,
+  strikethrough, task lists) and `remark-breaks` (a single newline is a line break). A small
+  plugin there shows raw HTML as text, images are drawn as links and never loaded, and links
+  open in the default browser through `openLink`; only `http`, `https` and `mailto` links are
+  active. The user's own messages and system notes stay plain text (`segments()`).
+- **Text Components** in a reply are rewritten as `[label](ref:N)` links by
+  `markdownSource()` (`src/protocol/references.ts`) before parsing, and the link renderer
+  draws `ref:N` as the component's chip (`TextComponentChip.tsx`).
+- **A Mini-Me named inline** (a mention, an `@` list entry, a reaction tooltip) is always
+  `MiniMePill.tsx`: its tint background and ink text, or neutral colours when it is unknown.
+- **The composer** keeps a native textarea with transparent text over a layer that draws the
+  same text, with picked references as pills. The layer must match the textarea's typography
+  and box exactly (`FIELD` in `Composer.tsx`), and its pills use a same-coloured `box-shadow`
+  rather than padding so that the text and caret stay aligned.
+- **The `@` list** comes from `miniMeSuggestions()`, which matches names ignoring case and
+  accents and groups them Thinking, Literature, Data.
 
 ## Interactive Components
 

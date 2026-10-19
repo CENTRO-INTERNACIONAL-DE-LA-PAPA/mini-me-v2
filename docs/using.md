@@ -8,14 +8,24 @@ the Ai2 and Typesafe accounts is described in the README's
 ## Asking a Mini-Me
 
 Type `@` in the message box to pick a Mini-Me; the one you mention first answers. Mini-Me
-comes with predefined Mini-Mes, and typing `@` lists them. Most use the AI model chosen in
-Settings, so they need an API key and a model. Those built on Asta, Researcher and
-Theorist, need an Ai2 account instead.
+comes with predefined Mini-Mes, and typing `@` lists them under Thinking, Literature and
+Data, each with a short description. Keep typing to narrow the list by name, move through
+it with the arrow keys, and press Enter or Tab to pick one. A picked Mini-Me shows in its
+colour in the message box. Most Mini-Mes use the AI model chosen in Settings, so they need
+an API key and a model. Those built on Asta, Researcher and Theorist, need an Ai2 account
+instead.
 
 When you don't mention a Mini-Me, Typesafe's Jev chooses the most suitable one. If Jev isn't
 confident enough (see **Confidence threshold** in Settings, 0.5 by default) or can't be
 reached, Assistant answers; mention a Mini-Me with `@` to choose one yourself. Jev also
 decides whether the Mini-Me reacts to your message with an emoji.
+
+## Formatting
+
+Mini-Mes' replies are formatted: bold and italic text, headings, lists, quotes, code and
+tables. Links open in your browser. HTML in a reply is shown as text, and images are shown
+as links, so a reply never loads anything from the internet by itself. Your own messages
+are shown exactly as you typed them.
 
 ## Files
 

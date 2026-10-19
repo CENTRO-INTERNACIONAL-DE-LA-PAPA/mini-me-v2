@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { CheckIcon } from "lucide-react";
 import { useState } from "react";
 import type { MessageStatus, MessageStep } from "../protocol/types";
+import { Markdown } from "./Markdown";
 
 type StepState = "done" | "running" | "waiting" | "pending";
 
@@ -71,9 +72,9 @@ export function WorkflowProgress({ steps, replyStatus, color }: Props) {
         })}
       </ol>
       {opened?.output && (
-        <p className="mt-3 border-t border-border pt-3 text-ui text-ink-2 whitespace-pre-wrap wrap-anywhere">
-          {opened.output}
-        </p>
+        <div className="mt-3 border-t border-border pt-3 text-ink-2">
+          <Markdown content={opened.output} size="ui" />
+        </div>
       )}
     </div>
   );

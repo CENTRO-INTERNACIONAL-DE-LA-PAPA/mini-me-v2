@@ -1,4 +1,4 @@
-import type { AssetRef, MiniMe, TextComponent } from "./types";
+import type { AssetRef, MiniMe, MiniMeGroup, TextComponent } from "./types";
 
 export type ReferenceKind = TextComponent["kind"];
 
@@ -109,6 +109,53 @@ export function toTextComponents(references: DraftReference[]): TextComponent[] 
     start,
     end,
   }));
+}
+
+/**
+ * The content as Markdown source in which each Text Component reads `[label](ref:N)`, `N`
+ * being its index in `components`, so a Markdown renderer can draw it as a chip. A component
+ * whose range doesn't hold its label is left as plain text.
+ */
+export function markdownSource(content: string, components: TextComponent[]): string {
+  const escape = (label: string) => label.replace(/[\\[\]]/g, "\\$&");
+  return components
+    .map((component, index) => ({ component, index }))
+    .filter(({ component }) => content.slice(component.start, component.end) === component.label)
+    .sort((a, b) => b.component.start - a.component.start)
+    .reduce(
+      (source, { component, index }) =>
+        `${source.slice(0, component.start)}[${escape(component.label)}](ref:${index})` +
+        source.slice(component.end),
+      content,
+    );
+}
+
+export const MINI_ME_GROUPS: Array<{ group: MiniMeGroup; label: string }> = [
+  { group: "thinking", label: "Thinking" },
+  { group: "literature", label: "Literature" },
+  { group: "data", label: "Data" },
+];
+
+/** Lowercased, without accents, for matching what the user types against names. */
+const fold = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+/**
+ * The Mini-Mes whose name contains `query`, ignoring case and accents, grouped in the order
+ * of `MINI_ME_GROUPS` and in their library order within a group. Empty groups are left out.
+ */
+export function miniMeSuggestions(
+  miniMes: MiniMe[],
+  query: string,
+): Array<{ label: string; miniMes: MiniMe[] }> {
+  const matching = miniMes.filter((m) => fold(m.name).includes(fold(query)));
+  return MINI_ME_GROUPS.map(({ group, label }) => ({
+    label,
+    miniMes: matching.filter((m) => m.group === group),
+  })).filter((section) => section.miniMes.length > 0);
 }
 
 /** Splits content into plain text and reference segments, for rendering chips. */

@@ -4,20 +4,24 @@ import {
   activeQuery,
   assetTarget,
   insertReference,
+  miniMeSuggestions,
   miniMeTarget,
+  segments,
   toTextComponents,
   updateReferences,
   type DraftReference,
   type ReferenceKind,
   type ReferenceTarget,
 } from "../protocol/references";
-import type { AssetRef, Message } from "../protocol/types";
+import type { AssetRef, Message, MiniMe } from "../protocol/types";
 import { formatSize } from "./format";
+import { MiniMePill, pillStyle } from "./MiniMePill";
 import { sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
 import { useMiniMes } from "./useMiniMes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 interface Props {
   projectId: string;
@@ -28,6 +32,23 @@ interface Props {
   onSent: (message: Message) => void;
 }
 
+/** The typography and box shared by the text box and the layer that draws its pills. */
+const FIELD =
+  "px-3 py-[7px] text-body whitespace-pre-wrap wrap-break-word [scrollbar-gutter:stable]";
+
+/** An entry in the `@` or `#` list. */
+interface Suggestion {
+  target: ReferenceTarget;
+  miniMe?: MiniMe;
+}
+
+/** A picked mention's colours on the layer: the pill's, with a same-coloured shadow standing in
+ * for padding, since padding would move the text away from the text box's caret. */
+function layerPillStyle(miniMe?: MiniMe) {
+  const style = pillStyle(miniMe);
+  return style && { ...style, boxShadow: `0 0 0 2px ${miniMe!.colors.tint}` };
+}
+
 export function Composer({ projectId, conversationId, replying, choosing, onSent }: Props) {
   const [text, setText] = useState("");
   const [references, setReferences] = useState<DraftReference[]>([]);
@@ -36,11 +57,14 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
     null,
   );
   const [assetSuggestions, setAssetSuggestions] = useState<AssetRef[]>([]);
+  const [highlight, setHighlight] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
   const sidecar = useSidecarStatus();
   const ready = sidecarReady(sidecar);
   const miniMes = useMiniMes();
+  const miniMeById = (id: string) => miniMes.find((m) => m.id === id);
 
   useEffect(() => {
     if (query?.kind !== "asset") {
@@ -57,12 +81,19 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
     };
   }, [projectId, query]);
 
-  const suggestions: ReferenceTarget[] =
+  useEffect(() => setHighlight(0), [query?.kind, query?.query]);
+
+  /** The list's sections: a heading (empty for files) and its entries. */
+  const sections: Array<{ heading: string; entries: Suggestion[] }> =
     query?.kind === "mini_me"
-      ? miniMes
-          .filter((m) => m.name.toLowerCase().includes(query.query.toLowerCase()))
-          .map(miniMeTarget)
-      : assetSuggestions.map(assetTarget);
+      ? miniMeSuggestions(miniMes, query.query).map((section) => ({
+          heading: section.label,
+          entries: section.miniMes.map((m) => ({ target: miniMeTarget(m), miniMe: m })),
+        }))
+      : assetSuggestions.length > 0
+        ? [{ heading: "", entries: assetSuggestions.map((a) => ({ target: assetTarget(a) })) }]
+        : [];
+  const suggestions = sections.flatMap((section) => section.entries);
 
   /** The query at the cursor, unless its `#` or `@` belongs to an existing reference. */
   function queryAt(value: string, cursor: number, refs: DraftReference[]) {
@@ -135,9 +166,14 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (query && suggestions.length > 0 && (event.key === "Enter" || event.key === "Tab")) {
+    const listed = query !== null && suggestions.length > 0;
+    if (listed && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       event.preventDefault();
-      pick(suggestions[0]);
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setHighlight((current) => (current + step + suggestions.length) % suggestions.length);
+    } else if (listed && (event.key === "Enter" || event.key === "Tab")) {
+      event.preventDefault();
+      pick(suggestions[Math.min(highlight, suggestions.length - 1)].target);
     } else if (event.key === "Escape") {
       setQuery(null);
     } else if (event.key === "Enter" && !event.shiftKey) {
@@ -149,21 +185,32 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
   return (
     <div className="relative bg-background px-8 pt-3 pb-4">
       {suggestions.length > 0 && (
-        <ul className="absolute bottom-full left-8 grid min-w-60 gap-0.5 rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-float">
-          {suggestions.map((target) => (
-            <li key={target.id}>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start rounded-md font-normal"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(target)}
-              >
-                {target.label}
-              </Button>
-            </li>
+        <div
+          role="listbox"
+          aria-label={query?.kind === "mini_me" ? "Mini-Mes" : "Files"}
+          className={cn(
+            "absolute bottom-full left-8 max-h-80 w-80 overflow-y-auto rounded-xl border",
+            "border-border bg-popover p-1 text-popover-foreground shadow-float",
+          )}
+        >
+          {sections.map((section, index) => (
+            <div key={index} role="group" aria-label={section.heading || undefined}>
+              {section.heading && (
+                <p className="px-2.5 pt-2 pb-1 text-meta text-muted-foreground">
+                  {section.heading}
+                </p>
+              )}
+              {section.entries.map((suggestion) => (
+                <SuggestionRow
+                  key={suggestion.target.id}
+                  suggestion={suggestion}
+                  selected={suggestions[highlight] === suggestion}
+                  onPick={() => pick(suggestion.target)}
+                />
+              ))}
+            </div>
           ))}
-        </ul>
+        </div>
       )}
       {attachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5">
@@ -191,18 +238,60 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
         <Button variant="outline" onClick={attach} title="Attach files">
           Attach
         </Button>
-        <Textarea
-          ref={input}
-          value={text}
-          rows={2}
-          className="max-h-48 min-h-9 flex-1 resize-none rounded-2xl border-border-composer text-body shadow-composer"
-          placeholder="Write a message. Type @ to ask a Mini-Me, # to reference a file."
-          onChange={(e) => edit(e.target.value, e.target.selectionStart)}
-          onKeyDown={onKeyDown}
-          onSelect={(e) =>
-            setQuery(queryAt(e.currentTarget.value, e.currentTarget.selectionStart, references))
-          }
-        />
+        <div className="relative min-w-0 flex-1 rounded-2xl bg-card shadow-composer">
+          <div
+            ref={layer}
+            aria-hidden
+            className={cn(
+              FIELD,
+              "pointer-events-none absolute inset-0 overflow-hidden border border-transparent",
+              "text-foreground",
+            )}
+          >
+            {segments(text, references).map((segment, index) => {
+              const miniMe =
+                segment.component?.kind === "mini_me"
+                  ? miniMeById(segment.component.id)
+                  : undefined;
+              return segment.component ? (
+                <span
+                  key={index}
+                  className={cn(
+                    "rounded-full box-decoration-clone",
+                    !miniMe && "bg-muted text-ink-2 shadow-[0_0_0_2px_var(--muted)]",
+                  )}
+                  style={layerPillStyle(miniMe)}
+                >
+                  {segment.text}
+                </span>
+              ) : (
+                <span key={index}>{segment.text}</span>
+              );
+            })}
+            {/* Gives a trailing empty line the same height as in the text box. */}
+            {"\u200b"}
+          </div>
+          <Textarea
+            ref={input}
+            value={text}
+            rows={2}
+            className={cn(
+              FIELD,
+              "relative max-h-48 min-h-9 resize-none rounded-2xl border-border-composer",
+              "bg-transparent text-transparent caret-foreground",
+              "selection:bg-primary selection:text-primary-foreground",
+            )}
+            placeholder="Write a message. Type @ to ask a Mini-Me, # to reference a file."
+            onChange={(e) => edit(e.target.value, e.target.selectionStart)}
+            onKeyDown={onKeyDown}
+            onScroll={(e) => {
+              if (layer.current) layer.current.scrollTop = e.currentTarget.scrollTop;
+            }}
+            onSelect={(e) =>
+              setQuery(queryAt(e.currentTarget.value, e.currentTarget.selectionStart, references))
+            }
+          />
+        </div>
         {replying ? (
           <Button variant="destructive" onClick={stop}>
             Stop
@@ -214,5 +303,47 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
         )}
       </div>
     </div>
+  );
+}
+
+/** One entry in the `@` or `#` list: a Mini-Me's pill and description, or a file name. */
+function SuggestionRow({
+  suggestion,
+  selected,
+  onPick,
+}: {
+  suggestion: Suggestion;
+  selected: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      role="option"
+      aria-selected={selected}
+      ref={selected ? (row) => row?.scrollIntoView({ block: "nearest" }) : undefined}
+      className={cn(
+        "flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5",
+        "text-left",
+        selected ? "bg-primary text-primary-foreground" : "hover:bg-accent",
+      )}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onPick}
+    >
+      {suggestion.miniMe ? (
+        <>
+          <MiniMePill miniMe={suggestion.miniMe}>{suggestion.target.label}</MiniMePill>
+          <span
+            className={cn(
+              "line-clamp-1 text-meta",
+              selected ? "text-muted-on-ink" : "text-muted-foreground",
+            )}
+          >
+            {suggestion.miniMe.description}
+          </span>
+        </>
+      ) : (
+        <span className="text-ui">{suggestion.target.label}</span>
+      )}
+    </button>
   );
 }

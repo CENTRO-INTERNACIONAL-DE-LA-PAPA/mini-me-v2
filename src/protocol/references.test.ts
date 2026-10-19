@@ -3,7 +3,9 @@ import {
   activeQuery,
   assetTarget,
   insertReference,
+  markdownSource,
   miniMeTarget,
+  miniMeSuggestions,
   segments,
   toTextComponents,
   updateReferences,
@@ -17,6 +19,7 @@ const scribe: MiniMe = {
   name: "Scribe",
   description: "",
   colors: { tint: "#E3DFFF", solid: "#6E5BFF", ink: "#4A3AE0" },
+  group: "thinking",
 };
 
 describe("activeQuery", () => {
@@ -111,5 +114,58 @@ describe("rendering helpers", () => {
       { kind: "asset", id: "a1", label: "#x", start: 4, end: 6 },
     ]);
     expect(segments("see #x now", [component]).map((s) => s.text)).toEqual(["see ", "#x", " now"]);
+  });
+});
+
+describe("markdownSource", () => {
+  const mention = { kind: "mini_me", id: "m1", label: "@Scribe", start: 4, end: 11 } as const;
+
+  it("turns Text Components into ref links", () => {
+    const file = { kind: "asset", id: "a1", label: "#trial.csv", start: 16, end: 26 } as const;
+    expect(markdownSource("ask @Scribe about #trial.csv", [mention, file])).toBe(
+      "ask [@Scribe](ref:0) about [#trial.csv](ref:1)",
+    );
+  });
+
+  it("escapes brackets in a label", () => {
+    const file = { kind: "asset", id: "a1", label: "#a]b.csv", start: 0, end: 8 } as const;
+    expect(markdownSource("#a]b.csv", [file])).toBe("[#a\\]b.csv](ref:0)");
+  });
+
+  it("leaves a component whose range doesn't hold its label", () => {
+    expect(markdownSource("ask @Scrabble", [mention])).toBe("ask @Scrabble");
+  });
+});
+
+describe("miniMeSuggestions", () => {
+  const miniMe = (name: string, group: MiniMe["group"]): MiniMe => ({
+    ...scribe,
+    id: name,
+    name,
+    group,
+  });
+  const all = [
+    miniMe("Profiler", "data"),
+    miniMe("Researcher", "literature"),
+    miniMe("Skeptic", "thinking"),
+    miniMe("Explorer", "thinking"),
+  ];
+  const names = (query: string) =>
+    miniMeSuggestions(all, query).map((s) => [s.label, s.miniMes.map((m) => m.name)]);
+
+  it("groups every Mini-Me for an empty query", () => {
+    expect(names("")).toEqual([
+      ["Thinking", ["Skeptic", "Explorer"]],
+      ["Literature", ["Researcher"]],
+      ["Data", ["Profiler"]],
+    ]);
+  });
+
+  it("narrows by name, leaving out empty groups", () => {
+    expect(names("pro")).toEqual([["Data", ["Profiler"]]]);
+  });
+
+  it("ignores case and accents", () => {
+    expect(names("SKÉP")).toEqual([["Thinking", ["Skeptic"]]]);
   });
 });

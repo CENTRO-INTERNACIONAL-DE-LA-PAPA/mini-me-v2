@@ -179,11 +179,15 @@ export interface MiniMeColors {
 }
 
 /** A Mini-Me as the UI lists and shows it. */
+/** Which heading the `@` list shows a Mini-Me under. */
+export type MiniMeGroup = "thinking" | "literature" | "data";
+
 export interface MiniMe {
   id: Uuid;
   name: string;
   description: string;
   colors: MiniMeColors;
+  group: MiniMeGroup;
 }
 
 export type ProviderId = "openai" | "anthropic" | "google" | "openrouter";
