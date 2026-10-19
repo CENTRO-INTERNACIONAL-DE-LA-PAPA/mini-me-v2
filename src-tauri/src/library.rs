@@ -348,6 +348,7 @@ mod tests {
                 "Validate Data",
                 "Clean Data",
                 "Join Data",
+                "Plot",
             ]
         );
     }
@@ -370,6 +371,7 @@ mod tests {
                 ("Validate Data", vec!["table"]),
                 ("Clean Data", vec!["table"]),
                 ("Join Data", vec!["table"]),
+                ("Plot", vec!["chart"]),
             ]
         );
     }
@@ -405,6 +407,7 @@ mod tests {
             ("Validator", "Validate Data", "data-validate"),
             ("Curator", "Clean Data", "data-clean"),
             ("Linker", "Join Data", "data-join"),
+            ("Plotter", "Plot", "data-plot"),
         ] {
             let t = step(mini_me);
             assert_eq!((t.name.as_str(), t.adapter.as_str()), (name, adapter));
@@ -412,10 +415,10 @@ mod tests {
     }
 
     #[test]
-    fn fourteen_mini_mes_ship_and_investigator_uses_every_control_step() {
+    fn fifteen_mini_mes_ship_and_investigator_uses_every_control_step() {
         let library = Library::builtin();
         let names: Vec<String> = library.summaries().into_iter().map(|m| m.name).collect();
-        assert_eq!(names.len(), 14);
+        assert_eq!(names.len(), 15);
         assert_eq!(names.last().map(String::as_str), Some("Investigator"));
 
         let investigator = library.mini_mes.iter().find(|m| m.name == "Investigator").unwrap();

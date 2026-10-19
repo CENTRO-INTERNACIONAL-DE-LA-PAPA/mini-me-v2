@@ -15,6 +15,12 @@ export default defineConfig(() => ({
     },
   },
 
+  // Plot is imported only by a lazily loaded chart figure. Prebundling it at startup keeps the
+  // dev server from answering that import with "Outdated Optimize Dep" when it first appears.
+  optimizeDeps: {
+    include: ["@observablehq/plot"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

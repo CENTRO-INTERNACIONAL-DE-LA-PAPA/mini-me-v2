@@ -1,6 +1,6 @@
 from mini_me_sidecar.adapters.asta import FindPapers, Theorize
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
-from mini_me_sidecar.adapters.data import CleanData, JoinData, ProfileData, ValidateData
+from mini_me_sidecar.adapters.data import CleanData, JoinData, PlotData, ProfileData, ValidateData
 from mini_me_sidecar.adapters.echo import Echo
 from mini_me_sidecar.adapters.prompt import Prompt
 from mini_me_sidecar.adapters.testing import TEST_ADAPTERS
@@ -18,6 +18,7 @@ def load_adapters(test_adapters: bool) -> dict[str, Adapter]:
         ValidateData(),
         CleanData(),
         JoinData(),
+        PlotData(),
     ]
     if test_adapters:
         adapters.extend(TEST_ADAPTERS)

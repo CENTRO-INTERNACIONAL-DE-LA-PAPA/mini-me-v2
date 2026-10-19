@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { MessageStatus } from "../../protocol/types";
 import * as approval from "./approval";
+import * as chart from "./chart";
 import * as paperSources from "./paper-sources";
 import * as table from "./table";
 import * as theories from "./theories";
@@ -17,6 +18,8 @@ export interface RendererProps {
   messageId?: string;
   componentId?: string;
   replyStatus?: MessageStatus;
+  /** The solid colour of the Mini-Me that wrote the reply, for kinds that draw in it. */
+  color?: string;
 }
 
 /** Draws one version of a kind. */
@@ -32,6 +35,7 @@ export const catalogue = new Map<string, Renderers>([
   ["theories", theories.renderers],
   ["table", table.renderers],
   ["approval", approval.renderers],
+  ["chart", chart.renderers],
 ]);
 
 /** The renderer for a kind and version, or null when this version of the app has none. */

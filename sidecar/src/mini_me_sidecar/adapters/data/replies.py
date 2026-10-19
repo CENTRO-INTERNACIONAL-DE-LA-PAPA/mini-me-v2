@@ -1,6 +1,6 @@
 """How each data Trait answers: read the tables, let the model choose from a catalogue when
-the Trait needs it, compute with the tools, and reply with text, `table` components and
-saved files."""
+the Trait needs it, compute with the tools, and reply with text, `table` or `chart`
+components and saved files."""
 
 import asyncio
 
@@ -8,22 +8,25 @@ import pandas as pd
 from pydantic import BaseModel
 
 from mini_me_sidecar.adapters.data.catalogue import (
+    ChartPlan,
     CheckPlan,
     CleanPlan,
     JoinPlan,
+    chart_problem,
     describe_entry,
     problem,
 )
 from mini_me_sidecar.adapters.data.choose import choose
 from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
-from mini_me_sidecar.adapters.data.describe import describe, shared_line
+from mini_me_sidecar.adapters.data.describe import describe
 from mini_me_sidecar.adapters.data.join import join, shared_key
+from mini_me_sidecar.adapters.data.plot import build_chart, chart_text
 from mini_me_sidecar.adapters.data.preview import table_data, table_text
 from mini_me_sidecar.adapters.data.profile import profile as profile_frame
 from mini_me_sidecar.adapters.data.profile import summary
-from mini_me_sidecar.adapters.data.tables import Table, read_tables, table_file
+from mini_me_sidecar.adapters.data.tables import Table, column_type, read_tables, table_file
 from mini_me_sidecar.adapters.data.validate import results_frame, run_checks
-from mini_me_sidecar.context import CallContext, TraitError
+from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
 
 # The core's limit for a file written by a Trait.
 MAX_WRITE_BYTES = 32 * 1024 * 1024
@@ -40,8 +43,7 @@ async def profile(ctx: CallContext, text: str) -> None:
 
 async def validate(ctx: CallContext, text: str) -> None:
     tables = await read_tables(ctx, text)
-    described = [describe(t) for t in tables]
-    plan = await choose(ctx, CheckPlan, text, [d for d, _ in described])
+    plan = await choose(ctx, CheckPlan, text, [describe(t) for t in tables])
     usable = {id(c) for t in tables for c in plan.checks if not problem(c, _columns(t))}
     ignored = [c for c in plan.checks if id(c) not in usable]
     for table in tables:
@@ -58,13 +60,11 @@ async def validate(ctx: CallContext, text: str) -> None:
         await _table(ctx, results_frame(results), f"Checks on {table.name}")
         await ctx.write_asset(f"{table.stem}-validation.html", "text/html", report.encode())
     _write_ignored(ctx, [(describe_entry(c), _why(c, tables)) for c in ignored])
-    ctx.write(shared_line(sorted({n for _, listed in described for n in listed})))
 
 
 async def clean(ctx: CallContext, text: str) -> None:
     table = (await read_tables(ctx, text))[0]
-    description, listed = describe(table)
-    plan = await choose(ctx, CleanPlan, text, [description])
+    plan = await choose(ctx, CleanPlan, text, [describe(table)])
     ctx.progress(f"Cleaning {table.name}")
     cleaned, log = await asyncio.to_thread(apply_actions, table.frame, plan.actions)
     applied = [a for a in log if not a.note]
@@ -79,7 +79,6 @@ async def clean(ctx: CallContext, text: str) -> None:
     source = await _save(ctx, table, cleaned, "cleaned")
     await _table(ctx, log_frame(log), "Cleaning actions")
     await _table(ctx, cleaned, f"Cleaned {table.name}", source)
-    ctx.write("\n" + shared_line(listed))
 
 
 async def join_tables(ctx: CallContext, text: str) -> None:
@@ -88,7 +87,7 @@ async def join_tables(ctx: CallContext, text: str) -> None:
         raise TraitError("two_tables", "Reference or attach two tables to join.")
     left, right = tables[0], tables[1]
     if ctx.model is not None and ctx.model.model:
-        descriptions = [describe(left, values=False)[0], describe(right, values=False)[0]]
+        descriptions = [describe(left, values=False), describe(right, values=False)]
         plan = await choose(ctx, JoinPlan, text, descriptions)
     elif (plan := shared_key(left.frame, right.frame)) is None:
         raise TraitError(
@@ -108,6 +107,47 @@ async def join_tables(ctx: CallContext, text: str) -> None:
     )
     source = await _save(ctx, left, result, "joined", csv_only=True)
     await _table(ctx, result, f"{left.stem} joined with {right.stem}", source)
+
+
+async def plot(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan = await choose(ctx, ChartPlan, text, [describe(table)])
+    types = {str(c): column_type(table.frame[c]) for c in table.frame.columns}
+    drawn, ignored = [], []
+    for chart in plan.charts:
+        reason = chart_problem(chart, types)
+        if reason is None:
+            drawn.append(chart)
+        else:
+            ignored.append((describe_entry(chart), reason))
+    ctx.write(_sheet_note(table))
+    unused = [t.name for t in tables[1:]]
+    if unused:
+        ctx.write(
+            f"Plot draws one table at a time, so this reply uses `{table.name}` and not "
+            + ", ".join(f"`{name}`" for name in unused)
+            + ".\n\n"
+        )
+    if not drawn:
+        ctx.write(f"None of the charts the AI model chose fit `{table.name}`.\n\n")
+    else:
+        ctx.write(f"Drew {len(drawn)} chart{'s' if len(drawn) > 1 else ''} of `{table.name}`:\n")
+    results = []
+    for chart in drawn:
+        ctx.progress(f"Drawing {chart.title or chart.type}")
+        result = await asyncio.to_thread(build_chart, table.frame, chart, types)
+        notes = "; ".join(result.notes)
+        ctx.write(f"- {result.data['title']}" + (f": {notes}" if notes else "") + "\n")
+        results.append(result)
+    if drawn:
+        ctx.write("\n")
+    for result in results:
+        try:
+            await ctx.component("chart", 1, result.data, chart_text(result.data))
+        except CoreRequestError:
+            ctx.write(chart_text(result.data) + "\n\n")
+    _write_ignored(ctx, ignored, "Not drawn")
 
 
 async def _table(
@@ -139,9 +179,11 @@ def _sheet_note(table: Table) -> str:
     return note + ". "
 
 
-def _write_ignored(ctx: CallContext, ignored: list[tuple[str, str]]) -> None:
+def _write_ignored(
+    ctx: CallContext, ignored: list[tuple[str, str]], heading: str = "Not run"
+) -> None:
     if ignored:
-        ctx.write("Not run, because the AI model's choice didn't fit the data:\n")
+        ctx.write(f"{heading}, because the AI model's choice didn't fit the data:\n")
         for label, reason in ignored:
             ctx.write(f"- {label}: {reason}\n")
         ctx.write("\n")

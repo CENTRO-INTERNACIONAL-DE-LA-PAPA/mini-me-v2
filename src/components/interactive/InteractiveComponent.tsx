@@ -34,10 +34,18 @@ interface Props {
   projectId?: string;
   messageId?: string;
   replyStatus?: MessageStatus;
+  /** The solid colour of the Mini-Me that wrote the reply, when known. */
+  color?: string;
 }
 
 /** One Interactive Component, drawn by its kind's renderer for its version. */
-export function InteractiveComponent({ component, projectId, messageId, replyStatus }: Props) {
+export function InteractiveComponent({
+  component,
+  projectId,
+  messageId,
+  replyStatus,
+  color,
+}: Props) {
   const Renderer = rendererFor(component.kind, component.version);
   if (!Renderer) {
     return <Fallback text={component.text} />;
@@ -51,6 +59,7 @@ export function InteractiveComponent({ component, projectId, messageId, replySta
         messageId={messageId}
         componentId={component.id}
         replyStatus={replyStatus}
+        color={color}
       />
     </RenderBoundary>
   );

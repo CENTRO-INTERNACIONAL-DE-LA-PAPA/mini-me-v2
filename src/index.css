@@ -127,6 +127,17 @@
     --chart-3: #8a8a8a;
     --chart-4: #b8b8b8;
     --chart-5: #d7d6d0;
+    /* Chart gridlines and faint separators. */
+    --line-soft: #f1f0eb;
+    /* Chart series after the first, which takes the colour of the Mini-Me that drew it. The
+       order passes the categorical palette checks for adjacent series on white. */
+    --chart-series-2: #eb6834;
+    --chart-series-3: #1baf7a;
+    --chart-series-4: #2a78d6;
+    --chart-series-5: #eda100;
+    --chart-series-6: #e87ba4;
+    --chart-series-7: #008300;
+    --chart-series-8: #e34948;
 
     --sidebar: #f7f7f5;
     --sidebar-foreground: #0a0a0a;

@@ -165,6 +165,15 @@
       "adapter": "data-join",
       "components": ["table"],
       "instructions": "You choose how to join two tables for a researcher. From the user's message and the column names of both tables, choose the key columns of each table and the join type (inner, left, right or outer; left unless the user asks otherwise). Use only columns that the tables have."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22",
+      "name": "Plot",
+      "description": "Draws charts of a table: histograms, bar, line, scatter and box charts, and correlation heatmaps.",
+      "color": "oklch(0.78 0.12 290)",
+      "adapter": "data-plot",
+      "components": ["chart"],
+      "instructions": "You choose charts of a table for a researcher. From the user's message and the description of the table, choose the fewest charts that answer the message, and give each a short title. Use only columns that the table has, with the types each chart type needs. For a distribution, prefer a histogram, or a box plot to compare groups. Use a line chart only when x is a date or an ordered number, such as a day or a dose. Use a bar chart to compare categories, with count when the user asks how many. Use a scatter chart for the relationship between two number columns, and a heatmap for correlations among several. Add a series column only when the user asks to compare by a category. Name alternatives only when another type shows the same columns usefully, such as a box plot for a histogram split by series."
     }
   ],
   "mini_mes": [
@@ -258,6 +267,13 @@
       "description": "Joins two data tables on their key columns",
       "colors": { "tint": "#E1EDF8", "solid": "#688AA8", "ink": "#3B5972" },
       "workflow": { "steps": [{ "id": "join-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a21" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b16",
+      "name": "Plotter",
+      "description": "Draws charts of a data table",
+      "colors": { "tint": "#EFE6FF", "solid": "#9769DC", "ink": "#623E96" },
+      "workflow": { "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b15",

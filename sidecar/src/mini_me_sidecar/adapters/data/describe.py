@@ -22,12 +22,11 @@ PERSONAL = re.compile(
 )
 
 
-def describe(table: Table, values: bool = True) -> tuple[dict[str, Any], list[str]]:
-    """The description of `table` for the model, and the columns whose values it lists.
-    With `values` false, only names and types are given."""
+def describe(table: Table, values: bool = True) -> dict[str, Any]:
+    """The description of `table` for the model. With `values` false, only names and types
+    are given."""
     frame = table.frame
     columns = []
-    listed: list[str] = []
     for name in frame.columns:
         series = frame[name]
         kind = column_type(series)
@@ -43,21 +42,11 @@ def describe(table: Table, values: bool = True) -> tuple[dict[str, Any], list[st
             if _may_list(str(name), distinct, len(non_null)):
                 counts = non_null.astype(str).value_counts().head(TOP_VALUES)
                 entry["top_values"] = [[value, int(n)] for value, n in counts.items()]
-                listed.append(str(name))
         columns.append(entry)
     description: dict[str, Any] = {"file": table.name, "rows": len(frame), "columns": columns}
     if table.sheet is not None:
         description["sheet"] = table.sheet
-    return description, listed
-
-
-def shared_line(listed: list[str]) -> str:
-    """The closing line of a reply whose Trait described its tables with statistics."""
-    line = "_Shared with the AI model: column names, types and statistics"
-    if listed:
-        line += "; values of " + ", ".join(f"`{name}`" for name in listed)
-    return line + "._"
-
+    return description
 
 def _may_list(name: str, distinct: int, non_null: int) -> bool:
     if PERSONAL.search(name) or distinct == 0 or distinct > MAX_LISTED_DISTINCT:
