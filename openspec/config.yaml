@@ -58,7 +58,7 @@ context: |
     library inside our sidecar, never the backend or the protocol; LangGraph types and
     concepts stay internal to the sidecar and must not appear in the protocol or the UI.
   - Routing: if the user does not @-mention a Mini-Me, Typesafe's Jev picks one. Below a
-    configurable confidence threshold, the app asks the user to choose a Mini-Me.
+    configurable confidence threshold, or when Jev cannot be asked, Assistant answers.
   - The sidecar's Python runtime and dependencies are pinned and shipped with the app; the
     app refuses to run against a mismatched sidecar version. No WSL, Docker or other
     system-level prerequisites.

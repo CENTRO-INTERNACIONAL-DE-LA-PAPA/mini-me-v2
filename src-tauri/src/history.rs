@@ -1,15 +1,48 @@
 //! The earlier messages of a Conversation as a Trait sees them: who wrote each one, its text,
-//! the names of its files, and whether it was finished, within a size budget.
+//! the names of its files, and whether it was finished, within a size budget. Also the
+//! Conversation's results: the Assets and Interactive Components its messages hold.
+
+use std::collections::HashSet;
 
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::conversations;
 use crate::library::Library;
-use crate::protocol::{AuthorKind, Message, MessageStatus};
+use crate::protocol::{AssetRef, AuthorKind, Message, MessageStatus, TextComponentKind};
 
 /// The most `content` characters a history may hold.
 pub const HISTORY_BUDGET_CHARS: usize = 50_000;
+
+/// The most Assets, and the most components, that `results` lists.
+pub const MAX_RESULTS: usize = 50;
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Results {
+    /// Newest first.
+    pub assets: Vec<ResultAsset>,
+    /// Newest first.
+    pub components: Vec<ResultComponent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ResultAsset {
+    #[serde(flatten)]
+    pub asset: AssetRef,
+    pub message_id: Uuid,
+    /// Whether the Asset belongs to the call's own user message.
+    pub current: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ResultComponent {
+    pub id: Uuid,
+    pub kind: String,
+    pub version: u32,
+    pub message_id: Uuid,
+    /// The name of the Mini-Me whose reply holds the component.
+    pub author: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct History {
@@ -59,16 +92,66 @@ pub fn history(messages: &[Message], before: Uuid, library: &Library, budget: us
     }
 }
 
+/// The Assets and components of `messages` (a whole Conversation in creation order), newest
+/// first, at most `MAX_RESULTS` of each, each Asset once. `current` is the call's user
+/// message. `find_asset` looks up an Asset that a message references by `#`, since a
+/// reference carries only its ID and label.
+pub fn results(
+    messages: &[Message],
+    current: Uuid,
+    library: &Library,
+    find_asset: impl Fn(Uuid) -> Option<AssetRef>,
+) -> Results {
+    let mut seen = HashSet::new();
+    let mut assets = Vec::new();
+    let mut components = Vec::new();
+    for message in messages.iter().rev() {
+        let referenced = message
+            .text_components
+            .iter()
+            .filter(|c| c.kind == TextComponentKind::Asset)
+            .filter_map(|c| find_asset(c.id));
+        for asset in message.attachments.iter().cloned().chain(referenced) {
+            if assets.len() < MAX_RESULTS && seen.insert(asset.id) {
+                let current = message.id == current;
+                assets.push(ResultAsset { asset, message_id: message.id, current });
+            }
+        }
+        for component in message.components.iter().rev() {
+            if components.len() < MAX_RESULTS {
+                components.push(ResultComponent {
+                    id: component.id,
+                    kind: component.kind.clone(),
+                    version: component.version,
+                    message_id: message.id,
+                    author: author_name(message, library),
+                });
+            }
+        }
+    }
+    Results { assets, components }
+}
+
+/// The ID of the message in `messages` that holds the component `component_id`.
+pub fn component_message(messages: &[Message], component_id: Uuid) -> Option<Uuid> {
+    messages
+        .iter()
+        .find(|m| m.components.iter().any(|c| c.id == component_id))
+        .map(|m| m.id)
+}
+
+/// A reply's Mini-Me name, or "Mini-Me" when the library no longer has it.
+fn author_name(message: &Message, library: &Library) -> String {
+    Uuid::parse_str(&message.author.id)
+        .ok()
+        .and_then(|id| library.mini_me(id))
+        .map_or_else(|| "Mini-Me".to_string(), |m| m.name.clone())
+}
+
 fn entry(message: &Message, library: &Library) -> HistoryEntry {
     let (author, name) = match message.author.kind {
         AuthorKind::User => ("user", "You".to_string()),
-        _ => {
-            let name = Uuid::parse_str(&message.author.id)
-                .ok()
-                .and_then(|id| library.mini_me(id))
-                .map_or_else(|| "Mini-Me".to_string(), |m| m.name.clone());
-            ("mini_me", name)
-        }
+        _ => ("mini_me", author_name(message, library)),
     };
     HistoryEntry {
         author,
@@ -211,6 +294,65 @@ mod tests {
         let too_big = history(&all, current, &library, 3);
         assert!(too_big.messages.is_empty());
         assert!(too_big.truncated);
+    }
+
+    fn asset(name: &str) -> AssetRef {
+        AssetRef { id: new_id(), name: name.into(), media_type: "text/csv".into(), size_bytes: 1 }
+    }
+
+    fn table(reply: &mut Message) -> Uuid {
+        let id = new_id();
+        reply.components.push(Component {
+            id,
+            kind: "table".into(),
+            version: 1,
+            data: serde_json::Value::Null,
+            text: "a\tb".into(),
+            answer: serde_json::Value::Null,
+        });
+        id
+    }
+
+    #[test]
+    fn results_are_newest_first_once_each_with_the_current_files_marked() {
+        let trial = asset("trial.csv");
+        let mut first = user("profile #trial.csv");
+        first.attachments.push(trial.clone());
+        let mut reply = scribe("Done.", MessageStatus::Complete);
+        let older = table(&mut reply);
+        let newer = table(&mut reply);
+        let notes = asset("notes.txt");
+        let mut current = user("again #trial.csv and #notes.txt");
+        for (id, label) in [(trial.id, "#trial.csv"), (notes.id, "#notes.txt")] {
+            current.text_components.push(crate::protocol::TextComponent {
+                kind: TextComponentKind::Asset,
+                id,
+                label: label.into(),
+                start: 0,
+                end: 1,
+            });
+        }
+        let current_id = current.id;
+        let all = [first, reply, current];
+        let registry = [trial.clone(), notes.clone()];
+        let find = |id| registry.iter().find(|a| a.id == id).cloned();
+
+        let results = results(&all, current_id, &Library::builtin(), find);
+        let names: Vec<(&str, bool)> =
+            results.assets.iter().map(|a| (a.asset.name.as_str(), a.current)).collect();
+        assert_eq!(names, [("trial.csv", true), ("notes.txt", true)]);
+        let ids: Vec<Uuid> = results.components.iter().map(|c| c.id).collect();
+        assert_eq!(ids, [newer, older]);
+        assert_eq!(results.components[0].author, "Scribe");
+    }
+
+    #[test]
+    fn a_component_is_found_in_its_message() {
+        let mut reply = scribe("Done.", MessageStatus::Complete);
+        let id = table(&mut reply);
+        let all = [user("q"), reply];
+        assert_eq!(component_message(&all, id), Some(all[1].id));
+        assert_eq!(component_message(&all, new_id()), None);
     }
 
     #[test]

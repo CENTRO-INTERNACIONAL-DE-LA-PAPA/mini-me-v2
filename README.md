@@ -36,7 +36,7 @@ Find Papers ──► Summarize ──► [you approve] ──► Refute ──�
 ```
 
 When you write a message without mentioning a Mini-Me, Mini-Me picks the most suitable one
-for you. If it isn't confident enough, it asks you to choose.
+for you. If it isn't confident enough, Assistant answers.
 
 ## Traits
 
@@ -207,8 +207,8 @@ before relying on them.
 
 When you don't mention a Mini-Me, Typesafe's Jev chooses the most suitable one. If Jev
 isn't confident enough (see **Confidence threshold** in Settings, 0.5 by default) or can't
-be reached, Mini-Me replies asking you to mention one with `@`. Jev also decides whether
-the Mini-Me reacts to your message with an emoji.
+be reached, Assistant answers; mention a Mini-Me with `@` to choose one yourself. Jev also
+decides whether the Mini-Me reacts to your message with an emoji.
 
 To choose, Jev receives your message's text, the names of the files it references or
 attaches, and the Mini-Mes' names and descriptions. It never receives file contents or

@@ -171,6 +171,20 @@ class CallContext:
         """The Conversation's earlier messages, `{ messages, truncated }`, oldest first."""
         return await self._requests.send(self.call_id, "conversation.history", {})
 
+    async def results(self) -> dict[str, Any]:
+        """The Conversation's Assets and Interactive Components, `{ assets, components }`,
+        each newest first. An Asset is `{ id, name, media_type, size_bytes, message_id,
+        current }`, where `current` marks the call's own message's files; a component is
+        `{ id, kind, version, message_id, author }`."""
+        return await self._requests.send(self.call_id, "conversation.results", {})
+
+    async def read_component(self, component_id: str) -> dict[str, Any]:
+        """A component of the Conversation, `{ kind, version, data, text }`. Raises
+        `CoreRequestError` with `not_found` for any other ID."""
+        return await self._requests.send(
+            self.call_id, "component.read", {"component_id": component_id}
+        )
+
     async def component(self, kind: str, version: int, data: Any, text: str) -> str:
         """Adds an Interactive Component below the reply's text and returns its ID. `kind`
         must be listed in the Trait's `components`, and `data` must have the shape that the
