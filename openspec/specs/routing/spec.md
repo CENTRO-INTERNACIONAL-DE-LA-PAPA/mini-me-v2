@@ -66,24 +66,6 @@ above the confidence threshold, the Mini-Me Jev chose SHALL answer.
 - **WHEN** the threshold is 0.5 and Jev chooses Scribe with confidence 0.9
 - **THEN** Scribe answers without the user being asked
 
-### Requirement: Asked to mention a Mini-Me below the threshold or without Jev
-When the message mentions no Mini-Me and either Jev's confidence is below the threshold, or
-no decision is available, the core SHALL start no Trait call. "No decision" means no
-Typesafe key, Typesafe unreachable, an error, or no answer within 10 seconds. Instead it
-SHALL persist a complete reply from `{ kind: "system", id: "routing" }` asking the user to
-mention a Mini-Me with `@`. The reply SHALL say whether Jev was unsure or could not be
-asked, and SHALL name a Mini-Me as an example.
-
-#### Scenario: Unsure
-- **WHEN** the threshold is 0.5 and Jev's confidence is 0.3
-- **THEN** the message gets a reply saying Mini-Me is not sure who should answer and to
-  mention one with @, and no Trait runs
-
-#### Scenario: No Typesafe key
-- **WHEN** no Typesafe key is saved and the user sends a message without a mention
-- **THEN** the reply says a Mini-Me could not be chosen, points to the Typesafe key in
-  Settings, and asks to mention a Mini-Me with @
-
 ### Requirement: Choosing a status
 While the routing decision for a message is pending, the UI SHALL show "Choosing a
 Mini-Me…" under the message and keep the composer disabled as during a reply.
@@ -98,18 +80,22 @@ app settings. It SHALL apply to Jev's `mini_me` answer and to its `reaction` ans
 
 #### Scenario: Changing the threshold
 - **WHEN** the user sets the threshold to 0.8 and Jev chooses a Mini-Me with confidence 0.7
-- **THEN** the message gets the reply asking to mention a Mini-Me
+- **THEN** Assistant answers
 
 ### Requirement: Jev decides on a reaction
 The answering Mini-Me SHALL react with Jev's `reaction` choice when that choice is not `none`
 and its confidence is at or above the threshold. Without a decision, there SHALL be no
-reaction, and a mentioned Mini-Me's reply SHALL go ahead. The reply asking to mention a
-Mini-Me SHALL come without a reaction.
+reaction, and the reply SHALL go ahead. A reply from the fallback SHALL react under the
+same rule, from Assistant.
 
 #### Scenario: Jev unavailable with a mention
 - **WHEN** Typesafe cannot be reached and the user sends "@Scribe thanks, summarize
   #notes.txt"
 - **THEN** Scribe replies with the summary and adds no reaction
+
+#### Scenario: Fallback with a reaction
+- **WHEN** Jev's `mini_me` confidence is 0.3 and it picks 👍 with confidence 0.8
+- **THEN** Assistant answers and adds 👍 to the user's message
 
 ### Requirement: Context answer is passed on
 Jev's `needs_context` answer SHALL be passed to the reply's run as `context.needs_context`,
@@ -143,3 +129,31 @@ The sidecar SHALL get the Typesafe key with `secret.get` for provider `typesafe`
 #### Scenario: No key
 - **WHEN** the core has no Typesafe key
 - **THEN** the sidecar answers `route.error` with code `secret_unavailable`
+
+### Requirement: Assistant answers below the threshold or without Jev
+When the message mentions no Mini-Me and Jev's confidence is below the threshold, Jev
+chooses a Mini-Me the library does not have, or no decision is available, Assistant SHALL
+answer. "No decision" means no Typesafe key, Typesafe unreachable, an error, or no answer
+within 10 seconds.
+
+#### Scenario: Unsure
+- **WHEN** the threshold is 0.5 and Jev's confidence is 0.3
+- **THEN** Assistant answers, without the user being asked to mention a Mini-Me
+
+#### Scenario: No Typesafe key
+- **WHEN** no Typesafe key is saved and the user sends "Create a sample CSV file" without a
+  mention
+- **THEN** Assistant answers
+
+#### Scenario: Unknown choice
+- **WHEN** Jev answers with an ID that is not a Mini-Me in the library
+- **THEN** Assistant answers
+
+### Requirement: A reply that cannot start is explained
+When the chosen or fallback Mini-Me's reply cannot be started, the core SHALL persist a
+complete reply from `{ kind: "system", id: "routing" }` saying the reply could not be
+started and why.
+
+#### Scenario: Sidecar not running
+- **WHEN** routing picks a Mini-Me but the sidecar is not running
+- **THEN** the message gets a note from Mini-Me saying the reply could not be started

@@ -18,7 +18,7 @@ use uuid::Uuid;
 use crate::assets;
 use crate::conversations::{self, PausedRun};
 use crate::error::{AppError, AppResult};
-use crate::history::{HISTORY_BUDGET_CHARS, history};
+use crate::history::{HISTORY_BUDGET_CHARS, component_message, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
 use crate::link::{
     AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, RouteMiniMe, RunContext, RunMiniMe,
@@ -174,6 +174,11 @@ struct ComponentAddParams {
     version: u32,
     data: Value,
     text: String,
+}
+
+#[derive(Deserialize)]
+struct ComponentReadParams {
+    component_id: Uuid,
 }
 
 #[derive(Deserialize)]
@@ -736,6 +741,33 @@ impl Runs {
                         .map_err(reply_ended)?;
                 Ok(json!({ "asset": asset }))
             }
+            "conversation.results" => {
+                let state = project.lock();
+                let messages = state.conversation_messages(place.conversation_id)?;
+                let found = results(&messages, place.answers, &self.library, |id| {
+                    assets::find(&state, id).ok()
+                });
+                Ok(serde_json::to_value(found)?)
+            }
+            "component.read" => {
+                let p: ComponentReadParams = parse_params(params)?;
+                let not_found = || AppError::not_found("No such component in this Conversation.");
+                let state = project.lock();
+                let messages = state.conversation_messages(place.conversation_id)?;
+                let message_id = component_message(&messages, p.component_id).ok_or_else(not_found)?;
+                let (_, message) = state.load_message_with(message_id, true)?.ok_or_else(not_found)?;
+                let component = message
+                    .components
+                    .into_iter()
+                    .find(|c| c.id == p.component_id)
+                    .ok_or_else(not_found)?;
+                Ok(json!({
+                    "kind": component.kind,
+                    "version": component.version,
+                    "data": component.data,
+                    "text": component.text,
+                }))
+            }
             "component.add" => {
                 let p: ComponentAddParams = parse_params(params)?;
                 let component = (p.kind.as_str(), p.version, p.data, p.text);
@@ -1248,6 +1280,28 @@ mod tests {
     }
 
     #[test]
+    fn a_call_lists_its_conversations_components_and_reads_one_in_full() {
+        let f = quick();
+        let (call_id, _) = f.start_call("echo");
+        let params = json!({
+            "kind": "paper-sources", "version": 1, "data": papers(), "text": "1. Late blight"
+        });
+        let id = result(add_component(&f, call_id, params))["component_id"].clone();
+
+        let listed = result(f.runs.respond("r".into(), call_id, "conversation.results", json!({})));
+        assert_eq!(listed["components"][0]["id"], id);
+        assert_eq!(listed["components"][0]["kind"], json!("paper-sources"));
+        assert_eq!(listed["assets"], json!([]));
+
+        let read = |component_id: Value| {
+            let params = json!({ "component_id": component_id });
+            f.runs.respond("r".into(), call_id, "component.read", params)
+        };
+        assert_eq!(result(read(id))["data"], papers());
+        assert_eq!(error_code(read(json!(new_id()))).as_deref(), Some("not_found"));
+    }
+
+    #[test]
     fn components_the_trait_does_not_list_or_without_text_are_refused() {
         let f = quick();
         let (call_id, reply) = f.start_call("echo");
@@ -1437,6 +1491,15 @@ mod tests {
         assert_eq!(error_code(ask("asset.read", read)).as_deref(), Some("unknown_method"));
         let add = json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": "t" });
         assert_eq!(error_code(ask("component.add", add)).as_deref(), Some("unknown_method"));
+        assert_eq!(
+            error_code(ask("conversation.results", json!({}))).as_deref(),
+            Some("unknown_method")
+        );
+        let read_component = json!({ "component_id": Uuid::nil() });
+        assert_eq!(
+            error_code(ask("component.read", read_component)).as_deref(),
+            Some("unknown_method")
+        );
         assert_eq!(
             error_code(ask("secret.get", json!({ "provider": "openai" }))).as_deref(),
             Some("secret_not_allowed")

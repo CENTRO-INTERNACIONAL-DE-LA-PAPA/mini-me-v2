@@ -61,7 +61,8 @@ Mini-Me SHALL ship with fifteen Mini-Mes:
   *Summarize*.
 - **Assistant:** "Answers general questions and requests that no other Mini-Me specializes
   in"; one Step running *Assist*, whose instructions make it a general research assistant
-  that uses referenced files when relevant and says when it does not know.
+  that uses referenced files when relevant and says when it does not know. Assistant also
+  answers whenever routing has no confident choice.
 - **Researcher:** "Finds research papers on a topic with Ai2's Paper Finder"; one Step
   running *Find Papers*.
 - **Theorist:** "Builds scientific theories from the literature with Ai2's Theorizer"; one

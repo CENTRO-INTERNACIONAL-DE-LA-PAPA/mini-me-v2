@@ -211,6 +211,8 @@ with `--test-adapters`, as the core's tests do.
 | `ctx.progress(label, fraction)` | the status line under a streaming reply; at most four per second | `run.progress` → `message.progress` |
 | `await ctx.read_asset(id)` | the bytes of a Project file the message references | `core.request` `asset.read` |
 | `await ctx.history()` | the Conversation's earlier messages, within a 50,000-character budget | `core.request` `conversation.history` |
+| `await ctx.results()` | the Conversation's files and Interactive Components, newest first | `core.request` `conversation.results` |
+| `await ctx.read_component(id)` | one component of the Conversation with its full data | `core.request` `component.read` |
 | `await ctx.secret(provider)` | an API key or the Ai2 token, for a declared provider only | `core.request` `secret.get` |
 | `await ctx.component(kind, version, data, text)` | adds an Interactive Component below the reply's text | `core.request` `component.add` |
 | `await ctx.write_asset(name, media_type, data)` | saves a file in the Project and attaches it to the reply | `core.request` `asset.write` |
@@ -230,10 +232,10 @@ For "@Researcher drought in Andean landraces":
 1. **Send.** The UI calls `send_message`; the core checks the message's references and stores
    it (`conversations.rs`).
 2. **Route.** With an `@` mention, the first mentioned Mini-Me answers. Without one,
-   Typesafe's Jev chooses a Mini-Me, or the app asks the user to mention one when Jev's
-   confidence is below the threshold in Settings. Jev also judges whether the message needs
-   earlier context and whether the Mini-Me reacts with an emoji (`routing.rs` in the core,
-   `routing.py` in the sidecar).
+   Typesafe's Jev chooses a Mini-Me; when Jev's confidence is below the threshold in
+   Settings or Jev cannot be asked, Assistant answers (`FALLBACK_MINI_ME` in `library.rs`).
+   Jev also judges whether the message needs earlier context and whether the Mini-Me reacts
+   with an emoji (`routing.rs` in the core, `routing.py` in the sidecar).
 3. **Start.** The core creates an empty streaming reply and sends `run.start` with the
    Mini-Me's Workflow, the Traits it uses, the model, the message and its context
    (`runs.rs`). A run needs a model if any of its adapters declares providers or if it has
@@ -350,7 +352,7 @@ The core and the sidecar speak newline-delimited JSON frames (`link.rs`, `link.p
 sidecar keeps the original stdout for frames and sends all other output to stderr, which the
 core writes to `sidecar.log`.
 
-- **Handshake:** the sidecar sends `hello` with its protocol version, currently **5**. A
+- **Handshake:** the sidecar sends `hello` with its protocol version, currently **6**. A
   different version on either side shows the sidecar as incompatible, naming both; in
   development the message also says which side is stale.
 - **Core → sidecar:** `adapters.list`, `run.start`, `run.cancel`, `route.start`,

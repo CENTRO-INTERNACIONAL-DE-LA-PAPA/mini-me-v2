@@ -4,6 +4,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Assistant, who answers when routing has no mentioned or confident choice.
+pub const FALLBACK_MINI_ME: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8e1f0d7b03);
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraitDef {
     pub id: Uuid,
@@ -235,6 +238,9 @@ impl Library {
         }
         for m in &self.mini_mes {
             problems.extend(self.workflow_problems(m));
+        }
+        if self.mini_me(FALLBACK_MINI_ME).is_none() {
+            problems.push("the fallback Mini-Me is missing".to_string());
         }
         problems
     }
@@ -472,6 +478,14 @@ mod tests {
         assert!(problems.iter().any(|p| p.contains("Title Case")));
         assert!(problems.iter().any(|p| p.contains("has no Steps")));
         assert!(problems.iter().any(|p| p.contains("placeholder Trait Document")));
+    }
+
+    #[test]
+    fn the_fallback_is_assistant_and_must_exist() {
+        let mut library = Library::builtin();
+        assert_eq!(library.mini_me(FALLBACK_MINI_ME).unwrap().name, "Assistant");
+        library.mini_mes.retain(|m| m.id != FALLBACK_MINI_ME);
+        assert!(library.problems().iter().any(|p| p.contains("fallback Mini-Me is missing")));
     }
 
     const SCOUT: &str = "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06";

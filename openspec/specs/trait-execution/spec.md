@@ -118,7 +118,8 @@ answer each with `core.response`, payload `{ request_id, result }` or `{ request
 - **THEN** the core answers with error code `unknown_method`
 
 #### Scenario: Model decision
-- **WHEN** a condition's decision sends `asset.read`, `component.add` or `asset.write`
+- **WHEN** a condition's decision sends `asset.read`, `component.add`, `asset.write`,
+  `conversation.results` or `component.read`
 - **THEN** the core answers with error code `unknown_method`; only `secret.get` is allowed
 
 #### Scenario: Unknown method or ended run
@@ -164,14 +165,15 @@ built-in library only placeholder Traits use it.
   with `run.done`
 
 ### Requirement: Link protocol version
-The link protocol version SHALL be 5. The Rust core and the sidecar both implement adapter
+The link protocol version SHALL be 6. The Rust core and the sidecar both implement adapter
 discovery, Mini-Me runs (`run.start`, `run.cancel` and the `run.*` and `step.*` frames), the
-routing request, and the `component.add` and `asset.write` requests. A side still at an
-earlier version SHALL be reported as a version mismatch.
+routing request, and the `component.add`, `asset.write`, `conversation.results` and
+`component.read` requests. A side still at an earlier version SHALL be reported as a
+version mismatch.
 
 #### Scenario: Old sidecar
-- **WHEN** a development build's core implementing version 5 starts a sidecar that sends
-  `hello` with protocol 4
+- **WHEN** a development build's core implementing version 6 starts a sidecar that sends
+  `hello` with protocol 5
 - **THEN** the sidecar is shown as `incompatible`, naming both versions
 
 ### Requirement: Summarize Trait

@@ -1,6 +1,6 @@
 //! Which Mini-Me answers a user message, whether it also reacts to it, and whether the
 //! message needs earlier context, as decided by Typesafe's Jev. When Jev is unsure or cannot
-//! be asked, the message gets a reply asking the user to mention a Mini-Me.
+//! be asked, the fallback Mini-Me answers.
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -11,13 +11,13 @@ use uuid::Uuid;
 
 use crate::conversations::{self, SendMessageInput};
 use crate::error::{AppError, AppResult};
-use crate::library::Library;
+use crate::library::{FALLBACK_MINI_ME, Library};
 use crate::link::{CallModel, RouteMiniMe};
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
 use crate::runs::{RouteAnswers, RunSpec, Runs};
 use crate::store::Project;
 
-/// How long a message waits for Jev before the user is asked to mention a Mini-Me.
+/// How long a message waits for Jev before the fallback Mini-Me answers it.
 pub const ROUTE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The reactions Jev may choose besides `none`.
@@ -33,26 +33,13 @@ pub struct RouteSettings {
     pub show_answers: bool,
 }
 
-/// The author ID of the replies that ask the user to mention a Mini-Me.
+/// The author ID of the notes that say why a message got no reply.
 const ROUTING_AUTHOR: &str = "routing";
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Unsure {
-    /// Jev answered below the confidence threshold.
-    LowConfidence,
-    /// Jev could not be asked, or a reply could not be started.
-    Unavailable,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum Answerer {
-    MiniMe(Uuid),
-    Unsure(Unsure),
-}
 
 #[derive(Debug, Clone, PartialEq)]
 struct Decision {
-    answerer: Answerer,
+    /// The Mini-Me that answers.
+    answerer: Uuid,
     reaction: Option<String>,
     needs_context: Option<bool>,
 }
@@ -112,7 +99,7 @@ impl Routing {
         Ok(message)
     }
 
-    /// Asks Jev and starts the reply, or replies asking the user to mention a Mini-Me.
+    /// Asks Jev and starts the reply, or notes why no reply could be started.
     fn route(
         &self,
         calls: &Runs,
@@ -171,20 +158,13 @@ impl Routing {
             settings.threshold,
             &self.library,
         );
-        let mini_me_id = match decision.answerer {
-            Answerer::MiniMe(id) => id,
-            Answerer::Unsure(why) => {
-                self.ask_for_mention(project, conversation_id, message.id, why);
-                return;
-            }
-        };
         let started = self.start_reply(
             calls,
             settings.model.clone(),
             project,
             conversation_id,
             message,
-            mini_me_id,
+            decision.answerer,
             decision.needs_context,
         );
         match started {
@@ -199,27 +179,17 @@ impl Routing {
             }
             Err(err) => {
                 eprintln!("could not start a reply: {err}");
-                self.ask_for_mention(project, conversation_id, message.id, Unsure::Unavailable);
+                let content = format!("Couldn't start a reply: {}", err.message);
+                if let Err(err) = conversations::system_reply(
+                    project,
+                    conversation_id,
+                    message.id,
+                    ROUTING_AUTHOR,
+                    &content,
+                ) {
+                    eprintln!("could not say why there is no reply: {err}");
+                }
             }
-        }
-    }
-
-    fn ask_for_mention(
-        &self,
-        project: &Project,
-        conversation_id: Uuid,
-        message_id: Uuid,
-        why: Unsure,
-    ) {
-        let content = mention_request(&self.library, why);
-        if let Err(err) = conversations::system_reply(
-            project,
-            conversation_id,
-            message_id,
-            ROUTING_AUTHOR,
-            &content,
-        ) {
-            eprintln!("could not ask for a mention: {err}");
         }
     }
 
@@ -274,7 +244,8 @@ fn state(message: &Message) -> Value {
 }
 
 /// Turns Jev's answers (`None` when Jev could not be asked) into who answers, the reaction
-/// and the context answer. A confidence equal to the threshold passes.
+/// and the context answer. A confidence equal to the threshold passes; below it, or without
+/// an answer, the fallback Mini-Me answers.
 fn decide(
     answers: Option<&RouteAnswers>,
     mentioned: Option<Uuid>,
@@ -283,19 +254,11 @@ fn decide(
 ) -> Decision {
     let answer = |question: &str| answers.and_then(|a| a.get(question));
 
-    let answerer = if let Some(id) = mentioned {
-        Answerer::MiniMe(id)
-    } else if let Some(choice) = answer("mini_me") {
-        let chosen = Uuid::parse_str(&choice.choice)
-            .ok()
-            .filter(|id| library.mini_me(*id).is_some());
-        match chosen {
-            Some(id) if choice.confidence >= threshold => Answerer::MiniMe(id),
-            _ => Answerer::Unsure(Unsure::LowConfidence),
-        }
-    } else {
-        Answerer::Unsure(Unsure::Unavailable)
-    };
+    let chosen = answer("mini_me")
+        .filter(|choice| choice.confidence >= threshold)
+        .and_then(|choice| Uuid::parse_str(&choice.choice).ok())
+        .filter(|id| library.mini_me(*id).is_some());
+    let answerer = mentioned.or(chosen).unwrap_or(FALLBACK_MINI_ME);
 
     let reaction = answer("reaction")
         .filter(|r| r.confidence >= threshold && REACTIONS.contains(&r.choice.as_str()))
@@ -309,23 +272,6 @@ fn decide(
         answerer,
         reaction,
         needs_context,
-    }
-}
-
-/// The reply asking the user to mention a Mini-Me, with the first Mini-Me as an example.
-fn mention_request(library: &Library, why: Unsure) -> String {
-    let example = library
-        .summaries()
-        .first()
-        .map_or_else(String::new, |m| format!(", for example @{}", m.name));
-    match why {
-        Unsure::LowConfidence => {
-            format!("Not sure which Mini-Me should answer this. Mention one with @{example}.")
-        }
-        Unsure::Unavailable => format!(
-            "Couldn't choose a Mini-Me: Typesafe is unavailable or has no key in Settings. \
-             Mention one with @{example}."
-        ),
     }
 }
 
@@ -434,32 +380,32 @@ mod tests {
         let sure = answers(vec![("mini_me", answer(&scribe, 0.5, &[]))]);
         assert_eq!(
             decide(Some(&sure), None, 0.5, &library).answerer,
-            Answerer::MiniMe(SCRIBE)
+            SCRIBE
         );
     }
 
     #[test]
-    fn low_confidence_or_an_unknown_mini_me_is_unsure() {
+    fn low_confidence_or_an_unknown_mini_me_falls_back() {
         let library = Library::builtin();
         let unsure = answers(vec![("mini_me", answer(&SCRIBE.to_string(), 0.3, &[]))]);
         assert_eq!(
             decide(Some(&unsure), None, 0.5, &library).answerer,
-            Answerer::Unsure(Unsure::LowConfidence)
+            FALLBACK_MINI_ME
         );
         let unknown = answers(vec![("mini_me", answer(&new_id().to_string(), 0.99, &[]))]);
         assert_eq!(
             decide(Some(&unknown), None, 0.5, &library).answerer,
-            Answerer::Unsure(Unsure::LowConfidence)
+            FALLBACK_MINI_ME
         );
     }
 
     #[test]
-    fn without_jev_only_a_mentioned_mini_me_answers() {
+    fn without_jev_a_mentioned_mini_me_answers_or_else_the_fallback() {
         let library = Library::builtin();
         assert_eq!(
             decide(None, None, 0.5, &library),
             Decision {
-                answerer: Answerer::Unsure(Unsure::Unavailable),
+                answerer: FALLBACK_MINI_ME,
                 reaction: None,
                 needs_context: None,
             }
@@ -467,7 +413,7 @@ mod tests {
         assert_eq!(
             decide(None, Some(SCRIBE), 0.5, &library),
             Decision {
-                answerer: Answerer::MiniMe(SCRIBE),
+                answerer: SCRIBE,
                 reaction: None,
                 needs_context: None,
             }
@@ -475,14 +421,15 @@ mod tests {
     }
 
     #[test]
-    fn the_mention_request_says_why_and_gives_an_example() {
+    fn the_fallback_reacts_under_the_same_threshold() {
         let library = Library::builtin();
-        let unsure = mention_request(&library, Unsure::LowConfidence);
-        assert!(unsure.starts_with("Not sure which Mini-Me"));
-        assert!(unsure.contains("@Scribe"));
-        let unavailable = mention_request(&library, Unsure::Unavailable);
-        assert!(unavailable.contains("Typesafe"));
-        assert!(unavailable.contains("@Scribe"));
+        let unsure = answers(vec![
+            ("mini_me", answer(&SCRIBE.to_string(), 0.3, &[])),
+            ("reaction", answer("👍", 0.8, &[])),
+        ]);
+        let decision = decide(Some(&unsure), None, 0.5, &library);
+        assert_eq!(decision.answerer, FALLBACK_MINI_ME);
+        assert_eq!(decision.reaction.as_deref(), Some("👍"));
     }
 
     #[test]
@@ -591,15 +538,15 @@ mod tests {
             Arc::clone(&library),
         ));
         let sink = Arc::new(Recorder::default());
-        let prompt_adapter = AdapterInfo {
-            id: "prompt".into(),
+        let adapter = |id: &str| AdapterInfo {
+            id: id.into(),
             description: String::new(),
             input_schema: json!({}),
             providers: vec!["dummy".into()],
         };
         calls.connect(
             Arc::clone(&sink) as Arc<dyn FrameSink>,
-            vec![prompt_adapter],
+            vec![adapter("prompt"), adapter("assist")],
         );
         Fixture {
             _dir: dir,
@@ -685,10 +632,24 @@ mod tests {
         }
     }
 
-    fn is_routing_note(events: &[EventKind]) -> bool {
-        events.iter().any(|e| {
-            matches!(e, EventKind::MessageCreated { message }
-                if message.author.kind == AuthorKind::System && message.author.id == ROUTING_AUTHOR)
+    fn routing_note(events: &[EventKind]) -> Option<Message> {
+        events.iter().find_map(|e| match e {
+            EventKind::MessageCreated { message }
+                if message.author.kind == AuthorKind::System
+                    && message.author.id == ROUTING_AUTHOR =>
+            {
+                Some(message.clone())
+            }
+            _ => None,
+        })
+    }
+
+    fn reply_to(events: &[EventKind], message_id: Uuid) -> Option<Message> {
+        events.iter().find_map(|e| match e {
+            EventKind::MessageCreated { message } if message.reply_to == Some(message_id) => {
+                Some(message.clone())
+            }
+            _ => None,
         })
     }
 
@@ -740,7 +701,7 @@ mod tests {
     }
 
     #[test]
-    fn a_second_message_waits_and_an_unanswered_route_asks_for_a_mention() {
+    fn a_second_message_waits_and_an_unanswered_route_falls_back_to_assistant() {
         let f = fixture();
         let first = f
             .send("late blight spreads", &[], Duration::from_millis(300))
@@ -748,24 +709,23 @@ mod tests {
         let second = f.send("and another", &[], ROUTE_TIMEOUT);
         assert_eq!(second.unwrap_err().code, "reply_in_progress");
 
-        let events = f.wait_for("the routing note", is_routing_note);
-        let note = events.iter().find_map(|e| match e {
-            EventKind::MessageCreated { message } if message.author.id == ROUTING_AUTHOR => {
-                Some(message.clone())
-            }
-            _ => None,
-        });
-        let note = note.unwrap();
-        assert_eq!(note.reply_to, Some(first.id));
+        let events = f.wait_for("the reply", |events| reply_to(events, first.id).is_some());
+        let reply = reply_to(&events, first.id).unwrap();
+        assert_eq!(reply.author.id, FALLBACK_MINI_ME.to_string());
+        assert_eq!(routing_note(&events), None);
+    }
+
+    #[test]
+    fn a_reply_that_cannot_start_is_explained() {
+        let f = fixture();
+        f.calls.disconnect();
+        let sent = f
+            .send("@Assistant hi", &[("@Assistant", ASSISTANT)], ROUTE_TIMEOUT)
+            .unwrap();
+        let events = f.wait_for("the routing note", |events| routing_note(events).is_some());
+        let note = routing_note(&events).unwrap();
+        assert_eq!(note.reply_to, Some(sent.id));
         assert_eq!(note.status, MessageStatus::Complete);
-        assert!(note.content.contains("Typesafe"));
-        let started = f
-            .sink
-            .0
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|frame| matches!(frame, CoreFrame::RunStart { .. }));
-        assert!(!started);
+        assert!(note.content.starts_with("Couldn't start a reply"));
     }
 }
