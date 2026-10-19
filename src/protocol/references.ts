@@ -41,8 +41,9 @@ export function activeQuery(
 }
 
 /**
- * Replaces `text[start..end]` (the typed query) with the target's label followed by a space,
- * and records the reference.
+ * Replaces `text[start..end]` (the typed query) with the target's label and records the
+ * reference. A space follows the label unless the text after it already starts with
+ * whitespace; either way the cursor ends after that space.
  */
 export function insertReference(
   text: string,
@@ -51,14 +52,15 @@ export function insertReference(
   end: number,
   target: ReferenceTarget,
 ): { text: string; references: DraftReference[]; cursor: number } {
-  const inserted = `${target.label} `;
+  const spaced = /^\s/.test(text.slice(end));
+  const inserted = spaced ? target.label : `${target.label} `;
   const nextText = text.slice(0, start) + inserted + text.slice(end);
   const shifted = updateReferences(text, nextText, references);
   const reference = { ...target, start, end: start + target.label.length };
   return {
     text: nextText,
     references: [...shifted, reference].sort((a, b) => a.start - b.start),
-    cursor: start + inserted.length,
+    cursor: start + target.label.length + 1,
   };
 }
 

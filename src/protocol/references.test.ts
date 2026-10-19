@@ -39,7 +39,7 @@ describe("activeQuery", () => {
 describe("insertReference", () => {
   it("replaces the query with the label and tracks its range", () => {
     const result = insertReference("see #tri now", [], 4, 8, assetTarget(asset));
-    expect(result.text).toBe("see #trial.csv  now");
+    expect(result.text).toBe("see #trial.csv now");
     expect(result.references).toEqual([
       { kind: "asset", id: "a1", label: "#trial.csv", start: 4, end: 14 },
     ]);
@@ -48,10 +48,21 @@ describe("insertReference", () => {
 
   it("inserts a Mini-Me mention", () => {
     const result = insertReference("@Scr summarize", [], 0, 4, miniMeTarget(scribe));
-    expect(result.text).toBe("@Scribe  summarize");
+    expect(result.text).toBe("@Scribe summarize");
     expect(result.references).toEqual([
       { kind: "mini_me", id: "m1", label: "@Scribe", start: 0, end: 7 },
     ]);
+  });
+
+  it("adds a space at the end of the text", () => {
+    const result = insertReference("see #tri", [], 4, 8, assetTarget(asset));
+    expect(result.text).toBe("see #trial.csv ");
+    expect(result.cursor).toBe(15);
+  });
+
+  it("puts the cursor after an existing space", () => {
+    const result = insertReference("@Scr summarize", [], 0, 4, miniMeTarget(scribe));
+    expect(result.cursor).toBe(8);
   });
 
   it("shifts references that come after the insertion", () => {
@@ -59,7 +70,7 @@ describe("insertReference", () => {
     const second = insertReference(first.text, first.references, 0, 1, assetTarget(asset));
     expect(second.references.map((r) => [r.start, r.end])).toEqual([
       [0, 10],
-      [16, 26],
+      [15, 25],
     ]);
   });
 });
