@@ -20,7 +20,7 @@ The Rust core SHALL hold a shared Trait library. Each Trait definition SHALL hav
 
 The library is read-only in this version. It contains *Summarize*, *Assist*, *Find
 Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment*, *Profile Data*,
-*Validate Data*, *Clean Data* and *Join Data*, and the placeholder Traits.
+*Validate Data*, *Clean Data*, *Join Data* and *Plot*, and the placeholder Traits.
 
 #### Scenario: Built-in Traits
 - **WHEN** the app starts
@@ -28,14 +28,14 @@ Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment*, *Profile
   *Wonder* and *Experiment* (adapter `prompt`), *Find Papers* (adapter
   `asta-paper-finder`), *Theorize* (adapter `asta-theorizer`), *Profile Data* (adapter
   `data-profile`), *Validate Data* (adapter `data-validate`), *Clean Data* (adapter
-  `data-clean`), *Join Data* (adapter `data-join`), and the placeholder Traits (adapter
-  `echo`)
+  `data-clean`), *Join Data* (adapter `data-join`), *Plot* (adapter `data-plot`), and the
+  placeholder Traits (adapter `echo`)
 
 #### Scenario: Components of the built-in Traits
 - **WHEN** the app starts
 - **THEN** *Find Papers* lists `paper-sources`, *Theorize* lists `theories`, *Profile
-  Data*, *Validate Data*, *Clean Data* and *Join Data* list `table`, and every other Trait
-  lists none
+  Data*, *Validate Data*, *Clean Data* and *Join Data* list `table`, *Plot* lists `chart`,
+  and every other Trait lists none
 
 ### Requirement: Mini-Me definitions
 Each Mini-Me SHALL have:
@@ -56,7 +56,7 @@ version.
 - **THEN** its reply is produced by running each Step of its Workflow
 
 ### Requirement: Predefined Mini-Mes
-Mini-Me SHALL ship with fourteen Mini-Mes:
+Mini-Me SHALL ship with fifteen Mini-Mes:
 - **Scribe:** "Summarizes your messages and the files you reference"; one Step running
   *Summarize*.
 - **Assistant:** "Answers general questions and requests that no other Mini-Me specializes
@@ -82,6 +82,7 @@ Mini-Me SHALL ship with fourteen Mini-Mes:
 - **Curator:** "Cleans a data table and saves the result as a new file"; one Step running
   *Clean Data*.
 - **Linker:** "Joins two data tables on their key columns"; one Step running *Join Data*.
+- **Plotter:** "Draws charts of a data table"; one Step running *Plot*.
 - **Investigator:** "Investigates a research question in several steps: explores it, plans,
   tests the plan against criticism and, if you approve, designs an experiment"; the
   the Workflow described by the Investigator requirements below.
@@ -91,7 +92,7 @@ Their colours follow DESIGN.md's Mini-Me colour family, and no two share a colou
 #### Scenario: Mini-Mes available
 - **WHEN** the user types `@` in the composer
 - **THEN** Scribe, Assistant, Researcher, Theorist, Explorer, Skeptic, Planner, Inquirer,
-  Experimenter, Profiler, Validator, Curator, Linker and Investigator are offered
+  Experimenter, Profiler, Validator, Curator, Linker, Plotter and Investigator are offered
 
 #### Scenario: General question
 - **WHEN** the user sends "@Assistant what is late blight?"
@@ -101,6 +102,11 @@ Their colours follow DESIGN.md's Mini-Me colour family, and no two share a colou
 - **WHEN** the user sends "Design an experiment to test whether early planting reduces late
   blight" without a mention, and routing picks Experimenter
 - **THEN** Experimenter answers by running *Experiment*
+
+#### Scenario: Routed to Plotter
+- **WHEN** the user sends "#field-trial.csv plot yield over the season" without a mention,
+  and routing picks Plotter
+- **THEN** Plotter answers by running *Plot*
 
 ### Requirement: A Mini-Me is shown by name and colour
 The UI SHALL get the list of Mini-Mes (ID, name, description, colours) from the Rust core.

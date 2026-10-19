@@ -70,14 +70,15 @@ context: |
     components with the shadcn CLI so they match, then restyle each one to DESIGN.md
     (colours, typography, spacing, radius, shadows, focus states). DESIGN.md is the visual
     design system for the whole app.
-  - Charts and plots: d3, imported as individual modules (d3-scale, d3-shape, d3-array, ...).
-    d3 computes scales, shapes and layouts; React renders the SVG. d3 touches the DOM only
-    where it clearly pays off, such as zoom or brushing.
-  - Tables: TanStack Table (headless), styled with the same design tokens.
+  - Charts and plots: Observable Plot, drawn into a container that a React component owns;
+    React holds the state of a chart's controls. d3 (which Plot is built on) is used directly
+    only where Plot can't do the job, such as zoom or brushing.
+  - Tables: plain React components, styled with the same design tokens.
   - All UI colours come from the theme tokens in src/index.css; no other palette. The only
     exception is each Mini-Me's and Trait's own colour, used only where DESIGN.md allows.
     The UI is light only; there is no dark theme yet. Charts and tables take their colours
-    from the same tokens.
+    from the same tokens; chart series past the tokens' palette take generated colours as
+    DESIGN.md describes.
   - Fonts are bundled with the app, never loaded from a CDN, so the UI renders offline.
   - The UI runs in WebView2 (Windows), WebKit (macOS) and WebKitGTK (Linux); styles must work
     in all three.
