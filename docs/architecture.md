@@ -276,8 +276,11 @@ gets `call_not_active`.
   `MiniMePill.tsx`: its tint background and ink text, or neutral colours when it is unknown.
 - **The composer** keeps a native textarea with transparent text over a layer that draws the
   same text, with picked references as pills. The layer must match the textarea's typography
-  and box exactly (`FIELD` in `Composer.tsx`), and its pills use a same-coloured `box-shadow`
-  rather than padding so that the text and caret stay aligned.
+  and box exactly (`FIELD` in `Composer.tsx`), so its pills take their height from a
+  same-coloured `box-shadow` and their width from a `PILL_PAD` (a narrow no-break space) on each
+  side of the label, which is text in both the textarea and the layer. A picked reference
+  acts as one block for the caret, selection and deletion, and `draftMessage()` strips the
+  padding and shifts the Text Component offsets before sending.
 - **The `@` list** comes from `miniMeSuggestions()`, which matches names ignoring case and
   accents and groups them Thinking, Literature, Data.
 

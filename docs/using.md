@@ -11,7 +11,8 @@ Type `@` in the message box to pick a Mini-Me; the one you mention first answers
 comes with predefined Mini-Mes, and typing `@` lists them under Thinking, Literature and
 Data, each with a short description. Keep typing to narrow the list by name, move through
 it with the arrow keys, and press Enter or Tab to pick one. A picked Mini-Me shows in its
-colour in the message box. Most Mini-Mes use the AI model chosen in Settings, so they need
+colour in the message box and acts as one block: the arrow keys step over it, and Backspace
+removes it whole. Most Mini-Mes use the AI model chosen in Settings, so they need
 an API key and a model. Those built on Asta, Researcher and Theorist, need an Ai2 account
 instead.
 

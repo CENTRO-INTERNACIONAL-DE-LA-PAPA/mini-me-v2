@@ -1,13 +1,21 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+} from "react";
 import { api, errorCode, errorMessage } from "../api";
 import {
   activeQuery,
   assetTarget,
+  caretStep,
+  draftMessage,
   insertReference,
   miniMeSuggestions,
   miniMeTarget,
+  pillAt,
   segments,
-  toTextComponents,
   updateReferences,
   type DraftReference,
   type ReferenceKind,
@@ -42,8 +50,9 @@ interface Suggestion {
   miniMe?: MiniMe;
 }
 
-/** A picked mention's colours on the layer: the pill's, with a same-coloured shadow standing in
- * for padding, since padding would move the text away from the text box's caret. */
+/** A picked mention's colours on the layer: the pill's, with a same-coloured shadow for its
+ * height, since padding would move the text away from the text box's caret. Its width comes
+ * from the `PILL_PAD`s inside it. */
 function layerPillStyle(miniMe?: MiniMe) {
   const style = pillStyle(miniMe);
   return style && { ...style, boxShadow: `0 0 0 2px ${miniMe!.colors.tint}` };
@@ -61,6 +70,11 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const layer = useRef<HTMLDivElement>(null);
+  /** The mouse is down on the text box, so the selection is still being dragged. */
+  const dragging = useRef(false);
+  /** The references of every text the box has held since the last send, so an undo that
+   * brings a text back brings its pills back too. */
+  const known = useRef(new Map<string, DraftReference[]>());
   const sidecar = useSidecarStatus();
   const ready = sidecarReady(sidecar);
   const miniMes = useMiniMes();
@@ -98,11 +112,12 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
   /** The query at the cursor, unless its `#` or `@` belongs to an existing reference. */
   function queryAt(value: string, cursor: number, refs: DraftReference[]) {
     const found = activeQuery(value, cursor);
-    return found && !refs.some((r) => r.start === found.start) ? found : null;
+    return found && !refs.some((r) => r.start <= found.start && found.start < r.end) ? found : null;
   }
 
   function edit(next: string, cursor: number) {
-    const nextReferences = updateReferences(text, next, references);
+    const nextReferences = known.current.get(next) ?? updateReferences(text, next, references);
+    known.current.set(next, nextReferences);
     setReferences(nextReferences);
     setText(next);
     setQuery(queryAt(next, cursor, nextReferences));
@@ -115,6 +130,7 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
     }
     const cursor = input.current?.selectionStart ?? text.length;
     const result = insertReference(text, references, query.start, cursor, target);
+    known.current.set(result.text, result.references);
     setText(result.text);
     setReferences(result.references);
     setQuery(null);
@@ -139,12 +155,12 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
     }
     try {
       const message = await api.sendMessage(projectId, conversationId, {
-        content: text,
+        ...draftMessage(text, references),
         attachments: attachments.map((a) => a.id),
-        text_components: toTextComponents(references),
       });
       setText("");
       setReferences([]);
+      known.current.clear();
       setAttachments([]);
       setQuery(null);
       onSent(message);
@@ -165,7 +181,114 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
     }
   }
 
+  /**
+   * Moves the caret over a picked reference, extends a selection over it, and deletes it, as one
+   * block. Returns whether the key was handled here instead of by the text box.
+   */
+  function pillKey(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
+    const box = event.currentTarget;
+    const { selectionStart: start, selectionEnd: end } = box;
+    const collapsed = start === end;
+    const word = event.altKey || event.ctrlKey;
+    if (event.nativeEvent.isComposing) {
+      return false;
+    }
+    if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && !word && !event.metaKey) {
+      const direction = event.key === "ArrowLeft" ? -1 : 1;
+      // A selection made with the mouse can have no direction; Shift+arrow then moves the end
+      // in the arrow's direction, as the system does.
+      const focusAtStart =
+        collapsed ||
+        box.selectionDirection === "backward" ||
+        (box.selectionDirection === "none" && direction < 0);
+      const anchor = focusAtStart ? end : start;
+      const focus = focusAtStart ? start : end;
+      if (!event.shiftKey && !collapsed) {
+        return false;
+      }
+      const next = caretStep(references, focus, direction);
+      if (next === focus + direction) {
+        return false;
+      }
+      event.preventDefault();
+      if (event.shiftKey) {
+        box.setSelectionRange(
+          Math.min(anchor, next),
+          Math.max(anchor, next),
+          next < anchor ? "backward" : "forward",
+        );
+      } else {
+        box.setSelectionRange(next, next);
+      }
+      return true;
+    }
+    if (collapsed && (event.key === "Backspace" || event.key === "Delete") && !event.metaKey) {
+      const back = event.key === "Backspace";
+      // A word deletion also takes the spaces between the caret and the pill.
+      const pill = references.find((r) => {
+        if (back ? r.end > start : r.start < start) {
+          return false;
+        }
+        const between = back ? box.value.slice(r.end, start) : box.value.slice(start, r.start);
+        return between === "" || (word && /^\s+$/.test(between));
+      });
+      // Selecting the pill lets the text box's own deletion remove it, which keeps undo working.
+      if (pill) {
+        box.setSelectionRange(back ? pill.start : start, back ? start : pill.end);
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Keeps the selection's ends out of picked references: a caret inside one moves to its
+   * nearest edge, and a selection grows to hold the whole reference.
+   */
+  function snapSelection(box: HTMLTextAreaElement) {
+    // Before the text state catches up with an edit, `references` holds the old offsets, so
+    // snapping waits for the next selection.
+    if (dragging.current || box.value !== text) {
+      return;
+    }
+    const { selectionStart: start, selectionEnd: end, selectionDirection } = box;
+    if (start === end) {
+      const pill = pillAt(references, start);
+      if (pill) {
+        const edge = start - pill.start < pill.end - start ? pill.start : pill.end;
+        box.setSelectionRange(edge, edge);
+      }
+      return;
+    }
+    const from = pillAt(references, start)?.start ?? start;
+    const to = pillAt(references, end)?.end ?? end;
+    if (from !== start || to !== end) {
+      box.setSelectionRange(from, to, selectionDirection);
+    }
+  }
+
+  /** Copies or cuts the selection as it would be sent, without the pills' padding. */
+  function copy(event: ClipboardEvent<HTMLTextAreaElement>, cut: boolean) {
+    const box = event.currentTarget;
+    const { selectionStart: start, selectionEnd: end } = box;
+    const inside = references
+      .filter((r) => start <= r.start && r.end <= end)
+      .map((r) => ({ ...r, start: r.start - start, end: r.end - start }));
+    if (inside.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    const { content } = draftMessage(box.value.slice(start, end), inside);
+    event.clipboardData.setData("text/plain", content);
+    if (cut) {
+      // Deleting through the editing command, unlike setting the value, keeps undo working.
+      document.execCommand("delete");
+    }
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (pillKey(event)) {
+      return;
+    }
     const listed = query !== null && suggestions.length > 0;
     if (listed && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       event.preventDefault();
@@ -287,9 +410,32 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
             onScroll={(e) => {
               if (layer.current) layer.current.scrollTop = e.currentTarget.scrollTop;
             }}
-            onSelect={(e) =>
-              setQuery(queryAt(e.currentTarget.value, e.currentTarget.selectionStart, references))
-            }
+            onSelect={(e) => {
+              snapSelection(e.currentTarget);
+              setQuery(queryAt(e.currentTarget.value, e.currentTarget.selectionStart, references));
+            }}
+            onMouseDown={(e) => {
+              if (e.button !== 0) {
+                return;
+              }
+              const box = e.currentTarget;
+              dragging.current = true;
+              // On the window, so a drag released outside the text box also ends; moving
+              // selected text by dragging it ends with `dragend` instead of `mouseup`.
+              const done = () => {
+                dragging.current = false;
+                window.removeEventListener("mouseup", done);
+                window.removeEventListener("dragend", done);
+                snapSelection(box);
+              };
+              window.addEventListener("mouseup", done);
+              window.addEventListener("dragend", done);
+            }}
+            onBlur={() => {
+              dragging.current = false;
+            }}
+            onCopy={(e) => copy(e, false)}
+            onCut={(e) => copy(e, true)}
           />
         </div>
         {replying ? (

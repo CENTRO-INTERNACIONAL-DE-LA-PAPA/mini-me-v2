@@ -156,7 +156,8 @@ export const Markdown = memo(
     );
   },
   // `onOpenAsset` is left out: it only changes with its message's re-render, and every
-  // version opens the same Asset in the same Project, so a finished reply isn't parsed again.
+  // instance of it opens the same Asset in the same Project, so a finished reply isn't parsed
+  // again.
   (before, after) =>
     before.content === after.content &&
     before.textComponents === after.textComponents &&
