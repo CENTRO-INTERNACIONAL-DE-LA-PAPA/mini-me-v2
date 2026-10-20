@@ -89,16 +89,25 @@ highlighted until the user moves the highlight, and again whenever the query cha
 After the user picks a Mini-Me or a file in the composer, the composer SHALL show that
 reference as its pill (a Mini-Me) or file chip (a file) while the user keeps writing, before
 the message is sent. Typing, selecting, undo, paste and input methods SHALL work as in a plain
-text box. A reference the user edits SHALL lose its pill and become plain text, as it does when
-sent.
+text box.
 
 #### Scenario: Picked mention
 - **WHEN** the user types "@Sk" and picks Skeptic
 - **THEN** "@Skeptic" is shown as Skeptic's pill in the composer before sending
 
-#### Scenario: Editing a picked mention
-- **WHEN** the user deletes a letter from a picked "@Skeptic"
-- **THEN** the remaining text is shown without a pill
+### Requirement: Picked references act as one block
+In the composer, a picked reference SHALL act as one block: the caret SHALL step over it, a
+selection SHALL hold all of it or none of it, and Backspace or Delete next to it SHALL remove
+all of it. The message SHALL be sent with the reference's label only, without the composer's
+padding.
+
+#### Scenario: Stepping over a picked mention
+- **WHEN** the caret is right after a picked "@Skeptic" and the user presses the left arrow
+- **THEN** the caret moves to just before "@"
+
+#### Scenario: Deleting a picked mention
+- **WHEN** the caret is right after a picked "@Skeptic" and the user presses Backspace
+- **THEN** the whole mention is removed
 
 ### Requirement: Predefined Mini-Mes have groups
 The predefined Mini-Mes SHALL have these groups: Thinking for Assistant, Scribe, Explorer,

@@ -117,18 +117,30 @@ leaves room for the 16px avatar that #14 will add on the left.
 
 The `Textarea` stays the input. Behind it, in the same grid cell, a `div` with the same font,
 size, line height, padding, border width and wrapping (`whitespace-pre-wrap
-wrap-anywhere`) shows the same text: plain spans for text, and for each `DraftReference` the
+wrap-break-word`) shows the same text: plain spans for text, and for each `DraftReference` the
 pill or file chip. The textarea's text is transparent with a visible caret
 (`caret-foreground`), so the user sees the layer's text and pills through it, and every input
 behaviour stays native. The layer is `aria-hidden` and scrolls with the textarea (its
 `scrollTop` follows the textarea's `onScroll`).
 
 The pills on the layer must not change the width of their text, or the caret would drift
-from what is drawn. They get their colour from `background-color` and their rounded padding
-from a same-coloured `box-shadow` spread (`0 0 0 2px`) instead of `padding`, with
-`box-decoration-break: clone` so a mention that wraps keeps both ends rounded. Before
-sending, a picked mention therefore looks slightly tighter than the sent pill; that
-difference is accepted.
+from what is drawn. Their horizontal padding is therefore text: a picked reference is
+inserted with a narrow no-break space (`PILL_PAD`, U+202F) on each side, present in both the
+text box and the layer, and its `DraftReference` range covers both. They get their colour
+from `background-color` and their height from a same-coloured `box-shadow` spread
+(`0 0 0 2px`) instead of `padding`, with `box-decoration-break: clone` so a mention that
+wraps keeps both ends rounded. Being no-break, the padding never wraps away from its label.
+`draftMessage` removes each reference's padding before sending, or turns it into a space
+where it alone separated the label from other text, and shifts the Text Component offsets;
+copy or cut from the text box goes through it too. A U+202F the user typed is left alone.
+
+A picked reference acts as one block. Left and right arrows (with or without Shift) step
+over it, Backspace or Delete next to it (also as a word deletion) selects it so the text
+box's own deletion removes it, and a caret or selection end that lands inside it, by
+clicking, dragging or other caret keys, is moved to its edge. The composer remembers the
+references of each text it has held since the last send, so an undo that brings a text back
+brings its pills back. Any other edit that touches part of a reference drops the reference
+and leaves its text plain.
 
 - Alternative considered: a contenteditable rich input (Lexical, TipTap). It would allow
   true inline elements, but it's a sizeable dependency and re-implements undo, paste, IME
