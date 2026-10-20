@@ -121,7 +121,7 @@ describe("markdownSource", () => {
   const mention = { kind: "mini_me", id: "m1", label: "@Scribe", start: 4, end: 11 } as const;
 
   it("turns Text Components into ref links", () => {
-    const file = { kind: "asset", id: "a1", label: "#trial.csv", start: 16, end: 26 } as const;
+    const file = { kind: "asset", id: "a1", label: "#trial.csv", start: 18, end: 28 } as const;
     expect(markdownSource("ask @Scribe about #trial.csv", [mention, file])).toBe(
       "ask [@Scribe](ref:0) about [#trial.csv](ref:1)",
     );
