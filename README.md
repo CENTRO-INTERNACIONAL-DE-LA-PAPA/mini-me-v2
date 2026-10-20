@@ -196,7 +196,8 @@ If your research uses output produced with Asta, please cite:
 
 [Tauri](https://tauri.app), [React](https://react.dev), [Tailwind CSS](https://tailwindcss.com),
 [shadcn/ui](https://ui.shadcn.com), [Observable Plot](https://observablehq.com/plot/) for
-charts, [LangGraph](https://www.langchain.com/langgraph), [pandas](https://pandas.pydata.org)
+charts, [react-markdown](https://github.com/remarkjs/react-markdown) for formatted replies,
+[LangGraph](https://www.langchain.com/langgraph), [pandas](https://pandas.pydata.org)
 and [pointblank](https://posit-dev.github.io/pointblank/) for the data Traits, and
 [Typesafe Jev](https://docs.typesafe.ai) for routing.
 

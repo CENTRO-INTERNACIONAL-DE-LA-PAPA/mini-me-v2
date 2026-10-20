@@ -1,12 +1,16 @@
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { api, errorMessage } from "../api";
 import type { MessageView } from "../protocol/eventStore";
 import { segments } from "../protocol/references";
 import type { JevAnswers, MiniMe } from "../protocol/types";
 import { formatSize } from "./format";
 import { InteractiveComponent } from "./interactive/InteractiveComponent";
+import { Markdown } from "./Markdown";
+import { MiniMePill } from "./MiniMePill";
+import { TextComponentChip } from "./TextComponentChip";
 import { useMiniMes } from "./useMiniMes";
 import { WorkflowProgress, showsProgress } from "./WorkflowProgress";
 
@@ -46,19 +50,18 @@ export function MessageItem({ projectId, message }: Props) {
     counts.set(reaction.emoji, (counts.get(reaction.emoji) ?? 0) + 1);
   }
   const miniMe = (id: string) => miniMes.find((m) => m.id === id);
-  const reactors = (emoji: string) =>
-    message.reactions
-      .filter((r) => r.emoji === emoji)
-      .map((r) => (r.by.kind === "mini_me" ? (miniMe(r.by.id)?.name ?? "Mini-Me") : "You"))
-      .join(", ");
+  const reactors = (emoji: string) => message.reactions.filter((r) => r.emoji === emoji);
 
-  async function open(assetId: string) {
-    try {
-      await api.openAsset(projectId, assetId);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
+  const open = useCallback(
+    async (assetId: string) => {
+      try {
+        await api.openAsset(projectId, assetId);
+      } catch (e) {
+        setError(errorMessage(e));
+      }
+    },
+    [projectId],
+  );
 
   const status = STATUS_LABEL[message.status];
   const fromUser = message.author.kind === "user";
@@ -97,29 +100,31 @@ export function MessageItem({ projectId, message }: Props) {
           color={authorMiniMe?.colors.solid}
         />
       )}
-      <p className="text-body whitespace-pre-wrap wrap-anywhere">
-        {segments(message.content, message.text_components).map((segment, index) =>
-          segment.component?.kind === "mini_me" ? (
-            <MentionChip
-              key={index}
-              text={segment.text}
-              miniMe={miniMe(segment.component.id)}
-            />
-          ) : segment.component ? (
-            <Badge
-              key={index}
-              variant="secondary"
-              title="Open file"
-              className="cursor-pointer align-baseline"
-              render={<button onClick={() => open(segment.component!.id)} />}
-            >
-              {segment.text}
-            </Badge>
-          ) : (
-            <span key={index}>{segment.text}</span>
-          ),
-        )}
-      </p>
+      {message.author.kind === "mini_me" ? (
+        <Markdown
+          content={message.content}
+          textComponents={message.text_components}
+          miniMes={miniMes}
+          onOpenAsset={open}
+        />
+      ) : (
+        <p className="text-body whitespace-pre-wrap wrap-anywhere">
+          {segments(message.content, message.text_components).map((segment, index) =>
+            segment.component ? (
+              <TextComponentChip
+                key={index}
+                component={segment.component}
+                miniMes={miniMes}
+                onOpenAsset={open}
+              >
+                {segment.text}
+              </TextComponentChip>
+            ) : (
+              <span key={index}>{segment.text}</span>
+            ),
+          )}
+        </p>
+      )}
       {message.components.length > 0 && (
         <div className="flex min-w-0 flex-col gap-3">
           {message.components.map((component) => (
@@ -160,13 +165,30 @@ export function MessageItem({ projectId, message }: Props) {
           className="pointer-events-none absolute -bottom-3 right-3 flex gap-1"
         >
           {[...counts].map(([emoji, count]) => (
-            <li
-              key={emoji}
-              title={reactors(emoji)}
-              className="pointer-events-auto rounded-full border border-border bg-card px-1.5 text-meta leading-5 shadow-xs"
-            >
-              {emoji}
-              {count > 1 && ` ${count}`}
+            <li key={emoji} className="pointer-events-auto">
+              <Tooltip>
+                <TooltipTrigger
+                  render={<span />}
+                  className={cn(
+                    "block rounded-full border border-border bg-card px-1.5 text-meta leading-5",
+                    "shadow-xs",
+                  )}
+                >
+                  {emoji}
+                  {count > 1 && ` ${count}`}
+                </TooltipTrigger>
+                <TooltipContent>
+                  {reactors(emoji).map((reaction, index) =>
+                    reaction.by.kind === "mini_me" ? (
+                      <MiniMePill key={index} miniMe={miniMe(reaction.by.id)}>
+                        {miniMe(reaction.by.id)?.name ?? "Mini-Me"}
+                      </MiniMePill>
+                    ) : (
+                      <span key={index}>You</span>
+                    ),
+                  )}
+                </TooltipContent>
+              </Tooltip>
             </li>
           ))}
         </ul>
@@ -179,19 +201,6 @@ export function MessageItem({ projectId, message }: Props) {
       )}
       {error && <p className="text-meta text-destructive">{error}</p>}
     </article>
-  );
-}
-
-/** An `@` mention, in the Mini-Me's tint with its ink colour. */
-function MentionChip({ text, miniMe }: { text: string; miniMe?: MiniMe }) {
-  return (
-    <Badge
-      variant="secondary"
-      className="align-baseline"
-      style={miniMe && { backgroundColor: miniMe.colors.tint, color: miniMe.colors.ink }}
-    >
-      {text}
-    </Badge>
   );
 }
 
