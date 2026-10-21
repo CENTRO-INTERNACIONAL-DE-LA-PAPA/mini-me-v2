@@ -178,10 +178,10 @@ export interface MiniMeColors {
   ink: string;
 }
 
-/** A Mini-Me as the UI lists and shows it. */
 /** Which heading the `@` list shows a Mini-Me under. */
 export type MiniMeGroup = "thinking" | "literature" | "data";
 
+/** A Mini-Me as the UI lists and shows it. */
 export interface MiniMe {
   id: Uuid;
   name: string;

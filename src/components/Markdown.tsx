@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { markdownSource } from "../protocol/references";
 import type { MiniMe, TextComponent } from "../protocol/types";
-import { openLink } from "./interactive/links";
+import { openLink, webUrl } from "./interactive/links";
 import { TextComponentChip } from "./TextComponentChip";
 
 interface Props {
@@ -42,24 +42,32 @@ function htmlAsText() {
   return walk;
 }
 
-const REMARK_PLUGINS = [remarkGfm, remarkBreaks, htmlAsText];
+// `htmlAsText` runs before `remarkBreaks`, so that the line breaks of raw HTML shown as text
+// become breaks too.
+const REMARK_PLUGINS = [remarkGfm, htmlAsText, remarkBreaks];
 
-const ACTIVE_LINK = /^(https?:|mailto:)/i;
+/** `href` when a link may open it: a web address, or an email address to write to. */
+const openable = (href: string | undefined) =>
+  href && /^mailto:/i.test(href) ? href : webUrl(href);
+
+const NO_TEXT_COMPONENTS: TextComponent[] = [];
+const NO_MINI_MES: MiniMe[] = [];
 
 /** Keeps `ref:` links, which stand for Text Components; other URLs get the default check. */
 const urlTransform = (url: string) => (url.startsWith("ref:") ? url : defaultUrlTransform(url));
 
 function link(href: string | undefined, children: ReactNode) {
-  if (!href || !ACTIVE_LINK.test(href)) {
+  const url = openable(href);
+  if (!url) {
     return <span>{children}</span>;
   }
   return (
     <a
-      href={href}
-      className="text-foreground underline underline-offset-2 hover:opacity-70"
+      href={url}
+      className="underline underline-offset-2 hover:opacity-70"
       onClick={(event) => {
         event.preventDefault();
-        openLink(href);
+        openLink(url);
       }}
     >
       {children}
@@ -73,7 +81,8 @@ const styled = (tag: string, className: string) =>
     return createElement(tag, { ...props, className });
   };
 
-const HEADING = "mt-3 font-semibold text-foreground first:mt-0";
+// Headings and links take the surrounding text's colour, which an opened Step output mutes.
+const HEADING = "mt-3 font-semibold first:mt-0";
 
 const ELEMENTS: Components = {
   p: styled("p", "mt-2 first:mt-0"),
@@ -112,8 +121,8 @@ const ELEMENTS: Components = {
 export const Markdown = memo(
   function Markdown({
     content,
-    textComponents = [],
-    miniMes = [],
+    textComponents = NO_TEXT_COMPONENTS,
+    miniMes = NO_MINI_MES,
     onOpenAsset,
     size = "body",
   }: Props) {
