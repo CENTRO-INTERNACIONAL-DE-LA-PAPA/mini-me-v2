@@ -7,6 +7,7 @@ the reply."""
 import json
 import re
 import sys
+import traceback
 from typing import Any, AsyncIterator
 
 from langchain_core.messages import (
@@ -61,6 +62,10 @@ LAST_ROUND = (
     "without calling tools."
 )
 
+# Written before the text of a round that follows a round with text, so that Markdown such
+# as a heading or a list in the later round still starts on its own line.
+PARAGRAPH_BREAK = "\n\n"
+
 # The most files, and the most components, listed for the model.
 MAX_LISTED = 50
 
@@ -114,29 +119,80 @@ class Prompt(Adapter):
         offered = {n: MODEL_TOOLS[n] for n in names if n in MODEL_TOOLS}
         chat = chat_model(model, key.reveal()).bind_tools([t.schema() for t in offered.values()])
 
-        tool_rounds = 0
-        while not ctx.cancelled.is_set():
-            last = tool_rounds >= MAX_TOOL_ROUNDS
-            if last:
-                messages.append(HumanMessage(LAST_ROUND))
-            reply = await _answer(ctx, chat, messages, model)
-            if reply is None or last or not reply.tool_calls:
+        await _converse(ctx, chat, messages, model, offered)
+
+
+async def _converse(
+    ctx: CallContext,
+    chat: Any,
+    messages: list[BaseMessage],
+    model: Model,
+    offered: dict[str, Any],
+) -> None:
+    """Asks the model until it answers without calling tools, running its tool calls in
+    between, for at most `MAX_TOOL_ROUNDS` rounds of tool calls."""
+    tool_rounds = 0
+    wrote = False
+    while not ctx.cancelled.is_set():
+        last = tool_rounds >= MAX_TOOL_ROUNDS
+        if last:
+            messages.append(HumanMessage(LAST_ROUND))
+        reply = await _answer(ctx, chat, messages, model, separate=wrote)
+        if reply is None:
+            return
+        said = bool(str(reply.text))
+        wrote = wrote or said
+        if not _has_calls(reply):
+            return
+        if last:
+            if said:
                 return
-            tool_rounds += 1
-            messages.append(reply)
-            for call in reply.tool_calls:
-                if ctx.cancelled.is_set():
-                    return
-                result = await _run_tool(ctx, offered, call)
-                messages.append(ToolMessage(content=result, tool_call_id=call["id"]))
+            raise TraitError(
+                "tool_rounds_used",
+                f"{model.model} kept calling tools after using all {MAX_TOOL_ROUNDS} rounds "
+                "of tool calls, without answering. Try again, or choose another model in "
+                "Settings.",
+            )
+        tool_rounds += 1
+        messages.append(reply)
+        for call in reply.tool_calls:
+            if ctx.cancelled.is_set():
+                return
+            result = await _run_tool(ctx, offered, call)
+            messages.append(ToolMessage(content=result, tool_call_id=call["id"]))
+        # Providers expect a result for every call the reply holds, malformed ones included.
+        for call in reply.invalid_tool_calls:
+            if call.get("id"):
+                messages.append(ToolMessage(content=_malformed(call), tool_call_id=call["id"]))
+
+
+def _has_calls(reply: AIMessage) -> bool:
+    return bool(reply.tool_calls or reply.invalid_tool_calls)
+
+
+def _malformed(call: dict[str, Any]) -> str:
+    """The result told to the model for a tool call whose arguments are not a JSON object."""
+    detail = f" ({call['error']})" if call.get("error") else ""
+    return json.dumps(
+        {
+            "error": f"The arguments for {call.get('name')} were not a JSON object{detail}. "
+            "Call it again with a JSON object as its arguments."
+        },
+        ensure_ascii=False,
+    )
 
 
 async def _answer(
-    ctx: CallContext, chat: Any, messages: list[BaseMessage], model: Model
+    ctx: CallContext,
+    chat: Any,
+    messages: list[BaseMessage],
+    model: Model,
+    separate: bool = False,
 ) -> AIMessage | None:
     """One round: streams the model's text into the call and returns its whole message, with
     any tool calls; None when the call was cancelled meanwhile. Asks again when the model
-    sends neither text nor a tool call."""
+    sends neither text nor a tool call. With `separate`, the round's text starts a new
+    paragraph, so that it reads apart from the text of earlier rounds."""
     name = PROVIDER_NAMES[model.provider]
     for _ in range(EMPTY_ANSWER_TRIES):
         wrote = False
@@ -148,6 +204,8 @@ async def _answer(
                     return None
                 # `text` joins the chunk's text blocks, whatever shape the provider sends.
                 if text := str(chunk.text):
+                    if separate and not wrote:
+                        ctx.write(PARAGRAPH_BREAK)
                     ctx.write(text)
                     wrote = True
                 ending.update(metadata)
@@ -164,7 +222,7 @@ async def _answer(
                 "answer. Rephrase it, ask in a new Conversation, or choose another model "
                 "in Settings.",
             )
-        if wrote or (reply is not None and reply.tool_calls):
+        if wrote or (reply is not None and _has_calls(reply)):
             return reply
         # A provider can end a stream with no text and no error, for example when it
         # reports a failure only through the finish reason.
@@ -194,8 +252,12 @@ async def _run_tool(ctx: CallContext, offered: dict[str, Any], call: dict[str, A
         if error.code == "call_not_active":
             raise
         return json.dumps({"error": str(error)}, ensure_ascii=False)
-    except TypeError as error:
-        return json.dumps({"error": f"Wrong arguments for {tool.name}: {error}"})
+    except Exception:
+        # A fault in the tool itself: logged for the developer, and the model is told only
+        # that the tool failed, so it can answer without it.
+        print(f"[prompt] {tool.name} failed:", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        return json.dumps({"error": f"{tool.name} failed unexpectedly."})
     return json.dumps(result, ensure_ascii=False, default=str)
 
 

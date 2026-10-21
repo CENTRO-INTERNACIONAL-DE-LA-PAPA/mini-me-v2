@@ -1,11 +1,13 @@
 """The forms of the tools offered to a model: each tool's name, what the model is told about
 it, the JSON Schema of its arguments, and the function that runs it."""
 
+import inspect
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
 from mini_me_sidecar.context import CallContext
+from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import read_component
 from mini_me_sidecar.tools.files import read_file, save_text_file
 from mini_me_sidecar.tools.tables import show_table
@@ -32,8 +34,25 @@ class ModelTool:
         }
 
     async def call(self, ctx: CallContext, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Runs the tool with the model's `arguments`. Raises `ToolError` when they do not
+        fit its parameters; arguments it does not know are left out."""
         known = self.parameters["properties"]
-        return await self.run(ctx, **{k: v for k, v in arguments.items() if k in known})
+        given = {k: _argument(k, v, known[k]) for k, v in arguments.items() if k in known}
+        try:
+            inspect.signature(self.run).bind(ctx, **given)
+        except TypeError as error:
+            raise ToolError(f"Wrong arguments for {self.name}: {error}") from None
+        return await self.run(ctx, **given)
+
+
+def _argument(name: str, value: Any, schema: dict[str, Any]) -> Any:
+    """`value` for the parameter `name`. Some providers, such as Google, send every number as
+    a float, so a whole float becomes an int where the parameter is an integer."""
+    if schema.get("type") == "integer" and isinstance(value, float):
+        if not value.is_integer():
+            raise ToolError(f"{name} must be a whole number.")
+        return int(value)
+    return value
 
 
 CELL = {

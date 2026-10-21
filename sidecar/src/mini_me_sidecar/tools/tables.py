@@ -2,6 +2,7 @@
 Interactive Component, built the same way whether an adapter or a model shows it."""
 
 import math
+import sys
 from datetime import date, datetime
 from typing import Any
 
@@ -137,11 +138,13 @@ def _fits(value: Any, kind: str) -> bool:
         return True
     match kind:
         case "number":
-            return (
-                isinstance(value, (int, float))
-                and not isinstance(value, bool)
-                and math.isfinite(value)
-            )
+            # A table's numbers must fit a float. An int is compared rather than passed to
+            # `math.isfinite`, which raises for one beyond a float's range.
+            if isinstance(value, bool):
+                return False
+            if isinstance(value, int):
+                return abs(value) <= sys.float_info.max
+            return isinstance(value, float) and math.isfinite(value)
         case "boolean":
             return isinstance(value, bool)
         case "date":
