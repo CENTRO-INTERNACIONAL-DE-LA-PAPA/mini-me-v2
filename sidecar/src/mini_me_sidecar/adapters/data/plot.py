@@ -5,18 +5,25 @@ series, category and outlier is kept; only points are sampled, and only when a c
 not fit the core's size limit."""
 
 import json
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from mini_me_sidecar.adapters.data.catalogue import Chart, chart_problem
+from mini_me_sidecar.adapters.data.catalogue import Chart, chart_axes, chart_problem
 from mini_me_sidecar.adapters.data.preview import json_value
 
 # The core refuses component data larger than 2 MiB; this leaves room for the title and the
 # JSON the core wraps around it.
 MAX_BYTES = 2_000_000
+
+# The most bins a histogram has, for each series.
+MAX_BINS = 100
+
+# What a view of each type has too many of when it cannot be drawn.
+TOO_MANY = {"histogram": "bins", "bar": "bars", "box": "groups", "heatmap": "columns"}
 
 KIND_NAMES = {
     "histogram": "Histogram",
@@ -30,10 +37,12 @@ KIND_NAMES = {
 
 @dataclass
 class ChartResult:
-    """A chart's component data, and what the reply says about how it was drawn."""
+    """A chart's component data, and what the reply says about how it was drawn. When the
+    chart does not `fit` the core's size limit, its data serves only for its text."""
 
     data: dict[str, Any]
     notes: list[str] = field(default_factory=list)
+    fits: bool = True
 
 
 def as_type(chart: Chart, kind: str) -> Chart:
@@ -78,9 +87,31 @@ def build_chart(frame: pd.DataFrame, chart: Chart, types: dict[str, str]) -> Cha
 
 
 def _fit(result: ChartResult, sampled: list[tuple[dict[str, Any], pd.DataFrame]]) -> None:
-    """Samples the points of line and scatter views, halving the largest view's sample, until
-    the chart fits `MAX_BYTES`, and notes each view that was sampled. The same table always
-    gives the same sample."""
+    """Fits the chart in `MAX_BYTES`: leaves out the alternative views that would not fit
+    even without points, then samples the points of line and scatter views, halving the
+    largest view's sample, and notes each view that was left out or sampled. The same table
+    always gives the same sample. A chart whose own view does not fit is marked so."""
+    views = result.data["views"]
+    budget = MAX_BYTES - len(json.dumps({**result.data, "views": []}))
+    sizes = [len(json.dumps({k: v for k, v in view.items() if k != "points"})) for view in views]
+    if sizes[0] > budget:
+        result.fits = False
+        result.data["views"] = views[:1]
+        result.notes.append(
+            f"it has too many {TOO_MANY[views[0]['type']]} to draw, so it is described in "
+            "text below"
+        )
+        return
+    kept, used = [views[0]], sizes[0]
+    for view, size in zip(views[1:], sizes[1:]):
+        if used + size > budget:
+            name = KIND_NAMES[view["type"]].lower()
+            result.notes.append(f"the {name} view was left out, as it has too many values")
+        else:
+            kept.append(view)
+            used += size
+    result.data["views"] = kept
+    sampled = [(view, points) for view, points in sampled if any(view is k for k in kept)]
     while sampled and len(json.dumps(result.data)) > MAX_BYTES:
         view, points = max(sampled, key=lambda s: len(s[0]["points"]))
         if len(view["points"]) <= 1:
@@ -113,9 +144,12 @@ def _view(
     points, which `_fit` may sample."""
     if chart.type == "heatmap":
         return _heatmap(frame, chart), [], None
-    used = [c for c in (chart.x, chart.y, chart.series) if c]
-    if chart.type == "bar" and chart.aggregate in (None, "count"):
-        used = [c for c in (chart.x, chart.series) if c]
+    # Only the columns `chart_problem` checked are read, so that a column the chart type
+    # ignores neither fails nor leaves rows out.
+    axes = chart_axes(chart)
+    used = [getattr(chart, axis) for axis in axes]
+    if chart.series and chart.type != "box":
+        used.append(chart.series)
     rows = frame[list(dict.fromkeys(used))].dropna()
     notes = []
     dropped = len(frame) - len(rows)
@@ -126,10 +160,9 @@ def _view(
             else f"{dropped:,} rows with missing values were left out"
         )
     view: dict[str, Any] = {"type": chart.type}
-    for axis in ("x", "y"):
+    for axis in axes:
         column = getattr(chart, axis)
-        if column and not (axis == "y" and chart.type == "histogram"):
-            view[axis] = {"name": column, "type": types[column]}
+        view[axis] = {"name": column, "type": types[column]}
     series: pd.Series | None = None
     if chart.series and chart.type != "box":
         series = rows[chart.series].astype(str)
@@ -158,16 +191,21 @@ def _series_order(series: pd.Series) -> list[str]:
 
 def _histogram(values: pd.Series, series: pd.Series | None) -> list[dict[str, Any]]:
     dates = pd.api.types.is_datetime64_any_dtype(values)
-    # Dates are binned as nanoseconds, whatever resolution pandas read them in.
-    numbers = (
-        values.astype("datetime64[ns]").astype("int64").to_numpy()
-        if dates
-        else values.to_numpy(dtype=float)
-    )
-    edges = np.histogram_bin_edges(numbers, "auto")
+    if dates:
+        # Dates with a time zone are binned by their local time.
+        if values.dt.tz is not None:
+            values = values.dt.tz_localize(None)
+        # Dates are binned as microseconds, whatever resolution pandas read them in.
+        # Nanoseconds would only reach the years 1677 to 2262.
+        numbers = values.astype("datetime64[us]").astype("int64").to_numpy()
+    else:
+        numbers = values.to_numpy(dtype=float)
+    edges = np.histogram_bin_edges(numbers, _bin_count(numbers))
 
     def edge(value: float) -> Any:
-        return json_value(pd.Timestamp(int(value))) if dates else json_value(float(value))
+        if dates:
+            return json_value(pd.Timestamp(np.datetime64(int(value), "us")))
+        return json_value(float(value))
 
     groups = [(None, numbers)]
     if series is not None:
@@ -181,6 +219,20 @@ def _histogram(values: pd.Series, series: pd.Series | None) -> list[dict[str, An
                 entry["series"] = name
             bins.append(entry)
     return bins
+
+
+def _bin_count(numbers: np.ndarray) -> int:
+    """numpy's "auto" number of bins, the larger of the Freedman–Diaconis and Sturges
+    estimates, at most `MAX_BINS`. "auto" itself has no limit: with most values close
+    together and one far away, it makes millions of bins."""
+    if len(numbers) == 0:
+        return 1
+    sturges = math.ceil(math.log2(len(numbers))) + 1
+    span = float(numbers.max() - numbers.min())
+    q1, q3 = np.percentile(numbers, [25, 75])
+    width = 2 * float(q3 - q1) * len(numbers) ** (-1 / 3)
+    freedman = math.ceil(span / width) if width > 0 else 0
+    return min(max(sturges, freedman), MAX_BINS)
 
 
 def _aggregate(values: Any, how: str) -> pd.Series:

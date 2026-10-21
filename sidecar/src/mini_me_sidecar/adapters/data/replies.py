@@ -143,6 +143,9 @@ async def plot(ctx: CallContext, text: str) -> None:
     if drawn:
         ctx.write("\n")
     for result in results:
+        if not result.fits:
+            ctx.write(chart_text(result.data) + "\n\n")
+            continue
         try:
             await show_chart(ctx, result.data, chart_text(result.data))
         except ToolError:

@@ -52,14 +52,21 @@ function bandWidth(width: number, bands: number, margins: number): number {
 
 const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
 
-/** Dates arrive as ISO text; Plot draws them on a time scale only as `Date`s. */
+// An ISO time of day without a time zone: "T" followed by no "Z", "+" or "-".
+const NO_ZONE = /T[^Z+-]*$/;
+
+/** Dates arrive as ISO text; Plot draws them on a time scale only as `Date`s. Text without
+ * a time zone is read as UTC, the zone Plot's time axis shows; JavaScript already reads a
+ * date without a time of day that way, but reads a time of day without a zone as local. */
 function value(column: Column | undefined, v: Value): Value | Date {
-  return column?.type === "date" && typeof v === "string" ? new Date(v) : v;
+  if (column?.type !== "date" || typeof v !== "string") return v;
+  return new Date(NO_ZONE.test(v) ? `${v}Z` : v);
 }
 
 function show(v: Value | Date | undefined): string {
   if (v === null || v === undefined) return "";
-  if (v instanceof Date) return v.toLocaleDateString();
+  // In UTC, like `value` reads it, so that a date is not shown as the day before.
+  if (v instanceof Date) return v.toLocaleDateString(undefined, { timeZone: "UTC" });
   return typeof v === "number" ? numberFormat.format(v) : v;
 }
 
@@ -135,7 +142,9 @@ export function chartSpec(
     }
     case "bar": {
       const bars = visible(view.bars, hidden);
-      const label = view.y ? `${view.aggregate} of ${view.y.name}` : "Rows";
+      // A count bar chart counts rows, even when its data names a `y` column.
+      const label =
+        view.y && view.aggregate !== "count" ? `${view.aggregate} of ${view.y.name}` : "Rows";
       const categories = [...new Set(view.bars.map((b) => b.x))];
       const className = tip(bars, (b) => [
         [view.x.name, b.x],

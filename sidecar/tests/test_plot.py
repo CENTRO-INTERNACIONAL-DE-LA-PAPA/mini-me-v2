@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from mini_me_sidecar.adapters.data.catalogue import Chart
-from mini_me_sidecar.adapters.data.plot import MAX_BYTES, build_chart, chart_text
+from mini_me_sidecar.adapters.data.plot import MAX_BINS, MAX_BYTES, build_chart, chart_text
 from mini_me_sidecar.adapters.data.tables import column_type
 
 
@@ -100,3 +100,48 @@ def test_dates_are_binned_and_lines_aggregate_per_series():
     assert bins[0]["x0"] == "2024-01-01"
     points = draw(frame, chart("line", x="day", y="yield", series="t")).data["views"][0]["points"]
     assert points[-1] == {"x": "2024-02-01", "y": 4.0, "series": "a"}
+
+
+def test_only_the_columns_a_chart_type_reads_are_read():
+    frame = pd.DataFrame({"variety": ["a", "a", "b"], "yield": [1.0, 2, 4], "note": [None] * 3})
+    histogram = draw(frame, chart("histogram", x="yield", y="nope"))
+    assert sum(b["count"] for b in histogram.data["views"][0]["bins"]) == 3
+    box = draw(frame, chart("box", x="variety", y="yield", series="note"))
+    assert box.notes == [] and len(box.data["views"][0]["groups"]) == 2
+    bar = draw(frame, chart("bar", x="variety", y="nope", aggregate="count")).data["views"][0]
+    assert "y" not in bar and bar["bars"][0] == {"x": "a", "y": 2}
+
+
+def test_dates_with_a_time_zone_or_beyond_2262_are_binned():
+    def first_edge(days) -> str:
+        bins = draw(pd.DataFrame({"day": days}), chart("histogram", x="day")).data["views"][0]
+        return bins["bins"][0]["x0"]
+
+    assert first_edge(pd.to_datetime(["2024-01-01", "2024-03-01"]).tz_localize("UTC")) == (
+        "2024-01-01"
+    )
+    assert first_edge(np.array(["2500-01-01", "2500-06-01"], dtype="datetime64[s]")) == (
+        "2500-01-01"
+    )
+
+
+def test_a_histogram_has_a_bounded_number_of_bins():
+    values = np.append(np.random.default_rng(2).normal(scale=1e-6, size=1000), 1e6)
+    bins = draw(pd.DataFrame({"x": values}), chart("histogram", x="x")).data["views"][0]["bins"]
+    assert len(bins) <= MAX_BINS
+
+
+def test_views_too_large_to_draw_are_left_out_or_described_in_text():
+    plots = [f"plot-{i:05d}-" + "x" * 40 for i in range(13000)]
+    frame = pd.DataFrame({"plot": plots, "yield": range(13000)})
+    c = chart("bar", x="plot", y="yield", aggregate="mean")
+    c.alternatives = ["box"]
+    result = draw(frame, c)
+    assert result.fits and [v["type"] for v in result.data["views"]] == ["bar"]
+    assert result.notes == ["the box plot view was left out, as it has too many values"]
+
+    wide = pd.DataFrame(np.random.default_rng(3).normal(size=(5, 300)))
+    wide.columns = [f"c{i:03d}" for i in range(300)]
+    result = draw(wide, chart("heatmap", columns=list(wide.columns)))
+    assert not result.fits
+    assert result.notes == ["it has too many columns to draw, so it is described in text below"]

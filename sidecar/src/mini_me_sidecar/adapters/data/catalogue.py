@@ -253,6 +253,15 @@ CHART_AXES: dict[str, dict[str, tuple[str, ...]]] = {
 SERIES_TYPES = ("text", "boolean")
 
 
+def chart_axes(chart: Chart) -> dict[str, tuple[str, ...]]:
+    """The axes `chart` reads a column for, with the column types each accepts. A count bar
+    chart has no `y`."""
+    axes = dict(CHART_AXES[chart.type])
+    if chart.type == "bar" and (chart.aggregate or "count") == "count":
+        axes.pop("y")
+    return axes
+
+
 def chart_problem(chart: Chart, types: dict[str, str]) -> str | None:
     """Why `chart` can't be drawn from a table whose columns have `types`, or None when it
     can."""
@@ -267,10 +276,7 @@ def chart_problem(chart: Chart, types: dict[str, str]) -> str | None:
         if wrong:
             return ", ".join(f"`{c}`" for c in wrong) + " is not a number column"
         return None
-    axes = dict(CHART_AXES[chart.type])
-    if chart.type == "bar" and (chart.aggregate or "count") == "count":
-        axes.pop("y")
-    for axis, allowed in axes.items():
+    for axis, allowed in chart_axes(chart).items():
         column = getattr(chart, axis)
         if column is None:
             return f"no `{axis}` column given"
