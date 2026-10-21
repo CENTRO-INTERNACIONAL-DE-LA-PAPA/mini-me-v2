@@ -27,7 +27,7 @@ def test_a_computation_runs_in_a_worker_that_is_reused():
         first = await workers.run(Context(), parse_table, "trial.csv", b"plot,yield\np1,2.5\n")
         worker = workers._idle[0]
         second = await workers.run(Context(), len, "yield")
-        return first, second, worker, workers._idle
+        return first, second, worker, list(workers._idle)
 
     first, second, worker, idle = in_workers(scenario)
     assert list(first.frame.columns) == ["plot", "yield"]
