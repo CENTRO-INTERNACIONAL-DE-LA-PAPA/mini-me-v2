@@ -1,0 +1,823 @@
+{
+  "events": [
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001001",
+      "type": "message.created",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 1,
+      "ts": 1760000000000,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message": {
+          "id": "0199d0b0-0000-7000-8000-000000000101",
+          "author": {
+            "kind": "user",
+            "id": "0199d0b0-0000-7000-8000-0000000000e1"
+          },
+          "content": "Plan a trial with #trial.csv",
+          "status": "complete",
+          "reply_to": null,
+          "attachments": [
+            {
+              "id": "0199d0b0-0000-7000-8000-000000000201",
+              "name": "trial.csv",
+              "media_type": "text/csv",
+              "size_bytes": 2048
+            }
+          ],
+          "text_components": [
+            {
+              "kind": "asset",
+              "id": "0199d0b0-0000-7000-8000-000000000201",
+              "label": "#trial.csv",
+              "start": 18,
+              "end": 28
+            }
+          ],
+          "components": [],
+          "steps": []
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001002",
+      "type": "routing.answered",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 2,
+      "ts": 1760000000100,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000101",
+        "answers": {
+          "mini_me": {
+            "choice": "investigator",
+            "confidence": 0.92,
+            "probabilities": {
+              "investigator": 0.92,
+              "assistant": 0.08
+            }
+          }
+        },
+        "error": null
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001003",
+      "type": "reaction.added",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 3,
+      "ts": 1760000000200,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000101",
+        "emoji": "👍",
+        "by": {
+          "kind": "mini_me",
+          "id": "scout"
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001004",
+      "type": "message.created",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 4,
+      "ts": 1760000000300,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message": {
+          "id": "0199d0b0-0000-7000-8000-000000000102",
+          "author": {
+            "kind": "mini_me",
+            "id": "investigator"
+          },
+          "content": "",
+          "status": "streaming",
+          "reply_to": "0199d0b0-0000-7000-8000-000000000101",
+          "attachments": [],
+          "text_components": [],
+          "components": [],
+          "steps": []
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001005",
+      "type": "step.started",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 5,
+      "ts": 1760000000400,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "step_id": "refute",
+        "type": "trait",
+        "name": "Refute"
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001006",
+      "type": "message.progress",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 6,
+      "ts": 1760000000500,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "label": "Reading trial.csv",
+        "fraction": 0.5
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001007",
+      "type": "message.delta",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 7,
+      "ts": 1760000000600,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "text": "The trial "
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001008",
+      "type": "step.completed",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 8,
+      "ts": 1760000000700,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "step_id": "refute",
+        "output": "first critique"
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001009",
+      "type": "step.started",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 9,
+      "ts": 1760000000800,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "step_id": "refute",
+        "type": "trait",
+        "name": "Refute"
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000100a",
+      "type": "step.completed",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 10,
+      "ts": 1760000000900,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "step_id": "refute",
+        "output": "second critique"
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000100b",
+      "type": "component.added",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 11,
+      "ts": 1760000001000,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "component": {
+          "id": "0199d0b0-0000-7000-8000-000000000301",
+          "kind": "approval",
+          "version": 1,
+          "data": {
+            "step_id": "ask",
+            "prompt": "Go on?"
+          },
+          "text": "Go on?",
+          "answer": null
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000100c",
+      "type": "message.paused",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 12,
+      "ts": 1760000001100,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102"
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000100d",
+      "type": "component.answered",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 13,
+      "ts": 1760000001200,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "component_id": "0199d0b0-0000-7000-8000-000000000301",
+        "answer": {
+          "approved": true
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000100e",
+      "type": "message.resumed",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 14,
+      "ts": 1760000001300,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102"
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000100f",
+      "type": "message.delta",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 15,
+      "ts": 1760000001400,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "text": "needs rain data."
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001010",
+      "type": "component.added",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 16,
+      "ts": 1760000001500,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "component": {
+          "id": "0199d0b0-0000-7000-8000-000000000302",
+          "kind": "table",
+          "version": 1,
+          "data": {
+            "columns": [
+              {
+                "name": "plot",
+                "type": "text"
+              }
+            ],
+            "rows": [
+              [
+                "p1"
+              ]
+            ]
+          },
+          "text": "plot\np1",
+          "answer": null
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001011",
+      "type": "message.completed",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 17,
+      "ts": 1760000001600,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000102",
+        "content": "The trial needs rain data."
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001012",
+      "type": "reaction.added",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 18,
+      "ts": 1760000001700,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000101",
+        "emoji": "🎉",
+        "by": {
+          "kind": "user",
+          "id": "0199d0b0-0000-7000-8000-0000000000e1"
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001013",
+      "type": "reaction.removed",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 19,
+      "ts": 1760000001800,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000101",
+        "emoji": "👍",
+        "by": {
+          "kind": "mini_me",
+          "id": "scout"
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001014",
+      "type": "reaction.added",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 20,
+      "ts": 1760000001900,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000101",
+        "emoji": "👍",
+        "by": {
+          "kind": "mini_me",
+          "id": "scout"
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001015",
+      "type": "message.created",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 21,
+      "ts": 1760000002000,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message": {
+          "id": "0199d0b0-0000-7000-8000-000000000103",
+          "author": {
+            "kind": "mini_me",
+            "id": "skeptic"
+          },
+          "content": "",
+          "status": "streaming",
+          "reply_to": "0199d0b0-0000-7000-8000-000000000101",
+          "attachments": [],
+          "text_components": [],
+          "components": [],
+          "steps": []
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001016",
+      "type": "message.delta",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 22,
+      "ts": 1760000002100,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000103",
+        "text": "Partly"
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001017",
+      "type": "message.failed",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 23,
+      "ts": 1760000002200,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000103",
+        "error": {
+          "code": "provider_error",
+          "message": "OpenAI is rate limiting this key."
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001018",
+      "type": "message.created",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 24,
+      "ts": 1760000002300,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message": {
+          "id": "0199d0b0-0000-7000-8000-000000000104",
+          "author": {
+            "kind": "mini_me",
+            "id": "scribe"
+          },
+          "content": "",
+          "status": "streaming",
+          "reply_to": "0199d0b0-0000-7000-8000-000000000101",
+          "attachments": [],
+          "text_components": [],
+          "components": [],
+          "steps": []
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-000000001019",
+      "type": "message.progress",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 25,
+      "ts": 1760000002400,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000104",
+        "label": "Summarizing",
+        "fraction": null
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000101a",
+      "type": "message.delta",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 26,
+      "ts": 1760000002500,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000104",
+        "text": "Draft"
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000101b",
+      "type": "attachment.added",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 27,
+      "ts": 1760000002600,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000104",
+        "asset": {
+          "id": "0199d0b0-0000-7000-8000-000000000202",
+          "name": "summary.md",
+          "media_type": "text/markdown",
+          "size_bytes": 120
+        }
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000101c",
+      "type": "message.paused",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 28,
+      "ts": 1760000002700,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000104"
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000101d",
+      "type": "message.resumed",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 29,
+      "ts": 1760000002800,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000104"
+      }
+    },
+    {
+      "id": "0199d0b0-0000-7000-8000-00000000101e",
+      "type": "message.progress",
+      "v": 1,
+      "project_id": "0199d0b0-0000-7000-8000-0000000000a1",
+      "conversation_id": "0199d0b0-0000-7000-8000-0000000000c1",
+      "seq": 30,
+      "ts": 1760000002900,
+      "origin": {
+        "installation_id": "0199d0b0-0000-7000-8000-0000000000f1",
+        "user_id": "0199d0b0-0000-7000-8000-0000000000e1"
+      },
+      "payload": {
+        "message_id": "0199d0b0-0000-7000-8000-000000000104",
+        "label": "Writing",
+        "fraction": 0.75
+      }
+    }
+  ],
+  "opened": {
+    "lastSeq": 30,
+    "messages": [
+      {
+        "id": "0199d0b0-0000-7000-8000-000000000101",
+        "author": {
+          "kind": "user",
+          "id": "0199d0b0-0000-7000-8000-0000000000e1"
+        },
+        "content": "Plan a trial with #trial.csv",
+        "status": "complete",
+        "reply_to": null,
+        "attachments": [
+          {
+            "id": "0199d0b0-0000-7000-8000-000000000201",
+            "name": "trial.csv",
+            "media_type": "text/csv",
+            "size_bytes": 2048
+          }
+        ],
+        "text_components": [
+          {
+            "kind": "asset",
+            "id": "0199d0b0-0000-7000-8000-000000000201",
+            "label": "#trial.csv",
+            "start": 18,
+            "end": 28
+          }
+        ],
+        "components": [],
+        "steps": [],
+        "reactions": [
+          {
+            "emoji": "🎉",
+            "by": {
+              "kind": "user",
+              "id": "0199d0b0-0000-7000-8000-0000000000e1"
+            }
+          },
+          {
+            "emoji": "👍",
+            "by": {
+              "kind": "mini_me",
+              "id": "scout"
+            }
+          }
+        ],
+        "progress": null,
+        "jev": {
+          "answers": {
+            "mini_me": {
+              "choice": "investigator",
+              "confidence": 0.92,
+              "probabilities": {
+                "investigator": 0.92,
+                "assistant": 0.08
+              }
+            }
+          },
+          "error": null
+        }
+      },
+      {
+        "id": "0199d0b0-0000-7000-8000-000000000102",
+        "author": {
+          "kind": "mini_me",
+          "id": "investigator"
+        },
+        "reply_to": "0199d0b0-0000-7000-8000-000000000101",
+        "attachments": [],
+        "text_components": [],
+        "components": [
+          {
+            "id": "0199d0b0-0000-7000-8000-000000000301",
+            "kind": "approval",
+            "version": 1,
+            "data": {
+              "step_id": "ask",
+              "prompt": "Go on?"
+            },
+            "text": "Go on?",
+            "answer": {
+              "approved": true
+            }
+          },
+          {
+            "id": "0199d0b0-0000-7000-8000-000000000302",
+            "kind": "table",
+            "version": 1,
+            "data": {
+              "columns": [
+                {
+                  "name": "plot",
+                  "type": "text"
+                }
+              ],
+              "rows": [
+                [
+                  "p1"
+                ]
+              ]
+            },
+            "text": "plot\np1",
+            "answer": null
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "refute",
+            "type": "trait",
+            "name": "Refute",
+            "output": "first critique",
+            "done": true
+          },
+          {
+            "step_id": "refute",
+            "type": "trait",
+            "name": "Refute",
+            "output": "second critique",
+            "done": true
+          }
+        ],
+        "reactions": [],
+        "progress": null,
+        "content": "The trial needs rain data.",
+        "status": "complete"
+      },
+      {
+        "id": "0199d0b0-0000-7000-8000-000000000103",
+        "author": {
+          "kind": "mini_me",
+          "id": "skeptic"
+        },
+        "reply_to": "0199d0b0-0000-7000-8000-000000000101",
+        "attachments": [],
+        "text_components": [],
+        "components": [],
+        "steps": [],
+        "reactions": [],
+        "progress": null,
+        "content": "Partly",
+        "status": "failed",
+        "failure": {
+          "code": "provider_error",
+          "message": "OpenAI is rate limiting this key."
+        }
+      },
+      {
+        "id": "0199d0b0-0000-7000-8000-000000000104",
+        "author": {
+          "kind": "mini_me",
+          "id": "scribe"
+        },
+        "reply_to": "0199d0b0-0000-7000-8000-000000000101",
+        "attachments": [
+          {
+            "id": "0199d0b0-0000-7000-8000-000000000202",
+            "name": "summary.md",
+            "media_type": "text/markdown",
+            "size_bytes": 120
+          }
+        ],
+        "text_components": [],
+        "components": [],
+        "steps": [],
+        "reactions": [],
+        "progress": {
+          "label": "Writing",
+          "fraction": 0.75
+        },
+        "content": "Draft",
+        "status": "streaming"
+      }
+    ]
+  }
+}

@@ -15,7 +15,7 @@ use crate::assets;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
 use crate::error::{AppError, AppResult};
 use crate::projects::{self, ProjectSummary};
-use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, now_ms};
+use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, OpenedConversation, now_ms};
 use crate::library::{Library, MiniMeSummary};
 use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{CANCEL_TIMEOUT, Runs};
@@ -124,11 +124,11 @@ impl AppState {
     }
 }
 
-struct ChannelSink(Channel<Event>);
+struct ChannelSink(Channel<Vec<Event>>);
 
 impl EventSink for ChannelSink {
-    fn send(&self, event: &Event) -> bool {
-        self.0.send(event.clone()).is_ok()
+    fn send(&self, events: &[Event]) -> bool {
+        self.0.send(events.to_vec()).is_ok()
     }
 }
 
@@ -168,17 +168,54 @@ pub async fn create_conversation(
     conversations::create(&*state.project(project_id)?)
 }
 
+/// The Conversation as stored, and a subscription that sends `on_events` every event
+/// persisted after it.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn open_conversation(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    conversation_id: Uuid,
+    on_events: Channel<Vec<Event>>,
+) -> AppResult<OpenedConversation> {
+    state
+        .project(project_id)?
+        .open(conversation_id, Box::new(ChannelSink(on_events)))
+}
+
+/// Sends `on_events` every event after `after_seq`, then new ones; returns the subscription's
+/// ID.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn subscribe_conversation(
     state: State<'_, AppState>,
     project_id: Uuid,
     conversation_id: Uuid,
     after_seq: i64,
-    on_event: Channel<Event>,
-) -> AppResult<()> {
+    on_events: Channel<Vec<Event>>,
+) -> AppResult<Uuid> {
     state
         .project(project_id)?
-        .subscribe(conversation_id, after_seq, Box::new(ChannelSink(on_event)))
+        .subscribe(conversation_id, after_seq, Box::new(ChannelSink(on_events)))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn unsubscribe_conversation(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    subscription_id: Uuid,
+) -> AppResult<()> {
+    state.project(project_id)?.unsubscribe(subscription_id);
+    Ok(())
+}
+
+/// Ends every Conversation subscription of every open Project. The UI calls it when it
+/// starts, so subscriptions held for a view that was reloaded end.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn reset_subscriptions(state: State<'_, AppState>) -> AppResult<()> {
+    let open = state.open_projects.lock().unwrap_or_else(|p| p.into_inner());
+    for project in open.values() {
+        project.unsubscribe_all();
+    }
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]

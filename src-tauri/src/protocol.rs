@@ -260,6 +260,51 @@ pub struct TextComponent {
     pub end: u32,
 }
 
+/// A message as the UI shows it: what its Conversation's events give when folded in order.
+/// `src/protocol/eventStore.ts` builds the same shape from events; `src-tauri/fixtures/
+/// replay.json` keeps the two in agreement.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct MessageView {
+    #[serde(flatten)]
+    pub message: Message,
+    pub reactions: Vec<Reaction>,
+    /// The latest progress of a streaming reply; `null` once it has ended or paused.
+    pub progress: Option<Progress>,
+    /// Jev's answers about the message, when the developer setting stored them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jev: Option<JevAnswers>,
+    /// Why the reply failed, once it has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure: Option<ErrorInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Reaction {
+    pub emoji: String,
+    pub by: Author,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Progress {
+    pub label: String,
+    pub fraction: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct JevAnswers {
+    pub answers: Value,
+    pub error: Option<ErrorInfo>,
+}
+
+/// A Conversation as it stands when the UI opens it. Events after `last_seq` reach the UI
+/// through the subscription `subscription_id`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct OpenedConversation {
+    pub subscription_id: Uuid,
+    pub last_seq: i64,
+    pub messages: Vec<MessageView>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -356,5 +401,31 @@ mod tests {
         ] {
             assert!(types.iter().any(|t| t == expected), "fixture lacks {expected}");
         }
+    }
+
+    #[test]
+    fn a_message_view_is_the_message_with_its_shown_state() {
+        let view = MessageView {
+            message: Message {
+                id: new_id(),
+                author: Author { kind: AuthorKind::MiniMe, id: "scout".into() },
+                content: "Reading".into(),
+                status: MessageStatus::Streaming,
+                reply_to: None,
+                attachments: Vec::new(),
+                text_components: Vec::new(),
+                components: Vec::new(),
+                steps: Vec::new(),
+            },
+            reactions: Vec::new(),
+            progress: Some(Progress { label: "Reading trial.csv".into(), fraction: None }),
+            jev: None,
+            failure: None,
+        };
+        let value = serde_json::to_value(&view).unwrap();
+        assert_eq!(value["content"], json!("Reading"));
+        assert_eq!(value["progress"], json!({ "label": "Reading trial.csv", "fraction": null }));
+        assert_eq!(value["reactions"], json!([]));
+        assert!(value.get("jev").is_none() && value.get("failure").is_none());
     }
 }

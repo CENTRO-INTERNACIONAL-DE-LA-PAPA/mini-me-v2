@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../src-tauri/fixtures/events.json";
-import { applyEvent, emptyConversation, type ConversationState } from "./eventStore";
+import replayFixture from "../../src-tauri/fixtures/replay.json";
+import {
+  applyEvent,
+  ConversationStore,
+  emptyConversation,
+  type ConversationState,
+} from "./eventStore";
 import type { Message, ProtocolEvent } from "./types";
 
 const events = fixture as ProtocolEvent[];
@@ -186,5 +192,29 @@ describe("Workflow replies", () => {
     );
     expect(resumed.messages[0].status).toBe("streaming");
     expect(resumed.messages[0].components[0].answer).toEqual({ approved: true });
+  });
+});
+
+describe("opening a Conversation", () => {
+  const opened = replayFixture.opened as unknown as ConversationState;
+  const openedEvents = replayFixture.events as ProtocolEvent[];
+
+  it("gives what folding all of its events gives", () => {
+    expect(replay(openedEvents)).toEqual(opened);
+  });
+
+  it("applies a batch with one notification and skips events the opened state holds", () => {
+    const store = new ConversationStore();
+    let notified = 0;
+    store.subscribe(() => notified++);
+    const half = openedEvents.length / 2;
+    const early = replay(openedEvents.slice(0, half));
+    store.load(
+      { subscription_id: "s", last_seq: early.lastSeq, messages: early.messages },
+      openedEvents.slice(half - 2, half + 1),
+    );
+    store.applyBatch(openedEvents.slice(half + 1));
+    expect(notified).toBe(2);
+    expect(store.getSnapshot()).toEqual(opened);
   });
 });
