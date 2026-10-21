@@ -321,102 +321,138 @@ impl ProjectState {
         message_id: Uuid,
         component_data: bool,
     ) -> AppResult<Option<(Uuid, Message)>> {
-        let row = self
-            .conn
-            .query_row(
-                "SELECT conversation_id, author_kind, author_id, content, status, reply_to, \
-                 attachments, text_components FROM messages WHERE id = ?1",
-                params![message_id.to_string()],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
-                        row.get::<_, String>(4)?,
-                        row.get::<_, Option<String>>(5)?,
-                        row.get::<_, String>(6)?,
-                        row.get::<_, String>(7)?,
-                    ))
-                },
-            )
-            .optional()?;
-        let Some((conversation, kind, author_id, content, status, reply_to, attachments, components)) =
-            row
-        else {
-            return Ok(None);
-        };
-        let corrupt = || AppError::storage("stored message is not readable");
-        let message = Message {
-            id: message_id,
-            author: Author {
-                kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?,
-                id: author_id,
-            },
-            content,
-            status: MessageStatus::parse(&status).ok_or_else(corrupt)?,
-            reply_to: reply_to.map(|id| Uuid::parse_str(&id)).transpose().map_err(|_| corrupt())?,
-            attachments: serde_json::from_str::<Vec<AssetRef>>(&attachments)?,
-            text_components: serde_json::from_str::<Vec<TextComponent>>(&components)?,
-            components: self.message_components(message_id, component_data)?,
-            steps: self.message_steps(message_id)?,
-        };
-        let conversation = Uuid::parse_str(&conversation).map_err(|_| corrupt())?;
-        Ok(Some((conversation, message)))
+        Ok(self.messages_in(Scope::Message(message_id), component_data)?.into_iter().next())
     }
 
-    /// A message's Interactive Components, in the order they were added; with `data` `null`
-    /// unless `with_data` is set.
-    fn message_components(&self, message_id: Uuid, with_data: bool) -> AppResult<Vec<Component>> {
-        let mut stmt = self.conn.prepare(if with_data {
-            "SELECT id, kind, version, data, text, answer FROM components \
-             WHERE message_id = ?1 ORDER BY rowid"
-        } else {
-            "SELECT id, kind, version, 'null', text, answer FROM components \
-             WHERE message_id = ?1 ORDER BY rowid"
-        })?;
-        let rows = stmt.query_map(params![message_id.to_string()], |row| {
+    /// The messages of `scope` with their Conversation, in the order they were created, with
+    /// their components and Steps; components carry `data` only when `component_data` is set
+    /// (`null` instead). Three queries, whatever the number of messages.
+    fn messages_in(&self, scope: Scope, component_data: bool) -> AppResult<Vec<(Uuid, Message)>> {
+        let mut components = self.components_in(scope, component_data)?;
+        let mut steps = self.steps_in(scope)?;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT m.id, m.conversation_id, m.author_kind, m.author_id, m.content, m.status, \
+             m.reply_to, m.attachments, m.text_components FROM messages m WHERE {} \
+             ORDER BY m.rowid",
+            scope.condition()
+        ))?;
+        let rows = stmt.query_map(params![scope.id()], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
-                row.get::<_, u32>(2)?,
+                row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
-                row.get::<_, Option<String>>(5)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, String>(8)?,
             ))
         })?;
-        let mut components = Vec::new();
+        let corrupt = || AppError::storage("stored message is not readable");
+        let mut messages = Vec::new();
         for row in rows {
-            let (id, kind, version, data, text, answer) = row?;
-            components.push(Component {
-                id: Uuid::parse_str(&id)
-                    .map_err(|_| AppError::storage("stored component is not readable"))?,
-                kind,
-                version,
-                data: serde_json::from_str(&data)?,
-                text,
-                answer: answer.map(|a| serde_json::from_str(&a)).transpose()?.unwrap_or_default(),
-            });
+            let (id, conversation, kind, author_id, content, status, reply_to, attachments, refs) =
+                row?;
+            let id = Uuid::parse_str(&id).map_err(|_| corrupt())?;
+            let message = Message {
+                id,
+                author: Author {
+                    kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?,
+                    id: author_id,
+                },
+                content,
+                status: MessageStatus::parse(&status).ok_or_else(corrupt)?,
+                reply_to: reply_to
+                    .map(|id| Uuid::parse_str(&id))
+                    .transpose()
+                    .map_err(|_| corrupt())?,
+                attachments: serde_json::from_str::<Vec<AssetRef>>(&attachments)?,
+                text_components: serde_json::from_str::<Vec<TextComponent>>(&refs)?,
+                components: components.remove(&id).unwrap_or_default(),
+                steps: steps.remove(&id).unwrap_or_default(),
+            };
+            messages.push((Uuid::parse_str(&conversation).map_err(|_| corrupt())?, message));
+        }
+        Ok(messages)
+    }
+
+    /// The Interactive Components of `scope`'s messages by message, each message's in the
+    /// order they were added; with `data` `null` unless `with_data` is set.
+    fn components_in(
+        &self,
+        scope: Scope,
+        with_data: bool,
+    ) -> AppResult<HashMap<Uuid, Vec<Component>>> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT c.message_id, {} FROM components c \
+             JOIN messages m ON m.id = c.message_id WHERE {} ORDER BY c.rowid",
+            component_columns(with_data),
+            scope.condition(),
+        ))?;
+        let rows = stmt.query_map(params![scope.id()], |row| {
+            Ok((row.get::<_, String>(0)?, component_row(row, 1)?))
+        })?;
+        let mut components: HashMap<Uuid, Vec<Component>> = HashMap::new();
+        for row in rows {
+            let (message_id, raw) = row?;
+            let message_id = Uuid::parse_str(&message_id)
+                .map_err(|_| AppError::storage("stored component is not readable"))?;
+            components.entry(message_id).or_default().push(component(raw)?);
         }
         Ok(components)
     }
 
-    /// The Steps a reply's Workflow has started, in order.
-    fn message_steps(&self, message_id: Uuid) -> AppResult<Vec<MessageStep>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT step_id, type, name, output, done FROM message_steps WHERE message_id = ?1 \
-             ORDER BY position",
-        )?;
-        let rows = stmt.query_map(params![message_id.to_string()], |row| {
-            Ok(MessageStep {
-                step_id: row.get(0)?,
-                step_type: row.get(1)?,
-                name: row.get(2)?,
-                output: row.get(3)?,
-                done: row.get(4)?,
-            })
+    /// The Steps each of `scope`'s replies has started, by message, in order.
+    fn steps_in(&self, scope: Scope) -> AppResult<HashMap<Uuid, Vec<MessageStep>>> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT s.message_id, s.step_id, s.type, s.name, s.output, s.done \
+             FROM message_steps s JOIN messages m ON m.id = s.message_id WHERE {} \
+             ORDER BY s.message_id, s.position",
+            scope.condition()
+        ))?;
+        let rows = stmt.query_map(params![scope.id()], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                MessageStep {
+                    step_id: row.get(1)?,
+                    step_type: row.get(2)?,
+                    name: row.get(3)?,
+                    output: row.get(4)?,
+                    done: row.get(5)?,
+                },
+            ))
         })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        let mut steps: HashMap<Uuid, Vec<MessageStep>> = HashMap::new();
+        for row in rows {
+            let (message_id, step) = row?;
+            let message_id = Uuid::parse_str(&message_id)
+                .map_err(|_| AppError::storage("stored Step is not readable"))?;
+            steps.entry(message_id).or_default().push(step);
+        }
+        Ok(steps)
+    }
+
+    /// The Interactive Component `component_id` with its data, when a message of the
+    /// Conversation holds it.
+    pub fn conversation_component(
+        &self,
+        conversation_id: Uuid,
+        component_id: Uuid,
+    ) -> AppResult<Option<Component>> {
+        let raw = self
+            .conn
+            .query_row(
+                &format!(
+                    "SELECT {} FROM components c JOIN messages m ON m.id = c.message_id \
+                     WHERE m.conversation_id = ?1 AND c.id = ?2",
+                    component_columns(true),
+                ),
+                params![conversation_id.to_string(), component_id.to_string()],
+                |row| component_row(row, 0),
+            )
+            .optional()?;
+        raw.map(component).transpose()
     }
 
     /// IDs of messages still streaming, optionally limited to one Conversation.
@@ -455,21 +491,8 @@ impl ProjectState {
     /// Every message of the Conversation, in the order they were created. Their components
     /// carry only `text` (`data` is `null`), which is all a history needs.
     pub fn conversation_messages(&self, conversation_id: Uuid) -> AppResult<Vec<Message>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id FROM messages WHERE conversation_id = ?1 ORDER BY rowid")?;
-        let ids = stmt
-            .query_map(params![conversation_id.to_string()], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut messages = Vec::with_capacity(ids.len());
-        for id in ids {
-            let id = Uuid::parse_str(&id)
-                .map_err(|_| AppError::storage("stored message is not readable"))?;
-            if let Some((_, message)) = self.load_message_with(id, false)? {
-                messages.push(message);
-            }
-        }
-        Ok(messages)
+        let messages = self.messages_in(Scope::Conversation(conversation_id), false)?;
+        Ok(messages.into_iter().map(|(_, message)| message).collect())
     }
 
     /// Every message of the Conversation as the UI shows it, in the order they were created:
@@ -477,26 +500,17 @@ impl ProjectState {
     /// Jev's answers and progress that only events record. Matches what folding the
     /// Conversation's events gives (`src/protocol/eventStore.ts`).
     fn message_views(&self, conversation_id: Uuid) -> AppResult<Vec<MessageView>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id FROM messages WHERE conversation_id = ?1 ORDER BY rowid")?;
-        let ids = stmt
-            .query_map(params![conversation_id.to_string()], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut views = Vec::with_capacity(ids.len());
-        for id in ids {
-            let id = Uuid::parse_str(&id)
-                .map_err(|_| AppError::storage("stored message is not readable"))?;
-            if let Some((_, message)) = self.load_message_with(id, true)? {
-                views.push(MessageView {
-                    message,
-                    reactions: Vec::new(),
-                    progress: None,
-                    jev: None,
-                    failure: None,
-                });
-            }
-        }
+        let messages = self.messages_in(Scope::Conversation(conversation_id), true)?;
+        let mut views: Vec<MessageView> = messages
+            .into_iter()
+            .map(|(_, message)| MessageView {
+                message,
+                reactions: Vec::new(),
+                progress: None,
+                jev: None,
+                failure: None,
+            })
+            .collect();
         let index: HashMap<Uuid, usize> =
             views.iter().enumerate().map(|(i, v)| (v.message.id, i)).collect();
 
@@ -591,6 +605,62 @@ impl ProjectState {
             .optional()?;
         Ok(found.is_some())
     }
+}
+
+/// The messages a read covers: one message, or every message of a Conversation.
+#[derive(Clone, Copy)]
+enum Scope {
+    Message(Uuid),
+    Conversation(Uuid),
+}
+
+impl Scope {
+    /// The condition on the `messages` row `m` that selects the scope, with its ID as `?1`.
+    fn condition(self) -> &'static str {
+        match self {
+            Scope::Message(_) => "m.id = ?1",
+            Scope::Conversation(_) => "m.conversation_id = ?1",
+        }
+    }
+
+    fn id(self) -> String {
+        match self {
+            Scope::Message(id) | Scope::Conversation(id) => id.to_string(),
+        }
+    }
+}
+
+/// The columns of a `components` row `c` that `component_row` reads; `data` reads as `null`
+/// unless `with_data` is set.
+fn component_columns(with_data: bool) -> String {
+    let data = if with_data { "c.data" } else { "'null'" };
+    format!("c.id, c.kind, c.version, {data}, c.text, c.answer")
+}
+
+/// The raw `component_columns`, starting at column `first`.
+type ComponentRow = (String, String, u32, String, String, Option<String>);
+
+fn component_row(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<ComponentRow> {
+    Ok((
+        row.get(first)?,
+        row.get(first + 1)?,
+        row.get(first + 2)?,
+        row.get(first + 3)?,
+        row.get(first + 4)?,
+        row.get(first + 5)?,
+    ))
+}
+
+fn component((id, kind, version, data, text, answer): ComponentRow) -> AppResult<Component> {
+    Ok(Component {
+        id: Uuid::parse_str(&id)
+            .map_err(|_| AppError::storage("stored component is not readable"))?,
+        kind,
+        version,
+        data: serde_json::from_str(&data)?,
+        text,
+        answer: answer.map(|a| serde_json::from_str(&a)).transpose()?.unwrap_or_default(),
+    })
 }
 
 fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
@@ -988,6 +1058,11 @@ mod tests {
         assert_eq!((in_history.text.as_str(), &in_history.data), ("first", &serde_json::Value::Null));
         let (_, question) = project.lock().load_message(question.id).unwrap().unwrap();
         assert!(question.components.is_empty());
+
+        let other = conversations::create(&project).unwrap().id;
+        let state = project.lock();
+        assert_eq!(state.conversation_component(other, first.id).unwrap(), None);
+        assert_eq!(state.conversation_component(conversation, first.id).unwrap(), Some(first));
     }
 
     #[test]
