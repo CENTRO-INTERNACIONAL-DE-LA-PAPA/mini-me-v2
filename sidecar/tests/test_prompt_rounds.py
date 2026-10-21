@@ -77,11 +77,11 @@ def test_a_last_round_with_only_tool_calls_ends_in_an_error(monkeypatch):
 
 
 def test_a_call_with_malformed_arguments_is_reported_to_the_model():
-    chat = FakeChat([tool_call("{not json"), AIMessageChunk("Answer")])
+    chat = FakeChat([tool_call("[1, 2]"), AIMessageChunk(content="Answer")])
     converse(chat)
     result = chat.sent[1][-1]
     assert isinstance(result, ToolMessage) and result.tool_call_id == "c1"
-    assert "not valid JSON" in result.content
+    assert "not a JSON object" in result.content
 
 
 def test_a_whole_float_argument_becomes_an_int():

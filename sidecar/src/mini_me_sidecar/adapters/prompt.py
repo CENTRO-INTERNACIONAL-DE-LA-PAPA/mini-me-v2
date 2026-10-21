@@ -171,11 +171,11 @@ def _has_calls(reply: AIMessage) -> bool:
 
 
 def _malformed(call: dict[str, Any]) -> str:
-    """The result told to the model for a tool call whose arguments are not valid JSON."""
+    """The result told to the model for a tool call whose arguments are not a JSON object."""
     detail = f" ({call['error']})" if call.get("error") else ""
     return json.dumps(
         {
-            "error": f"The arguments for {call.get('name')} were not valid JSON{detail}. "
+            "error": f"The arguments for {call.get('name')} were not a JSON object{detail}. "
             "Call it again with a JSON object as its arguments."
         },
         ensure_ascii=False,
