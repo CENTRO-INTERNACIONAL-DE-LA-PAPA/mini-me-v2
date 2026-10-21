@@ -142,9 +142,10 @@ rows" and name the source Asset.
 
 ### Requirement: Approval component
 The data of `approval` version 1 SHALL be `{ step_id, prompt }`, and its `text` the prompt.
-The UI SHALL show the prompt with Approve and Reject while the component has no answer and
-its reply is `paused`. Once answered, it SHALL show "Approved" or "Rejected" instead of the
-buttons. A reply stopped before an answer SHALL show neither the buttons nor an answer.
+The UI SHALL show the component below its reply only while it has no answer and its reply is
+`paused`, with the prompt, Approve and Reject. An answered approval, and one whose reply ended
+before an answer, SHALL NOT be shown below the reply; the component and its answer SHALL stay
+stored.
 
 #### Scenario: Waiting
 - **WHEN** a paused reply holds an unanswered approval "Design an experiment to test this
@@ -153,7 +154,12 @@ buttons. A reply stopped before an answer SHALL show neither the buttons nor an 
 
 #### Scenario: After approving
 - **WHEN** the user approves
-- **THEN** the buttons are replaced by "Approved", also after the Conversation is reopened
+- **THEN** the prompt is no longer shown below the reply, also after the Conversation is
+  reopened
+
+#### Scenario: Stopped before an answer
+- **WHEN** a reply paused at an approval is stopped
+- **THEN** no approval prompt is shown below the reply
 
 ### Requirement: Component answers
 An answer to an Interactive Component SHALL be persisted as `component.answered`, payload

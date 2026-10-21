@@ -7,6 +7,7 @@ import type { MessageView } from "../protocol/eventStore";
 import { segments } from "../protocol/references";
 import type { JevAnswers, MiniMe } from "../protocol/types";
 import { formatSize } from "./format";
+import { approvalState } from "./interactive/approval";
 import { InteractiveComponent } from "./interactive/InteractiveComponent";
 import { Markdown } from "./Markdown";
 import { MiniMePill } from "./MiniMePill";
@@ -53,6 +54,10 @@ export const MessageItem = memo(function MessageItem({ projectId, message }: Pro
   }
   const miniMe = (id: string) => miniMes.find((m) => m.id === id);
   const reactors = (emoji: string) => message.reactions.filter((r) => r.emoji === emoji);
+  // An approval shows only while it asks; once answered, the progress card shows its answer.
+  const shown = message.components.filter(
+    (c) => c.kind !== "approval" || approvalState(c.answer, message.status) === "asking",
+  );
 
   const open = useCallback(
     async (assetId: string) => {
@@ -98,6 +103,7 @@ export const MessageItem = memo(function MessageItem({ projectId, message }: Pro
       {showsProgress(message.steps) && (
         <WorkflowProgress
           steps={message.steps}
+          components={message.components}
           replyStatus={message.status}
           color={authorMiniMe?.colors.solid}
         />
@@ -127,9 +133,9 @@ export const MessageItem = memo(function MessageItem({ projectId, message }: Pro
           )}
         </p>
       )}
-      {message.components.length > 0 && (
+      {shown.length > 0 && (
         <div className="flex min-w-0 flex-col gap-3">
-          {message.components.map((component) => (
+          {shown.map((component) => (
             <InteractiveComponent
               key={component.id}
               component={component}
