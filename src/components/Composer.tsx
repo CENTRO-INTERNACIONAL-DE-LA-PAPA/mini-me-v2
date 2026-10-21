@@ -128,8 +128,9 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
     if (!query) {
       return;
     }
-    const cursor = input.current?.selectionStart ?? text.length;
-    const result = insertReference(text, references, query.start, cursor, target);
+    // The end of the selection, so that the reference replaces any selected text.
+    const end = input.current?.selectionEnd ?? text.length;
+    const result = insertReference(text, references, query.start, end, target);
     known.current.set(result.text, result.references);
     setText(result.text);
     setReferences(result.references);
@@ -462,11 +463,15 @@ function SuggestionRow({
   selected: boolean;
   onPick: () => void;
 }) {
+  const row = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (selected) row.current?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
   return (
     <button
       role="option"
       aria-selected={selected}
-      ref={selected ? (row) => row?.scrollIntoView({ block: "nearest" }) : undefined}
+      ref={row}
       className={cn(
         "flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5",
         "text-left",

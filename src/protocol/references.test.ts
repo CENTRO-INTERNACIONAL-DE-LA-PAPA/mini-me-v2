@@ -169,6 +169,11 @@ describe("markdownSource", () => {
   it("leaves a component whose range doesn't hold its label", () => {
     expect(markdownSource("ask @Scrabble", [mention])).toBe("ask @Scrabble");
   });
+
+  it("escapes a ! right before a component, so it stays a link", () => {
+    const file = { kind: "asset", id: "a1", label: "#trial.csv", start: 5, end: 15 } as const;
+    expect(markdownSource("Look!#trial.csv", [file])).toBe("Look\\![#trial.csv](ref:0)");
+  });
 });
 
 describe("miniMeSuggestions", () => {

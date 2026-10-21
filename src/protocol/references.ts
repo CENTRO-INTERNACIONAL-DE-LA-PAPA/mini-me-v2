@@ -164,12 +164,14 @@ export function markdownSource(content: string, components: TextComponent[]): st
     .map((component, index) => ({ component, index }))
     .filter(({ component }) => content.slice(component.start, component.end) === component.label)
     .sort((a, b) => b.component.start - a.component.start)
-    .reduce(
-      (source, { component, index }) =>
-        `${source.slice(0, component.start)}[${escape(component.label)}](ref:${index})` +
-        source.slice(component.end),
-      content,
-    );
+    .reduce((source, { component, index }) => {
+      let before = source.slice(0, component.start);
+      // A `!` right before the link would make it an image; escaped, it stays a `!`.
+      if (before.endsWith("!") && !before.endsWith("\\!")) {
+        before = `${before.slice(0, -1)}\\!`;
+      }
+      return `${before}[${escape(component.label)}](ref:${index})${source.slice(component.end)}`;
+    }, content);
 }
 
 export const MINI_ME_GROUPS: Array<{ group: MiniMeGroup; label: string }> = [
