@@ -42,6 +42,7 @@ def test_given_rows_become_table_data():
     [
         (COLUMNS, [["Yungay"]], "Row 1 has 1 values for 2 columns"),
         (COLUMNS, [["Yungay", "12 kg"]], "Row 1, column 'yield'"),
+        (COLUMNS, [["Yungay", 10**400]], "Row 1, column 'yield'"),
         (COLUMNS, [["Yungay", 1.0]] * 501, "at most 500 rows"),
         ([{"name": "when", "type": "date"}], [["March"]], "not a date"),
         ([{"name": "x", "type": "colour"}], [], "needs a type"),
