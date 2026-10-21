@@ -8,6 +8,7 @@ import threading
 from typing import BinaryIO
 
 from mini_me_sidecar import __version__
+from mini_me_sidecar.adapters.data.worker import WORKERS
 from mini_me_sidecar.context import Requests
 from mini_me_sidecar.link import PROTOCOL, Link, log, parse
 from mini_me_sidecar.routing import Router
@@ -20,6 +21,8 @@ def run(link_out: BinaryIO, test_adapters: bool) -> None:
     try:
         asyncio.run(_main(link, test_adapters))
     finally:
+        # `os._exit` skips `multiprocessing`'s own clean-up of child processes.
+        WORKERS.close()
         # Threads started with `asyncio.to_thread` by a Trait that ignored cancellation would
         # otherwise keep the interpreter alive after the core has gone.
         sys.stderr.flush()

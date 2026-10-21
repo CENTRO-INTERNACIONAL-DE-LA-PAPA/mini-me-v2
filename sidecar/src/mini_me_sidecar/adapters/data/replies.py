@@ -2,8 +2,6 @@
 the Trait needs it, compute with the tools, and reply with text, `table` or `chart`
 components and saved files."""
 
-import asyncio
-
 import pandas as pd
 from pydantic import BaseModel
 
@@ -25,6 +23,7 @@ from mini_me_sidecar.adapters.data.profile import profile as profile_frame
 from mini_me_sidecar.adapters.data.profile import summary
 from mini_me_sidecar.adapters.data.tables import NO_TABLE, Table, column_type, table_assets, table_file
 from mini_me_sidecar.adapters.data.validate import results_frame, run_checks
+from mini_me_sidecar.adapters.data.worker import WORKERS
 from mini_me_sidecar.context import CallContext, TraitError
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import show_chart
@@ -36,7 +35,7 @@ async def profile(ctx: CallContext, text: str) -> None:
     tables = await read_tables(ctx, text)
     for table in tables:
         ctx.progress(f"Profiling {table.name}")
-        columns = await asyncio.to_thread(profile_frame, table.frame)
+        columns = await WORKERS.run(ctx, profile_frame, table.frame)
         ctx.write(_sheet_note(table) + summary(table.name, table.frame) + "\n\n")
         await show_frame(ctx, columns, f"Columns of {table.name}")
 
@@ -49,7 +48,7 @@ async def validate(ctx: CallContext, text: str) -> None:
     for table in tables:
         ctx.progress(f"Checking {table.name}")
         checks = [c for c in plan.checks if not problem(c, _columns(table))]
-        results, report = await asyncio.to_thread(run_checks, table.frame, table.name, checks)
+        results, report = await WORKERS.run(ctx, run_checks, table.frame, table.name, checks)
         failed = sum(r.result != "Passed" for r in results)
         ctx.write(
             _sheet_note(table)
@@ -66,7 +65,7 @@ async def clean(ctx: CallContext, text: str) -> None:
     table = (await read_tables(ctx, text))[0]
     plan = await choose(ctx, CleanPlan, text, [describe(table)])
     ctx.progress(f"Cleaning {table.name}")
-    cleaned, log = await asyncio.to_thread(apply_actions, table.frame, plan.actions)
+    cleaned, log = await WORKERS.run(ctx, apply_actions, table.frame, plan.actions)
     applied = [a for a in log if not a.note]
     ctx.write(
         _sheet_note(table)
@@ -96,7 +95,7 @@ async def join_tables(ctx: CallContext, text: str) -> None:
             "column to join on.",
         )
     ctx.progress(f"Joining {left.name} and {right.name}")
-    result, stats = await asyncio.to_thread(join, left.frame, right.frame, plan, right.stem)
+    result, stats = await WORKERS.run(ctx, join, left.frame, right.frame, plan, right.stem)
     keys = ", ".join(f"`{k}`" for k in plan.left_on)
     ctx.write(
         f"Joined `{left.name}` ({stats.left_rows:,} rows) with `{right.name}` "
@@ -136,7 +135,7 @@ async def plot(ctx: CallContext, text: str) -> None:
     results = []
     for chart in drawn:
         ctx.progress(f"Drawing {chart.title or chart.type}")
-        result = await asyncio.to_thread(build_chart, table.frame, chart, types)
+        result = await WORKERS.run(ctx, build_chart, table.frame, chart, types)
         notes = "; ".join(result.notes)
         ctx.write(f"- {result.data['title']}" + (f": {notes}" if notes else "") + "\n")
         results.append(result)
@@ -165,7 +164,7 @@ async def _save(
     ctx: CallContext, table: Table, frame: pd.DataFrame, suffix: str, csv_only: bool = False
 ) -> str | None:
     """Saves `frame` as a new Asset and returns its name, or None when it is too large."""
-    name, media, data = await asyncio.to_thread(table_file, table, frame, suffix, csv_only)
+    name, media, data = await WORKERS.run(ctx, table_file, table, frame, suffix, csv_only)
     if len(data) > MAX_FILE_BYTES:
         ctx.write(f"\nThe result is larger than 32 MiB, so `{name}` could not be saved.\n")
         return None

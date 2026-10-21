@@ -16,6 +16,7 @@ from mini_me_sidecar.adapters.data.tables import (
     column_type,
     parse_table,
 )
+from mini_me_sidecar.adapters.data.worker import WORKERS
 from mini_me_sidecar.context import CallContext, TraitError
 from mini_me_sidecar.tools.base import ToolError, add_component, find_asset
 
@@ -32,7 +33,7 @@ async def read_table(ctx: CallContext, asset_id: str, name: str, text: str = "")
             f"{name} is larger than 100 MiB, the limit for data files.", "table_too_large"
         )
     try:
-        return parse_table(name, data, text)
+        return await WORKERS.run(ctx, parse_table, name, data, text)
     except TraitError as error:
         raise ToolError(str(error), error.code) from None
 
