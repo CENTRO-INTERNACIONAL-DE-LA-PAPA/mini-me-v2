@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 
 import pandas as pd
@@ -6,7 +7,7 @@ import pytest
 from mini_me_sidecar.tools import MODEL_TOOL_NAMES, READ_TOOLS, TOOL_NAMES
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import component_result
-from mini_me_sidecar.tools.files import READ_CHARS, check_file, text_result
+from mini_me_sidecar.tools.files import READ_CHARS, check_file, read_file, text_result
 from mini_me_sidecar.tools.model import MODEL_TOOLS
 from mini_me_sidecar.tools.tables import check_table, given_table, table_result
 
@@ -79,8 +80,53 @@ def test_a_table_component_is_read_with_all_its_rows():
     result = component_result({"kind": "table", "data": data})
     assert result["rows_in_component"] == result["total_rows"] == 120
     assert result["csv"].splitlines()[:2] == ["variety,yield", "Yungay,22.5"]
+    assert result["more"] is False
     other = component_result({"kind": "theories", "data": {"theories": []}})
-    assert other == {"kind": "theories", "data": '{"theories": []}', "cut": False}
+    assert other == {
+        "kind": "theories",
+        "start": 0,
+        "total_characters": 16,
+        "more": False,
+        "data": '{"theories": []}',
+    }
+
+
+def test_a_long_table_component_is_read_in_whole_rows():
+    rows = [["Yungay", "x" * 1000]] * 150
+    data = {"columns": COLUMNS, "rows": rows}
+    first = component_result({"kind": "table", "data": data})
+    shown = len(first["csv"].splitlines()) - 1
+    assert first["more"] is True and 0 < shown < 150
+    assert len(first["csv"]) <= READ_CHARS
+    rest = component_result({"kind": "table", "data": data}, shown)
+    assert rest["more"] is False
+    assert shown + len(rest["csv"].splitlines()) - 1 == 150
+
+
+class ReadingContext:
+    """Serves one text file and counts how often it is read."""
+
+    def __init__(self) -> None:
+        self.reads: dict = {}
+        self.fetched = 0
+
+    def progress(self, label: str) -> None:
+        pass
+
+    async def results(self) -> dict:
+        return {"assets": [{"id": "a1", "name": "notes.txt"}]}
+
+    async def read_asset(self, asset_id: str) -> bytes:
+        self.fetched += 1
+        return b"late blight " * 10_000
+
+
+def test_a_file_read_in_parts_is_fetched_once_per_call():
+    ctx = ReadingContext()
+    first = asyncio.run(read_file(ctx, "a1"))
+    rest = asyncio.run(read_file(ctx, "a1", READ_CHARS))
+    assert first["more"] and not rest["more"]
+    assert ctx.fetched == 1
 
 
 def test_model_tools_are_known_and_their_schemas_match_their_functions():

@@ -28,8 +28,11 @@ async def show_theories(ctx: CallContext, data: dict[str, Any], text: str) -> st
     return await add_component(ctx, "theories", data, text)
 
 
-async def read_component(ctx: CallContext, component_id: str) -> dict[str, Any]:
-    """One of the Conversation's components, shaped for a model to read."""
+async def read_component(ctx: CallContext, component_id: str, start: int = 0) -> dict[str, Any]:
+    """Part of one of the Conversation's components, shaped for a model to read: a table's
+    rows from row `start`, or another kind's data from character `start`."""
+    if start < 0:
+        raise ToolError("start cannot be negative.")
     ctx.progress("Reading a component")
     try:
         component = await ctx.read_component(component_id)
@@ -37,32 +40,53 @@ async def read_component(ctx: CallContext, component_id: str) -> dict[str, Any]:
         raise ToolError(
             f"No component with the ID {component_id} in this Conversation.", error.code
         ) from None
-    return component_result(component)
+    return component_result(component, start)
 
 
-def component_result(component: dict[str, Any]) -> dict[str, Any]:
-    """A `table` component as its columns and rows in CSV text; any other kind as its data in
-    JSON, at most `READ_CHARS` characters."""
+def component_result(component: dict[str, Any], start: int = 0) -> dict[str, Any]:
+    """A `table` component as its columns and whole rows from row `start` in CSV text; any
+    other kind as its data in JSON from character `start`. Either holds at most `READ_CHARS`
+    characters (a table at least one row), and `more` says whether more follow."""
     kind = str(component.get("kind", ""))
     data = component.get("data") or {}
     if kind == "table" and isinstance(data, dict):
         columns = data.get("columns") or []
         rows = data.get("rows") or []
-        buffer = io.StringIO()
-        writer = csv.writer(buffer, lineterminator="\n")
-        writer.writerow([c.get("name") for c in columns])
-        writer.writerows(rows)
+        lines = [_csv_line([c.get("name") for c in columns])]
+        size = len(lines[0])
+        for row in rows[start:]:
+            line = _csv_line(row)
+            if len(lines) > 1 and size + len(line) > READ_CHARS:
+                break
+            lines.append(line)
+            size += len(line)
+        end = start + len(lines) - 1
         result: dict[str, Any] = {
             "kind": kind,
             "title": data.get("title"),
             "columns": columns,
+            "start": start,
             "rows_in_component": len(rows),
             "total_rows": data.get("total_rows", len(rows)),
-            "csv": buffer.getvalue()[:READ_CHARS],
+            "more": end < len(rows),
+            "csv": "".join(lines),
         }
         if data.get("source"):
             # A preview of a longer table: the full table is in this file.
             result["source"] = data["source"]
         return result
     content = json.dumps(data, ensure_ascii=False)
-    return {"kind": kind, "data": content[:READ_CHARS], "cut": len(content) > READ_CHARS}
+    part = content[start : start + READ_CHARS]
+    return {
+        "kind": kind,
+        "start": start,
+        "total_characters": len(content),
+        "more": start + len(part) < len(content),
+        "data": part,
+    }
+
+
+def _csv_line(values: list[Any]) -> str:
+    buffer = io.StringIO()
+    csv.writer(buffer, lineterminator="\n").writerow(values)
+    return buffer.getvalue()

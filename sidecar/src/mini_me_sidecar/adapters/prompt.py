@@ -54,6 +54,10 @@ EMPTY_ANSWER_TRIES = 2
 # The most rounds of a call in which the model calls tools; the next round must answer.
 MAX_TOOL_ROUNDS = 8
 
+# The most characters of tool results one call sends its model, across all rounds: three
+# full reads of a file or component. The material has its own limit, `MAX_MATERIAL_CHARS`.
+MAX_TOOL_RESULT_CHARS = 300_000
+
 # Told to the model in the round after its last allowed tool round. The tools stay offered,
 # since some providers reject a chat that holds tool calls but offers no tools; any further
 # tool call is ignored.
@@ -133,6 +137,7 @@ async def _converse(
     between, for at most `MAX_TOOL_ROUNDS` rounds of tool calls."""
     tool_rounds = 0
     wrote = False
+    results_size = 0
     while not ctx.cancelled.is_set():
         last = tool_rounds >= MAX_TOOL_ROUNDS
         if last:
@@ -159,11 +164,26 @@ async def _converse(
             if ctx.cancelled.is_set():
                 return
             result = await _run_tool(ctx, offered, call)
+            if results_size + len(result) > MAX_TOOL_RESULT_CHARS:
+                result = _over_budget(len(result), MAX_TOOL_RESULT_CHARS - results_size)
+            results_size += len(result)
             messages.append(ToolMessage(content=result, tool_call_id=call["id"]))
         # Providers expect a result for every call the reply holds, malformed ones included.
         for call in reply.invalid_tool_calls:
             if call.get("id"):
                 messages.append(ToolMessage(content=_malformed(call), tool_call_id=call["id"]))
+
+
+def _over_budget(size: int, left: int) -> str:
+    """The result told to the model in place of one larger than what is left of
+    `MAX_TOOL_RESULT_CHARS`."""
+    return json.dumps(
+        {
+            "error": f"This result has {size:,} characters, more than the {max(left, 0):,} "
+            "left for tool results in this reply. Answer with what you have read, or read a "
+            "smaller part."
+        }
+    )
 
 
 def _has_calls(reply: AIMessage) -> bool:

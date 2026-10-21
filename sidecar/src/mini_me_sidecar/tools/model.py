@@ -88,12 +88,19 @@ MODEL_TOOLS: dict[str, ModelTool] = {
             name="read_component",
             description=(
                 "Reads one of the Conversation's Interactive Components by its ID: a table's "
-                "columns and all its rows as CSV, or another component's data."
+                "columns and its rows as CSV, or another component's data as JSON, up to "
+                "100,000 characters. When `more` is true, read again from a later `start` "
+                "(a row number for tables, a character position for other components)."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "component_id": {"type": "string", "description": "The component's ID."},
+                    "start": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Row or character to start from; 0 by default.",
+                    },
                 },
                 "required": ["component_id"],
             },
