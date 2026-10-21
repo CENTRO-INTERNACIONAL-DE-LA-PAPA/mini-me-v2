@@ -18,7 +18,7 @@ use uuid::Uuid;
 use crate::assets;
 use crate::conversations::{self, PausedRun};
 use crate::error::{AppError, AppResult};
-use crate::history::{HISTORY_BUDGET_CHARS, component_message, history, results};
+use crate::history::{HISTORY_BUDGET_CHARS, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
 use crate::link::{
     AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, RouteMiniMe, RunContext, RunMiniMe,
@@ -740,23 +740,17 @@ impl Runs {
             "conversation.results" => {
                 let state = project.lock();
                 let messages = state.conversation_messages(place.conversation_id)?;
-                let found = results(&messages, place.answers, &self.library, |id| {
+                let found = results(&messages, place.answers, reply, &self.library, |id| {
                     assets::find(&state, id).ok()
                 });
                 Ok(serde_json::to_value(found)?)
             }
             "component.read" => {
                 let p: ComponentReadParams = parse_params(params)?;
-                let not_found = || AppError::not_found("No such component in this Conversation.");
-                let state = project.lock();
-                let messages = state.conversation_messages(place.conversation_id)?;
-                let message_id = component_message(&messages, p.component_id).ok_or_else(not_found)?;
-                let (_, message) = state.load_message_with(message_id, true)?.ok_or_else(not_found)?;
-                let component = message
-                    .components
-                    .into_iter()
-                    .find(|c| c.id == p.component_id)
-                    .ok_or_else(not_found)?;
+                let component = project
+                    .lock()
+                    .conversation_component(place.conversation_id, p.component_id)?
+                    .ok_or_else(|| AppError::not_found("No such component in this Conversation."))?;
                 Ok(json!({
                     "kind": component.kind,
                     "version": component.version,

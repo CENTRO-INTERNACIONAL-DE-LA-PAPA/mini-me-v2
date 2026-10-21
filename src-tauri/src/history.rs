@@ -92,52 +92,67 @@ pub fn history(messages: &[Message], before: Uuid, library: &Library, budget: us
     }
 }
 
-/// The Assets and components of `messages` (a whole Conversation in creation order), newest
-/// first, at most `MAX_RESULTS` of each, each Asset once. `current` is the call's user
-/// message. `find_asset` looks up an Asset that a message references by `#`, since a
+/// The Assets and components a call can see: those of `messages` (a whole Conversation in
+/// creation order) up to and including its reply `reply`, newest first, at most `MAX_RESULTS`
+/// of each, each Asset once. The Assets of the call's user message `answers` and of `reply`
+/// are `current`. `find_asset` looks up an Asset that a message references by `#`, since a
 /// reference carries only its ID and label.
 pub fn results(
     messages: &[Message],
-    current: Uuid,
+    answers: Uuid,
+    reply: Uuid,
     library: &Library,
     find_asset: impl Fn(Uuid) -> Option<AssetRef>,
 ) -> Results {
+    let end = messages
+        .iter()
+        .position(|m| m.id == reply)
+        .or_else(|| messages.iter().position(|m| m.id == answers))
+        .map_or(messages.len(), |i| i + 1);
     let mut seen = HashSet::new();
     let mut assets = Vec::new();
     let mut components = Vec::new();
-    for message in messages.iter().rev() {
-        let referenced = message
-            .text_components
-            .iter()
-            .filter(|c| c.kind == TextComponentKind::Asset)
-            .filter_map(|c| find_asset(c.id));
-        for asset in message.attachments.iter().cloned().chain(referenced) {
+    for message in messages[..end].iter().rev() {
+        if assets.len() >= MAX_RESULTS && components.len() >= MAX_RESULTS {
+            break;
+        }
+        let current = message.id == answers || message.id == reply;
+        let result = |asset: AssetRef| ResultAsset { asset, message_id: message.id, current };
+        for asset in &message.attachments {
             if assets.len() < MAX_RESULTS && seen.insert(asset.id) {
-                let current = message.id == current;
-                assets.push(ResultAsset { asset, message_id: message.id, current });
+                assets.push(result(asset.clone()));
             }
         }
-        for component in message.components.iter().rev() {
-            if components.len() < MAX_RESULTS {
-                components.push(ResultComponent {
+        // Only references not listed yet are looked up, while there is room for them.
+        let references =
+            message.text_components.iter().filter(|c| c.kind == TextComponentKind::Asset);
+        for reference in references {
+            if assets.len() >= MAX_RESULTS {
+                break;
+            }
+            if seen.contains(&reference.id) {
+                continue;
+            }
+            if let Some(asset) = find_asset(reference.id) {
+                seen.insert(asset.id);
+                assets.push(result(asset));
+            }
+        }
+        let room = MAX_RESULTS.saturating_sub(components.len());
+        if room > 0 && !message.components.is_empty() {
+            let author = author_name(message, library);
+            components.extend(message.components.iter().rev().take(room).map(|component| {
+                ResultComponent {
                     id: component.id,
                     kind: component.kind.clone(),
                     version: component.version,
                     message_id: message.id,
-                    author: author_name(message, library),
-                });
-            }
+                    author: author.clone(),
+                }
+            }));
         }
     }
     Results { assets, components }
-}
-
-/// The ID of the message in `messages` that holds the component `component_id`.
-pub fn component_message(messages: &[Message], component_id: Uuid) -> Option<Uuid> {
-    messages
-        .iter()
-        .find(|m| m.components.iter().any(|c| c.id == component_id))
-        .map(|m| m.id)
 }
 
 /// A reply's Mini-Me name, or "Mini-Me" when the library no longer has it.
@@ -337,7 +352,8 @@ mod tests {
         let registry = [trial.clone(), notes.clone()];
         let find = |id| registry.iter().find(|a| a.id == id).cloned();
 
-        let results = results(&all, current_id, &Library::builtin(), find);
+        // The reply has not been created yet, so the results end at the user message.
+        let results = results(&all, current_id, new_id(), &Library::builtin(), find);
         let names: Vec<(&str, bool)> =
             results.assets.iter().map(|a| (a.asset.name.as_str(), a.current)).collect();
         assert_eq!(names, [("trial.csv", true), ("notes.txt", true)]);
@@ -347,12 +363,42 @@ mod tests {
     }
 
     #[test]
-    fn a_component_is_found_in_its_message() {
-        let mut reply = scribe("Done.", MessageStatus::Complete);
-        let id = table(&mut reply);
-        let all = [user("q"), reply];
-        assert_eq!(component_message(&all, id), Some(all[1].id));
-        assert_eq!(component_message(&all, new_id()), None);
+    fn results_stop_at_the_reply_and_mark_its_own_files_current() {
+        let question = user("profile it");
+        let mut reply = scribe("Saved.", MessageStatus::Streaming);
+        reply.attachments.push(asset("profile.csv"));
+        let mut later = user("and this");
+        later.attachments.push(asset("later.csv"));
+        let (answers, reply_id) = (question.id, reply.id);
+        let all = [question, reply, later];
+
+        let results = results(&all, answers, reply_id, &Library::builtin(), |_| None);
+        let names: Vec<(&str, bool)> =
+            results.assets.iter().map(|a| (a.asset.name.as_str(), a.current)).collect();
+        assert_eq!(names, [("profile.csv", true)]);
+    }
+
+    #[test]
+    fn references_already_listed_are_not_looked_up() {
+        let trial = asset("trial.csv");
+        let mut question = user("again #trial.csv");
+        question.attachments.push(trial.clone());
+        question.text_components.push(crate::protocol::TextComponent {
+            kind: TextComponentKind::Asset,
+            id: trial.id,
+            label: "#trial.csv".into(),
+            start: 6,
+            end: 16,
+        });
+        let answers = question.id;
+        let lookups = std::cell::Cell::new(0);
+        let find = |_| {
+            lookups.set(lookups.get() + 1);
+            None
+        };
+        let results = results(&[question], answers, new_id(), &Library::builtin(), find);
+        assert_eq!(results.assets.len(), 1);
+        assert_eq!(lookups.get(), 0);
     }
 
     #[test]
