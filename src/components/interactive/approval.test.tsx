@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { renderers } from "./approval";
+import { approvalState, renderers } from "./approval";
 
 describe("approval version 1", () => {
   const Approval = renderers[1];
@@ -15,16 +15,15 @@ describe("approval version 1", () => {
     expect(html).toContain("Reject");
   });
 
-  it("shows the answer instead of the buttons once answered", () => {
-    const html = render({ approved: true }, "streaming");
-    expect(html).toContain("Approved");
-    expect(html).not.toContain("<button");
-    expect(render({ approved: false }, "streaming")).toContain("Rejected");
+  it("draws nothing once answered or once the reply was stopped first", () => {
+    expect(render({ approved: true }, "streaming")).toBe("");
+    expect(render(null, "cancelled")).toBe("");
   });
 
-  it("shows neither buttons nor an answer when the reply was stopped first", () => {
-    const html = render(null, "cancelled");
-    expect(html).not.toContain("<button");
-    expect(html).not.toMatch(/Approved|Rejected/);
+  it("tells asking, answered and closed approvals apart", () => {
+    expect(approvalState(null, "paused")).toBe("asking");
+    expect(approvalState({ approved: true }, "streaming")).toBe("approved");
+    expect(approvalState({ approved: false }, "complete")).toBe("rejected");
+    expect(approvalState(null, "cancelled")).toBe("closed");
   });
 });

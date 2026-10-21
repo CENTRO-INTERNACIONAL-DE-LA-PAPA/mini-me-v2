@@ -9,7 +9,8 @@ interface ApprovalData {
   prompt?: string;
 }
 
-/** What the approval shows below its prompt. */
+/** Whether an approval asks, or what it was answered; `closed` when its reply ended first. A
+ * reply shows the component only while it asks. */
 export function approvalState(
   answer: unknown,
   replyStatus: RendererProps["replyStatus"],
@@ -20,12 +21,13 @@ export function approvalState(
   return replyStatus === "paused" ? "asking" : "closed";
 }
 
-/** A Workflow's approval Step: its prompt, with Approve and Reject while the reply waits. */
+/** A Workflow's approval Step while the reply waits: its prompt, with Approve and Reject.
+ * Draws nothing once answered or once the reply ended. */
 function Approval({ data, answer, projectId, messageId, componentId, replyStatus }: RendererProps) {
   const { prompt } = (data ?? {}) as ApprovalData;
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const state = approvalState(answer, replyStatus);
+  if (approvalState(answer, replyStatus) !== "asking") return null;
 
   async function respond(approved: boolean) {
     if (!projectId || !messageId || !componentId) return;
@@ -43,21 +45,14 @@ function Approval({ data, answer, projectId, messageId, componentId, replyStatus
   return (
     <div className="flex flex-col gap-3 rounded-[10px] border border-border bg-card px-4 py-3">
       <p className="text-ui text-foreground">{prompt}</p>
-      {state === "asking" && (
-        <div className="flex gap-2">
-          <Button onClick={() => respond(true)} disabled={sending}>
-            Approve
-          </Button>
-          <Button variant="outline" onClick={() => respond(false)} disabled={sending}>
-            Reject
-          </Button>
-        </div>
-      )}
-      {(state === "approved" || state === "rejected") && (
-        <p className="text-meta text-muted-foreground">
-          {state === "approved" ? "Approved" : "Rejected"}
-        </p>
-      )}
+      <div className="flex gap-2">
+        <Button onClick={() => respond(true)} disabled={sending}>
+          Approve
+        </Button>
+        <Button variant="outline" onClick={() => respond(false)} disabled={sending}>
+          Reject
+        </Button>
+      </div>
       {error && <p className="text-meta text-destructive">{error}</p>}
     </div>
   );

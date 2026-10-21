@@ -1,7 +1,8 @@
 import { cn } from "@/lib/utils";
 import { CheckIcon } from "lucide-react";
 import { useState } from "react";
-import type { MessageStatus, MessageStep } from "../protocol/types";
+import type { Component, MessageStatus, MessageStep } from "../protocol/types";
+import { approvalState } from "./interactive/approval";
 import { Markdown } from "./Markdown";
 
 type StepState = "done" | "running" | "waiting" | "pending";
@@ -20,17 +21,43 @@ export function showsProgress(steps: MessageStep[]): boolean {
   return steps.length > 1 || steps.some((s) => s.type !== "trait");
 }
 
+/**
+ * The answer to each approval Step run in `steps`, by index: the *n*-th run of an approval
+ * Step asked the *n*-th `approval` component with its `step_id`, both in the order they were
+ * added. Missing for other Steps, and for an approval without a component or an answer yet.
+ */
+export function approvalAnswers(
+  steps: MessageStep[],
+  components: Component[],
+): Array<"approved" | "rejected" | undefined> {
+  const asked = (stepId: string) =>
+    components.filter(
+      (c) => c.kind === "approval" && (c.data as { step_id?: string } | null)?.step_id === stepId,
+    );
+  const runs = new Map<string, number>();
+  return steps.map((step) => {
+    if (step.type !== "approval") return undefined;
+    const run = runs.get(step.step_id) ?? 0;
+    runs.set(step.step_id, run + 1);
+    const state = approvalState(asked(step.step_id)[run]?.answer, "complete");
+    return state === "approved" || state === "rejected" ? state : undefined;
+  });
+}
+
 interface Props {
   steps: MessageStep[];
+  /** The reply's Interactive Components, which hold its approvals' answers. */
+  components: Component[];
   replyStatus: MessageStatus;
   /** The Mini-Me's solid colour, for the running Step's spinner. */
   color?: string;
 }
 
 /** The Steps a reply's Workflow has run, in a row. A done Trait Step opens its output. */
-export function WorkflowProgress({ steps, replyStatus, color }: Props) {
+export function WorkflowProgress({ steps, components, replyStatus, color }: Props) {
   const [open, setOpen] = useState<number | null>(null);
   const opened = open === null ? null : steps[open];
+  const answers = approvalAnswers(steps, components);
 
   return (
     <div className="rounded-[10px] border border-border bg-card px-4 py-3">
@@ -38,14 +65,14 @@ export function WorkflowProgress({ steps, replyStatus, color }: Props) {
         {steps.map((step, index) => {
           const state = stepState(step, replyStatus);
           const decision = step.type === "condition" || step.type === "loop";
+          // A decision's outcome, or an approval's answer.
+          const outcome = step.done ? (decision ? step.output : answers[index]) : undefined;
           const label = (
             <>
               <StepMark state={state} color={color} />
               <span className={cn("text-ui", state === "pending" && "text-muted-foreground")}>
                 {step.name}
-                {decision && step.done && step.output && (
-                  <span className="text-muted-foreground"> · {step.output}</span>
-                )}
+                {outcome && <span className="text-muted-foreground"> · {outcome}</span>}
               </span>
             </>
           );
