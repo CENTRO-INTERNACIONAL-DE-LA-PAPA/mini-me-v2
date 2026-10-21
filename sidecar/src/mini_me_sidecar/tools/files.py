@@ -77,16 +77,21 @@ async def read_file(ctx: CallContext, asset_id: str, start: int = 0) -> dict[str
         # Imported here: the table tools load pandas, which reading a text file never needs.
         from mini_me_sidecar.tools.tables import read_table, table_result
 
-        table = await read_table(ctx, asset_id, name)
+        table = ctx.reads.get(("table", asset_id))
+        if table is None:
+            table = ctx.reads[("table", asset_id)] = await read_table(ctx, asset_id, name)
         return {"name": name, **table_result(table.frame, start)}
-    ctx.progress(f"Reading {name}")
-    data = await ctx.read_asset(asset_id)
-    try:
-        text = data.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        raise ToolError(
-            f"{name} is not a text file or a table, so it cannot be read.", "unreadable"
-        ) from None
+    text = ctx.reads.get(("text", asset_id))
+    if text is None:
+        ctx.progress(f"Reading {name}")
+        data = await ctx.read_asset(asset_id)
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise ToolError(
+                f"{name} is not a text file or a table, so it cannot be read.", "unreadable"
+            ) from None
+        ctx.reads[("text", asset_id)] = text
     return {"name": name, **text_result(text, start)}
 
 

@@ -117,6 +117,11 @@ class CallContext:
         self._progress_timer: asyncio.TimerHandle | None = None
         self._stream = stream
         self._written: list[str] = []
+        # The Conversation's results, until the call adds a file or component of its own.
+        self._results: dict[str, Any] | None = None
+        # Files `read_file` has read and parsed, by kind and Asset ID, so that reading a file
+        # in parts reads it once per call; an Asset's content never changes.
+        self.reads: dict[tuple[str, str], Any] = {}
 
     @property
     def output(self) -> str:
@@ -179,8 +184,11 @@ class CallContext:
         """The Conversation's Assets and Interactive Components, `{ assets, components }`,
         each newest first. An Asset is `{ id, name, media_type, size_bytes, message_id,
         current }`, where `current` marks the call's own message's files; a component is
-        `{ id, kind, version, message_id, author }`."""
-        return await self._requests.send(self.call_id, "conversation.results", {})
+        `{ id, kind, version, message_id, author }`. Asked of the core once, and again after
+        the call saves a file or adds a component."""
+        if self._results is None:
+            self._results = await self._requests.send(self.call_id, "conversation.results", {})
+        return self._results
 
     async def read_component(self, component_id: str) -> dict[str, Any]:
         """A component of the Conversation, `{ kind, version, data, text }`. Raises
@@ -202,6 +210,7 @@ class CallContext:
             "component.add",
             {"kind": kind, "version": version, "data": data, "text": text},
         )
+        self._results = None
         return str(result["component_id"])
 
     async def write_asset(self, name: str, media_type: str, data: bytes) -> dict[str, Any]:
@@ -212,6 +221,7 @@ class CallContext:
             "asset.write",
             {"name": name, "media_type": media_type, "data": base64.b64encode(data).decode()},
         )
+        self._results = None
         return result["asset"]
 
     async def secret(self, provider: str) -> Secret:

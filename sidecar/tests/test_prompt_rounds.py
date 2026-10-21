@@ -105,3 +105,12 @@ def test_wrong_arguments_and_faults_in_a_tool_are_told_apart():
     assert json.loads(wrong)["error"].startswith("Wrong arguments for needs")
     fault = asyncio.run(_run_tool(FakeContext(), offered, {"name": "fails", "args": {}}))
     assert json.loads(fault) == {"error": "fails failed unexpectedly."}
+
+
+def test_tool_results_beyond_the_budget_are_refused(monkeypatch):
+    monkeypatch.setattr(prompt, "MAX_TOOL_RESULT_CHARS", 10)
+    chat = FakeChat([tool_call("{}"), AIMessageChunk(content="Answer")])
+    converse(chat)
+    result = chat.sent[1][-1]
+    assert isinstance(result, ToolMessage)
+    assert "left for tool results" in result.content
