@@ -5,7 +5,7 @@ Local-first desktop research tool (Windows, macOS, Linux) for CIP scientists stu
 Reference files:
 - `Mini-Me Screens.dc.html`: Exploration 13 (Overview, Conversation, Report, Settings, Mini-Me editor, Trait editor)
 - `Mini-Me Glyph.dc.html`: the Mini-Me avatar component (solid style)
-- `Mini-Me Avatars.dc.html`: avatar parts explorer (style **1b Solid** is the chosen one)
+- `Mini-Me Brand.dc.html`: app icon ideas, wordmark + default Mini-Mes reference, banners
 
 ---
 
@@ -13,7 +13,7 @@ Reference files:
 
 1. **Calm, warm monochrome; colour means a Mini-Me.** Chrome is near-black, warm off-whites and warm greys. Saturated colour only appears when it identifies a Mini-Me or a Trait, so users learn "yellow = Data Wrangler".
 2. **Black is selection.** Every selected state (nav item, tab, chip, toolbar button, text selection) is solid `#0A0A0A` with white text. No accent-coloured selection, no tinted hover.
-3. **Three surfaces, one rule.** Sidebar `#F7F7F5` → workspace `#FCFCFA` → anything with a border `#FFFFFF`. Never pure white as a page background, never a bordered element without a white fill.
+3. **Three surfaces, one rule.** Sidebar `#F8F7F3` → workspace `#FDFCF9` → anything with a border `#FFFFFF`. Never pure white as a page background, never a bordered element without a white fill.
 4. **Hairlines, not boxes.** Structure comes from 1px warm hairlines (`#E7E6E1`) and whitespace. Avoid heavy shadows and nested containers.
 5. **Personality lives in the potatoes.** Mini-Me avatars and trait icons carry the warmth. Everything else stays quiet and precise.
 6. **Plain, short copy.** Sentence case, no jargon, no exclamation marks. Talk like a helpful lab colleague: "Needs your approval", "Changes apply to both."
@@ -25,13 +25,13 @@ Reference files:
 ### Surfaces
 | Token | Hex | Use |
 |---|---|---|
-| `--sidebar` | `#F7F7F5` | App sidebar, document panel header and formatting toolbar |
-| `--bg` | `#FCFCFA` | Workspace (main area, headers, inspectors, message-list fade) |
+| `--sidebar` | `#F8F7F3` | App sidebar, document panel header and formatting toolbar |
+| `--bg` | `#FDFCF9` | Workspace (main area, headers, inspectors, message-list fade) |
 | `--card` | `#FFFFFF` | **Every bordered element**: cards, tables, message bubbles, composer, inputs, selects, outline buttons, chips, popovers, workflow nodes, document page, sidebar project card |
-| `--surface-2` | `#F5F5F4` | Table header rows, neutral filled chips, info blocks, document panel background |
+| `--surface-2` | `#F8F7F3` (same as sidebar) | Table header rows, neutral filled chips, info blocks, document panel background |
 | `--canvas` | `#FAFAF8` | Workflow canvas, with an 18px dot grid in `#DEDCD5` |
 
-Rule of thumb: if it has a border, it is `#FFFFFF`. If it is flush with the window, it is `#FCFCFA` (workspace) or `#F7F7F5` (sidebar).
+Rule of thumb: if it has a border, it is `#FFFFFF`. If it is flush with the window, it is `#FDFCF9` (workspace) or `#F8F7F3` (sidebar).
 
 ### Ink and lines
 | Token | Hex | Use |
@@ -60,7 +60,7 @@ Each Mini-Me has a **tint** (backgrounds, chips), a **solid** (avatar body, dots
 Extra families available to new Mini-Mes (same structure, generated in `oklch`): teal 205, pink 350, blue 250, brown 55. Tint L≈0.94 C≈0.04, solid L≈0.6–0.68 C≈0.1–0.19, ink L≈0.42–0.48.
 
 ### Trait colours
-Traits use one bright fill per trait (same family as the Mini-Me solids) with a **black** line glyph on top. Keep L ≈ 0.74–0.84 and C ≈ 0.06–0.15 so black strokes stay legible.
+Retired. Traits no longer have colours (see Trait icons); values kept for reference only.
 
 | Trait | Fill |
 |---|---|
@@ -128,7 +128,7 @@ A second family is allowed later (e.g. a monospace for raw data), but no more th
 
 - **Base unit 2px**, common steps: 4, 6, 8, 10, 12, 14, 16, 20, 24, 32.
 - **Page padding:** 32px horizontal in headers and main areas, 22–24px in inspectors.
-- **Sidebar:** 264px wide, `#F7F7F5`, 1px `#E7E6E1` right hairline, 12px side padding, items `7px 10px`.
+- **Sidebar:** 264px wide, `#F8F7F3`, 1px `#E7E6E1` right hairline, 12px side padding, items `7px 10px`.
 - **Content widths:** conversation column 760px max (540px when the document panel is open); Overview column 820px.
 
 | Radius | Use |
@@ -140,7 +140,7 @@ A second family is allowed later (e.g. a monospace for raw data), but no more th
 | 14px | Chat bubbles, composer |
 | 999px | Chips, pills, toggles, status tags, workflow start/end |
 
-**Elevation:** almost none. White-on-`#FCFCFA` already gives a slight lift.
+**Elevation:** almost none. White-on-`#FDFCF9` already gives a slight lift.
 - Cards: border only.
 - Workflow nodes and start/end pills: `0 1px 2px rgba(0,0,0,.04)`.
 - Composer: `0 4px 16px rgba(0,0,0,.04)`.
@@ -163,15 +163,15 @@ Every avatar is built from five parts:
 | Body | Potato, Pebble, Bean |
 | Eyes | Dots, Happy (arcs), Calm (lines) |
 | Mouth | None, Smile, Oh, Flat |
-| Accessory | None, Glasses, Sprout, Beret, Sun hat (all solid `#0A0A0A`) |
+| Accessory | None, Glasses, Sprout, Hard hat, Sun hat (all solid `#0A0A0A`, no colour accents) |
 | Colour | Any Mini-Me colour family |
 
-Defaults: Data Wrangler (potato, dots, smile, sprout, yellow) · Literature Scout (potato, dots, no mouth, glasses, coral) · Trial Planner (bean, dots, flat, beret, violet) · Field Data Checker (pebble, happy, smile, sun hat, green).
+Defaults: Data Wrangler (potato, dots, smile, sprout, yellow) · Literature Scout (potato, dots, no mouth, glasses, coral) · Trial Planner (bean, dots, flat, hard hat, violet) · Field Data Checker (pebble, happy, smile, sun hat, green).
 
 Sizes: 16 (inline chip), 18 (sidebar stack, workflow start/end), 20–26 (message author), 28–30 (headers), 36 (editor title). Overlap stacks by about 25% (`margin-left: -5px` at 18px, `-7px` at 28–30px). Feature strokes are 0.95 in a 24-unit box, so details stay crisp down to 16px.
 
 ### Trait icons
-Same potato silhouette as the avatars, filled with the trait's bright colour, with a **black** line glyph on top (stroke 1.25, round caps and joins, 24-unit box). No face: a face means a Mini-Me. Sizes: 28 (lists), 30 (nodes and inspector), 34 (editor title).
+Plain line icons in ink (`currentColor`), round caps and joins, no fill, no colour and no potato silhouette. A potato shape always means a Mini-Me. Sizes: 28 (lists), 30 (nodes and inspector), 34 (editor title). Inside nodes they can sit in a 30px white square with a hairline border.
 
 No emoji in the UI chrome. Emoji are allowed only as user reactions.
 
@@ -183,12 +183,12 @@ Start from the shadcn defaults and apply these overrides. Suggested CSS variable
 
 ```css
 :root {
-  --background: 60 14% 99%;       /* #FCFCFA workspace */
-  --sidebar: 60 9% 97%;           /* #F7F7F5 */
+  --background: 60 14% 99%;       /* #FDFCF9 workspace */
+  --sidebar: 60 9% 97%;           /* #F8F7F3 */
   --card: 0 0% 100%;              /* #FFFFFF, all bordered elements */
   --popover: 0 0% 100%;
   --foreground: 0 0% 4%;          /* #0A0A0A */
-  --muted: 60 5% 96%;             /* #F5F5F4 */
+  --muted: 60 5% 96%;             /* #F8F7F3 */
   --muted-foreground: 0 0% 54%;   /* #8A8A8A */
   --border: 50 9% 89%;            /* #E7E6E1 */
   --input: 50 9% 89%;
@@ -218,7 +218,7 @@ Start from the shadcn defaults and apply these overrides. Suggested CSS variable
 **Checkbox:** 18px, radius 5, white with a `#E7E6E1` border. Checked is black with a white check.
 
 **Badge / Chip**
-- Neutral filled: `#F5F5F4` fill + `#E7E6E1` border, 999 radius, 13–14px.
+- Neutral filled: `#F8F7F3` fill + `#E7E6E1` border, 999 radius, 13–14px.
 - Outline: `#FFFFFF`, `#D0CFC9` border ("Testing").
 - Selected / solid: black fill, white text ("Supported", active filters).
 - Mini-Me mention: tint fill, ink text, 16px avatar, padding `1px 8px 1px 3px`.
@@ -226,15 +226,13 @@ Start from the shadcn defaults and apply these overrides. Suggested CSS variable
 
 **Tabs:** text tabs with a 2px black underline on the active tab (`box-shadow: inset 0 -2px 0 #0A0A0A`). Inactive tabs are muted. No pill tabs.
 
-**Sidebar / Nav:** `#F7F7F5` background with a right hairline. The project switcher is a white bordered card. The active item is black with white text. Section labels are 12.5/500 muted with a `+` action on the right. Unread or needs-attention items get a 7px dot in the Mini-Me's solid colour and status text in its ink colour.
+**Sidebar / Nav:** `#F8F7F3` background with a right hairline. The project switcher is a white bordered card. The active item is black with white text. Section labels are 12.5/500 muted with a `+` action on the right. Unread or needs-attention items get a 7px dot in the Mini-Me's solid colour and status text in its ink colour.
 
 **Card:** `#FFFFFF`, 1px border, radius 10, no shadow, `overflow: hidden`. Output cards have a 72px tinted thumbnail and a 3px solid bottom border in the owner's colour.
 
-**Table:** white container, border radius 10. The header row is `#F5F5F4`, 12.5 muted. Rows are 13.5 tabular-nums separated by hairlines. A flagged or referenced row gets the Mini-Me tint plus `inset 3px 0 0 <solid>`. The footer row shows counts and an "Open table →" link.
+**Table:** white container, border radius 10. The header row is `#F8F7F3`, 12.5 muted. Rows are 13.5 tabular-nums separated by hairlines. A flagged or referenced row gets the Mini-Me tint plus `inset 3px 0 0 <solid>`. The footer row shows counts and an "Open table →" link.
 
 **Charts:** sit on a white bordered card (never directly on the workspace). Gridlines `#F1F0EB`, axis `#0A0A0A`, labels 11px muted, baseline series `#D7D6D0`, Mini-Me series in its solid.
-
-**Chart series:** the first series is the Mini-Me's solid; series 2–8 follow in this order: orange `#EB6834`, aqua `#1BAF7A`, blue `#2A78D6`, yellow `#EDA100`, pink `#E87BA4`, green `#008300`, red `#E34948` (tokens `--chart-series-2` to `--chart-series-8`). Past eight, series take generated colours at oklch L 0.64 C 0.15, stepping the hue by the golden angle (137.5°) from 20°. A series keeps its colour when others are hidden. Aqua, yellow and pink are under 3:1 on white, so a series is always named in the legend and the tooltip, never by colour alone. Bars, boxes and heatmap cells are at least 24px wide; a chart with more scrolls sideways inside its card. Tooltips appear only over a mark, in the popover style.
 
 **Tooltip / Popover / Dropdown:** white, 1px border, radius 10, the floating shadow above, 4–5px inner padding, items radius 7. The active item is black.
 
@@ -249,19 +247,19 @@ Start from the shadcn defaults and apply these overrides. Suggested CSS variable
 - **Reactions:** a small white pill overlapping the bubble's bottom-left corner: avatar + emoji.
 - **Workflow progress:** a white bordered card with steps in a row. Done steps are a black circle with a check, the running step is a spinner in the Mini-Me's solid colour, and pending steps are a white circle with a 1.5px `#D0CFC9` ring.
 - **Composer:** `#FFFFFF`, border `#D9D8D2`, radius 14, soft shadow. Placeholder: "Ask a Mini-Me, or type @ to choose one…". Tool icons sit at the bottom left and a 32px black circular send button at the bottom right.
-- **Message-list fade:** the only gradient allowed, from `#FCFCFA` to transparent at the top of the scrolling list.
+- **Message-list fade:** the only gradient allowed, from `#FDFCF9` to transparent at the top of the scrolling list.
 
 ### Comment threads (Report / document mode)
 - A comment anchors to a passage the way a reference chip anchors to a table cell.
-- **In the document:** anchored text gets a `#F3F3F1` fill and a 1.5px dashed `#9A9A9A` underline. The active anchor gets `#ECECE9` and a 2px solid black underline. A numbered **comment marker** follows inline: 18px, radius `6 6 6 2` (a speech-bubble corner). The active marker is black with a white number; inactive markers are white with a black outline.
+- **In the document:** anchored text gets a `#F2F1EC` fill and a 1.5px dashed `#9A9A9A` underline. The active anchor gets `#EBEAE4` and a 2px solid black underline. A numbered **comment marker** follows inline: 18px, radius `6 6 6 2` (a speech-bubble corner). The active marker is black with a white number; inactive markers are white with a black outline.
 - **In chat:** the thread head shows the same marker (20px), the reference chip and a "Resolve" outline pill. Replies sit below, indented, with a **2px `#E7E6E1` vertical line** (`margin-left: 9px; padding-left: 19px`). Inside a thread, user bubbles are left-aligned with radius `4 14 14 14`, and authors get 20px avatars.
 - **Mini-Me edits** show as a white diff card ("Edit · Summary ¶1" + Undo). The inserted text is highlighted in the Mini-Me's tint with a 2px solid underline, in both the card and the document.
 - When the composer is replying in a thread, it shows a "Replying in thread" chip with the marker and a dismiss ×.
 
 ### Document panel
-- Right panel, 640px wide, `#F5F5F4` background, white page (radius 8, border, padding 32–48).
-- The header (`#F7F7F5`) shows the doc icon, title, and "Draft n · saved locally · n comments", plus Export (outline) and close.
-- A formatting toolbar (`#F7F7F5`) sits under the header: undo | heading, bold, italic, list, link | highlight, comment | "Show comments".
+- Right panel, 640px wide, `#F8F7F3` background (same as the sidebar), white page (radius 8, border, padding 32–48).
+- The header (`#F8F7F3`) shows the doc icon, title, and "Draft n · saved locally · n comments", plus Export (outline) and close.
+- A formatting toolbar (`#F8F7F3`) sits under the header: undo | heading, bold, italic, list, link | highlight, comment | "Show comments".
 - **Text selection** is black with white text. A floating white toolbar above the selection offers Rewrite / Comment / Highlight / Ask.
 
 ---
