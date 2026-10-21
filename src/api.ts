@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import type { OpenedConversation } from "./protocol/eventStore";
 import type {
   AppError,
   Ai2Status,
@@ -27,22 +28,42 @@ export const api = {
   createConversation: (project_id: Uuid) =>
     invoke<ConversationSummary>("create_conversation", { project_id }),
 
-  /** Streams every event after `after_seq`, then new events as they are persisted. */
+  /** The Conversation as stored, and a subscription that sends `onEvents` every event
+   * persisted after it, in batches. A batch can arrive before the returned state. */
+  openConversation: (
+    project_id: Uuid,
+    conversation_id: Uuid,
+    onEvents: (events: ProtocolEvent[]) => void,
+  ) => {
+    const on_events = new Channel<ProtocolEvent[]>();
+    on_events.onmessage = onEvents;
+    return invoke<OpenedConversation>("open_conversation", {
+      project_id,
+      conversation_id,
+      on_events,
+    });
+  },
+  /** Streams every event after `after_seq`, then new events as they are persisted, in
+   * batches; resolves with the subscription's ID. */
   subscribeConversation: (
     project_id: Uuid,
     conversation_id: Uuid,
     after_seq: number,
-    onEvent: (event: ProtocolEvent) => void,
+    onEvents: (events: ProtocolEvent[]) => void,
   ) => {
-    const on_event = new Channel<ProtocolEvent>();
-    on_event.onmessage = onEvent;
-    return invoke<void>("subscribe_conversation", {
+    const on_events = new Channel<ProtocolEvent[]>();
+    on_events.onmessage = onEvents;
+    return invoke<Uuid>("subscribe_conversation", {
       project_id,
       conversation_id,
       after_seq,
-      on_event,
+      on_events,
     });
   },
+  unsubscribeConversation: (project_id: Uuid, subscription_id: Uuid) =>
+    invoke<void>("unsubscribe_conversation", { project_id, subscription_id }),
+  /** Ends every Conversation subscription, including those of a view before a reload. */
+  resetSubscriptions: () => invoke<void>("reset_subscriptions"),
 
   sendMessage: (project_id: Uuid, conversation_id: Uuid, input: SendMessageInput) =>
     invoke<Message>("send_message", { project_id, conversation_id, input }),

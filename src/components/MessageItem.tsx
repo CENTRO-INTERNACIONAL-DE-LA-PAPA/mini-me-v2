@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useCallback, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { api, errorMessage } from "../api";
 import type { MessageView } from "../protocol/eventStore";
 import { segments } from "../protocol/references";
@@ -40,7 +40,9 @@ function author(message: MessageView, miniMes: MiniMe[]): { name: string; miniMe
   }
 }
 
-export function MessageItem({ projectId, message }: Props) {
+// Memoised: the Conversation's state keeps each unchanged message the same object, so only
+// the messages an event changed render again.
+export const MessageItem = memo(function MessageItem({ projectId, message }: Props) {
   const [error, setError] = useState<string | null>(null);
   const miniMes = useMiniMes();
   const { name, miniMe: authorMiniMe } = author(message, miniMes);
@@ -202,7 +204,7 @@ export function MessageItem({ projectId, message }: Props) {
       {error && <p className="text-meta text-destructive">{error}</p>}
     </article>
   );
-}
+});
 
 /** Jev's raw answers, for the "Show Jev's answers" developer setting. */
 function JevAnswersBlock({ jev, label }: { jev: JevAnswers; label: (option: string) => string }) {

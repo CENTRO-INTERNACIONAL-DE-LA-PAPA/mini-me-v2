@@ -1,10 +1,15 @@
 //! An open Project: its database, the event log, and delivery to subscribers.
 //!
-//! One lock per Project covers sequence assignment, the database transaction and delivery,
-//! so events reach subscribers only after they are committed, and always in `seq` order.
+//! One lock per Project covers sequence assignment, the database transaction and queuing
+//! events for subscribers, so events are queued only after they are committed, and always in
+//! `seq` order. Each subscription's own thread sends its queue to the UI, outside the lock.
 
-use std::collections::HashMap;
-use std::sync::{Mutex, MutexGuard};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use uuid::Uuid;
@@ -12,14 +17,52 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::paths::ProjectPaths;
 use crate::protocol::{
-    AssetRef, Author, AuthorKind, Component, ENVELOPE_VERSION, Event, EventKind, Message,
-    MessageStatus, MessageStep, Origin, TextComponent, new_id, now_ms,
+    AssetRef, Author, AuthorKind, Component, ENVELOPE_VERSION, Event, EventKind, JevAnswers,
+    Message, MessageStatus, MessageStep, MessageView, OpenedConversation, Origin, Progress,
+    Reaction, TextComponent, new_id, now_ms,
 };
 
-/// Receives delivered events. Returns `false` when the subscriber is gone and should be
-/// dropped.
+/// How long a subscription gathers events before delivering them as one batch: about one
+/// screen refresh, so a fast reply updates the UI at most once per frame.
+pub const BATCH_WINDOW: Duration = Duration::from_millis(16);
+
+/// Receives delivered events, in batches of consecutive events. Returns `false` when the
+/// subscriber is gone and should be dropped.
 pub trait EventSink: Send {
-    fn send(&self, event: &Event) -> bool;
+    fn send(&self, events: &[Event]) -> bool;
+}
+
+/// A subscriber's queue, which its delivery thread sends to the subscriber's sink. Dropping
+/// it ends the subscription: the thread delivers nothing more, then ends.
+struct Subscription {
+    id: Uuid,
+    queue: Sender<Event>,
+    active: Arc<AtomicBool>,
+}
+
+impl Drop for Subscription {
+    fn drop(&mut self) {
+        self.active.store(false, Ordering::Release);
+    }
+}
+
+/// A subscription's delivery thread: waits for an event, gathers what follows it within
+/// `BATCH_WINDOW`, and sends them together, until the subscription ends or a send fails.
+fn deliver(queue: Receiver<Event>, active: Arc<AtomicBool>, sink: Box<dyn EventSink>) {
+    while let Ok(first) = queue.recv() {
+        let mut batch = vec![first];
+        let deadline = Instant::now() + BATCH_WINDOW;
+        while let Some(wait) = deadline.checked_duration_since(Instant::now()) {
+            match queue.recv_timeout(wait) {
+                Ok(event) => batch.push(event),
+                Err(RecvTimeoutError::Timeout) => break,
+                Err(RecvTimeoutError::Disconnected) => return,
+            }
+        }
+        if !active.load(Ordering::Acquire) || !sink.send(&batch) {
+            return;
+        }
+    }
 }
 
 pub struct Project {
@@ -33,7 +76,7 @@ pub struct ProjectState {
     pub conn: Connection,
     project_id: Uuid,
     origin: Origin,
-    subscribers: HashMap<Uuid, Vec<Box<dyn EventSink>>>,
+    subscribers: HashMap<Uuid, Vec<Subscription>>,
 }
 
 impl Project {
@@ -55,27 +98,50 @@ impl Project {
         self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// Delivers every stored event after `after_seq`, then registers the sink for new events.
-    /// Both happen under the Project lock, so no event is missed or duplicated.
+    /// Delivers every stored event after `after_seq`, then every new event, and returns the
+    /// subscription's ID. Both are queued under the Project lock, so no event is missed or
+    /// duplicated.
     pub fn subscribe(
         &self,
         conversation_id: Uuid,
         after_seq: i64,
         sink: Box<dyn EventSink>,
-    ) -> AppResult<()> {
+    ) -> AppResult<Uuid> {
         let mut state = self.lock();
         state.require_conversation(conversation_id)?;
-        for event in state.events_after(conversation_id, after_seq)? {
-            if !sink.send(&event) {
-                return Ok(());
-            }
+        let stored = state.events_after(conversation_id, after_seq)?;
+        state.add_subscription(conversation_id, stored, sink)
+    }
+
+    /// The Conversation as stored, and a subscription that delivers every event persisted
+    /// after it. Both are read under the Project lock, so no event is missed or duplicated.
+    pub fn open(
+        &self,
+        conversation_id: Uuid,
+        sink: Box<dyn EventSink>,
+    ) -> AppResult<OpenedConversation> {
+        let mut state = self.lock();
+        state.require_conversation(conversation_id)?;
+        let messages = state.message_views(conversation_id)?;
+        let last_seq = state.last_seq(conversation_id)?;
+        let subscription_id = state.add_subscription(conversation_id, Vec::new(), sink)?;
+        Ok(OpenedConversation {
+            subscription_id,
+            last_seq,
+            messages,
+        })
+    }
+
+    /// Ends a subscription, whatever its Conversation; an unknown ID is ignored.
+    pub fn unsubscribe(&self, subscription_id: Uuid) {
+        for subscriptions in self.lock().subscribers.values_mut() {
+            subscriptions.retain(|s| s.id != subscription_id);
         }
-        state
-            .subscribers
-            .entry(conversation_id)
-            .or_default()
-            .push(sink);
-        Ok(())
+    }
+
+    /// Ends every subscription to the Project's Conversations.
+    pub fn unsubscribe_all(&self) {
+        self.lock().subscribers.clear();
     }
 }
 
@@ -94,6 +160,46 @@ impl ProjectState {
             .ok_or_else(|| AppError::not_found("Conversation not found"))
     }
 
+    /// Queues `stored` for `sink`, then starts the thread that delivers the subscription's
+    /// queue, and returns its ID.
+    fn add_subscription(
+        &mut self,
+        conversation_id: Uuid,
+        stored: Vec<Event>,
+        sink: Box<dyn EventSink>,
+    ) -> AppResult<Uuid> {
+        let (queue, receiver) = mpsc::channel();
+        for event in stored {
+            // The receiver is still held here, so queuing cannot fail.
+            let _ = queue.send(event);
+        }
+        let active = Arc::new(AtomicBool::new(true));
+        let running = Arc::clone(&active);
+        thread::Builder::new()
+            .name("conversation-events".into())
+            .spawn(move || deliver(receiver, running, sink))
+            .map_err(|e| AppError::new("subscribe_failed", format!("Cannot deliver events: {e}")))?;
+        let id = new_id();
+        self.subscribers
+            .entry(conversation_id)
+            .or_default()
+            .push(Subscription { id, queue, active });
+        Ok(id)
+    }
+
+    #[cfg(test)]
+    fn subscription_count(&self) -> usize {
+        self.subscribers.values().map(Vec::len).sum()
+    }
+
+    fn last_seq(&self, conversation_id: Uuid) -> AppResult<i64> {
+        Ok(self.conn.query_row(
+            "SELECT last_seq FROM conversations WHERE id = ?1",
+            params![conversation_id.to_string()],
+            |row| row.get(0),
+        )?)
+    }
+
     pub fn events_after(&self, conversation_id: Uuid, after_seq: i64) -> AppResult<Vec<Event>> {
         let mut stmt = self.conn.prepare(
             "SELECT body FROM events WHERE conversation_id = ?1 AND seq > ?2 ORDER BY seq",
@@ -109,14 +215,14 @@ impl ProjectState {
     }
 
     /// Assigns the next sequence number, stores the event and its projection in one
-    /// transaction, and only then delivers it.
+    /// transaction, and only then queues it for delivery.
     pub fn persist(&mut self, conversation_id: Uuid, kind: EventKind) -> AppResult<Event> {
         let mut events = self.persist_all(conversation_id, vec![kind], |_| Ok(()))?;
         Ok(events.remove(0))
     }
 
     /// Stores `kinds` as consecutive events, their projections and whatever `also` writes,
-    /// all in one transaction, then delivers the events in order.
+    /// all in one transaction, then queues the events for delivery in order.
     pub fn persist_all(
         &mut self,
         conversation_id: Uuid,
@@ -175,10 +281,10 @@ impl ProjectState {
         }
         tx.commit()?;
 
-        if let Some(sinks) = self.subscribers.get_mut(&conversation_id) {
-            for event in &events {
-                sinks.retain(|sink| sink.send(event));
-            }
+        // Queuing never waits on a subscriber. A queue whose thread has ended refuses the
+        // event, and its subscription is dropped.
+        if let Some(subscriptions) = self.subscribers.get_mut(&conversation_id) {
+            subscriptions.retain(|s| events.iter().all(|e| s.queue.send(e.clone()).is_ok()));
         }
         Ok(events)
     }
@@ -366,6 +472,113 @@ impl ProjectState {
         Ok(messages)
     }
 
+    /// Every message of the Conversation as the UI shows it, in the order they were created:
+    /// the stored messages with their components' data and reactions, plus the failures,
+    /// Jev's answers and progress that only events record. Matches what folding the
+    /// Conversation's events gives (`src/protocol/eventStore.ts`).
+    fn message_views(&self, conversation_id: Uuid) -> AppResult<Vec<MessageView>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM messages WHERE conversation_id = ?1 ORDER BY rowid")?;
+        let ids = stmt
+            .query_map(params![conversation_id.to_string()], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut views = Vec::with_capacity(ids.len());
+        for id in ids {
+            let id = Uuid::parse_str(&id)
+                .map_err(|_| AppError::storage("stored message is not readable"))?;
+            if let Some((_, message)) = self.load_message_with(id, true)? {
+                views.push(MessageView {
+                    message,
+                    reactions: Vec::new(),
+                    progress: None,
+                    jev: None,
+                    failure: None,
+                });
+            }
+        }
+        let index: HashMap<Uuid, usize> =
+            views.iter().enumerate().map(|(i, v)| (v.message.id, i)).collect();
+
+        // A reaction removed and added again is a new row, so `rowid` order is the order in
+        // which the UI adds them.
+        let mut stmt = self.conn.prepare(
+            "SELECT r.message_id, r.emoji, r.by_kind, r.by_id FROM reactions r \
+             JOIN messages m ON m.id = r.message_id WHERE m.conversation_id = ?1 \
+             ORDER BY r.rowid",
+        )?;
+        let rows = stmt.query_map(params![conversation_id.to_string()], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?;
+        for row in rows {
+            let (message_id, emoji, kind, by_id) = row?;
+            let corrupt = || AppError::storage("stored reaction is not readable");
+            let message_id = Uuid::parse_str(&message_id).map_err(|_| corrupt())?;
+            let by = Author {
+                kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?,
+                id: by_id,
+            };
+            if let Some(&i) = index.get(&message_id) {
+                views[i].reactions.push(Reaction { emoji, by });
+            }
+        }
+
+        let mut stmt = self.conn.prepare(
+            "SELECT body FROM events WHERE conversation_id = ?1 AND type IN \
+             ('message.failed', 'routing.answered', 'message.progress', 'message.paused', \
+             'message.resumed') ORDER BY seq",
+        )?;
+        let bodies = stmt.query_map(params![conversation_id.to_string()], |row| {
+            row.get::<_, String>(0)
+        })?;
+        let mut paused = HashSet::new();
+        for body in bodies {
+            let event: Event = serde_json::from_str(&body?)?;
+            let view = |id: &Uuid| index.get(id).copied();
+            match event.kind {
+                EventKind::MessageFailed { message_id, error } => {
+                    if let Some(i) = view(&message_id) {
+                        views[i].failure = Some(error);
+                    }
+                }
+                EventKind::RoutingAnswered { message_id, answers, error } => {
+                    if let Some(i) = view(&message_id) {
+                        views[i].jev = Some(JevAnswers { answers, error });
+                    }
+                }
+                // Pausing clears a reply's progress; it stays empty after resuming until the
+                // next progress event.
+                EventKind::MessagePaused { message_id } => {
+                    paused.insert(message_id);
+                    if let Some(i) = view(&message_id) {
+                        views[i].progress = None;
+                    }
+                }
+                EventKind::MessageResumed { message_id } => {
+                    paused.remove(&message_id);
+                }
+                EventKind::MessageProgress { message_id, label, fraction } => {
+                    if let Some(i) = view(&message_id).filter(|_| !paused.contains(&message_id)) {
+                        views[i].progress = Some(Progress { label, fraction });
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Progress is shown only while a reply streams.
+        for view in &mut views {
+            if view.message.status != MessageStatus::Streaming {
+                view.progress = None;
+            }
+        }
+        Ok(views)
+    }
+
     pub fn has_reaction(&self, message_id: Uuid, emoji: &str, by: &Author) -> AppResult<bool> {
         let found: Option<i64> = self
             .conn
@@ -407,7 +620,8 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
                 params![message_id.to_string(), text],
             )?;
         }
-        // Progress is shown only while a reply streams, so it has no projection.
+        // Progress and Jev's answers have no projection: opening a Conversation reads them
+        // from their events (`message_views`), as it does a failure's details.
         EventKind::MessageProgress { .. } | EventKind::RoutingAnswered { .. } => {}
         EventKind::MessagePaused { message_id } => {
             tx.execute(
@@ -519,19 +733,36 @@ pub mod test_support {
 
     use super::*;
 
-    /// Collects delivered events for assertions.
+    /// Collects delivered batches for assertions.
     #[derive(Clone, Default)]
-    pub struct Collector(pub Arc<Mutex<Vec<Event>>>);
+    pub struct Collector(pub Arc<Mutex<Vec<Vec<Event>>>>);
 
     impl Collector {
+        /// Every event delivered so far, across batches.
         pub fn events(&self) -> Vec<Event> {
+            self.0.lock().unwrap().concat()
+        }
+
+        pub fn batches(&self) -> Vec<Vec<Event>> {
             self.0.lock().unwrap().clone()
+        }
+
+        /// The delivered events, once at least `count` arrived and no more followed within a
+        /// few batch windows; panics after two seconds without `count`.
+        pub fn settled(&self, count: usize) -> Vec<Event> {
+            let start = std::time::Instant::now();
+            while self.events().len() < count {
+                assert!(start.elapsed() < Duration::from_secs(2), "fewer than {count} events");
+                thread::sleep(Duration::from_millis(5));
+            }
+            thread::sleep(BATCH_WINDOW * 4);
+            self.events()
         }
     }
 
     impl EventSink for Collector {
-        fn send(&self, event: &Event) -> bool {
-            self.0.lock().unwrap().push(event.clone());
+        fn send(&self, events: &[Event]) -> bool {
+            self.0.lock().unwrap().push(events.to_vec());
             true
         }
     }
@@ -576,6 +807,7 @@ mod tests {
         let mut state = project.lock();
         state.conn.execute_batch("DROP TABLE events").unwrap();
         assert!(state.persist(conversation, cancel(new_id())).is_err());
+        thread::sleep(BATCH_WINDOW * 4);
         assert!(collector.events().is_empty());
     }
 
@@ -598,8 +830,115 @@ mod tests {
             .persist(conversation, cancel(new_id()))
             .unwrap();
 
-        let seqs: Vec<i64> = collector.events().iter().map(|e| e.seq).collect();
+        let seqs: Vec<i64> = collector.settled(3).iter().map(|e| e.seq).collect();
         assert_eq!(seqs, vec![3, 4, 5]);
+    }
+
+    #[test]
+    fn events_persisted_together_arrive_as_one_batch() {
+        let (_dir, project) = temp_project();
+        let conversation = conversations::create(&project).unwrap().id;
+        let collector = Collector::default();
+        project.subscribe(conversation, 0, Box::new(collector.clone())).unwrap();
+        let kinds = (0..5).map(|_| cancel(new_id())).collect();
+        project.lock().persist_all(conversation, kinds, |_| Ok(())).unwrap();
+
+        assert_eq!(collector.settled(5).len(), 5);
+        let sizes: Vec<usize> = collector.batches().iter().map(Vec::len).collect();
+        assert_eq!(sizes, vec![5]);
+    }
+
+    /// Refuses every batch, as a closed UI channel does.
+    struct Gone;
+
+    impl EventSink for Gone {
+        fn send(&self, _: &[Event]) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn a_subscriber_that_is_gone_is_dropped() {
+        let (_dir, project) = temp_project();
+        let conversation = conversations::create(&project).unwrap().id;
+        project.subscribe(conversation, 0, Box::new(Gone)).unwrap();
+        project.lock().persist(conversation, cancel(new_id())).unwrap();
+        // The refused batch ends the delivery thread; the next event finds its queue closed.
+        thread::sleep(BATCH_WINDOW * 4);
+        project.lock().persist(conversation, cancel(new_id())).unwrap();
+        assert_eq!(project.lock().subscription_count(), 0);
+    }
+
+    /// Takes the Project lock on every delivery, which would deadlock if delivery ran under
+    /// that lock.
+    struct Locking(Arc<Project>, Collector);
+
+    impl EventSink for Locking {
+        fn send(&self, events: &[Event]) -> bool {
+            drop(self.0.lock());
+            self.1.send(events)
+        }
+    }
+
+    #[test]
+    fn delivery_does_not_hold_the_project_lock() {
+        let (_dir, project) = temp_project();
+        let project = Arc::new(project);
+        let conversation = conversations::create(&project).unwrap().id;
+        project.lock().persist(conversation, cancel(new_id())).unwrap();
+        let collector = Collector::default();
+        let sink = Locking(Arc::clone(&project), collector.clone());
+        project.subscribe(conversation, 0, Box::new(sink)).unwrap();
+        project.lock().persist(conversation, cancel(new_id())).unwrap();
+        assert_eq!(collector.settled(2).len(), 2);
+    }
+
+    #[test]
+    fn an_ended_subscription_receives_nothing_more() {
+        let (_dir, project) = temp_project();
+        let conversation = conversations::create(&project).unwrap().id;
+        let (first, second) = (Collector::default(), Collector::default());
+        let id = project.subscribe(conversation, 0, Box::new(first.clone())).unwrap();
+        project.subscribe(conversation, 0, Box::new(second.clone())).unwrap();
+        project.unsubscribe(id);
+        project.lock().persist(conversation, cancel(new_id())).unwrap();
+        assert_eq!(second.settled(1).len(), 1);
+        assert!(first.events().is_empty());
+
+        project.unsubscribe_all();
+        assert_eq!(project.lock().subscription_count(), 0);
+    }
+
+    #[test]
+    fn opening_delivers_only_events_persisted_after_it() {
+        let (_dir, project) = temp_project();
+        let conversation = conversations::create(&project).unwrap().id;
+        project.lock().persist(conversation, cancel(new_id())).unwrap();
+        let collector = Collector::default();
+        let opened = project.open(conversation, Box::new(collector.clone())).unwrap();
+        assert_eq!(opened.last_seq, 1);
+        project.lock().persist(conversation, cancel(new_id())).unwrap();
+        let seqs: Vec<i64> = collector.settled(1).iter().map(|e| e.seq).collect();
+        assert_eq!(seqs, vec![2]);
+    }
+
+    #[test]
+    fn opening_matches_the_replay_fixture() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../fixtures/replay.json")).unwrap();
+        let (_dir, project) = temp_project();
+        let conversation = conversations::create(&project).unwrap().id;
+        {
+            let mut state = project.lock();
+            for event in fixture["events"].as_array().unwrap() {
+                let event: Event = serde_json::from_value(event.clone()).unwrap();
+                state.persist(conversation, event.kind).unwrap();
+            }
+        }
+        let opened = project.open(conversation, Box::new(Collector::default())).unwrap();
+        let opened = serde_json::to_value(&opened).unwrap();
+        assert_eq!(opened["last_seq"], fixture["opened"]["lastSeq"]);
+        assert_eq!(opened["messages"], fixture["opened"]["messages"]);
     }
 
     #[test]

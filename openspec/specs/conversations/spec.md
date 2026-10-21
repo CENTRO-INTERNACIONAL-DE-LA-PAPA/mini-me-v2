@@ -36,6 +36,12 @@ A message's state SHALL be fully determined by the events of its Conversation.
 - **THEN** every message's content, status, attachments, Text Components, Interactive
   Components, Steps and reactions match what the user saw before
 
+#### Scenario: Opening from stored messages matches a replay
+- **WHEN** the app opens a Conversation from its stored messages
+- **THEN** every message's content, status, attachments, Text Components, Interactive
+  Components, Steps, reactions, failure, Jev's answer and progress equal what replaying the
+  Conversation's events from sequence 1 gives
+
 #### Scenario: Message without components
 - **WHEN** a message is created
 - **THEN** its list of Interactive Components is empty until `component.added` events add

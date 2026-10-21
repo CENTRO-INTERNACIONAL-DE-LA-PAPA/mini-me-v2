@@ -867,10 +867,10 @@ mod tests {
 
         add_reaction(&project, message.id, "👍", user(user_id)).unwrap();
         add_reaction(&project, message.id, "👍", user(user_id)).unwrap();
-        assert_eq!(collector.events().len(), 1);
+        assert_eq!(collector.settled(1).len(), 1);
 
         remove_reaction(&project, message.id, "👍", user(user_id)).unwrap();
         remove_reaction(&project, message.id, "👍", user(user_id)).unwrap();
-        assert_eq!(collector.events().len(), 2);
+        assert_eq!(collector.settled(2).len(), 2);
     }
 }

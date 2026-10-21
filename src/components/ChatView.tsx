@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api, errorMessage } from "../api";
 import { ConversationStore } from "../protocol/eventStore";
+import type { ProtocolEvent } from "../protocol/types";
 import { Composer } from "./Composer";
 import { MessageItem } from "./MessageItem";
 import { Separator } from "@/components/ui/separator";
@@ -17,15 +18,27 @@ function useConversation(projectId: string, conversationId: string) {
 
   useEffect(() => {
     let active = true;
-    api
-      .subscribeConversation(projectId, conversationId, 0, (event) => {
-        if (active) {
-          store.apply(event);
-        }
+    // Batches delivered before the opened state arrives wait for it; null once it has.
+    let pending: ProtocolEvent[] | null = [];
+    const opening = api.openConversation(projectId, conversationId, (events) => {
+      if (!active) return;
+      if (pending) pending.push(...events);
+      else store.applyBatch(events);
+    });
+    opening
+      .then((opened) => {
+        if (!active) return;
+        store.load(opened, pending ?? []);
+        pending = null;
       })
-      .catch((e) => setError(errorMessage(e)));
+      .catch((e) => active && setError(errorMessage(e)));
     return () => {
       active = false;
+      // Waits for the open to finish, so that a Conversation closed while it opens is still
+      // unsubscribed.
+      opening
+        .then((opened) => api.unsubscribeConversation(projectId, opened.subscription_id))
+        .catch(() => {});
     };
   }, [store, projectId, conversationId]);
 
@@ -49,9 +62,12 @@ export function ChatView({ projectId, conversationId, onActivity }: Props) {
     }
   }, [decided]);
 
+  // Follows new messages and the latest one as it streams, but not changes to earlier
+  // messages, such as a reaction, which would pull the user away from what they read.
+  const last = state.messages[state.messages.length - 1];
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
-  }, [state]);
+  }, [state.messages.length, last, choosing]);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
