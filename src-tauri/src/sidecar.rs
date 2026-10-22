@@ -821,17 +821,17 @@ mod tests {
     }
 
     #[test]
-    fn a_version_5_sidecar_is_refused_naming_both_versions() {
-        assert_eq!(SIDECAR_PROTOCOL, 6);
+    fn a_version_6_sidecar_is_refused_naming_both_versions() {
+        assert_eq!(SIDECAR_PROTOCOL, 7);
         let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(hello(5)).unwrap();
+        tx.send(hello(6)).unwrap();
         let err = handshake(&rx, &Recorder::default(), soon(), false, &SidecarLog::disabled())
             .err()
             .unwrap();
         let HandshakeError::Incompatible(detail) = err else {
             panic!("expected Incompatible, got {err:?}");
         };
-        assert!(detail.contains('5') && detail.contains('6'), "{detail}");
+        assert!(detail.contains('6') && detail.contains('7'), "{detail}");
     }
 
     #[test]

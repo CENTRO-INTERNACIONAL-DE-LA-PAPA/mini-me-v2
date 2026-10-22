@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Renderers } from "./catalogue";
+import { FeatureButton, useCanFeature } from "./featuring";
 
 type Cell = string | number | boolean | null;
 
@@ -57,12 +58,15 @@ function nextSorting(current: Sorting | null, column: number, numeric: boolean):
 export function TableView({
   data,
   initialSorting = null,
+  componentId,
 }: {
   data: unknown;
   initialSorting?: Sorting | null;
+  componentId?: string;
 }) {
   const { columns, rows, title, total_rows, source } = data as TableData;
   const [sorting, setSorting] = useState<Sorting | null>(initialSorting);
+  const canFeature = useCanFeature(componentId);
   const sorted = useMemo(
     () => sortRows(rows, columns[sorting?.column ?? 0]?.type === "number", sorting),
     [rows, columns, sorting],
@@ -73,8 +77,11 @@ export function TableView({
       aria-label={title ?? "Table"}
       className="w-full min-w-0 overflow-hidden rounded-[10px] border border-border bg-card"
     >
-      {title && (
-        <h3 className="border-b border-border px-4 py-2.5 text-ui font-semibold">{title}</h3>
+      {(title || canFeature) && (
+        <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
+          <h3 className="mr-auto text-ui font-semibold">{title}</h3>
+          <FeatureButton componentId={componentId} />
+        </header>
       )}
       {/* Wide tables scroll sideways inside the card instead of widening the reply. */}
       <div className="max-h-[420px] w-full overflow-auto overscroll-contain">
@@ -145,5 +152,5 @@ export function TableView({
 }
 
 export const renderers: Renderers = {
-  1: ({ data }) => <TableView data={data} />,
+  1: ({ data, componentId }) => <TableView data={data} componentId={componentId} />,
 };

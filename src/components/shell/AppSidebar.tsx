@@ -29,6 +29,7 @@ import {
   ChevronsUpDownIcon,
   FolderIcon,
   HomeIcon,
+  LayoutGridIcon,
   LeafIcon,
   PlusIcon,
   SettingsIcon,
@@ -98,6 +99,15 @@ export function AppSidebar({
         {project && (
           <SidebarGroup>
             <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={view.kind === "overview"}
+                  onClick={() => onNavigate({ kind: "overview" })}
+                >
+                  <LayoutGridIcon />
+                  <span>Overview</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   isActive={view.kind === "files"}

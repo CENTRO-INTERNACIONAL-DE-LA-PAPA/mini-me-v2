@@ -104,6 +104,12 @@
       "ask": ["mini_me", "reaction", "needs_context"]
     },
     {
+      "type": "summary.start",
+      "summary_id": "0199d0a0-0000-7000-8000-000000000501",
+      "model": { "provider": "anthropic", "model": "claude-sonnet-5-5" },
+      "material": "## Huancayo 2025 trial data\nYou: plot yield by altitude"
+    },
+    {
       "type": "core.response",
       "request_id": "5f1c2b7e9a0d4c3b8e6f1a2b3c4d5e6f",
       "result": { "data": "aGVsbG8=", "size_bytes": 5, "eof": true }
@@ -185,6 +191,16 @@
       "type": "route.error",
       "route_id": "0199d0a0-0000-7000-8000-000000000401",
       "error": { "code": "jev_unavailable", "message": "Typesafe could not be reached." }
+    },
+    {
+      "type": "summary.done",
+      "summary_id": "0199d0a0-0000-7000-8000-000000000501",
+      "text": "Yield falls with altitude in the 2025 trial."
+    },
+    {
+      "type": "summary.error",
+      "summary_id": "0199d0a0-0000-7000-8000-000000000501",
+      "error": { "code": "secret_unavailable", "message": "Add an Anthropic API key in Settings." }
     }
   ]
 }

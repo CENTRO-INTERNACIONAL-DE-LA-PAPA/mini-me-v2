@@ -12,7 +12,7 @@ use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 6;
+pub const SIDECAR_PROTOCOL: u32 = 7;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -131,6 +131,13 @@ pub enum CoreFrame {
         /// The question IDs to ask: `mini_me`, `reaction`, `needs_context`.
         ask: Vec<String>,
     },
+    /// Asks for a summary of a Project's Conversations; `material` is their text.
+    #[serde(rename = "summary.start")]
+    SummaryStart {
+        summary_id: Uuid,
+        model: CallModel,
+        material: String,
+    },
     /// Exactly one of `result` and `error` is set.
     #[serde(rename = "core.response")]
     CoreResponse {
@@ -203,6 +210,10 @@ pub enum SidecarFrame {
     },
     #[serde(rename = "route.error")]
     RouteError { route_id: Uuid, error: ErrorInfo },
+    #[serde(rename = "summary.done")]
+    SummaryDone { summary_id: Uuid, text: String },
+    #[serde(rename = "summary.error")]
+    SummaryError { summary_id: Uuid, error: ErrorInfo },
     #[serde(rename = "core.request")]
     CoreRequest {
         request_id: String,
@@ -312,6 +323,9 @@ mod tests {
             "route.start",
             "route.done",
             "route.error",
+            "summary.start",
+            "summary.done",
+            "summary.error",
         ] {
             assert!(types.iter().any(|t| t == expected), "fixture lacks {expected}");
         }

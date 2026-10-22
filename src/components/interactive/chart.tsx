@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo, useReducer } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Renderers, RendererProps } from "./catalogue";
+import { FeatureButton } from "./featuring";
 import {
   chartReducer,
   initialState,
@@ -21,7 +22,11 @@ const PALETTE = SERIES_TOKENS.map((name) => `var(${name})`);
 
 /** A chart in a card: its title, a toggle between its views, the figure, and a legend whose
  * entries hide and show series. */
-export function ChartView({ data, color }: Pick<RendererProps, "data" | "color">) {
+export function ChartView({
+  data,
+  color,
+  componentId,
+}: Pick<RendererProps, "data" | "color" | "componentId">) {
   const chart = useMemo(() => parseChart(data), [data]);
   const [state, dispatch] = useReducer(chartReducer(chart), initialState);
   const view = chart.views[state.view];
@@ -50,6 +55,7 @@ export function ChartView({ data, color }: Pick<RendererProps, "data" | "color">
             ))}
           </div>
         )}
+        <FeatureButton componentId={componentId} />
       </header>
       <div className="px-4 pt-3 pb-2">
         <Suspense fallback={<div className="min-h-[300px]" />}>
@@ -95,5 +101,7 @@ export function ChartView({ data, color }: Pick<RendererProps, "data" | "color">
 }
 
 export const renderers: Renderers = {
-  1: ({ data, color }) => <ChartView data={data} color={color} />,
+  1: ({ data, color, componentId }) => (
+    <ChartView data={data} color={color} componentId={componentId} />
+  ),
 };

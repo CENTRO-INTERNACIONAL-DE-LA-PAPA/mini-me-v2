@@ -153,6 +153,39 @@ export interface AppError {
   message: string;
 }
 
+/** The Project Overview, as the core builds it. */
+export interface Overview {
+  conversations: number;
+  /** The latest activity of any Conversation; null without Conversations. */
+  last_activity_at: number | null;
+  summary: string | null;
+  summary_at: number | null;
+  featured: FeaturedOutput | null;
+  /** Newest first. */
+  outputs: OverviewOutput[];
+}
+
+/** The component featured on the Overview, with its data, and the reply it belongs to. */
+export interface FeaturedOutput {
+  component: Component;
+  author: Author;
+  conversation_id: Uuid;
+  message_id: Uuid;
+}
+
+/** Something a Conversation produced: a component other than an approval, or a file a
+ * Mini-Me saved (`kind` is then `file` and `id` the Asset's). */
+export interface OverviewOutput {
+  kind: string;
+  id: Uuid;
+  title: string;
+  author: Author;
+  conversation_id: Uuid;
+  conversation_title: string;
+  message_id: Uuid;
+  created_at: number;
+}
+
 /** A Conversation named in a listing, such as where a Project file is used. */
 export interface ConversationRef {
   id: Uuid;

@@ -10,6 +10,7 @@ import type {
   FileEntry,
   Message,
   MiniMe,
+  Overview,
   ProjectSummary,
   ProtocolEvent,
   ProviderId,
@@ -83,6 +84,13 @@ export const api = {
   importAssets: (project_id: Uuid) => invoke<AssetRef[]>("import_assets", { project_id }),
   listAssets: (project_id: Uuid, query: string) =>
     invoke<AssetRef[]>("list_assets", { project_id, query }),
+  getOverview: (project_id: Uuid) => invoke<Overview>("get_overview", { project_id }),
+  /** Features a chart or table on the Overview; `null` clears it. */
+  featureComponent: (project_id: Uuid, component_id: Uuid | null) =>
+    invoke<void>("feature_component", { project_id, component_id }),
+  /** Asks the model chosen in Settings for a new summary; resolves with the updated Overview. */
+  updateOverviewSummary: (project_id: Uuid) =>
+    invoke<Overview>("update_overview_summary", { project_id }),
   /** Every Asset of the Project, newest first, with who added it and where it is used. */
   listProjectFiles: (project_id: Uuid) => invoke<FileEntry[]>("list_project_files", { project_id }),
   openAsset: (project_id: Uuid, asset_id: Uuid) =>

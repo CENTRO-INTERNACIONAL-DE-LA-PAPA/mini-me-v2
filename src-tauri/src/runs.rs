@@ -48,6 +48,8 @@ pub type RouteAnswers = BTreeMap<String, ChoiceAnswer>;
 
 type RouteOutcome = Result<RouteAnswers, ErrorInfo>;
 
+type SummaryOutcome = Result<String, ErrorInfo>;
+
 /// The writing end of the link to a running sidecar. Returns `false` when the sidecar can
 /// no longer be reached.
 pub trait FrameSink: Send + Sync {
@@ -149,6 +151,9 @@ struct Inner {
     runs: HashMap<Uuid, Run>,
     /// Routing requests waiting for their `route.done` or `route.error`.
     routes: HashMap<Uuid, mpsc::Sender<RouteOutcome>>,
+    /// Summary requests waiting for their `summary.done` or `summary.error`, with the
+    /// provider whose key each may get.
+    summaries: HashMap<Uuid, (String, mpsc::Sender<SummaryOutcome>)>,
 }
 
 impl Inner {
@@ -233,8 +238,9 @@ impl Runs {
         let runs: Vec<Run> = {
             let mut inner = self.lock();
             inner.sink = None;
-            // Dropping the senders wakes every waiting routing request.
+            // Dropping the senders wakes every waiting routing and summary request.
             inner.routes.clear();
+            inner.summaries.clear();
             inner.runs.drain().map(|(_, run)| run).collect()
         };
         for run in runs {
@@ -448,6 +454,56 @@ impl Runs {
         }
     }
 
+    /// Asks the sidecar to summarise `material` with `model`, waiting at most `timeout`.
+    /// Fails with the sidecar's error, `summary_timeout`, or `sidecar_stopped`.
+    pub fn summarize(
+        &self,
+        model: CallModel,
+        material: String,
+        timeout: Duration,
+    ) -> AppResult<String> {
+        let summary_id = new_id();
+        let (tx, rx) = mpsc::channel();
+        let sink = {
+            let mut inner = self.lock();
+            let Some(sink) = inner.sink.clone() else {
+                return Err(AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime is not ready."));
+            };
+            inner.summaries.insert(summary_id, (model.provider.clone(), tx));
+            sink
+        };
+        let sent = sink.send(&CoreFrame::SummaryStart { summary_id, model, material });
+        let outcome = if sent {
+            rx.recv_timeout(timeout)
+        } else {
+            Err(RecvTimeoutError::Disconnected)
+        };
+        self.lock().summaries.remove(&summary_id);
+        match outcome {
+            Ok(Ok(text)) => Ok(text),
+            Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
+            Err(RecvTimeoutError::Timeout) => Err(AppError::new(
+                "summary_timeout",
+                "The AI model did not finish the summary in time. Try again.",
+            )),
+            Err(RecvTimeoutError::Disconnected) => Err(AppError::new(
+                SIDECAR_STOPPED,
+                "Mini-Me's runtime stopped before the summary was written.",
+            )),
+        }
+    }
+
+    fn finish_summary(&self, summary_id: Uuid, outcome: SummaryOutcome) {
+        match self.lock().summaries.remove(&summary_id) {
+            Some((_, tx)) => {
+                let _ = tx.send(outcome);
+            }
+            None => self
+                .log
+                .line(&format!("ignoring the end of summary {summary_id}, which is not open")),
+        }
+    }
+
     fn finish_route(&self, route_id: Uuid, outcome: RouteOutcome) {
         match self.lock().routes.remove(&route_id) {
             Some(tx) => {
@@ -644,6 +700,12 @@ impl Runs {
             SidecarFrame::RouteError { route_id, error } => {
                 self.finish_route(route_id, Err(error));
             }
+            SidecarFrame::SummaryDone { summary_id, text } => {
+                self.finish_summary(summary_id, Ok(text));
+            }
+            SidecarFrame::SummaryError { summary_id, error } => {
+                self.finish_summary(summary_id, Err(error));
+            }
             SidecarFrame::CoreRequest {
                 request_id,
                 call_id,
@@ -695,7 +757,7 @@ impl Runs {
             /// The adapter of a Trait call; `None` for a decision.
             call: Option<String>,
         }
-        let (place, is_route) = {
+        let (place, is_route, summary_provider) = {
             let inner = self.lock();
             let place = inner.run_of_call(call_id).map(|(run, kind)| Place {
                 project: Arc::clone(&run.project),
@@ -708,11 +770,15 @@ impl Runs {
                     CallKind::Decision => None,
                 },
             });
-            (place, inner.routes.contains_key(&call_id))
+            let summary_provider = inner.summaries.get(&call_id).map(|(p, _)| p.clone());
+            (place, inner.routes.contains_key(&call_id), summary_provider)
         };
         let Some(place) = place else {
             if is_route {
                 return self.answer_route(method, params);
+            }
+            if let Some(provider) = summary_provider {
+                return self.answer_summary(&provider, method, params);
             }
             return Err(AppError::new("call_not_active", "This Trait call has ended."));
         };
@@ -788,6 +854,24 @@ impl Runs {
             ));
         }
         self.secret_value(ROUTING_KEY)
+    }
+
+    /// A summary request may only get the key of the provider whose model writes it.
+    fn answer_summary(&self, provider: &str, method: &str, params: Value) -> AppResult<Value> {
+        if method != "secret.get" {
+            return Err(AppError::new(
+                "unknown_method",
+                format!("A summary request cannot use '{method}'."),
+            ));
+        }
+        let params: SecretGetParams = parse_params(params)?;
+        if params.provider != provider {
+            return Err(AppError::new(
+                "secret_not_allowed",
+                format!("This summary cannot use the {} API key.", provider_name(&params.provider)),
+            ));
+        }
+        self.secret_value(provider)
     }
 
     /// A model decision may only get the key of its run's AI provider.
@@ -1660,6 +1744,72 @@ mod tests {
         let (_, handle) = start_route(&g, CANCEL_TIMEOUT);
         g.runs.disconnect();
         assert_eq!(handle.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
+    }
+
+    /// Starts a summary request on another thread; returns its summary ID and the outcome.
+    fn start_summary(
+        f: &Fixture,
+        timeout: Duration,
+    ) -> (Uuid, std::thread::JoinHandle<AppResult<String>>) {
+        let runs = Arc::clone(&f.runs);
+        let handle = std::thread::spawn(move || {
+            let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
+            runs.summarize(model, "## Trial\nYou: plot yield".into(), timeout)
+        });
+        let summary_id = loop {
+            let found = f.sink.frames().into_iter().find_map(|frame| match frame {
+                CoreFrame::SummaryStart { summary_id, .. } => Some(summary_id),
+                _ => None,
+            });
+            if let Some(summary_id) = found {
+                break summary_id;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        (summary_id, handle)
+    }
+
+    #[test]
+    fn a_summary_request_returns_the_text_or_the_sidecars_error() {
+        let f = quick();
+        let (summary_id, handle) = start_summary(&f, CANCEL_TIMEOUT);
+        f.runs.handle(SidecarFrame::SummaryDone { summary_id, text: "Yield rose.".into() });
+        assert_eq!(handle.join().unwrap().unwrap(), "Yield rose.");
+
+        let g = quick();
+        let (summary_id, handle) = start_summary(&g, CANCEL_TIMEOUT);
+        let error = ErrorInfo { code: "provider_refused".into(), message: "Refused.".into() };
+        g.runs.handle(SidecarFrame::SummaryError { summary_id, error });
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "provider_refused");
+    }
+
+    #[test]
+    fn a_summary_request_times_out_or_ends_with_the_sidecar() {
+        let f = quick();
+        let (_, handle) = start_summary(&f, Duration::from_millis(50));
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "summary_timeout");
+
+        let g = quick();
+        let (_, handle) = start_summary(&g, CANCEL_TIMEOUT);
+        g.runs.disconnect();
+        assert_eq!(handle.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
+    }
+
+    #[test]
+    fn a_summary_request_may_only_get_its_models_key() {
+        let secrets = MemorySecrets(HashMap::from([
+            ("typesafe".to_string(), "ts-key".to_string()),
+            ("openai".to_string(), "sk-openai".to_string()),
+        ]));
+        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        let (summary_id, handle) = start_summary(&f, CANCEL_TIMEOUT);
+        let ask = |provider: &str| {
+            f.runs.respond("r".into(), summary_id, "secret.get", json!({ "provider": provider }))
+        };
+        assert_eq!(error_code(ask("typesafe")).as_deref(), Some("secret_not_allowed"));
+        assert_eq!(error_code(ask("openai")), None);
+        f.runs.handle(SidecarFrame::SummaryDone { summary_id, text: String::new() });
+        handle.join().unwrap().unwrap();
     }
 
     #[test]

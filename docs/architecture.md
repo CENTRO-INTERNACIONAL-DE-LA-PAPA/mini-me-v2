@@ -378,6 +378,23 @@ outside the Project folder, including through symbolic links.
   Windows forbids, stores the file, registers it as `generated` and attaches it to the reply.
   If the attachment can't be stored, the file is removed again.
 
+## The Project Overview
+
+The Overview (`overview.rs`) is built from what `project.sqlite` already holds:
+Conversations for the header, components other than approvals and `generated` Assets for the
+outputs (a file belongs to the first message that attaches it, as on the Files screen). Its
+own state is the one-row `overview` table: the summary with `summary_at`, and
+`featured_component`, which only a chart or table may be.
+
+A summary is one model call outside any Conversation. `update_overview_summary` builds the
+material in the core (each Conversation's title and its messages as `You:` or Mini-Me
+lines, whole Conversations newest first, within four times the history budget), and
+`Runs::summarize` sends it as `summary.start`. The sidecar's `Summarizer` (`summary.py`) gets
+the provider's key with `secret.get`, using `summary_id` as the `call_id`, which may only
+get that provider's key, makes the call and answers once with `summary.done` or
+`summary.error`. The core saves the text only on success, so a failure keeps the previous
+summary.
+
 ## Secrets and accounts
 
 API keys, the Typesafe key and the Ai2 tokens live in the OS keychain (`secrets.rs`), never
@@ -392,14 +409,14 @@ The core and the sidecar speak newline-delimited JSON frames (`link.rs`, `link.p
 sidecar keeps the original stdout for frames and sends all other output to stderr, which the
 core writes to `sidecar.log`.
 
-- **Handshake:** the sidecar sends `hello` with its protocol version, currently **6**. A
+- **Handshake:** the sidecar sends `hello` with its protocol version, currently **7**. A
   different version on either side shows the sidecar as incompatible, naming both; in
   development the message also says which side is stale.
 - **Core → sidecar:** `adapters.list`, `run.start`, `run.cancel`, `route.start`,
-  `core.response`.
+  `summary.start`, `core.response`.
 - **Sidecar → core:** `hello`, `adapters`, `run.delta`, `run.progress`, `step.started`,
   `step.completed`, `run.paused`, `run.done`, `run.error`, `run.cancelled`, `route.done`,
-  `route.error`, `core.request`.
+  `route.error`, `summary.done`, `summary.error`, `core.request`.
 - `src-tauri/fixtures/sidecar-frames.json` holds an example of every frame, and
   `src-tauri/fixtures/events.json` one of every event; tests on both sides parse them.
 

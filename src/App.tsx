@@ -5,6 +5,7 @@ import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/ChatView";
 import { FilesView } from "./components/FilesView";
 import { HomeView } from "./components/HomeView";
+import { OverviewView } from "./components/OverviewView";
 import { SettingsView } from "./components/SettingsView";
 import { AppSidebar } from "./components/shell/AppSidebar";
 import type { View } from "./components/shell/view";
@@ -56,7 +57,7 @@ export default function App() {
   async function openProject(summary: ProjectSummary) {
     try {
       setProject(await api.openProject(summary.id));
-      setView({ kind: "home" });
+      setView({ kind: "overview" });
       setError(null);
     } catch (e) {
       fail(e);
@@ -146,6 +147,19 @@ function Main({
       return scrolling(<SettingsView />);
     case "avatars":
       return scrolling(<AvatarDebugView onClose={onBack} />);
+    case "overview":
+      return project
+        ? scrolling(
+            <OverviewView
+              key={project.id}
+              project={project}
+              onOpenConversation={(id, messageId) =>
+                onNavigate({ kind: "conversation", id, messageId })
+              }
+              onOpenFiles={() => onNavigate({ kind: "files" })}
+            />,
+          )
+        : null;
     case "files":
       return project
         ? scrolling(
@@ -159,10 +173,11 @@ function Main({
     case "conversation":
       return project ? (
         <ChatView
-          key={view.id}
+          key={`${view.id}-${view.messageId ?? ""}`}
           projectId={project.id}
           projectName={project.name}
           conversationId={view.id}
+          messageId={view.messageId}
           title={conversations.find((c) => c.id === view.id)?.title ?? "Conversation"}
           onActivity={onConversationActivity}
         />
