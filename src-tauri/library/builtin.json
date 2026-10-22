@@ -183,6 +183,7 @@
       "name": "Scribe",
       "description": "Summarizes your messages and the files you reference",
       "colors": { "tint": "#E3DFFF", "solid": "#6E5BFF", "ink": "#4A3AE0" },
+      "avatar": { "base": "long", "face": "quiet", "accessory": "bow-tie" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "summarize", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }] }
     },
@@ -191,6 +192,7 @@
       "name": "Assistant",
       "description": "Answers general questions and requests that no other Mini-Me specializes in, and can save files and show tables",
       "colors": { "tint": "#D6F1EE", "solid": "#1F9E8F", "ink": "#12675D" },
+      "avatar": { "base": "classic", "face": "cheerful", "accessory": "sprout" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "assist", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03" }] }
     },
@@ -199,6 +201,7 @@
       "name": "Researcher",
       "description": "Finds research papers on a topic with Ai2's Paper Finder",
       "colors": { "tint": "#FFE1D8", "solid": "#FF5A36", "ink": "#B3300F" },
+      "avatar": { "base": "russet", "face": "content", "accessory": "glasses" },
       "group": "literature",
       "workflow": { "steps": [{ "id": "find-papers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a04" }] }
     },
@@ -207,6 +210,7 @@
       "name": "Theorist",
       "description": "Builds scientific theories from the literature with Ai2's Theorizer",
       "colors": { "tint": "#FFF0C2", "solid": "#F5B800", "ink": "#7A5A00" },
+      "avatar": { "base": "marble", "face": "amazed", "accessory": "grad-cap" },
       "group": "literature",
       "workflow": { "steps": [{ "id": "theorize", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a05" }] }
     },
@@ -215,6 +219,7 @@
       "name": "Explorer",
       "description": "Suggests a range of directions worth exploring on a topic",
       "colors": { "tint": "#D8EEFF", "solid": "#3690E3", "ink": "#00579C" },
+      "avatar": { "base": "kennebec", "face": "joyful", "accessory": "bucket-hat" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "scout", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06" }] }
     },
@@ -223,6 +228,7 @@
       "name": "Skeptic",
       "description": "Argues against a statement or claim to test how well it holds up",
       "colors": { "tint": "#FFE5D2", "solid": "#BB7B4E", "ink": "#7B461E" },
+      "avatar": { "base": "knobby", "face": "smug", "accessory": "mustache" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "refute", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07" }] }
     },
@@ -231,6 +237,7 @@
       "name": "Planner",
       "description": "Plans a project as an architecture or an ordered list of steps",
       "colors": { "tint": "#D9F2E3", "solid": "#2FA36B", "ink": "#1E7A4A" },
+      "avatar": { "base": "bean", "face": "neutral", "accessory": "hard-hat" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "plan", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" }] }
     },
@@ -239,6 +246,7 @@
       "name": "Inquirer",
       "description": "Asks questions that open up a topic further",
       "colors": { "tint": "#FFE1EF", "solid": "#D4599B", "ink": "#8E2461" },
+      "avatar": { "base": "pear", "face": "playful", "accessory": "flower" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "wonder", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
     },
@@ -247,6 +255,7 @@
       "name": "Experimenter",
       "description": "Designs experiments to test a hypothesis",
       "colors": { "tint": "#E5F0D4", "solid": "#779B1E", "ink": "#446100" },
+      "avatar": { "base": "fingerling", "face": "delighted", "accessory": "goggles" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "experiment", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10" }] }
     },
@@ -255,6 +264,7 @@
       "name": "Profiler",
       "description": "Describes what is in a data table: its columns, types, missing values and duplicates",
       "colors": { "tint": "#CEF3FC", "solid": "#0096AF", "ink": "#006277" },
+      "avatar": { "base": "pebble", "face": "neutral", "accessory": "cap" },
       "group": "data",
       "workflow": { "steps": [{ "id": "profile-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18" }] }
     },
@@ -263,6 +273,7 @@
       "name": "Validator",
       "description": "Checks a data table against rules and reports which checks fail",
       "colors": { "tint": "#FFE1E0", "solid": "#DD4D57", "ink": "#9B1B2D" },
+      "avatar": { "base": "wide", "face": "grumpy" },
       "group": "data",
       "workflow": { "steps": [{ "id": "validate-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a19" }] }
     },
@@ -271,6 +282,7 @@
       "name": "Curator",
       "description": "Cleans a data table and saves the result as a new file",
       "colors": { "tint": "#F8E3FC", "solid": "#B25EC5", "ink": "#793089" },
+      "avatar": { "base": "mochi", "face": "smitten", "accessory": "bow" },
       "group": "data",
       "workflow": { "steps": [{ "id": "clean-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a20" }] }
     },
@@ -279,6 +291,7 @@
       "name": "Linker",
       "description": "Joins two data tables on their key columns",
       "colors": { "tint": "#E1EDF8", "solid": "#688AA8", "ink": "#3B5972" },
+      "avatar": { "base": "peanut", "face": "ecstatic", "accessory": "beanie" },
       "group": "data",
       "workflow": { "steps": [{ "id": "join-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a21" }] }
     },
@@ -287,6 +300,7 @@
       "name": "Plotter",
       "description": "Draws charts of a data table",
       "colors": { "tint": "#EFE6FF", "solid": "#9769DC", "ink": "#623E96" },
+      "avatar": { "base": "sweet-potato", "face": "determined", "accessory": "party-hat" },
       "group": "data",
       "workflow": { "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22" }] }
     },
@@ -295,6 +309,7 @@
       "name": "Investigator",
       "description": "Investigates a research question in several steps: explores it, plans, tests the plan against criticism and, if you approve, designs an experiment",
       "colors": { "tint": "#EFEDCF", "solid": "#A19500", "ink": "#5F5700" },
+      "avatar": { "base": "purple-peruvian", "face": "determined", "accessory": "sun-hat" },
       "group": "thinking",
       "workflow": {
         "steps": [

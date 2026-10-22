@@ -182,11 +182,19 @@ export interface MiniMeColors {
 export type MiniMeGroup = "thinking" | "literature" | "data";
 
 /** A Mini-Me as the UI lists and shows it. */
+/** The avatar parts a Mini-Me is drawn with, by the ids of the avatar part files. */
+export interface MiniMeAvatar {
+  base: string;
+  face: string;
+  accessory?: string;
+}
+
 export interface MiniMe {
   id: Uuid;
   name: string;
   description: string;
   colors: MiniMeColors;
+  avatar: MiniMeAvatar;
   group: MiniMeGroup;
 }
 

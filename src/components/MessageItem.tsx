@@ -10,6 +10,7 @@ import { formatSize } from "./format";
 import { approvalState } from "./interactive/approval";
 import { InteractiveComponent } from "./interactive/InteractiveComponent";
 import { Markdown } from "./Markdown";
+import { MiniMeAvatar } from "./MiniMeAvatar";
 import { MiniMePill } from "./MiniMePill";
 import { TextComponentChip } from "./TextComponentChip";
 import { useMiniMes } from "./useMiniMes";
@@ -82,17 +83,8 @@ export const MessageItem = memo(function MessageItem({ projectId, message }: Pro
           : "text-ink-2",
       )}
     >
-      <header className="flex items-baseline gap-2 text-meta">
-        {message.author.kind !== "user" && (
-          <span
-            aria-hidden
-            className={cn(
-              "size-[9px] shrink-0 self-center rounded-full",
-              !authorMiniMe && "bg-off",
-            )}
-            style={authorMiniMe && { backgroundColor: authorMiniMe.colors.solid }}
-          />
-        )}
+      <header className="flex items-center gap-2 text-meta">
+        {message.author.kind !== "user" && <MiniMeAvatar miniMe={authorMiniMe} size={26} />}
         <strong className="text-[14.5px] font-semibold text-foreground">{name}</strong>
         {status && (
           <span className={message.status === "failed" ? "text-destructive" : "text-muted-foreground"}>

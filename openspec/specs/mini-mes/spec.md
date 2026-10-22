@@ -48,6 +48,8 @@ Each Mini-Me SHALL have:
 - an `id` (UUID, stable across installations);
 - a `name` and a `description`;
 - colours `tint`, `solid` and `ink`;
+- an avatar: a `base`, a `face` and optionally an `accessory`, each the id of one of the UI's
+  avatar part files;
 - a `group`, one of `thinking`, `literature` and `data`, which the `@` list shows it under;
 - exactly one Workflow, a list of Steps as Workflows define them.
 
@@ -122,22 +124,25 @@ Their colours follow DESIGN.md's Mini-Me colour family, and no two share a colou
   and routing picks Plotter
 - **THEN** Plotter answers by running *Plot*
 
-### Requirement: A Mini-Me is shown by name and colour
-The UI SHALL get the list of Mini-Mes (ID, name, description, colours, group) from the Rust
-core. It SHALL show each reply authored by a Mini-Me with that Mini-Me's name and a mark in
-its `solid` colour. Wherever the UI names a Mini-Me inline (an `@` mention in a sent message
-or a reply, an entry in the `@` list, a picked mention in the composer, a name in a reaction
-tooltip), it SHALL show the Mini-Me's pill: its name on a rounded chip in its `tint` with
-`ink` text. A reply whose Mini-Me is unknown SHALL show "Mini-Me" with a neutral mark, and an
-inline name of an unknown Mini-Me SHALL show a neutral pill.
+### Requirement: A Mini-Me is shown by name, avatar and colour
+The UI SHALL get the list of Mini-Mes (ID, name, description, colours, avatar, group) from the
+Rust core. It SHALL show each reply authored by a Mini-Me with that Mini-Me's name and its
+avatar, whose body is in its `solid` colour and whose freckles are in its `ink`. Wherever the
+UI names a Mini-Me inline (an `@` mention in a sent message or a reply, an entry in the `@`
+list, a name in a reaction tooltip), it SHALL show the Mini-Me's pill: its avatar and name on
+a rounded chip in its `tint` with `ink` text. A picked mention in the composer's text box
+SHALL show the pill's colours without the avatar, so the pill stays in line with the text. A
+reply whose Mini-Me is unknown SHALL show "Mini-Me" with a neutral avatar, and an inline name
+of an unknown Mini-Me SHALL show a neutral pill.
 
 #### Scenario: Reply header
 - **WHEN** Scribe answers
-- **THEN** the reply's header reads "Scribe" next to a mark in Scribe's solid colour
+- **THEN** the reply's header reads "Scribe" next to Scribe's avatar in Scribe's solid
+  colour
 
 #### Scenario: Unknown Mini-Me
 - **WHEN** a Conversation holds a reply from a Mini-Me that no longer exists
-- **THEN** the reply is shown as "Mini-Me" with a neutral mark and its text intact
+- **THEN** the reply is shown as "Mini-Me" with a neutral avatar and its text intact
 
 #### Scenario: Mention in a sent message
 - **WHEN** the user sends a message mentioning @Skeptic
