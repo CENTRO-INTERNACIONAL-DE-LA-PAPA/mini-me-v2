@@ -17,6 +17,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
@@ -26,6 +27,7 @@ import {
   BugIcon,
   CheckIcon,
   ChevronsUpDownIcon,
+  FolderIcon,
   HomeIcon,
   LeafIcon,
   PlusIcon,
@@ -44,6 +46,8 @@ interface Props {
   project: ProjectSummary | null;
   projects: ProjectSummary[];
   conversations: ConversationSummary[];
+  /** How many files the open Project holds. */
+  fileCount: number;
   onOpenProject: (project: ProjectSummary) => void;
   onNavigate: (view: View) => void;
   onNewConversation: () => void;
@@ -54,6 +58,7 @@ export function AppSidebar({
   project,
   projects,
   conversations,
+  fileCount,
   onOpenProject,
   onNavigate,
   onNewConversation,
@@ -86,6 +91,22 @@ export function AppSidebar({
                   <HomeIcon />
                   <span>Home</span>
                 </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
+        )}
+        {project && (
+          <SidebarGroup>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={view.kind === "files"}
+                  onClick={() => onNavigate({ kind: "files" })}
+                >
+                  <FolderIcon />
+                  <span>Files</span>
+                </SidebarMenuButton>
+                <SidebarMenuBadge>{fileCount}</SidebarMenuBadge>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>

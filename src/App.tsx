@@ -3,6 +3,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from "@/com
 import { api, errorMessage } from "./api";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/ChatView";
+import { FilesView } from "./components/FilesView";
 import { HomeView } from "./components/HomeView";
 import { SettingsView } from "./components/SettingsView";
 import { AppSidebar } from "./components/shell/AppSidebar";
@@ -13,6 +14,7 @@ export default function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [fileCount, setFileCount] = useState(0);
   const [view, setView] = useState<View>({ kind: "home" });
   // The view to return to when Settings or the avatar page is closed.
   const [previous, setPrevious] = useState<View>({ kind: "home" });
@@ -28,6 +30,8 @@ export default function App() {
     if (!project) return;
     try {
       setConversations(await api.listConversations(project.id));
+      // A reply can save files, so the file count follows Conversation activity.
+      setFileCount((await api.listProjectFiles(project.id)).length);
     } catch (e) {
       fail(e);
     }
@@ -35,6 +39,7 @@ export default function App() {
 
   useEffect(() => {
     setConversations([]);
+    setFileCount(0);
     refreshConversations();
   }, [refreshConversations]);
 
@@ -86,6 +91,7 @@ export default function App() {
         project={project}
         projects={projects}
         conversations={conversations}
+        fileCount={fileCount}
         onOpenProject={openProject}
         onNavigate={navigate}
         onNewConversation={newConversation}
@@ -101,6 +107,7 @@ export default function App() {
           onOpenProject={openProject}
           onCreateProject={createProject}
           onConversationActivity={refreshConversations}
+          onNavigate={navigate}
           onBack={() => setView(previous)}
         />
       </SidebarInset>
@@ -116,6 +123,7 @@ function Main({
   onOpenProject,
   onCreateProject,
   onConversationActivity,
+  onNavigate,
   onBack,
 }: {
   view: View;
@@ -125,6 +133,7 @@ function Main({
   onOpenProject: (project: ProjectSummary) => void;
   onCreateProject: (name: string) => Promise<void>;
   onConversationActivity: () => void;
+  onNavigate: (view: View) => void;
   onBack: () => void;
 }) {
   // A Conversation scrolls its message list itself, above the composer; other views scroll
@@ -137,6 +146,16 @@ function Main({
       return scrolling(<SettingsView />);
     case "avatars":
       return scrolling(<AvatarDebugView onClose={onBack} />);
+    case "files":
+      return project
+        ? scrolling(
+            <FilesView
+              project={project}
+              onOpenConversation={(id) => onNavigate({ kind: "conversation", id })}
+              onChanged={onConversationActivity}
+            />,
+          )
+        : null;
     case "conversation":
       return project ? (
         <ChatView

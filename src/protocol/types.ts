@@ -153,6 +153,23 @@ export interface AppError {
   message: string;
 }
 
+/** A Conversation named in a listing, such as where a Project file is used. */
+export interface ConversationRef {
+  id: Uuid;
+  title: string;
+}
+
+/** An Asset as the Project's Files screen lists it. */
+export interface FileEntry extends AssetRef {
+  /** `upload` for a file the user imported, `generated` for one a Mini-Me saved. */
+  source: "upload" | "generated";
+  created_at: number;
+  /** The author of the first message the Asset is attached to, if any. */
+  added_by: Author | null;
+  /** The Conversations that attach or reference the Asset, in the order it first appeared. */
+  used_in: ConversationRef[];
+}
+
 export interface ProjectSummary {
   id: Uuid;
   name: string;

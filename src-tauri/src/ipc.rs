@@ -494,6 +494,14 @@ pub async fn list_assets(
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub async fn list_project_files(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+) -> AppResult<Vec<assets::FileEntry>> {
+    assets::project_files(&*state.project(project_id)?)
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn open_asset(
     app: AppHandle,
     state: State<'_, AppState>,
