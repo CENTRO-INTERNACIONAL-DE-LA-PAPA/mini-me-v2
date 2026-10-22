@@ -70,7 +70,7 @@ export function ChatView({ projectId, conversationId, onActivity }: Props) {
   }, [state.messages.length, last, choosing]);
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 px-8 py-6">
           {state.messages.map((message) => (
