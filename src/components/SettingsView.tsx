@@ -8,7 +8,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api, errorMessage } from "../api";
 import type { Ai2Status, AiSettings, KeyAccount, ProviderId } from "../protocol/types";
 
@@ -22,11 +25,15 @@ const PROVIDERS: { id: ProviderId; name: string }[] = [
 const providerName = (id: KeyAccount) =>
   id === "typesafe" ? "Typesafe" : (PROVIDERS.find((p) => p.id === id)?.name ?? id);
 
-interface Props {
-  onClose: () => void;
-}
+type Page = "models" | "accounts";
 
-export function SettingsView({ onClose }: Props) {
+const PAGES: { id: Page; name: string }[] = [
+  { id: "models", name: "Models & keys" },
+  { id: "accounts", name: "Accounts" },
+];
+
+export function SettingsView() {
+  const [page, setPage] = useState<Page>("models");
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,41 +50,156 @@ export function SettingsView({ onClose }: Props) {
   }, [refresh]);
 
   return (
-    <main className="mx-auto mt-[10vh] max-w-lg px-4 pb-16">
-      <Button variant="link" className="mb-2 px-0 text-muted-foreground" onClick={onClose}>
-        ← Back
-      </Button>
-      <h1 className="mb-6 text-page font-bold">Settings</h1>
-      {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
-      {settings && (
-        <>
-          <ModelSection settings={settings} onSaved={refresh} />
-          <section className="mt-10">
-            <h2 className="mb-1 text-section font-bold">API keys</h2>
-            <p className="mb-4 text-meta text-muted-foreground">
-              Keys are kept in your system's keychain and are never shown again after you save
-              them. Mini-Me uses the key of the provider chosen above.
-            </p>
-            <ul className="grid gap-3">
-              {PROVIDERS.map((provider) => (
-                <KeyRow
-                  key={provider.id}
-                  provider={provider.id}
-                  saved={settings.saved_keys.includes(provider.id)}
-                  onChanged={refresh}
-                />
-              ))}
-            </ul>
-          </section>
-          <RoutingSection settings={settings} onChanged={refresh} />
-          <Ai2Section />
-        </>
-      )}
-    </main>
+    <div className="flex min-h-full">
+      <nav className="w-[220px] shrink-0 border-r border-border px-3 py-10">
+        <h1 className="mb-4 px-2.5 text-page font-bold">Settings</h1>
+        <SidebarMenu>
+          {PAGES.map((p) => (
+            <SidebarMenuItem key={p.id}>
+              <SidebarMenuButton isActive={page === p.id} onClick={() => setPage(p.id)}>
+                <span>{p.name}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </nav>
+      <main className="min-w-0 flex-1 px-14 py-12">
+        <div className="max-w-[720px]">
+          {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
+          {settings && page === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
+          {settings && page === "accounts" && (
+            <AccountsPage settings={settings} onChanged={refresh} />
+          )}
+        </div>
+      </main>
+    </div>
   );
 }
 
-function ModelSection({ settings, onSaved }: { settings: AiSettings; onSaved: () => void }) {
+function PageHeader({ title, lead }: { title: string; lead: string }) {
+  return (
+    <header className="mb-10">
+      <h2 className="text-page font-bold">{title}</h2>
+      <p className="mt-1.5 text-ui text-ink-2">{lead}</p>
+    </header>
+  );
+}
+
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mt-10 first:mt-0">
+      <h3 className="text-section font-semibold">{title}</h3>
+      {description && <p className="mt-1 text-meta text-muted-foreground">{description}</p>}
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+/** One setting: its name and what it does on the left, its control on the right. */
+function SettingRow({
+  label,
+  htmlFor,
+  description,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  description?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-6 border-b border-border py-4">
+      <div className="grid flex-1 gap-0.5">
+        <Label htmlFor={htmlFor} className="font-medium">
+          {label}
+        </Label>
+        {description && <p className="text-meta text-muted-foreground">{description}</p>}
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{children}</div>
+    </div>
+  );
+}
+
+/** A green or grey dot with its label, for whether something is set up. */
+function StatusDot({ on, children }: { on: boolean; children: ReactNode }) {
+  return (
+    <span className="flex items-center gap-1.5 text-meta text-ink-2">
+      <span aria-hidden className={cn("size-[7px] rounded-full", on ? "bg-success" : "bg-off")} />
+      {children}
+    </span>
+  );
+}
+
+function ModelsPage({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
+  return (
+    <>
+      <PageHeader
+        title="Models & keys"
+        lead="Mini-Mes call the AI model you choose here, with your own key. Keys are kept in your system's keychain and are only sent to their provider."
+      />
+      <Section title="Providers">
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+          {PROVIDERS.map((provider) => (
+            <KeyRow
+              key={provider.id}
+              account={provider.id}
+              saved={settings.saved_keys.includes(provider.id)}
+              hint={`Add an API key to use ${provider.name} models`}
+              onChanged={onChanged}
+            />
+          ))}
+        </ul>
+      </Section>
+      <Section title="Defaults">
+        <ModelRow settings={settings} onSaved={onChanged} />
+      </Section>
+    </>
+  );
+}
+
+function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
+  return (
+    <>
+      <PageHeader
+        title="Accounts"
+        lead="Services Mini-Me signs in to, and the one that chooses which Mini-Me answers."
+      />
+      <Section
+        title="Ai2"
+        description="Researcher and Theorist use Ai2's Asta services, which need an Ai2 account. Their messages are sent to Ai2; file contents are not."
+      >
+        <Ai2Row />
+      </Section>
+      <Section
+        title="Choosing a Mini-Me"
+        description="When you don't mention a Mini-Me, Typesafe's Jev chooses one. Your message's text and the names of its files are sent to Typesafe; file contents are not."
+      >
+        <ul className="overflow-hidden rounded-xl border border-border bg-card">
+          <KeyRow
+            account="typesafe"
+            saved={settings.saved_keys.includes("typesafe")}
+            hint="Add a key so Mini-Me can choose who answers"
+            onChanged={onChanged}
+          />
+        </ul>
+        <ThresholdRow settings={settings} onChanged={onChanged} />
+      </Section>
+      <Section title="Advanced">
+        <DeveloperRow settings={settings} onChanged={onChanged} />
+      </Section>
+    </>
+  );
+}
+
+function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => void }) {
   const [provider, setProvider] = useState<ProviderId>(settings.provider);
   const [model, setModel] = useState(settings.model);
   const [status, setStatus] = useState<string | null>(null);
@@ -95,10 +217,18 @@ function ModelSection({ settings, onSaved }: { settings: AiSettings; onSaved: ()
   }
 
   return (
-    <form className="grid gap-4" onSubmit={save}>
-      <h2 className="text-section font-bold">AI model</h2>
-      <div className="grid gap-2">
-        <Label htmlFor="provider">Provider</Label>
+    <form onSubmit={save}>
+      <SettingRow
+        label="AI model"
+        htmlFor="model"
+        description={
+          <>
+            Used by every Mini-Me that calls an AI model, such as Scribe. Type the model ID
+            exactly as the provider lists it.
+            {status && <span className="mt-1 block text-ink-2">{status}</span>}
+          </>
+        }
+      >
         <Select
           value={provider}
           onValueChange={(value) => {
@@ -106,7 +236,7 @@ function ModelSection({ settings, onSaved }: { settings: AiSettings; onSaved: ()
             setStatus(null);
           }}
         >
-          <SelectTrigger id="provider" className="w-full">
+          <SelectTrigger aria-label="Provider" className="w-36">
             <SelectValue>{(value: ProviderId) => providerName(value)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -117,34 +247,26 @@ function ModelSection({ settings, onSaved }: { settings: AiSettings; onSaved: ()
             ))}
           </SelectContent>
         </Select>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="model">Model</Label>
         <Input
           id="model"
+          className="w-56"
           value={model}
           onChange={(e) => {
             setModel(e.target.value);
             setStatus(null);
           }}
-          placeholder={`Model ID, as listed by ${providerName(provider)}`}
+          placeholder="Model ID"
           spellCheck={false}
         />
-        <p className="text-meta text-muted-foreground">
-          Used by every Mini-Me that calls an AI model, such as Scribe.
-        </p>
-      </div>
-      <div className="flex items-center gap-3">
         <Button type="submit" disabled={!changed}>
           Save
         </Button>
-        {status && <span className="text-meta text-muted-foreground">{status}</span>}
-      </div>
+      </SettingRow>
     </form>
   );
 }
 
-function Ai2Section() {
+function Ai2Row() {
   const [status, setStatus] = useState<Ai2Status | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -167,55 +289,53 @@ function Ai2Section() {
     }
   }
 
+  const signedIn = status?.state === "signed_in";
   return (
-    <section className="mt-10">
-      <h2 className="mb-1 text-section font-bold">Ai2 account</h2>
-      <p className="mb-4 text-meta text-muted-foreground">
-        Researcher and Theorist use Ai2's Asta services, which need an Ai2 account. Their
-        messages are sent to Ai2; file contents are not.
-      </p>
-      <div className="grid gap-2 rounded-xl border border-border bg-card px-4 py-3">
-        {status?.state === "signed_in" && (
-          <div className="flex items-center gap-2">
-            <span aria-hidden className="size-[7px] rounded-full bg-success" />
-            <span className="flex-1 text-ui">
-              Signed in as {status.email ?? "your Ai2 account"}
-            </span>
-            <Button variant="ghost" onClick={() => run(api.ai2SignOut)}>
-              Sign out
-            </Button>
-          </div>
-        )}
-        {status?.state === "pending" && (
-          <div className="grid gap-1 text-ui">
-            <p>
-              Confirm the code <strong className="font-mono">{status.user_code}</strong> on the
-              Ai2 page that opened in your browser.
-            </p>
-            <p className="text-meta text-muted-foreground">
-              No page? Open {status.verification_uri} and enter the code.
-            </p>
-          </div>
-        )}
-        {(status === null || status.state === "signed_out") && (
-          <div className="flex items-center gap-2">
-            <span aria-hidden className="size-[7px] rounded-full bg-off" />
-            <span className="flex-1 text-ui">Not signed in</span>
+    <div className="rounded-xl border border-border bg-card px-4 py-3.5">
+      <div className="flex items-center gap-3">
+        <span className="grid flex-1 gap-0.5">
+          <span className="font-medium">Ai2 account</span>
+          <span className="text-meta text-muted-foreground">
+            {signedIn
+              ? `Signed in as ${status.email ?? "your Ai2 account"}`
+              : status?.state === "pending"
+                ? "Waiting for you to confirm the code in your browser"
+                : "Sign in to use Researcher and Theorist"}
+          </span>
+        </span>
+        <StatusDot on={signedIn}>{signedIn ? "Signed in" : "Not signed in"}</StatusDot>
+        {signedIn ? (
+          <Button variant="outline" onClick={() => run(api.ai2SignOut)}>
+            Sign out
+          </Button>
+        ) : (
+          status?.state !== "pending" && (
             <Button variant="outline" onClick={() => run(api.ai2StartSignIn)}>
               Sign in
             </Button>
-          </div>
+          )
         )}
-        {status?.state === "signed_out" && status.error && (
-          <p className="text-meta text-destructive">{status.error}</p>
-        )}
-        {error && <p className="text-meta text-destructive">{error}</p>}
       </div>
-    </section>
+      {status?.state === "pending" && (
+        <div className="mt-3 grid gap-1 border-t border-border pt-3">
+          <p>
+            Confirm the code <strong className="font-mono">{status.user_code}</strong> on the
+            Ai2 page that opened in your browser.
+          </p>
+          <p className="text-meta text-muted-foreground">
+            No page? Open {status.verification_uri} and enter the code.
+          </p>
+        </div>
+      )}
+      {status?.state === "signed_out" && status.error && (
+        <p className="mt-2 text-meta text-destructive">{status.error}</p>
+      )}
+      {error && <p className="mt-2 text-meta text-destructive">{error}</p>}
+    </div>
   );
 }
 
-function RoutingSection({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
+function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
   const [threshold, setThreshold] = useState(String(settings.threshold));
   const [status, setStatus] = useState<string | null>(null);
   const value = Number(threshold);
@@ -233,85 +353,97 @@ function RoutingSection({ settings, onChanged }: { settings: AiSettings; onChang
   }
 
   return (
-    <section className="mt-10">
-      <h2 className="mb-1 text-section font-bold">Choosing a Mini-Me</h2>
-      <p className="mb-4 text-meta text-muted-foreground">
-        When you don't mention a Mini-Me, Typesafe's Jev chooses one. Your message's text and
-        the names of its files are sent to Typesafe; file contents are not.
-      </p>
-      <ul className="mb-4 grid gap-3">
-        <KeyRow
-          provider="typesafe"
-          saved={settings.saved_keys.includes("typesafe")}
-          onChanged={onChanged}
-        />
-      </ul>
-      <form className="grid gap-2" onSubmit={save}>
-        <Label htmlFor="threshold">Confidence threshold</Label>
-        <div className="flex items-center gap-3">
-          <Input
-            id="threshold"
-            type="number"
-            min={0}
-            max={1}
-            step={0.05}
-            className="w-28"
-            value={threshold}
-            aria-invalid={!valid}
-            onChange={(e) => {
-              setThreshold(e.target.value);
-              setStatus(null);
-            }}
-          />
-          <Button type="submit" variant="outline" disabled={!valid || value === settings.threshold}>
-            Save
-          </Button>
-          {status && <span className="text-meta text-muted-foreground">{status}</span>}
-        </div>
-        <p className="text-meta text-muted-foreground">
-          From 0 to 1. When Jev is less sure than this, Mini-Me asks you to mention a Mini-Me
-          with @ instead of guessing.
-        </p>
-      </form>
-      <label className="mt-4 flex items-center gap-2 text-ui">
-        <input
-          type="checkbox"
-          className="size-4 accent-primary"
-          checked={settings.show_answers}
-          onChange={async (e) => {
-            try {
-              await api.setShowJevAnswers(e.target.checked);
-              onChanged();
-            } catch (err) {
-              setStatus(errorMessage(err));
-            }
+    <form onSubmit={save}>
+      <SettingRow
+        label="Confidence threshold"
+        htmlFor="threshold"
+        description={
+          <>
+            From 0 to 1. When Jev is less sure than this, Mini-Me asks you to mention a Mini-Me
+            with @ instead of guessing.
+            {status && <span className="mt-1 block text-ink-2">{status}</span>}
+          </>
+        }
+      >
+        <Input
+          id="threshold"
+          type="number"
+          min={0}
+          max={1}
+          step={0.05}
+          className="w-24"
+          value={threshold}
+          aria-invalid={!valid}
+          onChange={(e) => {
+            setThreshold(e.target.value);
+            setStatus(null);
           }}
         />
-        [DEBUG] Show Jev's answers under each message
-      </label>
-    </section>
+        <Button type="submit" variant="outline" disabled={!valid || value === settings.threshold}>
+          Save
+        </Button>
+      </SettingRow>
+    </form>
   );
 }
 
+function DeveloperRow({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <SettingRow
+      label="[DEBUG] Show Jev's answers"
+      htmlFor="show-answers"
+      description={
+        <>
+          Stores Jev's raw answers and shows them under each message.
+          {error && <span className="mt-1 block text-destructive">{error}</span>}
+        </>
+      }
+    >
+      <Switch
+        id="show-answers"
+        checked={settings.show_answers}
+        onCheckedChange={async (checked) => {
+          try {
+            setError(null);
+            await api.setShowJevAnswers(checked);
+            onChanged();
+          } catch (e) {
+            setError(errorMessage(e));
+          }
+        }}
+      />
+    </SettingRow>
+  );
+}
+
+/**
+ * A provider or service in a list: a letter tile, its name, whether its key is saved, and a
+ * button that opens a field to add, replace or remove the key.
+ */
 function KeyRow({
-  provider,
+  account,
   saved,
+  hint,
   onChanged,
 }: {
-  provider: KeyAccount;
+  account: KeyAccount;
   saved: boolean;
+  hint: string;
   onChanged: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
   const [key, setKey] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const name = providerName(provider);
+  const name = providerName(account);
 
   async function save(event: FormEvent) {
     event.preventDefault();
     try {
-      await api.saveApiKey(provider, key);
+      await api.saveApiKey(account, key);
       setKey("");
       setError(null);
+      setEditing(false);
       onChanged();
     } catch (e) {
       setError(errorMessage(e));
@@ -320,8 +452,9 @@ function KeyRow({
 
   async function remove() {
     try {
-      await api.removeApiKey(provider);
+      await api.removeApiKey(account);
       setError(null);
+      setEditing(false);
       onChanged();
     } catch (e) {
       setError(errorMessage(e));
@@ -329,40 +462,47 @@ function KeyRow({
   }
 
   return (
-    <li className="rounded-xl border border-border bg-card px-4 py-3">
-      <form className="grid gap-2" onSubmit={save}>
-        <div className="flex items-center gap-2">
-          <Label htmlFor={`key-${provider}`} className="flex-1">
-            {name}
-          </Label>
-          <span className="flex items-center gap-1.5 text-meta text-muted-foreground">
-            <span
-              aria-hidden
-              className={`size-[7px] rounded-full ${saved ? "bg-success" : "bg-off"}`}
-            />
-            {saved ? "Saved" : "Not set"}
+    <li className="px-4 py-3.5">
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted font-semibold"
+        >
+          {name[0]}
+        </span>
+        <span className="grid flex-1 gap-0.5">
+          <span className="font-medium">{name}</span>
+          <span className="text-meta text-muted-foreground">
+            {saved ? "Key saved in your system's keychain" : hint}
           </span>
-        </div>
-        <div className="flex gap-2">
+        </span>
+        <StatusDot on={saved}>{saved ? "Connected" : "Not connected"}</StatusDot>
+        <Button variant="outline" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+          {saved ? "Edit" : "Add key"}
+        </Button>
+      </div>
+      {editing && (
+        <form className="mt-3 flex gap-2 pl-11" onSubmit={save}>
           <Input
-            id={`key-${provider}`}
+            aria-label={`${name} key`}
             type="password"
             autoComplete="off"
+            autoFocus
             value={key}
             onChange={(e) => setKey(e.target.value)}
             placeholder={saved ? `Paste a new ${name} key to replace it` : `Paste your ${name} key`}
           />
-          <Button type="submit" variant="outline" disabled={!key.trim()}>
+          <Button type="submit" disabled={!key.trim()}>
             {saved ? "Replace" : "Save"}
           </Button>
           {saved && (
-            <Button type="button" variant="ghost" onClick={remove}>
+            <Button type="button" variant="destructive" onClick={remove}>
               Remove
             </Button>
           )}
-        </div>
-        {error && <p className="text-meta text-destructive">{error}</p>}
-      </form>
+        </form>
+      )}
+      {error && <p className="mt-2 pl-11 text-meta text-destructive">{error}</p>}
     </li>
   );
 }

@@ -134,7 +134,7 @@ function Main({
   );
   switch (view.kind) {
     case "settings":
-      return scrolling(<SettingsView onClose={onBack} />);
+      return scrolling(<SettingsView />);
     case "avatars":
       return scrolling(<AvatarDebugView onClose={onBack} />);
     case "conversation":
