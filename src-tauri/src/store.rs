@@ -501,9 +501,17 @@ impl ProjectState {
     /// Conversation's events gives (`src/protocol/eventStore.ts`).
     fn message_views(&self, conversation_id: Uuid) -> AppResult<Vec<MessageView>> {
         let messages = self.messages_in(Scope::Conversation(conversation_id), true)?;
+        let created: HashMap<String, i64> = self
+            .conn
+            .prepare("SELECT id, created_at FROM messages WHERE conversation_id = ?1")?
+            .query_map(params![conversation_id.to_string()], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .collect::<Result<_, _>>()?;
         let mut views: Vec<MessageView> = messages
             .into_iter()
             .map(|(_, message)| MessageView {
+                created_at: created.get(&message.id.to_string()).copied().unwrap_or_default(),
                 message,
                 reactions: Vec::new(),
                 progress: None,
@@ -1006,9 +1014,18 @@ mod tests {
             }
         }
         let opened = project.open(conversation, Box::new(Collector::default())).unwrap();
-        let opened = serde_json::to_value(&opened).unwrap();
+        let mut opened = serde_json::to_value(&opened).unwrap();
         assert_eq!(opened["last_seq"], fixture["opened"]["lastSeq"]);
-        assert_eq!(opened["messages"], fixture["opened"]["messages"]);
+        // Persisting stamps events with the current time rather than the fixture's `ts`, so
+        // `created_at` is checked for presence and left out of the comparison.
+        let mut expected = fixture["opened"]["messages"].clone();
+        for list in [&mut opened["messages"], &mut expected] {
+            for message in list.as_array_mut().unwrap() {
+                let created_at = message.as_object_mut().unwrap().remove("created_at");
+                assert!(created_at.is_some_and(|t| t.is_i64()));
+            }
+        }
+        assert_eq!(opened["messages"], expected);
     }
 
     #[test]

@@ -267,6 +267,8 @@ pub struct TextComponent {
 pub struct MessageView {
     #[serde(flatten)]
     pub message: Message,
+    /// When the message was created: its `message.created` event's `ts`, in milliseconds.
+    pub created_at: i64,
     pub reactions: Vec<Reaction>,
     /// The latest progress of a streaming reply; `null` once it has ended or paused.
     pub progress: Option<Progress>,
@@ -417,6 +419,7 @@ mod tests {
                 components: Vec::new(),
                 steps: Vec::new(),
             },
+            created_at: 1_760_000_000_000,
             reactions: Vec::new(),
             progress: Some(Progress { label: "Reading trial.csv".into(), fraction: None }),
             jev: None,

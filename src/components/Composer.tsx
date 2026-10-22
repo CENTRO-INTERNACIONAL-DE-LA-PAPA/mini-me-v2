@@ -28,6 +28,7 @@ import { sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
 import { useMiniMes } from "./useMiniMes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ArrowUpIcon, AtSignIcon, HashIcon, PaperclipIcon, SquareIcon } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +43,7 @@ interface Props {
 
 /** The typography and box shared by the text box and the layer that draws its pills. */
 const FIELD =
-  "px-3 py-[7px] text-body whitespace-pre-wrap wrap-break-word [scrollbar-gutter:stable]";
+  "px-4 pt-3 pb-1 text-body whitespace-pre-wrap wrap-break-word [scrollbar-gutter:stable]";
 
 /** An entry in the `@` or `#` list. */
 interface Suggestion {
@@ -79,6 +80,9 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
   const ready = sidecarReady(sidecar);
   const miniMes = useMiniMes();
   const miniMeById = (id: string) => miniMes.find((m) => m.id === id);
+  // The first Mini-Me the draft mentions answers it; without one, Mini-Me picks who answers.
+  const mentioned = references.find((r) => r.kind === "mini_me");
+  const asked = mentioned && miniMeById(mentioned.id);
 
   useEffect(() => {
     if (query?.kind !== "asset") {
@@ -172,6 +176,20 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
           : errorMessage(e),
       );
     }
+  }
+
+  /** Types `@` or `#` at the caret, with a space before it when needed, to open its list. */
+  function startReference(sign: "@" | "#") {
+    const box = input.current;
+    const start = box?.selectionStart ?? text.length;
+    const end = box?.selectionEnd ?? text.length;
+    const inserted = start > 0 && !/\s/.test(text[start - 1]) ? ` ${sign}` : sign;
+    const cursor = start + inserted.length;
+    edit(text.slice(0, start) + inserted + text.slice(end), cursor);
+    requestAnimationFrame(() => {
+      box?.focus();
+      box?.setSelectionRange(cursor, cursor);
+    });
   }
 
   async function stop() {
@@ -307,7 +325,7 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
   }
 
   return (
-    <div className="relative bg-background px-8 pt-3 pb-4">
+    <div className="relative mx-auto w-full max-w-[760px] px-8 pt-2 pb-5">
       {suggestions.length > 0 && (
         <div
           role="listbox"
@@ -358,17 +376,14 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
           {sidecar.detail}
         </p>
       )}
-      <div className="flex items-end gap-2">
-        <Button variant="outline" onClick={attach} title="Attach files">
-          Attach
-        </Button>
-        <div className="relative min-w-0 flex-1 rounded-2xl bg-card shadow-composer">
+      <div className="rounded-2xl border border-border-composer bg-card shadow-composer">
+        <div className="relative">
           <div
             ref={layer}
             aria-hidden
             className={cn(
               FIELD,
-              "pointer-events-none absolute inset-0 overflow-hidden border border-transparent",
+              "pointer-events-none absolute inset-0 overflow-hidden",
               "text-foreground",
             )}
           >
@@ -398,14 +413,14 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
           <Textarea
             ref={input}
             value={text}
-            rows={2}
+            rows={1}
             className={cn(
               FIELD,
-              "relative max-h-48 min-h-9 resize-none rounded-2xl border-border-composer",
+              "relative max-h-48 min-h-9 resize-none rounded-none border-0",
               "bg-transparent text-transparent caret-foreground",
               "selection:bg-primary selection:text-primary-foreground",
             )}
-            placeholder="Write a message. Type @ to ask a Mini-Me, # to reference a file."
+            placeholder="Ask a Mini-Me, or type @ to choose one…"
             onChange={(e) => edit(e.target.value, e.target.selectionStart)}
             onKeyDown={onKeyDown}
             onScroll={(e) => {
@@ -439,15 +454,66 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
             onCut={(e) => copy(e, true)}
           />
         </div>
-        {replying ? (
-          <Button variant="destructive" onClick={stop}>
-            Stop
+        <div className="flex items-center gap-0.5 px-2 pb-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Mention a Mini-Me"
+            title="Mention a Mini-Me"
+            onClick={() => startReference("@")}
+          >
+            <AtSignIcon />
           </Button>
-        ) : (
-          <Button onClick={send} disabled={!text.trim() || !ready || choosing}>
-            Send
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Reference a file"
+            title="Reference a file"
+            onClick={() => startReference("#")}
+          >
+            <HashIcon />
           </Button>
-        )}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Attach files"
+            title="Attach files"
+            onClick={attach}
+          >
+            <PaperclipIcon />
+          </Button>
+          <span className="ml-2 flex-1 truncate text-meta text-muted-foreground">
+            {asked ? (
+              <span className="flex items-center gap-1.5">
+                Asking <MiniMePill miniMe={asked}>{asked.name}</MiniMePill>
+              </span>
+            ) : (
+              "Auto-pick Mini-Me"
+            )}
+          </span>
+          {replying ? (
+            <Button
+              size="icon"
+              className="rounded-full"
+              aria-label="Stop the reply"
+              title="Stop the reply"
+              onClick={stop}
+            >
+              <SquareIcon className="size-3 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              className="rounded-full"
+              aria-label="Send"
+              title="Send"
+              onClick={send}
+              disabled={!text.trim() || !ready || choosing}
+            >
+              <ArrowUpIcon />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

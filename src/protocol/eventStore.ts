@@ -15,6 +15,8 @@ export interface Reaction {
 }
 
 export interface MessageView extends Message {
+  /** When the message was created: its `message.created` event's `ts`, in milliseconds. */
+  created_at: number;
   reactions: Reaction[];
   /** The latest progress of a streaming reply; null once it has ended. */
   progress: Progress | null;
@@ -74,6 +76,7 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
             // Events stored before Interactive Components existed have no `components`.
             components: known.payload.message.components ?? [],
             steps: known.payload.message.steps ?? [],
+            created_at: known.ts,
             reactions: [],
             progress: null,
           },

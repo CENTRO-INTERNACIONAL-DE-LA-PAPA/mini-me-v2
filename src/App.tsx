@@ -97,6 +97,7 @@ export default function App() {
           view={view}
           project={project}
           projects={projects}
+          conversations={conversations}
           onOpenProject={openProject}
           onCreateProject={createProject}
           onConversationActivity={refreshConversations}
@@ -111,6 +112,7 @@ function Main({
   view,
   project,
   projects,
+  conversations,
   onOpenProject,
   onCreateProject,
   onConversationActivity,
@@ -119,6 +121,7 @@ function Main({
   view: View;
   project: ProjectSummary | null;
   projects: ProjectSummary[];
+  conversations: ConversationSummary[];
   onOpenProject: (project: ProjectSummary) => void;
   onCreateProject: (name: string) => Promise<void>;
   onConversationActivity: () => void;
@@ -139,7 +142,9 @@ function Main({
         <ChatView
           key={view.id}
           projectId={project.id}
+          projectName={project.name}
           conversationId={view.id}
+          title={conversations.find((c) => c.id === view.id)?.title ?? "Conversation"}
           onActivity={onConversationActivity}
         />
       ) : null;
