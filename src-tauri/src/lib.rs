@@ -49,6 +49,7 @@ pub fn run() {
             ipc::remove_reaction,
             ipc::import_assets,
             ipc::list_assets,
+            ipc::list_project_files,
             ipc::open_asset,
             ipc::get_sidecar_status,
             ipc::subscribe_sidecar_status,

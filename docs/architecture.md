@@ -273,7 +273,10 @@ gets `call_not_active`.
   `markdownSource()` (`src/protocol/references.ts`) before parsing, and the link renderer
   draws `ref:N` as the component's chip (`TextComponentChip.tsx`).
 - **A Mini-Me named inline** (a mention, an `@` list entry, a reaction tooltip) is always
-  `MiniMePill.tsx`: its tint background and ink text, or neutral colours when it is unknown.
+  `MiniMePill.tsx`: its avatar (`MiniMeAvatar.tsx`, drawn from the parts its definition
+  names) and name on its tint with ink text, or neutral colours when it is unknown. The
+  composer's text box draws picked mentions without the avatar, so they stay in line with
+  the text.
 - **The composer** keeps a native textarea with transparent text over a layer that draws the
   same text, with picked references as pills. The layer must match the textarea's typography
   and box exactly (`FIELD` in `Composer.tsx`), so its pills take their height from a

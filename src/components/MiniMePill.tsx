@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { MiniMe } from "../protocol/types";
+import { MiniMeAvatar } from "./MiniMeAvatar";
 
 /** The pill's colours: the Mini-Me's tint and ink, or neutral when it is unknown. */
 export function pillStyle(miniMe?: MiniMe): CSSProperties | undefined {
@@ -8,8 +9,8 @@ export function pillStyle(miniMe?: MiniMe): CSSProperties | undefined {
 }
 
 /**
- * A Mini-Me named inline: its name on a rounded chip in its tint with ink text. `children` is
- * the text shown, so a mention keeps the label it was sent with.
+ * A Mini-Me named inline: its avatar and name on a rounded chip in its tint with ink text.
+ * `children` is the text shown, so a mention keeps the label it was sent with.
  */
 export function MiniMePill({
   miniMe,
@@ -23,13 +24,14 @@ export function MiniMePill({
   return (
     <span
       className={cn(
-        "inline-flex h-6 items-center rounded-full px-2 align-baseline text-[13px]",
+        "inline-flex h-6 items-center gap-1 rounded-full pr-2 pl-[3px] align-baseline text-[13px]",
         "whitespace-nowrap",
         !miniMe && "bg-muted text-ink-2",
         className,
       )}
       style={pillStyle(miniMe)}
     >
+      <MiniMeAvatar miniMe={miniMe} size={16} />
       {children}
     </span>
   );

@@ -7,6 +7,7 @@ import type {
   AssetRef,
   KeyAccount,
   ConversationSummary,
+  FileEntry,
   Message,
   MiniMe,
   ProjectSummary,
@@ -82,6 +83,8 @@ export const api = {
   importAssets: (project_id: Uuid) => invoke<AssetRef[]>("import_assets", { project_id }),
   listAssets: (project_id: Uuid, query: string) =>
     invoke<AssetRef[]>("list_assets", { project_id, query }),
+  /** Every Asset of the Project, newest first, with who added it and where it is used. */
+  listProjectFiles: (project_id: Uuid) => invoke<FileEntry[]>("list_project_files", { project_id }),
   openAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("open_asset", { project_id, asset_id }),
 

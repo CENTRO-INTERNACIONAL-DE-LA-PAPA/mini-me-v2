@@ -58,6 +58,16 @@ pub struct MiniMeColors {
     pub ink: String,
 }
 
+/// The parts a Mini-Me's avatar is drawn from, named by the UI's avatar part files. The body
+/// takes the Mini-Me's `solid` colour and the freckles its `ink`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MiniMeAvatar {
+    pub base: String,
+    pub face: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessory: Option<String>,
+}
+
 /// A node in a Workflow: a Trait Step or a control Step. In JSON a Step without `type` is a
 /// Trait Step.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -191,6 +201,7 @@ pub struct MiniMe {
     pub name: String,
     pub description: String,
     pub colors: MiniMeColors,
+    pub avatar: MiniMeAvatar,
     pub group: MiniMeGroup,
     pub workflow: Workflow,
 }
@@ -202,6 +213,7 @@ pub struct MiniMeSummary {
     pub name: String,
     pub description: String,
     pub colors: MiniMeColors,
+    pub avatar: MiniMeAvatar,
     pub group: MiniMeGroup,
 }
 
@@ -242,6 +254,7 @@ impl Library {
                 name: m.name.clone(),
                 description: m.description.clone(),
                 colors: m.colors.clone(),
+                avatar: m.avatar.clone(),
                 group: m.group,
             })
             .collect()

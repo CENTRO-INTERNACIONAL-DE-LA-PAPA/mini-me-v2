@@ -13,13 +13,19 @@ function TooltipContent({
   className,
   side = "top",
   sideOffset = 6,
+  align = "center",
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
-  Pick<TooltipPrimitive.Positioner.Props, "side" | "sideOffset">) {
+  Pick<TooltipPrimitive.Positioner.Props, "align" | "side" | "sideOffset">) {
   return (
     <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Positioner side={side} sideOffset={sideOffset} className="isolate z-50">
+      <TooltipPrimitive.Positioner
+        side={side}
+        sideOffset={sideOffset}
+        align={align}
+        className="isolate z-50"
+      >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
