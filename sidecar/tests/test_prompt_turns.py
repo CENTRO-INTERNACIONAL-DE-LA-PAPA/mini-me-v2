@@ -1,6 +1,7 @@
 from mini_me_sidecar.adapters.prompt import (
     FILES_RULE,
     REPLY_RULE,
+    RESEARCH_CONTEXT,
     _filtered,
     _material,
     _merged,
@@ -32,7 +33,14 @@ def test_a_later_step_is_told_it_is_part_of_a_workflow():
     assert "one Step of Investigator's Workflow" in prompt
     assert prompt.endswith("Design an experiment.")
     alone = _system_prompt("Scribe", False, "Summarize.")
-    assert alone == f"You are Scribe, a Mini-Me. {REPLY_RULE} {FILES_RULE}\n\nSummarize."
+    assert alone == (
+        f"You are Scribe, a Mini-Me. {RESEARCH_CONTEXT} {REPLY_RULE} {FILES_RULE}\n\nSummarize."
+    )
+
+
+def test_every_call_says_it_serves_agricultural_research():
+    assert _system_prompt(None, False, "Design an experiment.").startswith(RESEARCH_CONTEXT)
+    assert RESEARCH_CONTEXT in _system_prompt("Experimenter", True, "Design an experiment.")
 
 
 def test_a_content_filter_or_refusal_ending_is_recognised():

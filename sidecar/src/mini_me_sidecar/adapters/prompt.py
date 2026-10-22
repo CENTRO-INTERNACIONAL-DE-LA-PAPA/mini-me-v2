@@ -25,6 +25,16 @@ from mini_me_sidecar.tools import READ_TOOLS
 
 MAX_MATERIAL_CHARS = 400_000
 
+# Told to the model on every call: who it works for, since some Traits' instructions (such as
+# Experiment's) name only their task. It gives context and is no way past a provider's safety
+# filter: some models still decline plant-pathogen requests with it.
+RESEARCH_CONTEXT = (
+    "You work for scientists at the International Potato Center (CIP), a CGIAR research "
+    "centre. Their work is agricultural research on potato, sweetpotato and other root and "
+    "tuber crops: breeding, agronomy, soil and climate, food security, and plant health, "
+    "including plant diseases, their pathogens and pests and how to control them."
+)
+
 # Told to the model before every Trait's instructions. Introduced by name alone, models tend
 # to open with a title restating the request ("Skeptic's response to …").
 REPLY_RULE = (
@@ -342,10 +352,11 @@ async def _earlier_turns(ctx: CallContext) -> list[tuple[str, str]]:
 
 
 def _system_prompt(mini_me_name: str | None, in_workflow: bool, instructions: str | None) -> str:
-    """The system prompt: who the model is, how to reply, then the Trait's instructions."""
-    preamble = REPLY_RULE
+    """The system prompt: who the model is and works for, how to reply, then the Trait's
+    instructions."""
+    preamble = f"{RESEARCH_CONTEXT} {REPLY_RULE}"
     if mini_me_name:
-        preamble = f"You are {mini_me_name}, a Mini-Me. {REPLY_RULE}"
+        preamble = f"You are {mini_me_name}, a Mini-Me. {preamble}"
         if in_workflow:
             preamble += " " + WORKFLOW_RULE.format(name=mini_me_name)
     elif in_workflow:

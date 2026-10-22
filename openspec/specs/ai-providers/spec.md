@@ -113,6 +113,18 @@ This holds for every Trait the adapter runs, with or without a `mini_me_name`.
 - **THEN** Skeptic's reply starts with its argument, not with a title such as "Skeptic's
   response to "the sky is blue""
 
+### Requirement: The model knows whose research it serves
+The prompt adapter's system prompt SHALL say, before the Trait's instructions, that the model
+works for scientists at the International Potato Center (CIP) on agricultural research,
+including plant diseases, their pathogens and pests. This holds for every Trait the adapter
+runs, with or without a `mini_me_name`. The user's message SHALL NOT be changed to get past a
+provider's safety filter.
+
+#### Scenario: Experiment call
+- **WHEN** Experimenter's *Experiment* Trait runs
+- **THEN** its system prompt says it works for CIP scientists on agricultural research,
+  before *Experiment*'s instructions
+
 ### Requirement: Earlier Step outputs in the prompt
 When a prompt adapter call has earlier Step outputs, it SHALL send them to the model after
 the Conversation's earlier messages and before the call's material, as one user turn that
