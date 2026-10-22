@@ -26,6 +26,10 @@ const STATUS_LABEL: Record<string, string | undefined> = {
 interface Props {
   projectId: string;
   message: MessageView;
+  /** Opens or closes this reply's Workflow steps beside the Conversation. */
+  onToggleSteps?: (messageId: string) => void;
+  /** Whether those steps are open. */
+  stepsShown?: boolean;
 }
 
 /** The author's name, and the Mini-Me when the author is a known one. */
@@ -44,7 +48,12 @@ function author(message: MessageView, miniMes: MiniMe[]): { name: string; miniMe
 
 // Memoised: the Conversation's state keeps each unchanged message the same object, so only
 // the messages an event changed render again.
-export const MessageItem = memo(function MessageItem({ projectId, message }: Props) {
+export const MessageItem = memo(function MessageItem({
+  projectId,
+  message,
+  onToggleSteps,
+  stepsShown = false,
+}: Props) {
   const [error, setError] = useState<string | null>(null);
   const miniMes = useMiniMes();
   const { name, miniMe: authorMiniMe } = author(message, miniMes);
@@ -197,6 +206,8 @@ export const MessageItem = memo(function MessageItem({ projectId, message }: Pro
           components={message.components}
           replyStatus={message.status}
           color={authorMiniMe?.colors.solid}
+          onShowSteps={onToggleSteps && (() => onToggleSteps(message.id))}
+          stepsShown={stepsShown}
         />
       )}
       {message.author.kind === "mini_me" ? (

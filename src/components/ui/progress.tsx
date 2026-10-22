@@ -1,0 +1,82 @@
+import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
+import { cn } from "@/lib/utils"
+
+// `color` fills the bar, such as a Mini-Me's solid for its own work; ink when left out.
+function Progress({
+  className,
+  children,
+  value,
+  color,
+  ...props
+}: ProgressPrimitive.Root.Props & { color?: string }) {
+  return (
+    <ProgressPrimitive.Root
+      value={value}
+      data-slot="progress"
+      className={cn("flex flex-wrap gap-3", className)}
+      {...props}
+    >
+      {children}
+      <ProgressTrack>
+        <ProgressIndicator style={color ? { backgroundColor: color } : undefined} />
+      </ProgressTrack>
+    </ProgressPrimitive.Root>
+  )
+}
+
+function ProgressTrack({ className, ...props }: ProgressPrimitive.Track.Props) {
+  return (
+    <ProgressPrimitive.Track
+      className={cn(
+        "relative flex h-[3px] w-full items-center overflow-x-hidden rounded-full bg-border",
+        className
+      )}
+      data-slot="progress-track"
+      {...props}
+    />
+  )
+}
+
+function ProgressIndicator({
+  className,
+  ...props
+}: ProgressPrimitive.Indicator.Props) {
+  return (
+    <ProgressPrimitive.Indicator
+      data-slot="progress-indicator"
+      className={cn("h-full bg-primary transition-all duration-200 ease-out", className)}
+      {...props}
+    />
+  )
+}
+
+function ProgressLabel({ className, ...props }: ProgressPrimitive.Label.Props) {
+  return (
+    <ProgressPrimitive.Label
+      className={cn("text-meta font-medium", className)}
+      data-slot="progress-label"
+      {...props}
+    />
+  )
+}
+
+function ProgressValue({ className, ...props }: ProgressPrimitive.Value.Props) {
+  return (
+    <ProgressPrimitive.Value
+      className={cn(
+        "ml-auto text-meta text-muted-foreground tabular-nums",
+        className
+      )}
+      data-slot="progress-value"
+      {...props}
+    />
+  )
+}
+
+export {
+  Progress,
+  ProgressTrack,
+  ProgressIndicator,
+  ProgressLabel,
+  ProgressValue,
+}

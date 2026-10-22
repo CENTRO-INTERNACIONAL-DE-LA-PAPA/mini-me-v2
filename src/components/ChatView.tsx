@@ -1,11 +1,15 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Button } from "@/components/ui/button";
+import { ActivityIcon, ListTodoIcon } from "lucide-react";
 import { api, errorMessage } from "../api";
 import { ConversationStore } from "../protocol/eventStore";
 import type { ProtocolEvent } from "../protocol/types";
 import { Composer } from "./Composer";
 import { MessageItem } from "./MessageItem";
 import type { MessageView } from "../protocol/eventStore";
+import { PLACEHOLDER_JOBS, PLACEHOLDER_TODOS } from "../placeholders";
 import { MiniMeAvatar } from "./MiniMeAvatar";
+import { JobsPanel, StepsPanel, TodoPanel, type Panel } from "./SidePanels";
 import { useMiniMes } from "./useMiniMes";
 
 interface Props {
@@ -52,6 +56,22 @@ function useConversation(projectId: string, conversationId: string) {
 
 export function ChatView({ projectId, projectName, conversationId, title, onActivity }: Props) {
   const { state, error } = useConversation(projectId, conversationId);
+  const [panel, setPanel] = useState<Panel | null>(null);
+  const toggle = (next: Panel) =>
+    setPanel((current) => (JSON.stringify(current) === JSON.stringify(next) ? null : next));
+  // Stable, so toggling one reply's steps renders only the replies whose state changed.
+  const toggleSteps = useCallback(
+    (messageId: string) =>
+      setPanel((current) =>
+        current?.kind === "steps" && current.messageId === messageId
+          ? null
+          : { kind: "steps", messageId },
+      ),
+    [],
+  );
+  const stepsOf =
+    panel?.kind === "steps" ? state.messages.find((m) => m.id === panel.messageId) : undefined;
+  const openTodos = PLACEHOLDER_TODOS?.filter((t) => !t.done).length ?? 0;
   const bottom = useRef<HTMLDivElement>(null);
   // The message sent from this view, until Mini-Me decides who answers it. Kept in memory
   // only, so reopening a Conversation never shows a stale "Choosing" status.
@@ -74,47 +94,81 @@ export function ChatView({ projectId, projectName, conversationId, title, onActi
   }, [state.messages.length, last, choosing]);
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="flex items-center gap-4 border-b border-border px-8 py-3.5">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-meta text-muted-foreground">{projectName} / Conversation</p>
-          <h1 className="truncate text-header font-bold">{title}</h1>
+    <div className="flex min-h-0 min-w-0 flex-1">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex items-center gap-4 border-b border-border px-8 py-3.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-meta text-muted-foreground">{projectName} / Conversation</p>
+            <h1 className="truncate text-header font-bold">{title}</h1>
+          </div>
+          <Participants messages={state.messages} />
+          {PLACEHOLDER_TODOS && (
+            <Button
+              variant="outline"
+              size="sm"
+              aria-pressed={panel?.kind === "todo"}
+              onClick={() => toggle({ kind: "todo" })}
+            >
+              <ListTodoIcon />
+              To-do
+              <span className="opacity-60">{openTodos}</span>
+            </Button>
+          )}
+          {PLACEHOLDER_JOBS && (
+            <Button
+              variant="outline"
+              size="sm"
+              aria-pressed={panel?.kind === "jobs"}
+              onClick={() => toggle({ kind: "jobs" })}
+            >
+              <ActivityIcon />
+              Background jobs
+            </Button>
+          )}
+        </header>
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
+          {/* DESIGN.md's message-list fade: the list's top edge fades into the workspace. */}
+          <div
+            aria-hidden
+            className="pointer-events-none sticky top-0 z-10 -mb-6 h-6 bg-linear-to-b from-background to-transparent"
+          />
+          <div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 px-8 pt-6 pb-8">
+            {state.messages.map((message) => (
+              <MessageItem
+                key={message.id}
+                projectId={projectId}
+                message={message}
+                onToggleSteps={toggleSteps}
+                stepsShown={stepsOf?.id === message.id}
+              />
+            ))}
+            {choosing && (
+              <p role="status" className="text-meta text-muted-foreground">
+                Choosing a Mini-Me…
+              </p>
+            )}
+            {state.messages.length === 0 && (
+              <p className="p-8 text-center text-muted-foreground">No messages yet.</p>
+            )}
+            <div ref={bottom} />
+          </div>
         </div>
-        <Participants messages={state.messages} />
-      </header>
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
-        {/* DESIGN.md's message-list fade: the list's top edge fades into the workspace. */}
-        <div
-          aria-hidden
-          className="pointer-events-none sticky top-0 z-10 -mb-6 h-6 bg-linear-to-b from-background to-transparent"
+        {error && <p className="px-8 py-2 text-meta text-destructive">{error}</p>}
+        <Composer
+          projectId={projectId}
+          conversationId={conversationId}
+          replying={replying}
+          choosing={choosing}
+          onSent={(message) => {
+            setRouting(message.id);
+            onActivity();
+          }}
         />
-        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 px-8 pt-6 pb-8">
-          {state.messages.map((message) => (
-            <MessageItem key={message.id} projectId={projectId} message={message} />
-          ))}
-          {choosing && (
-            <p role="status" className="text-meta text-muted-foreground">
-              Choosing a Mini-Me…
-            </p>
-          )}
-          {state.messages.length === 0 && (
-            <p className="p-8 text-center text-muted-foreground">No messages yet.</p>
-          )}
-          <div ref={bottom} />
-        </div>
-      </div>
-      {error && <p className="px-8 py-2 text-meta text-destructive">{error}</p>}
-      <Composer
-        projectId={projectId}
-        conversationId={conversationId}
-        replying={replying}
-        choosing={choosing}
-        onSent={(message) => {
-          setRouting(message.id);
-          onActivity();
-        }}
-      />
-    </section>
+      </section>
+      {panel?.kind === "todo" && <TodoPanel onClose={() => setPanel(null)} />}
+      {panel?.kind === "jobs" && <JobsPanel onClose={() => setPanel(null)} />}
+      {stepsOf && <StepsPanel message={stepsOf} onClose={() => setPanel(null)} />}
+    </div>
   );
 }
 

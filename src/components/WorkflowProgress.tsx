@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CheckIcon } from "lucide-react";
 import { useState } from "react";
@@ -5,7 +6,7 @@ import type { Component, MessageStatus, MessageStep } from "../protocol/types";
 import { approvalState } from "./interactive/approval";
 import { Markdown } from "./Markdown";
 
-type StepState = "done" | "running" | "waiting" | "pending";
+export type StepState = "done" | "running" | "waiting" | "pending";
 
 /** How a Step is drawn: done once completed; otherwise running while its reply streams,
  * waiting while the reply waits for an approval, and pending after the reply ended. */
@@ -51,53 +52,80 @@ interface Props {
   replyStatus: MessageStatus;
   /** The Mini-Me's solid colour, for the running Step's spinner. */
   color?: string;
+  /** Opens the Steps as a timeline beside the Conversation, when the view offers one. */
+  onShowSteps?: () => void;
+  /** Whether that timeline is open for this reply. */
+  stepsShown?: boolean;
 }
 
 /** The Steps a reply's Workflow has run, in a row. A done Trait Step opens its output. */
-export function WorkflowProgress({ steps, components, replyStatus, color }: Props) {
+export function WorkflowProgress({
+  steps,
+  components,
+  replyStatus,
+  color,
+  onShowSteps,
+  stepsShown = false,
+}: Props) {
   const [open, setOpen] = useState<number | null>(null);
   const opened = open === null ? null : steps[open];
   const answers = approvalAnswers(steps, components);
 
   return (
     <div className="rounded-[10px] border border-border bg-card px-4 py-3">
-      <ol aria-label="Workflow progress" className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        {steps.map((step, index) => {
-          const state = stepState(step, replyStatus);
-          const decision = step.type === "condition" || step.type === "loop";
-          // A decision's outcome, or an approval's answer.
-          const outcome = step.done ? (decision ? step.output : answers[index]) : undefined;
-          const label = (
-            <>
-              <StepMark state={state} color={color} />
-              <span className={cn("text-ui", state === "pending" && "text-muted-foreground")}>
-                {step.name}
-                {outcome && <span className="text-muted-foreground"> · {outcome}</span>}
-              </span>
-            </>
-          );
-          const openable = step.type === "trait" && step.done && step.output;
-          return (
-            <li key={index} className="flex items-center">
-              {openable ? (
-                <button
-                  className={cn(
-                    "flex cursor-pointer items-center gap-2 rounded-md",
-                    "underline-offset-4 hover:underline",
-                    open === index && "underline",
-                  )}
-                  aria-expanded={open === index}
-                  onClick={() => setOpen(open === index ? null : index)}
-                >
-                  {label}
-                </button>
-              ) : (
-                <span className="flex items-center gap-2">{label}</span>
-              )}
-            </li>
-          );
-        })}
-      </ol>
+      <div className="flex items-start gap-3">
+        <ol
+          aria-label="Workflow progress"
+          className="flex flex-1 flex-wrap items-center gap-x-4 gap-y-2"
+        >
+          {steps.map((step, index) => {
+            const state = stepState(step, replyStatus);
+            const decision = step.type === "condition" || step.type === "loop";
+            // A decision's outcome, or an approval's answer.
+            const outcome = step.done ? (decision ? step.output : answers[index]) : undefined;
+            const label = (
+              <>
+                <StepMark state={state} color={color} />
+                <span className={cn("text-ui", state === "pending" && "text-muted-foreground")}>
+                  {step.name}
+                  {outcome && <span className="text-muted-foreground"> · {outcome}</span>}
+                </span>
+              </>
+            );
+            const openable = step.type === "trait" && step.done && step.output;
+            return (
+              <li key={index} className="flex items-center">
+                {openable ? (
+                  <button
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-md",
+                      "underline-offset-4 hover:underline",
+                      open === index && "underline",
+                    )}
+                    aria-expanded={open === index}
+                    onClick={() => setOpen(open === index ? null : index)}
+                  >
+                    {label}
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-2">{label}</span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+        {onShowSteps && (
+          <Button
+            variant="outline"
+            size="xs"
+            className="shrink-0 rounded-full"
+            aria-pressed={stepsShown}
+            onClick={onShowSteps}
+          >
+            {stepsShown ? "Showing steps" : "Show steps"}
+          </Button>
+        )}
+      </div>
       {opened?.output && (
         <div className="mt-3 border-t border-border pt-3 text-ink-2">
           <Markdown content={opened.output} size="ui" />
@@ -107,7 +135,7 @@ export function WorkflowProgress({ steps, components, replyStatus, color }: Prop
   );
 }
 
-function StepMark({ state, color }: { state: StepState; color?: string }) {
+export function StepMark({ state, color }: { state: StepState; color?: string }) {
   const size = "size-[18px] shrink-0 rounded-full";
   switch (state) {
     case "done":

@@ -34,3 +34,23 @@ export const PLACEHOLDER_NEEDS_YOU = sample([
     action: "Open",
   },
 ]);
+
+/** The To-do panel's tasks: the user's own and ones Mini-Mes hand back. */
+export const PLACEHOLDER_TODOS = sample([
+  { title: "Check the missing replicate for CIP 705240", miniMe: "Validator", done: false },
+  { title: "Approve the 2026 trial design", miniMe: "Investigator", done: false },
+  { title: "Send field notes for plot 14 to Huancayo station", miniMe: null, done: false },
+  { title: "Upload Huancayo 2025 data", miniMe: null, done: true },
+  { title: "Shortlist candidate R-genes", miniMe: null, done: true },
+]);
+
+/** The Background jobs panel: work that runs outside a reply, now, next or on a schedule. */
+export const PLACEHOLDER_JOBS = sample({
+  running: [{ title: "Search and summarise", miniMe: "Researcher", step: "Read 4 papers", progress: 0.5 }],
+  queued: [{ title: "Re-run replicate check with 2024 data", detail: "Starts after the current job" }],
+  scheduled: [{ title: "Pull weather for Huancayo station", detail: "Mondays 06:00 · next in 5 days" }],
+  recent: [
+    { title: "Replicate check", detail: "10:43 · 4.2 s", failed: false },
+    { title: "Translate abstracts to Spanish", detail: "Model not set", failed: true },
+  ],
+});
