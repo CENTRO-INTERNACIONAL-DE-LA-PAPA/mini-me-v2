@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 3;
+pub const SCHEMA_VERSION: i32 = 4;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -103,6 +103,17 @@ CREATE TABLE paused_runs (
     state         TEXT NOT NULL,
     created_at    INTEGER NOT NULL
 );
+"#,
+    r#"
+-- The Project Overview's own state: the summary the user asked for and the component they
+-- featured. Always exactly one row.
+CREATE TABLE overview (
+    id                  INTEGER PRIMARY KEY CHECK (id = 1),
+    summary             TEXT,
+    summary_at          INTEGER,
+    featured_component  TEXT REFERENCES components(id)
+);
+INSERT INTO overview (id) VALUES (1);
 "#,
 ];
 
@@ -204,7 +215,7 @@ mod tests {
             conn.pragma_update(None, "user_version", 2).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), 3);
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
         let tables: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN \
@@ -215,6 +226,27 @@ mod tests {
             .unwrap();
         assert_eq!(tables, 2);
         conn.prepare("SELECT answer FROM components").unwrap();
+    }
+
+    #[test]
+    fn a_version_3_database_gains_an_empty_overview() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..3] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 3).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        let (summary, featured): (Option<String>, Option<String>) = conn
+            .query_row("SELECT summary, featured_component FROM overview", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap();
+        assert_eq!((summary, featured), (None, None));
     }
 
     #[test]

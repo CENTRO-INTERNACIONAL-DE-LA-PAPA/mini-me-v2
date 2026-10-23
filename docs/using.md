@@ -5,6 +5,18 @@ the Ai2 and Typesafe accounts is described in the README's
 [Getting started](../README.md#getting-started), and what each service receives in
 [What leaves your computer](../README.md#what-leaves-your-computer).
 
+## A Project's Overview
+
+Opening a Project shows its **Overview**: when it was last active, how many Conversations it
+has, a summary, a featured output and the latest outputs. **Update summary** asks the AI
+model chosen in Settings for a short summary of what the Project has found and what is still
+open. It sends the text of the Project's messages, newest Conversations first, to that
+model's provider, never file contents, and only when you click it; the summary then stays
+until you update it again. To feature a chart or table, click the pin in its header in a
+reply; the Overview shows it large, and the pin or the × on the Overview removes it. Latest
+outputs lists the tables, charts, papers, theories and files Mini-Mes made, six at first
+and all with **Show all**; a card opens the reply it came from.
+
 ## Asking a Mini-Me
 
 Type `@` in the message box to pick a Mini-Me; the one you mention first answers. Mini-Me

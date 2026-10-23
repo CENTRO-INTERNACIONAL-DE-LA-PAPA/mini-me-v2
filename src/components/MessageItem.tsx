@@ -174,7 +174,7 @@ export const MessageItem = memo(function MessageItem({
 
   if (fromUser) {
     return (
-      <article className="flex max-w-[560px] flex-col items-end gap-1.5 self-end">
+      <article data-message-id={message.id} className="flex max-w-[560px] flex-col items-end gap-1.5 self-end">
         <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] border border-border bg-card px-4 py-3">
           {text}
           {attachments}
@@ -189,7 +189,7 @@ export const MessageItem = memo(function MessageItem({
   }
 
   return (
-    <article className="relative flex flex-col gap-2 text-ink-2">
+    <article data-message-id={message.id} className="relative flex flex-col gap-2 text-ink-2">
       <header className="flex items-center gap-2 text-meta">
         <MiniMeAvatar miniMe={authorMiniMe} size={26} />
         <strong className="text-[14.5px] font-semibold text-foreground">{name}</strong>

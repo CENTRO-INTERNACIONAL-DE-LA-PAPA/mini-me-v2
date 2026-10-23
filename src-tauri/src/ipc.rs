@@ -16,7 +16,9 @@ use crate::conversations::{self, ConversationSummary, SendMessageInput};
 use crate::error::{AppError, AppResult};
 use crate::projects::{self, ProjectSummary};
 use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, OpenedConversation, now_ms};
+use crate::history::HISTORY_BUDGET_CHARS;
 use crate::library::{Library, MiniMeSummary};
+use crate::overview;
 use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{CANCEL_TIMEOUT, Runs};
 use crate::secrets::KeychainSecrets;
@@ -24,6 +26,13 @@ use crate::settings::{AiSettings, Settings};
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
 use crate::updates::{UpdateStatus, Updates};
+
+/// How much of a Project's message text a summary is written from: whole Conversations,
+/// newest first, up to four times the history of one call.
+const SUMMARY_BUDGET_CHARS: usize = HISTORY_BUDGET_CHARS * 4;
+
+/// How long a summary may take; long material can keep the model writing for a while.
+const SUMMARY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 pub struct AppState {
     config_dir: PathBuf,
@@ -499,6 +508,53 @@ pub async fn list_project_files(
     project_id: Uuid,
 ) -> AppResult<Vec<assets::FileEntry>> {
     assets::project_files(&*state.project(project_id)?)
+}
+
+/// The Project Overview: its header, summary, featured component and outputs.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_overview(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+) -> AppResult<overview::Overview> {
+    overview::overview(&*state.project(project_id)?)
+}
+
+/// Features a chart or table on the Overview, or clears the featured component with `null`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn feature_component(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    component_id: Option<Uuid>,
+) -> AppResult<()> {
+    overview::feature(&*state.project(project_id)?, component_id)
+}
+
+/// Asks the model chosen in Settings to summarise the Project's Conversations and saves the
+/// summary. On any failure the previous summary stays. Returns the updated Overview.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn update_overview_summary(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+) -> AppResult<overview::Overview> {
+    let project = state.project(project_id)?;
+    let model = state
+        .settings()
+        .ai
+        .model()
+        .ok_or_else(|| AppError::new("model_not_set", "Choose an AI model in Settings first."))?;
+    let material =
+        overview::summary_material(&project, state.routing.library(), SUMMARY_BUDGET_CHARS)?;
+    if material.is_empty() {
+        return Err(AppError::invalid_input("There are no messages to summarise yet."));
+    }
+    let runs = Arc::clone(&state.runs);
+    let text = tauri::async_runtime::spawn_blocking(move || {
+        runs.summarize(model, material, SUMMARY_TIMEOUT)
+    })
+    .await
+    .map_err(|e| AppError::new("summary_failed", e.to_string()))??;
+    overview::save_summary(&project, &text, now_ms())?;
+    overview::overview(&project)
 }
 
 #[tauri::command(rename_all = "snake_case")]

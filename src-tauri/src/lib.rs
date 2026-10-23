@@ -8,6 +8,7 @@ mod history;
 mod ipc;
 mod library;
 mod link;
+mod overview;
 mod paths;
 mod projects;
 mod protocol;
@@ -50,6 +51,9 @@ pub fn run() {
             ipc::import_assets,
             ipc::list_assets,
             ipc::list_project_files,
+            ipc::get_overview,
+            ipc::feature_component,
+            ipc::update_overview_summary,
             ipc::open_asset,
             ipc::get_sidecar_status,
             ipc::subscribe_sidecar_status,
