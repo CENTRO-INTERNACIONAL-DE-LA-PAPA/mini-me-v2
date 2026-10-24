@@ -11,7 +11,7 @@ A table's name SHALL be the file name of its `source` without the extension. A t
 comes from no file SHALL be named after its `title`, without a `.csv`, `.tsv` or `.xlsx`
 extension, and one with no title "table". A chart SHALL be named after its `title`, and one
 with no title "chart". Characters other than letters, digits, `-`, `_` and `.` SHALL become
-`-`.
+`-`, and a run of `-` SHALL become one.
 
 #### Scenario: Preview of a file
 - **WHEN** a table's `source` is `field-trial-cleaned.csv`
@@ -29,6 +29,10 @@ with no title "chart". Characters other than letters, digits, `-`, `_` and `.` S
 #### Scenario: Chart
 - **WHEN** Plot shows a chart titled "Yield by variety"
 - **THEN** its name is `Yield-by-variety`
+
+#### Scenario: Title with a dash between spaces
+- **WHEN** Plot shows a chart titled "Blight severity — distribution by variety"
+- **THEN** its name is `Blight-severity-distribution-by-variety`
 
 ### Requirement: Repeated names
 When an earlier table or chart of the same Conversation already has a component's name, the
