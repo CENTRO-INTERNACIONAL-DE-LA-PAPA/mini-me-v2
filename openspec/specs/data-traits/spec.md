@@ -9,11 +9,14 @@ replies with and saves.
 ## Requirements
 
 ### Requirement: Tables a data Trait reads
-A data Trait SHALL read the Assets the message references with `#` or attaches, in that
-order, as tables. CSV (`.csv`), TSV (`.tsv`) and Excel (`.xlsx`) files are supported; the
-format comes from the file name's extension. For a CSV or TSV the first row holds the column
-names. For an Excel file, the Trait reads the sheet named in the message when one matches
-exactly, and otherwise the first sheet, and its reply names the sheet it read. Files are
+A data Trait SHALL read, as tables, the Assets the message references with `#` and the
+tables it references with `$`, in the order they appear in the message, then the Assets it
+attaches. CSV (`.csv`), TSV (`.tsv`) and Excel (`.xlsx`) files are supported; the format
+comes from the file name's extension. For a CSV or TSV the first row holds the column names.
+For an Excel file, the Trait reads the sheet named in the message when one matches exactly,
+and otherwise the first sheet, and its reply names the sheet it read; a `$` reference to a
+table shown from an Excel file reads that table's sheet. A message that references a chart
+with `$` SHALL fail with a message saying the Trait reads tables, naming the chart. Files are
 read through `asset.read` only, so Project-folder confinement holds, and an Asset larger
 than 100 MiB is refused.
 
@@ -28,12 +31,26 @@ than 100 MiB is refused.
   `harvest.xlsx`
 
 #### Scenario: No table
-- **WHEN** the message references no CSV, TSV or Excel file
-- **THEN** the reply fails with a message asking to reference one with `#` or attach it
+- **WHEN** the message references no CSV, TSV or Excel file and no table
+- **THEN** the reply fails with a message asking to reference a file with `#` or a table
+  with `$`, or to attach a file
 
 #### Scenario: Unreadable file
 - **WHEN** a referenced `.csv` cannot be parsed as a table
 - **THEN** the reply fails with a message naming the file and what could not be read
+
+#### Scenario: Table referenced
+- **WHEN** the user sends "@Plotter plot $field-trial-cleaned", a preview of 500 of 12,340
+  rows of `field-trial-cleaned.csv`
+- **THEN** Plot draws from all 12,340 rows of `field-trial-cleaned.csv`
+
+#### Scenario: File and table in order
+- **WHEN** the user sends "@Linker join $plots with #harvest.csv"
+- **THEN** Join Data reads the table `plots` first and `harvest.csv` second
+
+#### Scenario: Chart referenced
+- **WHEN** the user sends "@Profiler $Yield-by-variety"
+- **THEN** the reply fails saying Profiler reads tables and `$Yield-by-variety` is a chart
 
 ### Requirement: What the model sees of the data
 When a data Trait asks the AI model to choose checks, actions or keys, it SHALL send the
