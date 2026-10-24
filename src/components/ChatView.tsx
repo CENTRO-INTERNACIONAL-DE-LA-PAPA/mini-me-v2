@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Button } from "@/components/ui/button";
-import { ActivityIcon, ListTodoIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ActivityIcon, ListTodoIcon, PaperclipIcon } from "lucide-react";
 import { api, errorMessage } from "../api";
 import { ConversationStore } from "../protocol/eventStore";
 import type { ProtocolEvent } from "../protocol/types";
@@ -99,6 +101,29 @@ export function ChatView({
     (target: ReferenceTarget) => composer.current?.appendReference(target),
     [],
   );
+  /** Files are being dragged over the window. */
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    getCurrentWebview()
+      .onDragDropEvent(({ payload }) => {
+        if (payload.type === "enter") {
+          setDragging(payload.paths.length > 0);
+        } else if (payload.type === "leave") {
+          setDragging(false);
+        } else if (payload.type === "drop") {
+          setDragging(false);
+          if (payload.paths.length > 0) composer.current?.attachDropped(payload.paths);
+        }
+      })
+      .then((stop) => (active ? (unlisten = stop) : stop()));
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (decided) {
@@ -129,7 +154,20 @@ export function ChatView({
     <FeaturingProvider projectId={projectId}>
       <ComponentReferencesProvider names={names} append={appendReference}>
         <div className="flex min-h-0 min-w-0 flex-1">
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            {dragging && (
+              <div
+                role="status"
+                className={cn(
+                  "pointer-events-none absolute inset-3 z-20 flex flex-col items-center",
+                  "justify-center gap-2 rounded-2xl border-2 border-dashed border-primary",
+                  "bg-background/90 text-ui font-semibold",
+                )}
+              >
+                <PaperclipIcon aria-hidden className="size-6" />
+                Drop to attach
+              </div>
+            )}
             <header className="flex items-center gap-4 border-b border-border px-8 py-3.5">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-meta text-muted-foreground">

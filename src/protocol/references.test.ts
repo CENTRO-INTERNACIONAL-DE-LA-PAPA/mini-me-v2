@@ -1,23 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  activeQuery,
-  appendReference,
-  assetTarget,
-  caretStep,
-  componentTarget,
-  draftMessage,
-  insertReference,
-  markdownSource,
-  miniMeTarget,
-  miniMeSuggestions,
-  segments,
-  updateReferences,
-  PILL_PAD as P,
-  type DraftReference,
-} from "./references";
-import type { AssetRef, MiniMe } from "./types";
+import { draftFromDoc, markdownSource, miniMeSuggestions, segments } from "./references";
+import type { MiniMe } from "./types";
 
-const asset: AssetRef = { id: "a1", name: "trial.csv", media_type: "text/csv", size_bytes: 10 };
 const scribe: MiniMe = {
   id: "m1",
   name: "Scribe",
@@ -26,140 +10,33 @@ const scribe: MiniMe = {
   avatar: { base: "long", face: "quiet" },
   group: "thinking",
 };
+describe("draftFromDoc", () => {
+  const text = (value: string) => ({ type: "text", text: value });
+  const reference = (attrs: object) => ({ type: "reference", attrs });
+  const paragraph = (...content: object[]) => ({ type: "paragraph", content });
+  const doc = (...content: object[]) => ({ type: "doc", content });
 
-describe("activeQuery", () => {
-  it("finds the #query before the cursor", () => {
-    expect(activeQuery("see #tri", 8)).toEqual({ start: 4, query: "tri", kind: "asset" });
-    expect(activeQuery("#", 1)).toEqual({ start: 0, query: "", kind: "asset" });
-  });
-
-  it("finds the @query for Mini-Mes", () => {
-    expect(activeQuery("hi @scr", 7)).toEqual({ start: 3, query: "scr", kind: "mini_me" });
-    expect(activeQuery("email@host", 10)).toBeNull();
-  });
-
-  it("ignores # inside a word or after a space", () => {
-    expect(activeQuery("issue#3", 7)).toBeNull();
-    expect(activeQuery("see #tri ", 9)).toBeNull();
-  });
-});
-
-describe("$ references", () => {
-  it("finds a $ query", () => {
-    expect(activeQuery("plot $tri", 9)).toEqual({ start: 5, query: "tri", kind: "component" });
-  });
-
-  it("appends a chip after the text, and sends the component's ID", () => {
-    const appended = appendReference("Plot this", [], componentTarget("trial", "c1"));
-    expect(appended.text).toBe(`Plot this ${P}$trial${P}`);
-    const sent = draftMessage(appended.text, appended.references);
-    expect(sent.content).toBe("Plot this $trial");
-    expect(sent.text_components).toEqual([
-      { kind: "component", id: "c1", label: "$trial", start: 10, end: 16 },
-    ]);
-  });
-});
-
-describe("insertReference", () => {
-  it("replaces the query with the padded label and tracks its range", () => {
-    const result = insertReference("see #tri now", [], 4, 8, assetTarget(asset));
-    expect(result.text).toBe(`see ${P}#trial.csv${P} now`);
-    expect(result.references).toEqual([
-      { kind: "asset", id: "a1", label: "#trial.csv", start: 4, end: 16 },
-    ]);
-    expect(result.cursor).toBe(17);
-  });
-
-  it("inserts a Mini-Me mention", () => {
-    const result = insertReference("@Scr summarize", [], 0, 4, miniMeTarget(scribe));
-    expect(result.text).toBe(`${P}@Scribe${P} summarize`);
-    expect(result.references).toEqual([
-      { kind: "mini_me", id: "m1", label: "@Scribe", start: 0, end: 9 },
-    ]);
-  });
-
-  it("adds a space at the end of the text", () => {
-    const result = insertReference("see #tri", [], 4, 8, assetTarget(asset));
-    expect(result.text).toBe(`see ${P}#trial.csv${P} `);
-    expect(result.cursor).toBe(17);
-  });
-
-  it("adds a space before a line break", () => {
-    const result = insertReference("#tri\nnext", [], 0, 4, assetTarget(asset));
-    expect(result.text).toBe(`${P}#trial.csv${P} \nnext`);
-    expect(result.cursor).toBe(13);
-  });
-
-  it("puts the cursor after an existing space", () => {
-    const result = insertReference("@Scr summarize", [], 0, 4, miniMeTarget(scribe));
-    expect(result.cursor).toBe(10);
-  });
-
-  it("shifts references that come after the insertion", () => {
-    const first = insertReference("# and #", [], 6, 7, assetTarget(asset));
-    const second = insertReference(first.text, first.references, 0, 1, assetTarget(asset));
-    expect(second.references.map((r) => [r.start, r.end])).toEqual([
-      [0, 12],
-      [17, 29],
-    ]);
-  });
-});
-
-describe("pills as blocks", () => {
-  const { text, references } = insertReference("ask @Scr", [], 4, 8, miniMeTarget(scribe));
-
-  it("steps the caret over a whole pill", () => {
-    expect(caretStep(references, 13, -1)).toBe(4);
-    expect(caretStep(references, 4, 1)).toBe(13);
-    expect(caretStep(references, 4, -1)).toBe(3);
-  });
-
-  it("sends the text without padding", () => {
-    const second = { ...references[0], start: 21, end: 30 };
-    expect(draftMessage(`${text}hi ${text}`, [references[0], second])).toEqual({
-      content: "ask @Scribe hi ask @Scribe ",
-      text_components: [
-        { kind: "mini_me", id: "m1", label: "@Scribe", start: 4, end: 11 },
-        { kind: "mini_me", id: "m1", label: "@Scribe", start: 19, end: 26 },
-      ],
+  it("puts each reference's label in the text with a Text Component over it", () => {
+    const skeptic = { kind: "mini_me", id: "m1", label: "@Skeptic" };
+    const sent = paragraph(text("Ask "), reference(skeptic), text(" about this"));
+    const draft = draftFromDoc(doc(sent));
+    expect(draft).toEqual({
+      content: "Ask @Skeptic about this",
+      text_components: [{ ...skeptic, start: 4, end: 12 }],
     });
   });
 
-  it("sends a space where padding alone separated a pill from other text", () => {
-    const pill = { kind: "mini_me", id: "m1", label: "@Scribe", start: 0, end: 9 } as const;
-    const file = { kind: "asset", id: "a1", label: "#x", start: 9, end: 13 } as const;
-    expect(draftMessage(`${P}@Scribe${P}hi`, [pill]).content).toBe("@Scribe hi");
-    expect(draftMessage(`${P}@Scribe${P}${P}#x${P}`, [pill, file]).content).toBe("@Scribe #x");
+  it("turns hard breaks and paragraphs into line breaks", () => {
+    const draft = draftFromDoc(
+      doc(paragraph(text("one"), { type: "hardBreak" }, text("two")), paragraph(text("three"))),
+    );
+    expect(draft.content).toBe("one\ntwo\nthree");
   });
 
-  it("keeps narrow spaces that aren't padding", () => {
-    expect(draftMessage(`10${P}kg`, []).content).toBe(`10${P}kg`);
-  });
-
-  it("adds a space before a following pill", () => {
-    const pill = { ...references[0], start: 4, end: 13 };
-    const result = insertReference(`#tri${text.slice(4)}`, [pill], 0, 4, assetTarget(asset));
-    expect(draftMessage(result.text, result.references).content).toBe("#trial.csv @Scribe ");
-    expect(result.cursor).toBe(13);
-  });
-});
-
-describe("updateReferences", () => {
-  const ref: DraftReference = { kind: "asset", id: "a1", label: "#trial.csv", start: 4, end: 14 };
-  const text = "see #trial.csv now";
-
-  it("keeps references before an edit", () => {
-    expect(updateReferences(text, text + "!", [ref])).toEqual([ref]);
-  });
-
-  it("shifts references after an edit", () => {
-    expect(updateReferences(text, "please " + text, [ref])).toEqual([
-      { ...ref, start: 11, end: 21 },
-    ]);
-  });
-
-  it("drops a reference when the edit touches it", () => {
-    expect(updateReferences(text, "see #trial.cv now", [ref])).toEqual([]);
+  it("counts offsets in UTF-16 code units", () => {
+    const trial = { kind: "component", id: "c1", label: "$trial" };
+    const draft = draftFromDoc(doc(paragraph(text("🥔 "), reference(trial))));
+    expect(draft.text_components[0]).toMatchObject({ start: 3, end: 9 });
   });
 });
 

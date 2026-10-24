@@ -20,7 +20,7 @@ function baseName(kind: ComponentName["kind"], data: { source?: unknown; title?:
       : typeof data.source === "string" && data.source
         ? data.source.replace(/\.[^.]*$/, "")
         : title.replace(TABLE_EXTENSION, "") || "table";
-  return name.replace(/[^\p{L}\p{N}._-]/gu, "-");
+  return name.replace(/[^\p{L}\p{N}._-]/gu, "-").replace(/-{2,}/g, "-");
 }
 
 /** The name of each `table` and `chart` component of a Conversation, by component ID, in the

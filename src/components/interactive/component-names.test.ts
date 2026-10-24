@@ -28,7 +28,7 @@ describe("componentNames", () => {
   it("names a chart after its title or 'chart', numbering repeats across tables and charts", () => {
     const messages = [
       reply(["table", { source: "plots.csv" }], ["approval", { title: "Go on?" }]),
-      reply(["chart", { title: "plots" }], ["chart", { title: "Yield by variety" }], ["chart", {}]),
+      reply(["chart", { title: "plots" }], ["chart", { title: "Yield — by variety" }], ["chart", {}]),
     ];
     expect([...componentNames(messages).values()]).toMatchObject([
       { name: "plots", kind: "table" },

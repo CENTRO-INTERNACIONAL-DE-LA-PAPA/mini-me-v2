@@ -20,7 +20,7 @@ mod sidecar;
 mod store;
 mod updates;
 
-use tauri::{Manager, RunEvent};
+use tauri::{DragDropEvent, Manager, RunEvent, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -32,6 +32,13 @@ pub fn run() {
             let state = ipc::AppState::init(app.handle())?;
             app.manage(state);
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) = event {
+                if let Some(state) = window.try_state::<ipc::AppState>() {
+                    state.record_drop(paths.clone());
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             ipc::list_projects,
@@ -49,6 +56,9 @@ pub fn run() {
             ipc::add_reaction,
             ipc::remove_reaction,
             ipc::import_assets,
+            ipc::import_pasted_image,
+            ipc::import_dropped,
+            ipc::read_image_asset,
             ipc::list_assets,
             ipc::list_project_files,
             ipc::get_overview,

@@ -84,6 +84,23 @@ export const api = {
   importAssets: (project_id: Uuid) => invoke<AssetRef[]>("import_assets", { project_id }),
   listAssets: (project_id: Uuid, query: string) =>
     invoke<AssetRef[]>("list_assets", { project_id, query }),
+  /** Imports an image pasted into the composer, sent as raw bytes. */
+  importPastedImage: (project_id: Uuid, image: File) =>
+    image.arrayBuffer().then((bytes) =>
+      invoke<AssetRef>("import_pasted_image", new Uint8Array(bytes), {
+        headers: {
+          "project-id": project_id,
+          "media-type": image.type,
+          name: encodeURIComponent(image.name),
+        },
+      }),
+    ),
+  /** Imports files dropped on the window; the core accepts only the paths of the latest drop. */
+  importDropped: (project_id: Uuid, paths: string[]) =>
+    invoke<AssetRef[]>("import_dropped", { project_id, paths }),
+  /** The bytes of a PNG, JPEG, GIF or WebP Asset, for its thumbnail. */
+  readImageAsset: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<ArrayBuffer>("read_image_asset", { project_id, asset_id }),
   getOverview: (project_id: Uuid) => invoke<Overview>("get_overview", { project_id }),
   /** Features a chart or table on the Overview; `null` clears it. */
   featureComponent: (project_id: Uuid, component_id: Uuid | null) =>
