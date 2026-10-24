@@ -80,6 +80,7 @@ pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
 
 fn validate_text_components(
     state: &ProjectState,
+    conversation_id: Uuid,
     content: &str,
     components: &[TextComponent],
 ) -> AppResult<()> {
@@ -100,7 +101,23 @@ fn validate_text_components(
             // Mini-Mes are not Project data; `routing::send` checks mentions against the
             // library before the message gets here.
             TextComponentKind::MiniMe => {}
+            TextComponentKind::Component => check_reference(state, conversation_id, component)?,
         }
+    }
+    Ok(())
+}
+
+/// A `$` reference must point to a `table` or `chart` of the same Conversation.
+fn check_reference(
+    state: &ProjectState,
+    conversation_id: Uuid,
+    reference: &TextComponent,
+) -> AppResult<()> {
+    let component = state.conversation_component(conversation_id, reference.id)?.ok_or_else(|| {
+        AppError::not_found("A $ reference points to no table or chart in this Conversation.")
+    })?;
+    if !matches!(component.kind.as_str(), "table" | "chart") {
+        return Err(AppError::invalid_input("A $ reference must point to a table or a chart."));
     }
     Ok(())
 }
@@ -130,7 +147,7 @@ pub fn send_message(
         .iter()
         .map(|id| assets::find(&state, *id))
         .collect::<AppResult<Vec<_>>>()?;
-    validate_text_components(&state, &input.content, &input.text_components)?;
+    validate_text_components(&state, conversation_id, &input.content, &input.text_components)?;
 
     let message = Message {
         id: new_id(),
@@ -739,6 +756,50 @@ mod tests {
                 .code,
             "invalid_input"
         );
+    }
+
+    /// A Conversation with one reply holding a `table`, a `chart` and `theories`; returns
+    /// the Conversation and the three components.
+    fn conversation_with_components(project: &Project) -> (Uuid, [Uuid; 3]) {
+        let conversation = create(project).unwrap().id;
+        let question = send_message(project, conversation, text("profile"), new_id()).unwrap();
+        let reply = start_reply(project, conversation, question.id, echo()).unwrap();
+        let ids = ["table", "chart", "theories"].map(|kind| {
+            add_component(project, reply, (kind, 1, serde_json::json!({}), "t".into())).unwrap()
+        });
+        complete_reply(project, reply).unwrap();
+        (conversation, ids)
+    }
+
+    fn reference(id: Uuid) -> SendMessageInput {
+        let mut input = text("plot $t");
+        input.text_components.push(TextComponent {
+            kind: TextComponentKind::Component,
+            id,
+            label: "$t".to_string(),
+            start: 5,
+            end: 7,
+        });
+        input
+    }
+
+    #[test]
+    fn references_must_point_to_a_table_or_chart_of_the_conversation() {
+        let (_dir, project) = temp_project();
+        let (conversation, [table, chart, theories]) = conversation_with_components(&project);
+        let send = |input| send_message(&project, conversation, input, new_id());
+
+        send(reference(table)).unwrap();
+        send(reference(chart)).unwrap();
+
+        let stored = project.lock().events_after(conversation, 0).unwrap().len();
+        assert_eq!(send(reference(theories)).unwrap_err().code, "invalid_input");
+        assert_eq!(send(reference(new_id())).unwrap_err().code, "not_found");
+        assert_eq!(project.lock().events_after(conversation, 0).unwrap().len(), stored);
+
+        let other = create(&project).unwrap().id;
+        let err = send_message(&project, other, reference(table), new_id()).unwrap_err();
+        assert_eq!(err.code, "not_found");
     }
 
     #[test]

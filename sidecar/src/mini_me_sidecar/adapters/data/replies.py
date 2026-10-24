@@ -2,6 +2,8 @@
 the Trait needs it, compute with the tools, and reply with text, `table` or `chart`
 components and saved files."""
 
+from typing import Any
+
 import pandas as pd
 from pydantic import BaseModel
 
@@ -21,14 +23,20 @@ from mini_me_sidecar.adapters.data.join import join, shared_key
 from mini_me_sidecar.adapters.data.plot import build_chart, chart_text
 from mini_me_sidecar.adapters.data.profile import profile as profile_frame
 from mini_me_sidecar.adapters.data.profile import summary
-from mini_me_sidecar.adapters.data.tables import NO_TABLE, Table, column_type, table_assets, table_file
+from mini_me_sidecar.adapters.data.tables import (
+    NO_TABLE,
+    Table,
+    column_type,
+    table_file,
+    table_sources,
+)
 from mini_me_sidecar.adapters.data.validate import results_frame, run_checks
 from mini_me_sidecar.adapters.data.worker import WORKERS
 from mini_me_sidecar.context import CallContext, TraitError
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import show_chart
 from mini_me_sidecar.tools.files import MAX_FILE_BYTES, save_file
-from mini_me_sidecar.tools.tables import read_table, show_frame
+from mini_me_sidecar.tools.tables import read_reference, read_table, show_frame
 
 
 async def profile(ctx: CallContext, text: str) -> None:
@@ -154,7 +162,12 @@ async def plot(ctx: CallContext, text: str) -> None:
 
 async def read_tables(ctx: CallContext, text: str) -> list[Table]:
     """Every table the call's message points to, in order. Fails when there is none."""
-    tables = [await read_table(ctx, i, name, text) for i, name in table_assets(ctx.message)]
+    tables = [
+        await read_reference(ctx, source.reference)
+        if source.reference is not None
+        else await read_table(ctx, str(source.asset_id), source.name, text)
+        for source in table_sources(ctx.message)
+    ]
     if not tables:
         raise TraitError("no_table", NO_TABLE)
     return tables
@@ -162,14 +175,14 @@ async def read_tables(ctx: CallContext, text: str) -> list[Table]:
 
 async def _save(
     ctx: CallContext, table: Table, frame: pd.DataFrame, suffix: str, csv_only: bool = False
-) -> str | None:
-    """Saves `frame` as a new Asset and returns its name, or None when it is too large."""
+) -> dict[str, Any] | None:
+    """Saves `frame` as a new Asset and returns its `{ asset_id, name }`, or None when it is
+    too large."""
     name, media, data = await WORKERS.run(ctx, table_file, table, frame, suffix, csv_only)
     if len(data) > MAX_FILE_BYTES:
         ctx.write(f"\nThe result is larger than 32 MiB, so `{name}` could not be saved.\n")
         return None
-    await save_file(ctx, name, media, data)
-    return name
+    return await save_file(ctx, name, media, data)
 
 
 def _sheet_note(table: Table) -> str:

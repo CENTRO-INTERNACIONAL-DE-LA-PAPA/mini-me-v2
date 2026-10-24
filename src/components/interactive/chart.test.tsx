@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ChartView } from "./chart";
+import { ComponentReferencesProvider } from "./component-references";
 
 const data = {
   title: "Yield against height",
@@ -29,5 +30,16 @@ describe("chart card", () => {
     expect(html).toContain(">Scatter</button>");
     expect(html).toContain(">Line</button>");
     expect(html).toContain("Sample of 5,000 of 48,210 points");
+  });
+
+  it("has a reference button inside a Conversation", () => {
+    const chart = { id: "c1", name: "Yield-against-height", kind: "chart" as const };
+    const names = new Map([["c1", chart]]);
+    const html = renderToStaticMarkup(
+      <ComponentReferencesProvider names={names} append={() => {}}>
+        <ChartView data={data} componentId="c1" />
+      </ComponentReferencesProvider>,
+    );
+    expect(html).toContain('aria-label="Add $Yield-against-height to the message"');
   });
 });

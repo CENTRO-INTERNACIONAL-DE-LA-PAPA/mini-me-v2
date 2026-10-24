@@ -30,10 +30,10 @@ context: |
   - Step: a node in a Workflow. A Trait Step runs a Trait (the same Trait may appear in
     several Steps); a control Step is an approval, condition, loop or parallel split/join.
     A Mini-Me's Traits are the Traits referenced by its Trait Steps.
-  - Text Component: an inline reference inside a message (@Mini-Me, #asset, #interactive
-    component, #selection within an interactive component). Shown as a chip in the UI and
-    carried as a typed ID reference; when a message reaches a Trait, the backend resolves each
-    reference so the Trait can access the referenced content.
+  - Text Component: an inline reference inside a message (@Mini-Me, #asset, $table or chart
+    Interactive Component). Shown as a chip in the UI and carried as a typed ID reference;
+    when a message reaches a Trait, the backend resolves each reference so the Trait can
+    access the referenced content.
   - Interactive Component: a rich, interactive element attached to an AI message (table,
     chart, diagram, ...). Each kind is a fixed, hand-coded type in a catalogue with a
     versioned spec. Traits emit data/specs for these; they never generate UI code.

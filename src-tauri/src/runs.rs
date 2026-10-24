@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::assets;
+use crate::components;
 use crate::conversations::{self, PausedRun};
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, history, results};
@@ -813,16 +814,7 @@ impl Runs {
             }
             "component.read" => {
                 let p: ComponentReadParams = parse_params(params)?;
-                let component = project
-                    .lock()
-                    .conversation_component(place.conversation_id, p.component_id)?
-                    .ok_or_else(|| AppError::not_found("No such component in this Conversation."))?;
-                Ok(json!({
-                    "kind": component.kind,
-                    "version": component.version,
-                    "data": component.data,
-                    "text": component.text,
-                }))
+                components::read(&project.lock(), place.conversation_id, p.component_id)
             }
             "component.add" => {
                 let p: ComponentAddParams = parse_params(params)?;

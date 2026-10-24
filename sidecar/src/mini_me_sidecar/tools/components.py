@@ -72,8 +72,10 @@ def component_result(component: dict[str, Any], start: int = 0) -> dict[str, Any
             "csv": "".join(lines),
         }
         if data.get("source"):
-            # A preview of a longer table: the full table is in this file.
+            # The file the table was shown from; for a preview, it holds the full table.
             result["source"] = data["source"]
+        if component.get("source_asset_id"):
+            result["source_asset_id"] = component["source_asset_id"]
         return result
     content = json.dumps(data, ensure_ascii=False)
     part = content[start : start + READ_CHARS]

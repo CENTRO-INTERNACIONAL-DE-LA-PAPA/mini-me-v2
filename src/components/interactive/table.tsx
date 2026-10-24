@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Renderers } from "./catalogue";
+import { ReferenceButton, useComponentName } from "./component-references";
 import { FeatureButton, useCanFeature } from "./featuring";
 
 type Cell = string | number | boolean | null;
@@ -67,6 +68,7 @@ export function TableView({
   const { columns, rows, title, total_rows, source } = data as TableData;
   const [sorting, setSorting] = useState<Sorting | null>(initialSorting);
   const canFeature = useCanFeature(componentId);
+  const canReference = useComponentName(componentId) !== undefined;
   const sorted = useMemo(
     () => sortRows(rows, columns[sorting?.column ?? 0]?.type === "number", sorting),
     [rows, columns, sorting],
@@ -77,9 +79,10 @@ export function TableView({
       aria-label={title ?? "Table"}
       className="w-full min-w-0 overflow-hidden rounded-[10px] border border-border bg-card"
     >
-      {(title || canFeature) && (
+      {(title || canFeature || canReference) && (
         <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
           <h3 className="mr-auto text-ui font-semibold">{title}</h3>
+          <ReferenceButton componentId={componentId} />
           <FeatureButton componentId={componentId} />
         </header>
       )}

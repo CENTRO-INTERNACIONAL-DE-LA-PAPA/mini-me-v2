@@ -1,16 +1,21 @@
 import {
   useEffect,
+  useImperativeHandle,
   useRef,
   useState,
   type ClipboardEvent,
   type KeyboardEvent,
+  type Ref,
 } from "react";
 import { api, errorCode, errorMessage } from "../api";
 import {
   activeQuery,
+  appendReference,
   assetTarget,
   caretStep,
+  componentTarget,
   draftMessage,
+  fold,
   insertReference,
   miniMeSuggestions,
   miniMeTarget,
@@ -23,12 +28,21 @@ import {
 } from "../protocol/references";
 import type { AssetRef, Message, MiniMe } from "../protocol/types";
 import { formatSize } from "./format";
+import type { ComponentName } from "./interactive/component-names";
 import { MiniMePill, pillStyle } from "./MiniMePill";
 import { sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
 import { useMiniMes } from "./useMiniMes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowUpIcon, AtSignIcon, HashIcon, PaperclipIcon, SquareIcon } from "lucide-react";
+import {
+  ArrowUpIcon,
+  AtSignIcon,
+  ChartColumnIcon,
+  HashIcon,
+  PaperclipIcon,
+  SquareIcon,
+  Table2Icon,
+} from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -39,16 +53,27 @@ interface Props {
   /** Mini-Me is deciding who answers the last message; sending waits until it has. */
   choosing: boolean;
   onSent: (message: Message) => void;
+  /** The Conversation's tables and charts, newest first, for the `$` list. */
+  components: ComponentName[];
+  ref?: Ref<ComposerHandle>;
+}
+
+/** What the rest of the Conversation can do to the composer. */
+export interface ComposerHandle {
+  /** Adds a reference at the end of the text, leaving the rest and the caret as they are. */
+  appendReference: (target: ReferenceTarget) => void;
 }
 
 /** The typography and box shared by the text box and the layer that draws its pills. */
 const FIELD =
   "px-4 pt-3 pb-1 text-body whitespace-pre-wrap wrap-break-word [scrollbar-gutter:stable]";
 
-/** An entry in the `@` or `#` list. */
+/** An entry in the `@`, `#` or `$` list. */
 interface Suggestion {
   target: ReferenceTarget;
   miniMe?: MiniMe;
+  /** For a `$` entry, what the component is. */
+  kind?: ComponentName["kind"];
 }
 
 /** A picked mention's colours on the layer: the pill's, with a same-coloured shadow for its
@@ -59,7 +84,15 @@ function layerPillStyle(miniMe?: MiniMe) {
   return style && { ...style, boxShadow: `0 0 0 2px ${miniMe!.colors.tint}` };
 }
 
-export function Composer({ projectId, conversationId, replying, choosing, onSent }: Props) {
+export function Composer({
+  projectId,
+  conversationId,
+  replying,
+  choosing,
+  onSent,
+  components,
+  ref,
+}: Props) {
   const [text, setText] = useState("");
   const [references, setReferences] = useState<DraftReference[]>([]);
   const [attachments, setAttachments] = useState<AssetRef[]>([]);
@@ -101,19 +134,47 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
 
   useEffect(() => setHighlight(0), [query?.kind, query?.query]);
 
-  /** The list's sections: a heading (empty for files) and its entries. */
+  const componentSuggestions: Suggestion[] =
+    query?.kind === "component"
+      ? components
+          .filter((c) => fold(c.name).includes(fold(query.query)))
+          .map((c) => ({ target: componentTarget(c.name, c.id), kind: c.kind }))
+      : [];
+
+  /** The list's sections: a heading (empty for files, tables and charts) and its entries. */
   const sections: Array<{ heading: string; entries: Suggestion[] }> =
     query?.kind === "mini_me"
       ? miniMeSuggestions(miniMes, query.query).map((section) => ({
           heading: section.label,
           entries: section.miniMes.map((m) => ({ target: miniMeTarget(m), miniMe: m })),
         }))
-      : assetSuggestions.length > 0
-        ? [{ heading: "", entries: assetSuggestions.map((a) => ({ target: assetTarget(a) })) }]
-        : [];
+      : query?.kind === "component"
+        ? componentSuggestions.length > 0
+          ? [{ heading: "", entries: componentSuggestions }]
+          : []
+        : assetSuggestions.length > 0
+          ? [{ heading: "", entries: assetSuggestions.map((a) => ({ target: assetTarget(a) })) }]
+          : [];
   const suggestions = sections.flatMap((section) => section.entries);
 
-  /** The query at the cursor, unless its `#` or `@` belongs to an existing reference. */
+  useImperativeHandle(
+    ref,
+    () => ({
+      appendReference(target) {
+        const box = input.current;
+        const focused = box !== null && document.activeElement === box;
+        const [start, end] = [box?.selectionStart ?? 0, box?.selectionEnd ?? 0];
+        const result = appendReference(text, references, target);
+        known.current.set(result.text, result.references);
+        setText(result.text);
+        setReferences(result.references);
+        if (focused) requestAnimationFrame(() => box.setSelectionRange(start, end));
+      },
+    }),
+    [text, references],
+  );
+
+  /** The query at the cursor, unless its `#`, `@` or `$` belongs to an existing reference. */
   function queryAt(value: string, cursor: number, refs: DraftReference[]) {
     const found = activeQuery(value, cursor);
     return found && !refs.some((r) => r.start <= found.start && found.start < r.end) ? found : null;
@@ -329,7 +390,13 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
       {suggestions.length > 0 && (
         <div
           role="listbox"
-          aria-label={query?.kind === "mini_me" ? "Mini-Mes" : "Files"}
+          aria-label={
+            query?.kind === "mini_me"
+              ? "Mini-Mes"
+              : query?.kind === "component"
+                ? "Tables and charts"
+                : "Files"
+          }
           className={cn(
             "absolute bottom-full left-8 max-h-80 w-80 overflow-y-auto rounded-xl border",
             "border-border bg-popover p-1 text-popover-foreground shadow-float",
@@ -519,7 +586,8 @@ export function Composer({ projectId, conversationId, replying, choosing, onSent
   );
 }
 
-/** One entry in the `@` or `#` list: a Mini-Me's pill and description, or a file name. */
+/** One entry in the `@`, `#` or `$` list: a Mini-Me's pill and description, a table's or
+ * chart's name, or a file name. */
 function SuggestionRow({
   suggestion,
   selected,
@@ -558,6 +626,15 @@ function SuggestionRow({
             {suggestion.miniMe.description}
           </span>
         </>
+      ) : suggestion.kind ? (
+        <span className="flex items-center gap-1.5 text-ui">
+          {suggestion.kind === "chart" ? (
+            <ChartColumnIcon aria-label="Chart" className="size-3.5 shrink-0" />
+          ) : (
+            <Table2Icon aria-label="Table" className="size-3.5 shrink-0" />
+          )}
+          {suggestion.target.label}
+        </span>
       ) : (
         <span className="text-ui">{suggestion.target.label}</span>
       )}

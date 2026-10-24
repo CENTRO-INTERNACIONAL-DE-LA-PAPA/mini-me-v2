@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo, useReducer } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Renderers, RendererProps } from "./catalogue";
+import { ReferenceButton } from "./component-references";
 import { FeatureButton } from "./featuring";
 import {
   chartReducer,
@@ -55,6 +56,7 @@ export function ChartView({
             ))}
           </div>
         )}
+        <ReferenceButton componentId={componentId} />
         <FeatureButton componentId={componentId} />
       </header>
       <div className="px-4 pt-3 pb-2">

@@ -42,6 +42,8 @@ pub struct ResultComponent {
     pub message_id: Uuid,
     /// The name of the Mini-Me whose reply holds the component.
     pub author: String,
+    /// Whether the call's own user message references the component with `$`.
+    pub current: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -95,8 +97,9 @@ pub fn history(messages: &[Message], before: Uuid, library: &Library, budget: us
 /// The Assets and components a call can see: those of `messages` (a whole Conversation in
 /// creation order) up to and including its reply `reply`, newest first, at most `MAX_RESULTS`
 /// of each, each Asset once. The Assets of the call's user message `answers` and of `reply`
-/// are `current`. `find_asset` looks up an Asset that a message references by `#`, since a
-/// reference carries only its ID and label.
+/// are `current`, and so are the components `answers` references with `$`. `find_asset`
+/// looks up an Asset that a message references by `#`, since a reference carries only its ID
+/// and label.
 pub fn results(
     messages: &[Message],
     answers: Uuid,
@@ -109,6 +112,14 @@ pub fn results(
         .position(|m| m.id == reply)
         .or_else(|| messages.iter().position(|m| m.id == answers))
         .map_or(messages.len(), |i| i + 1);
+    let referenced: HashSet<Uuid> = messages
+        .iter()
+        .find(|m| m.id == answers)
+        .into_iter()
+        .flat_map(|m| &m.text_components)
+        .filter(|c| c.kind == TextComponentKind::Component)
+        .map(|c| c.id)
+        .collect();
     let mut seen = HashSet::new();
     let mut assets = Vec::new();
     let mut components = Vec::new();
@@ -148,6 +159,7 @@ pub fn results(
                     version: component.version,
                     message_id: message.id,
                     author: author.clone(),
+                    current: referenced.contains(&component.id),
                 }
             }));
         }
@@ -337,10 +349,15 @@ mod tests {
         let older = table(&mut reply);
         let newer = table(&mut reply);
         let notes = asset("notes.txt");
-        let mut current = user("again #trial.csv and #notes.txt");
-        for (id, label) in [(trial.id, "#trial.csv"), (notes.id, "#notes.txt")] {
+        let mut current = user("again #trial.csv and #notes.txt with $older");
+        let references = [
+            (TextComponentKind::Asset, trial.id, "#trial.csv"),
+            (TextComponentKind::Asset, notes.id, "#notes.txt"),
+            (TextComponentKind::Component, older, "$older"),
+        ];
+        for (kind, id, label) in references {
             current.text_components.push(crate::protocol::TextComponent {
-                kind: TextComponentKind::Asset,
+                kind,
                 id,
                 label: label.into(),
                 start: 0,
@@ -357,8 +374,8 @@ mod tests {
         let names: Vec<(&str, bool)> =
             results.assets.iter().map(|a| (a.asset.name.as_str(), a.current)).collect();
         assert_eq!(names, [("trial.csv", true), ("notes.txt", true)]);
-        let ids: Vec<Uuid> = results.components.iter().map(|c| c.id).collect();
-        assert_eq!(ids, [newer, older]);
+        let ids: Vec<(Uuid, bool)> = results.components.iter().map(|c| (c.id, c.current)).collect();
+        assert_eq!(ids, [(newer, false), (older, true)]);
         assert_eq!(results.components[0].author, "Scribe");
     }
 
