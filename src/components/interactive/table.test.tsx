@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { ComponentReferencesProvider } from "./component-references";
 import { TableView } from "./table";
 
 const data = {
@@ -50,5 +51,17 @@ describe("table version 1", () => {
     expect(html).toContain("Showing 3 of 12,340 rows");
     expect(html).toContain("trial-cleaned.csv");
     expect(renderToStaticMarkup(<TableView data={data} />)).not.toContain("Showing");
+  });
+
+  it("has a reference button inside a Conversation only", () => {
+    const names = new Map([["t1", { id: "t1", name: "trial", kind: "table" as const }]]);
+    const html = renderToStaticMarkup(
+      <ComponentReferencesProvider names={names} append={() => {}}>
+        <TableView data={data} componentId="t1" />
+      </ComponentReferencesProvider>,
+    );
+    expect(html).toContain('aria-label="Add $trial to the message"');
+    const outside = renderToStaticMarkup(<TableView data={data} componentId="t1" />);
+    expect(outside).not.toContain("<header");
   });
 });

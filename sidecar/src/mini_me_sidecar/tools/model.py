@@ -89,8 +89,10 @@ MODEL_TOOLS: dict[str, ModelTool] = {
             description=(
                 "Reads one of the Conversation's Interactive Components by its ID: a table's "
                 "columns and its rows as CSV, or another component's data as JSON, up to "
-                "100,000 characters. When `more` is true, read again from a later `start` "
-                "(a row number for tables, a character position for other components)."
+                "100,000 characters. A table shown from a file names its `source_asset_id`; "
+                "read that file with read_file when you need rows past those the table "
+                "holds. When `more` is true, read again from a later `start` (a row number "
+                "for tables, a character position for other components)."
             ),
             parameters={
                 "type": "object",

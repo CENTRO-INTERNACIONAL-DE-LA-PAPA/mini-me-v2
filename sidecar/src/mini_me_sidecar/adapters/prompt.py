@@ -123,7 +123,7 @@ class Prompt(Adapter):
                 "input_too_large",
                 f"This is {len(text):,} characters; the limit is {MAX_MATERIAL_CHARS:,}.",
             )
-        material = _material(text, await ctx.results())
+        material = _material(text, await ctx.results(), ctx.message)
         earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []
         key = await ctx.secret(model.provider)
         instructions = _system_prompt(ctx.mini_me_name, bool(ctx.steps), ctx.trait.instructions)
@@ -302,9 +302,11 @@ def _tools_error(error: Exception, model: Model) -> TraitError | None:
     )
 
 
-def _material(text: str, results: dict[str, Any]) -> str:
+def _material(
+    text: str, results: dict[str, Any], message: dict[str, Any] | None = None
+) -> str:
     """The user prompt: `text`, then the Conversation's files and components with their IDs,
-    newest first, without their content."""
+    newest first, and the components `message` references with `$`, all without their content."""
     files = (results.get("assets") or [])[:MAX_LISTED]
     components = (results.get("components") or [])[:MAX_LISTED]
     parts = [text]
@@ -317,9 +319,24 @@ def _material(text: str, results: dict[str, Any]) -> str:
         parts.append("Files in this Conversation:\n" + "\n".join(lines))
     if components:
         lines = [
-            f"- {c.get('kind')} from {c.get('author')} (ID: {c.get('id')})" for c in components
+            f"- {c.get('kind')} from {c.get('author')} (ID: {c.get('id')})"
+            + (" — in this message" if c.get("current") else "")
+            for c in components
         ]
         parts.append("Interactive Components in this Conversation:\n" + "\n".join(lines))
+    references = [
+        c for c in (message or {}).get("text_components") or [] if c.get("kind") == "component"
+    ]
+    if references:
+        kinds = {c.get("id"): c.get("kind") for c in results.get("components") or []}
+        lines = [
+            f"- {c.get('label')}: the {kinds.get(c.get('id'), 'component')} with ID {c.get('id')}"
+            for c in references
+        ]
+        parts.append(
+            "Components referenced in this message, to read with read_component:\n"
+            + "\n".join(lines)
+        )
     return "\n\n".join(p for p in parts if p)
 
 

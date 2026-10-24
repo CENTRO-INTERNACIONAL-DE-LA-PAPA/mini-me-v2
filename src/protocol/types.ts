@@ -26,7 +26,7 @@ export interface AssetRef {
 
 /** `start` and `end` are UTF-16 code unit offsets, i.e. plain JavaScript string indices. */
 export interface TextComponent {
-  kind: "asset" | "mini_me";
+  kind: "asset" | "mini_me" | "component";
   id: Uuid;
   label: string;
   start: number;

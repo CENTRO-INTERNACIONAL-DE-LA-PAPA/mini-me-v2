@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   activeQuery,
+  appendReference,
   assetTarget,
   caretStep,
+  componentTarget,
   draftMessage,
   insertReference,
   markdownSource,
@@ -39,6 +41,22 @@ describe("activeQuery", () => {
   it("ignores # inside a word or after a space", () => {
     expect(activeQuery("issue#3", 7)).toBeNull();
     expect(activeQuery("see #tri ", 9)).toBeNull();
+  });
+});
+
+describe("$ references", () => {
+  it("finds a $ query", () => {
+    expect(activeQuery("plot $tri", 9)).toEqual({ start: 5, query: "tri", kind: "component" });
+  });
+
+  it("appends a chip after the text, and sends the component's ID", () => {
+    const appended = appendReference("Plot this", [], componentTarget("trial", "c1"));
+    expect(appended.text).toBe(`Plot this ${P}$trial${P}`);
+    const sent = draftMessage(appended.text, appended.references);
+    expect(sent.content).toBe("Plot this $trial");
+    expect(sent.text_components).toEqual([
+      { kind: "component", id: "c1", label: "$trial", start: 10, end: 16 },
+    ]);
   });
 });
 

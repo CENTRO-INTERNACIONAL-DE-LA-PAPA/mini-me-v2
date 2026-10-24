@@ -2,8 +2,9 @@ import type { AssetRef, MiniMe, MiniMeGroup, TextComponent } from "./types";
 
 export type ReferenceKind = TextComponent["kind"];
 
-/** A `#` file reference or an `@` Mini-Me mention inside the composer text. Offsets are
- * JavaScript string indices, and the range holds the label with a `PILL_PAD` on each side. */
+/** A `#` file reference, an `@` Mini-Me mention or a `$` table or chart reference inside the
+ * composer text. Offsets are JavaScript string indices, and the span holds the label with a
+ * `PILL_PAD` on each side. */
 export interface DraftReference {
   kind: ReferenceKind;
   id: string;
@@ -27,6 +28,13 @@ export const miniMeTarget = (miniMe: MiniMe): ReferenceTarget => ({
   label: `@${miniMe.name}`,
 });
 
+/** A `$` reference to the table or chart `componentId`, which goes by `name`. */
+export const componentTarget = (name: string, componentId: string): ReferenceTarget => ({
+  kind: "component",
+  id: componentId,
+  label: `$${name}`,
+});
+
 /**
  * The narrow space on each side of a picked reference in the composer text. It pads the pill
  * drawn behind the text box while keeping the text and the caret aligned with it, and is
@@ -35,17 +43,18 @@ export const miniMeTarget = (miniMe: MiniMe): ReferenceTarget => ({
  */
 export const PILL_PAD = "\u202f";
 
-/** The `#query` or `@query` being typed right before the cursor, if any. */
+/** The `#query`, `@query` or `$query` being typed right before the cursor, if any. */
 export function activeQuery(
   text: string,
   cursor: number,
 ): { start: number; query: string; kind: ReferenceKind } | null {
-  const match = /(^|\s)([#@])([^\s#@]*)$/.exec(text.slice(0, cursor));
+  const match = /(^|\s)([#@$])([^\s#@$]*)$/.exec(text.slice(0, cursor));
   if (!match) {
     return null;
   }
   const start = cursor - match[3].length - 1;
-  return { start, query: match[3], kind: match[2] === "#" ? "asset" : "mini_me" };
+  const kind = match[2] === "#" ? "asset" : match[2] === "@" ? "mini_me" : "component";
+  return { start, query: match[3], kind };
 }
 
 /**
@@ -70,6 +79,24 @@ export function insertReference(
     text: nextText,
     references: [...shifted, reference].sort((a, b) => a.start - b.start),
     cursor: reference.end + 1,
+  };
+}
+
+/**
+ * Adds the target's padded label at the end of `text`, after a space unless the text is
+ * empty or already ends in whitespace, and records the reference.
+ */
+export function appendReference(
+  text: string,
+  references: DraftReference[],
+  target: ReferenceTarget,
+): { text: string; references: DraftReference[] } {
+  const spacer = text === "" || /\s$/.test(text) ? "" : " ";
+  const start = text.length + spacer.length;
+  const padded = PILL_PAD + target.label + PILL_PAD;
+  return {
+    text: text + spacer + padded,
+    references: [...references, { ...target, start, end: start + padded.length }],
   };
 }
 
@@ -181,7 +208,7 @@ export const MINI_ME_GROUPS: Array<{ group: MiniMeGroup; label: string }> = [
 ];
 
 /** Lowercased, without accents, for matching what the user types against names. */
-const fold = (text: string) =>
+export const fold = (text: string) =>
   text
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")

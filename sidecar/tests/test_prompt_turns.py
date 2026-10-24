@@ -65,6 +65,26 @@ def test_the_conversations_files_and_components_are_listed_without_content():
     assert _material("hello", {"assets": [], "components": []}) == "hello"
 
 
+def test_the_messages_references_are_listed_with_their_kind():
+    table = {"id": "c1", "kind": "table", "author": "Curator", "current": True}
+    chart = {"id": "c2", "kind": "chart", "author": "Plotter", "current": True}
+    results = {"assets": [], "components": [chart, table]}
+    message = {
+        "text_components": [
+            {"kind": "component", "id": "c1", "label": "$trial"},
+            {"kind": "component", "id": "c2", "label": "$Yield-by-variety"},
+            {"kind": "mini_me", "id": "scribe", "label": "@Scribe"},
+        ]
+    }
+    material = _material("summarize these", results, message)
+    assert "- table from Curator (ID: c1) — in this message" in material
+    assert material.endswith(
+        "read_component:\n"
+        "- $trial: the table with ID c1\n"
+        "- $Yield-by-variety: the chart with ID c2"
+    )
+
+
 def test_a_model_without_tool_calling_gets_its_own_error():
     model = Model(provider="openrouter", model="some/model")
     error = _tools_error(Exception("No endpoints found that support tool use"), model)

@@ -17,7 +17,7 @@ from mini_me_sidecar.adapters.data.tables import (
     parse_table,
 )
 from mini_me_sidecar.adapters.data.worker import WORKERS
-from mini_me_sidecar.context import CallContext, TraitError
+from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
 from mini_me_sidecar.tools.base import ToolError, add_component, find_asset
 
 COLUMN_TYPES = ("number", "text", "date", "boolean")
@@ -38,12 +38,37 @@ async def read_table(ctx: CallContext, asset_id: str, name: str, text: str = "")
         raise ToolError(str(error), error.code) from None
 
 
+async def read_reference(ctx: CallContext, reference: dict[str, Any]) -> Table:
+    """The table a `$` reference (a `component` Text Component) points to, named after the
+    table with a `.csv` extension: the file it was shown from when the core names one, else
+    the component's own rows."""
+    label = str(reference.get("label", ""))
+    ctx.progress(f"Reading {label}")
+    try:
+        component = await ctx.read_component(str(reference.get("id")))
+    except CoreRequestError as error:
+        raise ToolError(f"{label} points to no table in this Conversation.", error.code) from None
+    kind = component.get("kind")
+    if kind != "table":
+        trait = ctx.trait.name or "This Trait"
+        raise ToolError(f"{trait} reads tables, and {label} is a {kind}.", "not_a_table")
+    data = component.get("data") or {}
+    source_id = component.get("source_asset_id")
+    if source_id:
+        frame = await _source_frame(ctx, str(source_id), data)
+    else:
+        frame = given_frame(data.get("columns") or [], data.get("rows") or [])
+    return Table(f"{label.removeprefix('$')}.csv", frame)
+
+
 async def show_frame(
-    ctx: CallContext, frame: pd.DataFrame, title: str, source: str | None = None
+    ctx: CallContext, frame: pd.DataFrame, title: str, source: dict[str, Any] | None = None
 ) -> str:
     """Shows `frame` as a table, a preview of its first rows when it is long, and returns
-    the component's ID. `source` names the file that holds the full table."""
-    data = table_data(frame, title=title, source=source)
+    the component's ID. `source` is the saved file holding the table, `{ asset_id, name }`
+    as `save_file` returns it."""
+    file = source or {}
+    data = table_data(frame, title=title, source=file.get("name"), source_id=file.get("asset_id"))
     ctx.progress("Showing a table")
     return await add_component(ctx, "table", data, table_text(data))
 
@@ -65,7 +90,9 @@ async def show_table(
         if not name.lower().endswith(TABLE_EXTENSIONS):
             raise ToolError("Only CSV, TSV and Excel files can be shown as tables.")
         table = await read_table(ctx, asset_id, name)
-        data = table_data(table.frame, title=title or name, source=name)
+        data = table_data(
+            table.frame, title=title or name, source=name, source_id=asset_id, sheet=table.sheet
+        )
     elif columns is not None and rows is not None:
         check_table(columns, rows)
         data = given_table(title, columns, rows)
@@ -78,6 +105,32 @@ async def show_table(
         "rows_shown": len(data["rows"]),
         "total_rows": data.get("total_rows", len(data["rows"])),
     }
+
+
+def given_frame(columns: list[dict[str, Any]], rows: list[list[Any]]) -> pd.DataFrame:
+    """The rows of a `table` component as a DataFrame, each column of its component type."""
+    names = [str(c.get("name")) for c in columns]
+    frame = pd.DataFrame(rows, columns=names, dtype=object)
+    for column, name in zip(columns, names):
+        match column.get("type"):
+            case "number":
+                frame[name] = pd.to_numeric(frame[name])
+            case "date":
+                frame[name] = pd.to_datetime(frame[name])
+            case "boolean":
+                frame[name] = frame[name].astype("boolean")
+    return frame
+
+
+async def _source_frame(ctx: CallContext, asset_id: str, data: dict[str, Any]) -> pd.DataFrame:
+    """The full table of a component's source file, read once per call."""
+    sheet = data.get("sheet")
+    key = ("table", asset_id) if sheet is None else ("table", asset_id, sheet)
+    table = ctx.reads.get(key)
+    if table is None:
+        name = str(data.get("source") or "table.csv")
+        table = ctx.reads[key] = await read_table(ctx, asset_id, name, sheet or "")
+    return table.frame
 
 
 def check_table(columns: list[dict[str, Any]], rows: list[list[Any]]) -> None:

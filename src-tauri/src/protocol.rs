@@ -247,6 +247,8 @@ pub struct Component {
 pub enum TextComponentKind {
     Asset,
     MiniMe,
+    /// A `$` reference to a whole `table` or `chart` Interactive Component.
+    Component,
 }
 
 /// An inline reference inside a message. `start` and `end` are UTF-16 code unit offsets into
@@ -363,6 +365,16 @@ mod tests {
         }))
         .unwrap();
         assert!(message.components.is_empty());
+    }
+
+    #[test]
+    fn a_component_reference_round_trips() {
+        let part = json!({
+            "kind": "component", "id": new_id(), "label": "$trial", "start": 0, "end": 6
+        });
+        let component: TextComponent = serde_json::from_value(part.clone()).unwrap();
+        assert_eq!(component.kind, TextComponentKind::Component);
+        assert_eq!(serde_json::to_value(&component).unwrap(), part);
     }
 
     #[test]
