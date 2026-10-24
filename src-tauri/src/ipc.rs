@@ -44,6 +44,8 @@ pub struct AppState {
     pub sidecar: Arc<Supervisor>,
     pub updates: Arc<Updates>,
     ai2: Arc<Ai2>,
+    /// The paths of the latest drop on the window, as the operating system reported them.
+    dropped: Mutex<Vec<PathBuf>>,
 }
 
 impl AppState {
@@ -99,7 +101,13 @@ impl AppState {
             sidecar,
             updates,
             ai2,
+            dropped: Mutex::new(Vec::new()),
         })
+    }
+
+    /// Remembers the paths of a drop on the window, replacing those of the previous drop.
+    pub fn record_drop(&self, paths: Vec<PathBuf>) {
+        *self.dropped.lock().unwrap_or_else(|p| p.into_inner()) = paths;
     }
 
     fn settings(&self) -> Settings {
@@ -491,6 +499,49 @@ pub async fn import_assets(
         imported.push(assets::import(&project, &path)?);
     }
     Ok(imported)
+}
+
+/// Imports an image pasted into the composer. The bytes are the raw request body; the
+/// headers carry `project-id`, `media-type` and the clipboard's percent-encoded `name`.
+#[tauri::command]
+pub async fn import_pasted_image(
+    state: State<'_, AppState>,
+    request: tauri::ipc::Request<'_>,
+) -> AppResult<AssetRef> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err(AppError::invalid_input("A pasted image is sent as raw bytes."));
+    };
+    let header = |name: &str| {
+        request.headers().get(name).and_then(|value| value.to_str().ok()).unwrap_or_default()
+    };
+    let project_id = Uuid::parse_str(header("project-id"))
+        .map_err(|_| AppError::invalid_input("A pasted image needs its Project."))?;
+    let name = percent_encoding::percent_decode_str(header("name")).decode_utf8_lossy();
+    let media_type = header("media-type");
+    let project = state.project(project_id)?;
+    assets::import_bytes(&project, &assets::pasted_name(&name, media_type), media_type, bytes)
+}
+
+/// Imports files dropped on the window; only paths of the latest drop are accepted.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn import_dropped(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    paths: Vec<PathBuf>,
+) -> AppResult<Vec<AssetRef>> {
+    let dropped = state.dropped.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    assets::import_dropped(&*state.project(project_id)?, &paths, &dropped)
+}
+
+/// The bytes of an image Asset, for its thumbnail in the composer.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn read_image_asset(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<tauri::ipc::Response> {
+    let (_, bytes) = assets::read_image(&*state.project(project_id)?, asset_id)?;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 #[tauri::command(rename_all = "snake_case")]

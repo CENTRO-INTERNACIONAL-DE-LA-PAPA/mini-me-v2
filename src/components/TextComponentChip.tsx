@@ -5,8 +5,8 @@ import type { MiniMe, TextComponent } from "../protocol/types";
 import { useComponentName } from "./interactive/component-references";
 import { MiniMePill } from "./MiniMePill";
 
-/** A Text Component in a message: a Mini-Me's pill, a `$` table or chart chip, or a file chip
- * that opens the file. */
+/** A Text Component: a Mini-Me's pill, a `$` table or chart chip, or a file chip that opens
+ * the file when `onOpenAsset` is given. */
 export function TextComponentChip({
   component,
   miniMes,
@@ -15,7 +15,7 @@ export function TextComponentChip({
 }: {
   component: TextComponent;
   miniMes: MiniMe[];
-  onOpenAsset: (assetId: string) => void;
+  onOpenAsset?: (assetId: string) => void;
   children: ReactNode;
 }) {
   if (component.kind === "mini_me") {
@@ -23,6 +23,13 @@ export function TextComponentChip({
   }
   if (component.kind === "component") {
     return <ComponentChip componentId={component.id}>{children}</ComponentChip>;
+  }
+  if (!onOpenAsset) {
+    return (
+      <Badge variant="secondary" className="align-baseline">
+        {children}
+      </Badge>
+    );
   }
   return (
     <Badge

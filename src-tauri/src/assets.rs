@@ -36,6 +36,36 @@ pub fn import(project: &Project, source: &Path) -> AppResult<AssetRef> {
     register(project, AssetRef { id, name, media_type, size_bytes }, "upload", &rel_path)
 }
 
+/// Imports the files of `paths` that the user dropped on the window. Every path must be one of
+/// `dropped`, the paths the operating system reported for the latest drop, so the UI cannot
+/// name a file of its own; folders are skipped.
+pub fn import_dropped(
+    project: &Project,
+    paths: &[PathBuf],
+    dropped: &[PathBuf],
+) -> AppResult<Vec<AssetRef>> {
+    if let Some(path) = paths.iter().find(|path| !dropped.contains(path)) {
+        return Err(AppError::invalid_input(format!(
+            "{} was not dropped on Mini-Me.",
+            path.display()
+        )));
+    }
+    paths.iter().filter(|path| path.is_file()).map(|path| import(project, path)).collect()
+}
+
+/// Media types every webview the app runs in can draw as an image.
+pub const THUMBNAIL_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+/// The media type and bytes of an image Asset, for its thumbnail. Other media types are
+/// refused.
+pub fn read_image(project: &Project, id: Uuid) -> AppResult<(String, Vec<u8>)> {
+    let asset = find(&project.lock(), id)?;
+    if !THUMBNAIL_TYPES.contains(&asset.media_type.as_str()) {
+        return Err(AppError::invalid_input(format!("{} is not an image.", asset.name)));
+    }
+    Ok((asset.media_type, std::fs::read(file_path(project, id)?)?))
+}
+
 /// Characters Windows does not allow in file names, besides the path separators.
 const FORBIDDEN_IN_NAMES: &[char] = &['<', '>', ':', '"', '|', '?', '*'];
 
@@ -45,7 +75,7 @@ const WINDOWS_DEVICES: &[&str] = &[
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
-/// Refuses a name for a generated Asset that is empty, longer than 255 characters, or could
+/// Refuses a name for a stored Asset that is empty, longer than 255 characters, or could
 /// leave its folder or fail on Windows: `.` or `..`, path separators, control characters, the
 /// characters Windows forbids, a Windows device name, and a trailing dot or space.
 pub fn check_name(name: &str) -> AppResult<()> {
@@ -75,6 +105,45 @@ pub fn write_generated(
     media_type: &str,
     bytes: &[u8],
 ) -> AppResult<AssetRef> {
+    store(project, name, media_type, bytes, "generated")
+}
+
+/// Stores bytes the user pasted as an `upload` Asset named `name`.
+pub fn import_bytes(
+    project: &Project,
+    name: &str,
+    media_type: &str,
+    bytes: &[u8],
+) -> AppResult<AssetRef> {
+    store(project, name, media_type, bytes, "upload")
+}
+
+/// The name of a pasted image: the clipboard's file name when it gives a usable one, else
+/// `Pasted image` with the usual extension of `media_type`.
+pub fn pasted_name(clipboard_name: &str, media_type: &str) -> String {
+    let clipboard_name = clipboard_name.trim();
+    if !clipboard_name.is_empty() && check_name(clipboard_name).is_ok() {
+        return clipboard_name.to_string();
+    }
+    let extension = match media_type {
+        "image/jpeg" => Some("jpg"),
+        other => mime_guess::get_mime_extensions_str(other).and_then(|e| e.first().copied()),
+    };
+    match extension {
+        Some(extension) => format!("Pasted image.{extension}"),
+        None => "Pasted image".to_string(),
+    }
+}
+
+/// Writes `bytes` to a new folder under `assets` and registers them with `source`.
+/// `media_type` falls back to one guessed from the name when empty.
+fn store(
+    project: &Project,
+    name: &str,
+    media_type: &str,
+    bytes: &[u8],
+    source: &str,
+) -> AppResult<AssetRef> {
     check_name(name)?;
     let id = new_id();
     let rel_path = format!("assets/{id}/{name}");
@@ -89,7 +158,7 @@ pub fn write_generated(
         media_type.trim().to_string()
     };
     let asset = AssetRef { id, name: name.to_string(), media_type, size_bytes: bytes.len() as i64 };
-    register(project, asset, "generated", &rel_path).inspect_err(|_| {
+    register(project, asset, source, &rel_path).inspect_err(|_| {
         let _ = remove_files(project, id);
     })
 }
@@ -480,5 +549,59 @@ mod tests {
         assert_eq!(used, [first, second]);
         assert_eq!(entry(unused.id).source, "generated");
         assert!(entry(unused.id).added_by.is_none() && entry(unused.id).used_in.is_empty());
+    }
+
+    #[test]
+    fn a_pasted_image_is_stored_as_an_upload() {
+        let (_dir, project) = temp_project();
+        let name = pasted_name("", "image/png");
+        assert_eq!(name, "Pasted image.png");
+        let asset = import_bytes(&project, &name, "image/png", b"png").unwrap();
+        assert_eq!((asset.name.as_str(), asset.size_bytes), ("Pasted image.png", 3));
+        assert_eq!(std::fs::read(file_path(&project, asset.id).unwrap()).unwrap(), b"png");
+        let source: String = project
+            .lock()
+            .conn
+            .query_row("SELECT source FROM assets WHERE id = ?1", [asset.id.to_string()], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(source, "upload");
+    }
+
+    #[test]
+    fn a_pasted_name_falls_back_when_the_clipboard_gives_none_or_a_bad_one() {
+        assert_eq!(pasted_name("field.jpg", "image/jpeg"), "field.jpg");
+        assert_eq!(pasted_name("what?.png", "image/jpeg"), "Pasted image.jpg");
+        assert_eq!(pasted_name("  ", "image/webp"), "Pasted image.webp");
+        assert_eq!(pasted_name("", "image/x-unknown"), "Pasted image");
+    }
+
+    #[test]
+    fn only_dropped_files_are_imported() {
+        let (dir, project) = temp_project();
+        let file = dir.path().join("plots.csv");
+        std::fs::write(&file, "plot\n1").unwrap();
+        let folder = dir.path().join("photos");
+        std::fs::create_dir(&folder).unwrap();
+        let dropped = [file.clone(), folder.clone()];
+
+        let imported = import_dropped(&project, &dropped, &dropped).unwrap();
+        assert_eq!(imported.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), ["plots.csv"]);
+
+        let other = dir.path().join("secret.txt");
+        std::fs::write(&other, "x").unwrap();
+        let err = import_dropped(&project, &[file, other], &dropped).unwrap_err();
+        assert_eq!(err.code, "invalid_input");
+        assert_eq!(list(&project, None).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn only_images_are_read_for_thumbnails() {
+        let (_dir, project) = temp_project();
+        let image = import_bytes(&project, "field.png", "", b"png").unwrap();
+        let table = import_bytes(&project, "plots.csv", "", b"plot").unwrap();
+        assert_eq!(read_image(&project, image.id).unwrap(), ("image/png".into(), b"png".to_vec()));
+        assert_eq!(read_image(&project, table.id).unwrap_err().code, "invalid_input");
     }
 }

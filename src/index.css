@@ -174,4 +174,20 @@
     svg.lucide {
         stroke-width: 1.4;
     }
+    /* The composer's placeholder, which the editor puts in a `data-placeholder` attribute. */
+    .composer-editor p.is-editor-empty:first-child::before {
+        content: attr(data-placeholder);
+        float: left;
+        height: 0;
+        pointer-events: none;
+        @apply text-muted-foreground;
+    }
+}
+
+/* A chip in the composer stays a box, so the caret is drawn beside it rather than inside it,
+   but no taller than a line of text, so the caret beside it keeps the text's height. Outside
+   the layers, so it wins over the chip's own height. */
+.composer-editor .composer-chip > * {
+    height: 20px;
+    vertical-align: middle;
 }

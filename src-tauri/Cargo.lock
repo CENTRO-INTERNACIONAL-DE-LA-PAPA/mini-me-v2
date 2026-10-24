@@ -2302,6 +2302,7 @@ dependencies = [
  "base64 0.22.1",
  "keyring",
  "mime_guess",
+ "percent-encoding",
  "reqwest",
  "rusqlite",
  "serde",

@@ -1,20 +1,10 @@
+import type { JSONContent } from "@tiptap/core";
 import type { AssetRef, MiniMe, MiniMeGroup, TextComponent } from "./types";
 
 export type ReferenceKind = TextComponent["kind"];
 
-/** A `#` file reference, an `@` Mini-Me mention or a `$` table or chart reference inside the
- * composer text. Offsets are JavaScript string indices, and the span holds the label with a
- * `PILL_PAD` on each side. */
-export interface DraftReference {
-  kind: ReferenceKind;
-  id: string;
-  label: string;
-  start: number;
-  end: number;
-}
-
-/** What a reference points to, before it has a position in the text. */
-export type ReferenceTarget = Pick<DraftReference, "kind" | "id" | "label">;
+/** What a reference points to: the Asset, Mini-Me or component `id`, labelled `label`. */
+export type ReferenceTarget = Pick<TextComponent, "kind" | "id" | "label">;
 
 export const assetTarget = (asset: AssetRef): ReferenceTarget => ({
   kind: "asset",
@@ -36,148 +26,31 @@ export const componentTarget = (name: string, componentId: string): ReferenceTar
 });
 
 /**
- * The narrow space on each side of a picked reference in the composer text. It pads the pill
- * drawn behind the text box while keeping the text and the caret aligned with it, and is
- * stripped before the message is sent. It doesn't allow a line break, so a pill never wraps
- * away from its padding.
+ * The composer's document as a message: its text with each reference's label in place, and a
+ * Text Component over each label. Paragraphs and hard breaks become line breaks.
  */
-export const PILL_PAD = "\u202f";
-
-/** The `#query`, `@query` or `$query` being typed right before the cursor, if any. */
-export function activeQuery(
-  text: string,
-  cursor: number,
-): { start: number; query: string; kind: ReferenceKind } | null {
-  const match = /(^|\s)([#@$])([^\s#@$]*)$/.exec(text.slice(0, cursor));
-  if (!match) {
-    return null;
-  }
-  const start = cursor - match[3].length - 1;
-  const kind = match[2] === "#" ? "asset" : match[2] === "@" ? "mini_me" : "component";
-  return { start, query: match[3], kind };
-}
-
-/**
- * Replaces `text[start..end]` (the typed query) with the target's padded label and records
- * the reference. A space follows it unless the text after it already starts with a space;
- * either way the cursor ends after that space.
- */
-export function insertReference(
-  text: string,
-  references: DraftReference[],
-  start: number,
-  end: number,
-  target: ReferenceTarget,
-): { text: string; references: DraftReference[]; cursor: number } {
-  const padded = PILL_PAD + target.label + PILL_PAD;
-  const spaced = text[end] === " ";
-  const inserted = spaced ? padded : `${padded} `;
-  const nextText = text.slice(0, start) + inserted + text.slice(end);
-  const shifted = updateReferences(text, nextText, references);
-  const reference = { ...target, start, end: start + padded.length };
-  return {
-    text: nextText,
-    references: [...shifted, reference].sort((a, b) => a.start - b.start),
-    cursor: reference.end + 1,
-  };
-}
-
-/**
- * Adds the target's padded label at the end of `text`, after a space unless the text is
- * empty or already ends in whitespace, and records the reference.
- */
-export function appendReference(
-  text: string,
-  references: DraftReference[],
-  target: ReferenceTarget,
-): { text: string; references: DraftReference[] } {
-  const spacer = text === "" || /\s$/.test(text) ? "" : " ";
-  const start = text.length + spacer.length;
-  const padded = PILL_PAD + target.label + PILL_PAD;
-  return {
-    text: text + spacer + padded,
-    references: [...references, { ...target, start, end: start + padded.length }],
-  };
-}
-
-/**
- * Keeps references in step with an edit from `before` to `after`. References entirely before
- * or after the edited region are kept (and shifted); any reference the edit touches is
- * dropped, leaving its text as plain text.
- */
-export function updateReferences(
-  before: string,
-  after: string,
-  references: DraftReference[],
-): DraftReference[] {
-  let prefix = 0;
-  const maxPrefix = Math.min(before.length, after.length);
-  while (prefix < maxPrefix && before[prefix] === after[prefix]) {
-    prefix++;
-  }
-  let suffix = 0;
-  const maxSuffix = Math.min(before.length, after.length) - prefix;
-  while (
-    suffix < maxSuffix &&
-    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
-  ) {
-    suffix++;
-  }
-  const editEnd = before.length - suffix;
-  const delta = after.length - before.length;
-
-  return references.flatMap((ref) => {
-    if (ref.end <= prefix) {
-      return [ref];
-    }
-    if (ref.start >= editEnd) {
-      return [{ ...ref, start: ref.start + delta, end: ref.end + delta }];
-    }
-    return [];
-  });
-}
-
-/** The reference whose pill holds `position` strictly inside it, if any. */
-export function pillAt(references: DraftReference[], position: number): DraftReference | undefined {
-  return references.find((r) => r.start < position && position < r.end);
-}
-
-/** The caret position one step from `position` in `direction`, stepping over a whole pill. */
-export function caretStep(references: DraftReference[], position: number, direction: -1 | 1) {
-  const next = position + direction;
-  const pill = pillAt(references, next);
-  return pill ? (direction < 0 ? pill.start : pill.end) : next;
-}
-
-/**
- * The composer text and its references as sent, offsets shifted to match. Each reference's
- * `PILL_PAD`s are removed, or become a space where one alone separated the label from other
- * text, so the sent text reads as the composer showed it. Other text is kept as typed.
- */
-export function draftMessage(
-  text: string,
-  references: DraftReference[],
-): { content: string; text_components: TextComponent[] } {
-  const sorted = [...references].sort((a, b) => a.start - b.start);
-  const isSpace = (char: string | undefined) =>
-    char !== undefined && char !== PILL_PAD && /\s/.test(char);
+export function draftFromDoc(doc: JSONContent): {
+  content: string;
+  text_components: TextComponent[];
+} {
   let content = "";
-  let position = 0;
-  const text_components = sorted.map(({ kind, id, label, start, end }): TextComponent => {
-    content += text.slice(position, start);
-    if (content !== "" && !isSpace(content[content.length - 1])) {
-      content += " ";
+  const text_components: TextComponent[] = [];
+  (doc.content ?? []).forEach((block, index) => {
+    if (index > 0) content += "\n";
+    for (const node of block.content ?? []) {
+      if (node.type === "text") {
+        content += node.text ?? "";
+      } else if (node.type === "hardBreak") {
+        content += "\n";
+      } else if (node.type === "reference") {
+        const { kind, id, label } = node.attrs as ReferenceTarget;
+        const start = content.length;
+        content += label;
+        text_components.push({ kind, id, label, start, end: content.length });
+      }
     }
-    const from = content.length;
-    content += label;
-    const after = text[end];
-    if (after !== undefined && !isSpace(after)) {
-      content += " ";
-    }
-    position = end;
-    return { kind, id, label, start: from, end: from + label.length };
   });
-  return { content: content + text.slice(position), text_components };
+  return { content, text_components };
 }
 
 /**
