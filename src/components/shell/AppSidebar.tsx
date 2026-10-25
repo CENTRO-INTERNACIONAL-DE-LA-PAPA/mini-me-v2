@@ -30,6 +30,7 @@ import {
   FolderIcon,
   HomeIcon,
   LayoutGridIcon,
+  ChevronRightIcon,
   LeafIcon,
   PlusIcon,
   SettingsIcon,
@@ -37,8 +38,10 @@ import {
 import { PLACEHOLDER_USER } from "../../placeholders";
 import type { ConversationSummary, ProjectSummary } from "../../protocol/types";
 import { formatRelative } from "../format";
+import { MiniMeAvatar } from "../MiniMeAvatar";
 import { SidecarStatusLine, useSidecarStatus } from "../SidecarStatusLine";
 import { UpdateStatusLine } from "../UpdateStatusLine";
+import { useMiniMes } from "../useMiniMes";
 import type { View } from "./view";
 import { Wordmark } from "./Wordmark";
 
@@ -164,6 +167,18 @@ export function AppSidebar({
           <SidecarStatusLine status={sidecar} />
           <UpdateStatusLine />
         </div>
+        <SidebarMenu className="border-t border-sidebar-border pt-3">
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={["library", "mini-me", "trait"].includes(view.kind)}
+              onClick={() => onNavigate({ kind: "library" })}
+            >
+              <AvatarStack />
+              <span className="flex-1">Mini-Mes & Traits</span>
+              <ChevronRightIcon className="text-muted-foreground group-data-active/menu-button:text-current" />
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <div className="flex items-center gap-2.5 border-t border-sidebar-border pt-3 pl-2.5">
           {PLACEHOLDER_USER && (
             <>
@@ -208,6 +223,24 @@ export function AppSidebar({
         </div>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+/** Mini-Mes the Library entry shows, one per group, overlapping by about a quarter. */
+const STACKED = ["Researcher", "Curator", "Planner"];
+
+function AvatarStack() {
+  const miniMes = useMiniMes();
+  const shown = STACKED.map((name) => miniMes.find((m) => m.name === name)).filter(
+    (m) => m !== undefined,
+  );
+  return (
+    // Menu buttons size every svg as an icon; avatar bodies are svgs that fill their box.
+    <span className="flex shrink-0 [&_svg]:size-full!">
+      {shown.map((m, i) => (
+        <MiniMeAvatar key={m.id} miniMe={m} size={18} className={i > 0 ? "-ml-[5px]" : undefined} />
+      ))}
+    </span>
   );
 }
 

@@ -19,6 +19,7 @@ mod settings;
 mod sidecar;
 mod store;
 mod updates;
+mod user_library;
 
 use tauri::{DragDropEvent, Manager, RunEvent, WindowEvent};
 
@@ -69,6 +70,12 @@ pub fn run() {
             ipc::subscribe_sidecar_status,
             ipc::restart_sidecar,
             ipc::list_mini_mes,
+            ipc::list_library,
+            ipc::get_mini_me,
+            ipc::save_mini_me,
+            ipc::save_trait,
+            ipc::delete_mini_me,
+            ipc::delete_trait,
             ipc::get_ai_settings,
             ipc::set_ai_model,
             ipc::save_api_key,

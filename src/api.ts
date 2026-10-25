@@ -7,15 +7,19 @@ import type {
   AssetRef,
   KeyAccount,
   ConversationSummary,
+  LibraryView,
   FileEntry,
   Message,
   MiniMe,
+  MiniMeDefinition,
   Overview,
   ProjectSummary,
   ProtocolEvent,
   ProviderId,
+  SavedDefinition,
   SendMessageInput,
   SidecarStatus,
+  TraitDraft,
   UpdateStatus,
   Uuid,
 } from "./protocol/types";
@@ -124,6 +128,14 @@ export const api = {
   restartSidecar: () => invoke<void>("restart_sidecar"),
 
   listMiniMes: () => invoke<MiniMe[]>("list_mini_mes"),
+  listLibrary: () => invoke<LibraryView>("list_library"),
+  getMiniMe: (id: Uuid) => invoke<MiniMeDefinition>("get_mini_me", { id }),
+  /** Creates the Mini-Me when its `id` is nil, else replaces it. */
+  saveMiniMe: (miniMe: MiniMeDefinition) =>
+    invoke<SavedDefinition>("save_mini_me", { mini_me: miniMe }),
+  saveTrait: (draft: TraitDraft) => invoke<SavedDefinition>("save_trait", { draft }),
+  deleteMiniMe: (id: Uuid) => invoke<LibraryView>("delete_mini_me", { id }),
+  deleteTrait: (id: Uuid) => invoke<LibraryView>("delete_trait", { id }),
 
   getAiSettings: () => invoke<AiSettings>("get_ai_settings"),
   setAiModel: (provider: ProviderId, model: string) =>

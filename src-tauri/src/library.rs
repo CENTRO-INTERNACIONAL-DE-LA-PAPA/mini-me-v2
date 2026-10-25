@@ -1,5 +1,6 @@
 //! The shared Trait library and the Mini-Mes built from it. Definitions are data: the
-//! built-in ones are embedded from `library/builtin.json`.
+//! built-in ones are embedded from `library/builtin.json`, and user-made ones are added by
+//! `user_library`.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -23,8 +24,9 @@ pub const TOOLS: [&str; 8] = [
 /// offered to every prompt-based Trait, so it does not list them.
 pub const MODEL_TOOLS: [&str; 2] = ["save_file", "show_table"];
 
-/// The adapter that offers a Trait's tools to its AI model.
-const PROMPT_ADAPTER: &str = "prompt";
+/// The adapter that offers a Trait's tools to its AI model, and the only one user-made
+/// Traits run on.
+pub const PROMPT_ADAPTER: &str = "prompt";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraitDef {
@@ -215,22 +217,47 @@ pub struct MiniMeSummary {
     pub colors: MiniMeColors,
     pub avatar: MiniMeAvatar,
     pub group: MiniMeGroup,
+    pub built_in: bool,
+}
+
+/// What the UI needs to list, show and edit a Trait.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TraitSummary {
+    pub id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub instructions: Option<String>,
+    pub tools: Vec<String>,
+    pub built_in: bool,
+    /// Whether it runs on the prompt adapter, the only kind a duplicate can be made of.
+    pub prompt_based: bool,
+    /// The Mini-Mes whose Workflows run it.
+    pub used_by: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Library {
-    traits: Vec<TraitDef>,
-    mini_mes: Vec<MiniMe>,
+    pub(crate) traits: Vec<TraitDef>,
+    pub(crate) mini_mes: Vec<MiniMe>,
+    /// The IDs of the built-in definitions; every other entry is user-made.
+    #[serde(skip)]
+    built_in: Vec<Uuid>,
 }
 
 impl Library {
     /// The built-in library. Its content is checked by this module's tests, so parsing it
     /// cannot fail at run time.
     pub fn builtin() -> Self {
-        let library: Self = serde_json::from_str(include_str!("../library/builtin.json"))
+        let mut library: Self = serde_json::from_str(include_str!("../library/builtin.json"))
             .expect("library/builtin.json is valid");
+        library.built_in = library.traits.iter().map(|t| t.id).collect();
+        library.built_in.extend(library.mini_mes.iter().map(|m| m.id));
         debug_assert_eq!(library.problems(), Vec::<String>::new());
         library
+    }
+
+    pub fn is_built_in(&self, id: Uuid) -> bool {
+        self.built_in.contains(&id)
     }
 
     pub fn mini_me(&self, id: Uuid) -> Option<&MiniMe> {
@@ -256,12 +283,36 @@ impl Library {
                 colors: m.colors.clone(),
                 avatar: m.avatar.clone(),
                 group: m.group,
+                built_in: self.is_built_in(m.id),
+            })
+            .collect()
+    }
+
+    /// Every Trait except the placeholders, which no Mini-Me may run.
+    pub fn trait_summaries(&self) -> Vec<TraitSummary> {
+        self.traits
+            .iter()
+            .filter(|t| t.adapter != "echo")
+            .map(|t| TraitSummary {
+                id: t.id,
+                name: t.name.clone(),
+                description: t.description.clone(),
+                instructions: t.instructions.clone(),
+                tools: t.tools.clone(),
+                built_in: self.is_built_in(t.id),
+                prompt_based: t.adapter == PROMPT_ADAPTER,
+                used_by: self
+                    .mini_mes
+                    .iter()
+                    .filter(|m| m.workflow.trait_ids().contains(&t.id))
+                    .map(|m| m.id)
+                    .collect(),
             })
             .collect()
     }
 
     /// Every problem with the definitions, empty when they are consistent.
-    fn problems(&self) -> Vec<String> {
+    pub(crate) fn problems(&self) -> Vec<String> {
         let mut problems = Vec::new();
         let mut ids: Vec<Uuid> = self.traits.iter().map(|t| t.id).collect();
         ids.extend(self.mini_mes.iter().map(|m| m.id));
@@ -271,13 +322,23 @@ impl Library {
         if ids.len() != count {
             problems.push("two definitions share an ID".to_string());
         }
-        for t in &self.traits {
-            let title_case = t
-                .name
-                .split(' ')
-                .all(|word| word.chars().next().is_some_and(char::is_uppercase));
+        for (i, t) in self.traits.iter().enumerate() {
+            let title_case = t.name.split(' ').all(|word| {
+                word.chars().next().is_some_and(|c| c.is_uppercase() || c.is_ascii_digit())
+            });
             if !title_case {
                 problems.push(format!("Trait name {:?} is not in Title Case", t.name));
+            }
+            if self.traits[..i].iter().any(|other| same_name(&other.name, &t.name)) {
+                problems.push(format!("two Traits are named {:?}", t.name));
+            }
+            if !self.is_built_in(t.id) {
+                if t.adapter != PROMPT_ADAPTER {
+                    problems.push(format!("Trait {} is user-made and must run on prompt", t.name));
+                }
+                if t.instructions.as_deref().is_none_or(|i| i.trim().is_empty()) {
+                    problems.push(format!("Trait {} has no instructions", t.name));
+                }
             }
             for tool in &t.tools {
                 if !TOOLS.contains(&tool.as_str()) {
@@ -290,7 +351,16 @@ impl Library {
                 }
             }
         }
-        for m in &self.mini_mes {
+        for (i, m) in self.mini_mes.iter().enumerate() {
+            if m.name.trim().is_empty() {
+                problems.push("a Mini-Me has no name".to_string());
+            } else if self.mini_mes[..i].iter().any(|other| same_name(&other.name, &m.name)) {
+                problems.push(format!("two Mini-Mes are named {:?}", m.name));
+            }
+            // Routing chooses a Mini-Me by its description.
+            if m.description.trim().is_empty() {
+                problems.push(format!("{} has no description", m.name));
+            }
             problems.extend(self.workflow_problems(m));
         }
         if self.mini_me(FALLBACK_MINI_ME).is_none() {
@@ -356,6 +426,11 @@ impl Library {
         }
         problems
     }
+}
+
+/// Whether two names are the same, ignoring case.
+fn same_name(a: &str, b: &str) -> bool {
+    a.to_lowercase() == b.to_lowercase()
 }
 
 fn branch_problems(at: &str, branches: &[Branch]) -> Vec<String> {
@@ -446,6 +521,19 @@ mod tests {
         let problems = library.problems();
         assert!(problems.iter().any(|p| p.contains("cannot list \"show_chart\"")));
         assert!(problems.iter().any(|p| p.contains("unknown tool \"teleport\"")));
+    }
+
+    #[test]
+    fn summaries_mark_built_ins_and_list_the_users_of_a_trait() {
+        let library = Library::builtin();
+        let skeptic = library.summaries().into_iter().find(|m| m.name == "Skeptic").unwrap();
+        assert!(skeptic.built_in);
+        let traits = library.trait_summaries();
+        let refute = traits.iter().find(|t| t.name == "Refute").unwrap();
+        assert!(refute.built_in && refute.prompt_based);
+        assert!(refute.used_by.contains(&skeptic.id));
+        assert!(!traits.iter().find(|t| t.name == "Find Papers").unwrap().prompt_based);
+        assert!(!traits.iter().any(|t| t.name == "Document"));
     }
 
     #[test]
@@ -570,6 +658,52 @@ mod tests {
         assert_eq!(library.mini_me(FALLBACK_MINI_ME).unwrap().name, "Assistant");
         library.mini_mes.retain(|m| m.id != FALLBACK_MINI_ME);
         assert!(library.problems().iter().any(|p| p.contains("fallback Mini-Me is missing")));
+    }
+
+    /// A valid user-made Trait named `name`.
+    pub(crate) fn user_trait(name: &str) -> TraitDef {
+        TraitDef {
+            id: Uuid::now_v7(),
+            name: name.into(),
+            description: "Translates text.".into(),
+            color: "oklch(0.8 0 0)".into(),
+            adapter: PROMPT_ADAPTER.into(),
+            instructions: Some("Translate the message.".into()),
+            tools: vec![],
+        }
+    }
+
+    #[test]
+    fn names_are_unique_and_in_title_case_with_digits() {
+        let mut library = Library::builtin();
+        library.traits.push(user_trait("Plan Copy 2"));
+        assert_eq!(library.problems(), Vec::<String>::new());
+
+        library.traits.push(user_trait("translate text"));
+        library.traits.push(user_trait("plan"));
+        let mut skeptic = library.mini_mes.iter().find(|m| m.name == "Skeptic").unwrap().clone();
+        skeptic.id = Uuid::now_v7();
+        skeptic.name = "skeptic".into();
+        library.mini_mes.push(skeptic);
+        let problems = library.problems();
+        assert!(problems.iter().any(|p| p.contains("\"translate text\" is not in Title Case")));
+        assert!(problems.iter().any(|p| p.contains("two Traits are named \"plan\"")));
+        assert!(problems.iter().any(|p| p.contains("two Mini-Mes are named \"skeptic\"")));
+    }
+
+    #[test]
+    fn user_made_traits_run_on_prompt_with_instructions() {
+        let mut library = Library::builtin();
+        let mut plot = user_trait("My Plot");
+        plot.adapter = "data-plot".into();
+        let mut empty = user_trait("Empty");
+        empty.instructions = Some(" ".into());
+        library.traits.extend([plot, empty]);
+        let problems = library.problems();
+        assert!(problems.iter().any(|p| p.contains("My Plot is user-made and must run on prompt")));
+        assert!(problems.iter().any(|p| p.contains("Empty has no instructions")));
+        // Built-in Traits on other adapters stay valid.
+        assert_eq!(problems.len(), 2, "{problems:?}");
     }
 
     const SCOUT: &str = "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06";
