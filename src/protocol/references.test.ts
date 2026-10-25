@@ -9,6 +9,7 @@ const scribe: MiniMe = {
   colors: { tint: "#E3DFFF", solid: "#6E5BFF", ink: "#4A3AE0" },
   avatar: { base: "long", face: "quiet" },
   group: "thinking",
+  built_in: true,
 };
 describe("draftFromDoc", () => {
   const text = (value: string) => ({ type: "text", text: value });

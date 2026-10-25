@@ -17,7 +17,8 @@ use crate::error::{AppError, AppResult};
 use crate::projects::{self, ProjectSummary};
 use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, OpenedConversation, now_ms};
 use crate::history::HISTORY_BUDGET_CHARS;
-use crate::library::{Library, MiniMeSummary};
+use crate::library::{MiniMe, MiniMeSummary, TraitSummary};
+use crate::user_library::{LibraryStore, Skipped, TraitDraft};
 use crate::overview;
 use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{CANCEL_TIMEOUT, Runs};
@@ -41,6 +42,7 @@ pub struct AppState {
     open_projects: Mutex<HashMap<Uuid, Arc<Project>>>,
     runs: Arc<Runs>,
     routing: Arc<Routing>,
+    library: Arc<LibraryStore>,
     pub sidecar: Arc<Supervisor>,
     pub updates: Arc<Updates>,
     ai2: Arc<Ai2>,
@@ -69,7 +71,8 @@ impl AppState {
             Launch::release(&resources)
         };
         let log = Arc::new(SidecarLog::new(&log_dir));
-        let library = Arc::new(Library::builtin());
+        let data_root = projects::ensure_data_root(&documents)?;
+        let library = Arc::new(LibraryStore::open(&data_root));
         let ai2 = Ai2::system();
         let runs = Arc::new(Runs::new(
             Box::new(AppSecrets {
@@ -93,11 +96,12 @@ impl AppState {
         }
         Ok(Self {
             settings: Mutex::new(Settings::load_or_create(&config_dir)?),
-            data_root: projects::ensure_data_root(&documents)?,
+            data_root,
             config_dir,
             open_projects: Mutex::new(HashMap::new()),
             runs,
-            routing: Routing::new(library),
+            routing: Routing::new(Arc::clone(&library)),
+            library,
             sidecar,
             updates,
             ai2,
@@ -282,7 +286,82 @@ pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> App
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_mini_mes(state: State<'_, AppState>) -> AppResult<Vec<MiniMeSummary>> {
-    Ok(state.routing.library().summaries())
+    Ok(state.library.current().summaries())
+}
+
+/// Everything the Library view shows.
+#[derive(serde::Serialize)]
+pub struct LibraryView {
+    mini_mes: Vec<MiniMeSummary>,
+    traits: Vec<TraitSummary>,
+    /// User-made entries left out because they break a rule.
+    skipped: Vec<Skipped>,
+    /// Why `user-library.json` could not be read; user-made definitions cannot be changed
+    /// while it is set.
+    unreadable: Option<String>,
+}
+
+fn library_view(store: &LibraryStore) -> LibraryView {
+    let library = store.current();
+    LibraryView {
+        mini_mes: library.summaries(),
+        traits: library.trait_summaries(),
+        skipped: store.skipped(),
+        unreadable: store.unreadable(),
+    }
+}
+
+/// A saved definition's ID, with the library as it now is.
+#[derive(serde::Serialize)]
+pub struct Saved {
+    id: Uuid,
+    library: LibraryView,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn list_library(state: State<'_, AppState>) -> AppResult<LibraryView> {
+    Ok(library_view(&state.library))
+}
+
+/// A Mini-Me with its Workflow, for its editor.
+#[derive(serde::Serialize)]
+pub struct MiniMeDetail {
+    #[serde(flatten)]
+    mini_me: MiniMe,
+    built_in: bool,
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_mini_me(state: State<'_, AppState>, id: Uuid) -> AppResult<MiniMeDetail> {
+    let library = state.library.current();
+    let mini_me = library.mini_me(id).ok_or_else(|| AppError::not_found("Mini-Me not found"))?;
+    Ok(MiniMeDetail { mini_me: mini_me.clone(), built_in: library.is_built_in(id) })
+}
+
+/// Creates (with a nil ID) or replaces a user-made Mini-Me.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn save_mini_me(state: State<'_, AppState>, mini_me: MiniMe) -> AppResult<Saved> {
+    let id = state.library.save_mini_me(mini_me)?.id;
+    Ok(Saved { id, library: library_view(&state.library) })
+}
+
+/// Creates (with a nil ID) or replaces a user-made Trait.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn save_trait(state: State<'_, AppState>, draft: TraitDraft) -> AppResult<Saved> {
+    let id = state.library.save_trait(draft)?.id;
+    Ok(Saved { id, library: library_view(&state.library) })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_mini_me(state: State<'_, AppState>, id: Uuid) -> AppResult<LibraryView> {
+    state.library.delete_mini_me(id)?;
+    Ok(library_view(&state.library))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_trait(state: State<'_, AppState>, id: Uuid) -> AppResult<LibraryView> {
+    state.library.delete_trait(id)?;
+    Ok(library_view(&state.library))
 }
 
 /// The AI settings and which providers have a saved key. Keys themselves never leave the
@@ -594,7 +673,7 @@ pub async fn update_overview_summary(
         .model()
         .ok_or_else(|| AppError::new("model_not_set", "Choose an AI model in Settings first."))?;
     let material =
-        overview::summary_material(&project, state.routing.library(), SUMMARY_BUDGET_CHARS)?;
+        overview::summary_material(&project, &state.library.current(), SUMMARY_BUDGET_CHARS)?;
     if material.is_empty() {
         return Err(AppError::invalid_input("There are no messages to summarise yet."));
     }

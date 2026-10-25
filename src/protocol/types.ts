@@ -246,6 +246,69 @@ export interface MiniMe {
   colors: MiniMeColors;
   avatar: MiniMeAvatar;
   group: MiniMeGroup;
+  built_in: boolean;
+}
+
+/** A node of a Workflow: a Trait Step or a control Step. */
+export type WorkflowStep = { id: string; label?: string } & (
+  | { type: "trait"; trait: Uuid }
+  | { type: "approval"; prompt: string }
+  | { type: "condition"; question: string; branches: WorkflowBranch[] }
+  | { type: "loop"; question: string; max_iterations: number; steps: WorkflowStep[] }
+  | { type: "parallel"; branches: WorkflowBranch[] }
+);
+
+export interface WorkflowBranch {
+  label: string;
+  steps: WorkflowStep[];
+}
+
+/** A Mini-Me with its Workflow, as its editor shows and saves it. */
+export interface MiniMeDefinition extends MiniMe {
+  workflow: { steps: WorkflowStep[] };
+}
+
+/** A Trait as the Library lists and edits it. */
+export interface TraitSummary {
+  id: Uuid;
+  name: string;
+  description: string;
+  instructions: string | null;
+  tools: string[];
+  built_in: boolean;
+  /** Whether it runs on its instructions; only such Traits can be duplicated. */
+  prompt_based: boolean;
+  /** The Mini-Mes whose Workflows run it. */
+  used_by: Uuid[];
+}
+
+/** What a user edits of a Trait; a nil `id` creates a new one. */
+export interface TraitDraft {
+  id: Uuid;
+  name: string;
+  description: string;
+  instructions: string;
+  tools: string[];
+}
+
+/** A user-made entry of `user-library.json` left out because it breaks a rule. */
+export interface SkippedEntry {
+  kind: "trait" | "mini_me";
+  name: string | null;
+  problems: string[];
+}
+
+export interface LibraryView {
+  mini_mes: MiniMe[];
+  traits: TraitSummary[];
+  skipped: SkippedEntry[];
+  /** Why `user-library.json` could not be read; user-made definitions cannot change then. */
+  unreadable: string | null;
+}
+
+export interface SavedDefinition {
+  id: Uuid;
+  library: LibraryView;
 }
 
 export type ProviderId = "openai" | "anthropic" | "google" | "openrouter";

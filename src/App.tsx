@@ -5,10 +5,13 @@ import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/ChatView";
 import { FilesView } from "./components/FilesView";
 import { HomeView } from "./components/HomeView";
+import { LibraryView } from "./components/LibraryView";
+import { MiniMeEditor } from "./components/MiniMeEditor";
 import { OverviewView } from "./components/OverviewView";
 import { SettingsView } from "./components/SettingsView";
 import { AppSidebar } from "./components/shell/AppSidebar";
-import type { View } from "./components/shell/view";
+import { isAppView, type View } from "./components/shell/view";
+import { TraitEditor } from "./components/TraitEditor";
 import type { ConversationSummary, ProjectSummary } from "./protocol/types";
 
 export default function App() {
@@ -17,7 +20,7 @@ export default function App() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [fileCount, setFileCount] = useState(0);
   const [view, setView] = useState<View>({ kind: "home" });
-  // The view to return to when Settings or the avatar page is closed.
+  // The view to return to when an app view, such as Settings or the Library, is closed.
   const [previous, setPrevious] = useState<View>({ kind: "home" });
   const [error, setError] = useState<string | null>(null);
 
@@ -46,8 +49,8 @@ export default function App() {
 
   function navigate(next: View) {
     setError(null);
-    if (next.kind === "settings" || next.kind === "avatars") {
-      if (view.kind !== "settings" && view.kind !== "avatars") setPrevious(view);
+    if (isAppView(next)) {
+      if (!isAppView(view)) setPrevious(view);
     } else if (next.kind === "home") {
       setProject(null);
     }
@@ -147,6 +150,28 @@ function Main({
       return scrolling(<SettingsView />);
     case "avatars":
       return scrolling(<AvatarDebugView onClose={onBack} />);
+    case "library":
+      return scrolling(<LibraryView tab={view.tab ?? "mini-mes"} onOpen={onNavigate} />);
+    case "mini-me":
+      return scrolling(
+        <MiniMeEditor
+          key={`${view.id ?? ""}-${view.from ?? ""}`}
+          id={view.id}
+          from={view.from}
+          onOpen={onNavigate}
+          onBack={() => onNavigate({ kind: "library", tab: "mini-mes" })}
+        />,
+      );
+    case "trait":
+      return scrolling(
+        <TraitEditor
+          key={`${view.id ?? ""}-${view.from ?? ""}`}
+          id={view.id}
+          from={view.from}
+          onOpen={onNavigate}
+          onBack={() => onNavigate({ kind: "library", tab: "traits" })}
+        />,
+      );
     case "overview":
       return project
         ? scrolling(

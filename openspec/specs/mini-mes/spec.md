@@ -23,9 +23,11 @@ What a Trait can read, save or show comes only from its tools; a definition list
 Interactive Component kinds. The library SHALL refuse to load with a tool name it does not
 know, or with a prompt-based Trait listing a tool that has no form for models.
 
-The library is read-only in this version. It contains *Summarize*, *Assist*, *Find
-Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment*, *Profile Data*,
-*Validate Data*, *Clean Data*, *Join Data* and *Plot*, and the placeholder Traits.
+The library holds built-in Traits, which are read-only, and user-made Traits, which the user
+creates, edits and deletes as the Library editors describe. The built-in Traits are
+*Summarize*, *Assist*, *Find Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*,
+*Experiment*, *Profile Data*, *Validate Data*, *Clean Data*, *Join Data* and *Plot*, and the
+placeholder Traits.
 
 #### Scenario: Built-in Traits
 - **WHEN** the app starts
@@ -43,6 +45,11 @@ Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment*, *Profile
   *Validate Data*, *Clean Data* and *Join Data* `read_table`, `show_table` and `save_file`;
   *Plot* `read_table` and `show_chart`; and every other Trait lists none
 
+#### Scenario: User-made Traits join the library
+- **WHEN** the app starts and `user-library.json` holds a valid Trait *Translate*
+- **THEN** the library contains *Translate* next to the built-in Traits, marked as
+  user-made
+
 ### Requirement: Mini-Me definitions
 Each Mini-Me SHALL have:
 - an `id` (UUID, stable across installations);
@@ -53,8 +60,9 @@ Each Mini-Me SHALL have:
 - a `group`, one of `thinking`, `literature` and `data`, which the `@` list shows it under;
 - exactly one Workflow, a list of Steps as Workflows define them.
 
-A Mini-Me's Traits are the Traits its Trait Steps reference. Mini-Mes are read-only in this
-version.
+A Mini-Me's Traits are the Traits its Trait Steps reference. The predefined Mini-Mes are
+built-in and read-only. User-made Mini-Mes are created, edited and deleted as the Library
+editors describe. The list of Mini-Mes the UI gets SHALL say for each whether it is built-in.
 
 #### Scenario: One-Step Workflow
 - **WHEN** a Mini-Me whose Workflow has one Trait Step answers a message
@@ -65,9 +73,15 @@ version.
 - **THEN** its reply is produced by running each Step of its Workflow
 
 #### Scenario: Unknown group
-- **WHEN** the library names a Mini-Me with a `group` other than `thinking`, `literature` or
-  `data`, or with none
-- **THEN** the library fails to load, naming that Mini-Me
+- **WHEN** the built-in library names a Mini-Me with a `group` other than `thinking`,
+  `literature` or `data`, or with none
+- **THEN** the library fails to load, naming that Mini-Me; a user-made Mini-Me with such a
+  group is skipped instead
+
+#### Scenario: User-made Mini-Me is listed
+- **WHEN** the user has saved "Field Translator"
+- **THEN** the UI's list of Mini-Mes includes it after the built-in ones, marked as not
+  built-in
 
 ### Requirement: Predefined Mini-Mes
 Mini-Me SHALL ship with fifteen Mini-Mes:

@@ -21,6 +21,7 @@ use crate::conversations::{self, PausedRun};
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
+use crate::user_library::LibraryStore;
 use crate::link::{
     AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, RouteMiniMe, RunContext, RunMiniMe,
     RunPlan, RunResume, RunTrait, SidecarFrame,
@@ -168,7 +169,7 @@ impl Inner {
 
 pub struct Runs {
     inner: Mutex<Inner>,
-    library: Arc<Library>,
+    library: Arc<LibraryStore>,
     secrets: Box<dyn SecretSource>,
     log: Arc<SidecarLog>,
     cancel_timeout: Duration,
@@ -211,7 +212,7 @@ impl Runs {
         secrets: Box<dyn SecretSource>,
         log: Arc<SidecarLog>,
         cancel_timeout: Duration,
-        library: Arc<Library>,
+        library: Arc<LibraryStore>,
     ) -> Self {
         Self {
             inner: Mutex::new(Inner::default()),
@@ -792,7 +793,8 @@ impl Runs {
             "asset.read" => read_asset(&project, parse_params(params)?),
             "conversation.history" => {
                 let messages = project.lock().conversation_messages(place.conversation_id)?;
-                let history = history(&messages, place.answers, &self.library, HISTORY_BUDGET_CHARS);
+                let library = self.library.current();
+                let history = history(&messages, place.answers, &library, HISTORY_BUDGET_CHARS);
                 Ok(serde_json::to_value(history)?)
             }
             "secret.get" => self.secret(&adapter, place.provider.as_deref(), parse_params(params)?),
@@ -807,7 +809,8 @@ impl Runs {
             "conversation.results" => {
                 let state = project.lock();
                 let messages = state.conversation_messages(place.conversation_id)?;
-                let found = results(&messages, place.answers, reply, &self.library, |id| {
+                let library = self.library.current();
+                let found = results(&messages, place.answers, reply, &library, |id| {
                     assets::find(&state, id).ok()
                 });
                 Ok(serde_json::to_value(found)?)
@@ -1076,7 +1079,7 @@ mod tests {
             secrets,
             Arc::new(SidecarLog::disabled()),
             cancel_timeout,
-            Arc::new(Library::builtin()),
+            LibraryStore::builtin(),
         ));
         let sink = Arc::new(Recorder::default());
         runs.connect(

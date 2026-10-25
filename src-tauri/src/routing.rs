@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::conversations::{self, SendMessageInput};
 use crate::error::{AppError, AppResult};
 use crate::library::{FALLBACK_MINI_ME, Library};
+use crate::user_library::LibraryStore;
 use crate::link::{CallModel, RouteMiniMe};
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
 use crate::runs::{RouteAnswers, RunSpec, Runs};
@@ -45,21 +46,17 @@ struct Decision {
 }
 
 pub struct Routing {
-    library: Arc<Library>,
+    library: Arc<LibraryStore>,
     /// Conversations whose latest message is waiting for a routing decision.
     pending: Mutex<HashSet<Uuid>>,
 }
 
 impl Routing {
-    pub fn new(library: Arc<Library>) -> Arc<Self> {
+    pub fn new(library: Arc<LibraryStore>) -> Arc<Self> {
         Arc::new(Self {
             library,
             pending: Mutex::new(HashSet::new()),
         })
-    }
-
-    pub fn library(&self) -> &Library {
-        &self.library
     }
 
     /// Validates and persists a user message, then decides on a background thread who
@@ -74,7 +71,7 @@ impl Routing {
         input: SendMessageInput,
         user_id: Uuid,
     ) -> AppResult<Message> {
-        check_mentions(&input, &self.library)?;
+        check_mentions(&input, &self.library.current())?;
         let message = {
             let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
             if pending.contains(&conversation_id) {
@@ -108,13 +105,13 @@ impl Routing {
         conversation_id: Uuid,
         message: &Message,
     ) {
+        let library = self.library.current();
         let mentioned = first_mention(message);
         let mut ask = vec!["reaction".to_string(), "needs_context".to_string()];
         if mentioned.is_none() {
             ask.insert(0, "mini_me".to_string());
         }
-        let mini_mes = self
-            .library
+        let mini_mes = library
             .summaries()
             .into_iter()
             .map(|m| RouteMiniMe {
@@ -156,9 +153,10 @@ impl Routing {
             answers.as_ref(),
             mentioned,
             settings.threshold,
-            &self.library,
+            &library,
         );
         let started = self.start_reply(
+            &library,
             calls,
             settings.model.clone(),
             project,
@@ -196,6 +194,7 @@ impl Routing {
     /// Starts `mini_me_id`'s reply to `message`; returns the reply's author.
     fn start_reply(
         &self,
+        library: &Library,
         calls: &Runs,
         model: Option<CallModel>,
         project: &Arc<Project>,
@@ -210,7 +209,7 @@ impl Routing {
         };
         let input = json!({ "text": input_text(message) });
         let spec =
-            RunSpec::for_mini_me(&self.library, mini_me_id, author.clone(), input, needs_context)?;
+            RunSpec::for_mini_me(library, mini_me_id, author.clone(), input, needs_context)?;
         calls.start(Arc::clone(project), conversation_id, message, spec, model)?;
         Ok(author)
     }
@@ -527,7 +526,10 @@ mod tests {
     }
 
     fn fixture() -> Fixture {
-        let library = Arc::new(Library::builtin());
+        fixture_with(LibraryStore::builtin())
+    }
+
+    fn fixture_with(library: Arc<LibraryStore>) -> Fixture {
         let (dir, project) = crate::projects::test_support::temp_project();
         let project = Arc::new(project);
         let conversation = conversations::create(&project).unwrap().id;
@@ -651,6 +653,30 @@ mod tests {
             }
             _ => None,
         })
+    }
+
+    #[test]
+    fn a_saved_mini_me_is_offered_in_the_next_route_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(LibraryStore::open(dir.path()));
+        let f = fixture_with(Arc::clone(&store));
+        let mut copy = store.current().mini_me(ASSISTANT).unwrap().clone();
+        copy.id = Uuid::nil();
+        copy.name = "Field Translator".into();
+        let saved = store.save_mini_me(copy).unwrap();
+        f.send("translate these field notes", &[], ROUTE_TIMEOUT).unwrap();
+        f.route_id();
+        let frames = f.sink.0.lock().unwrap().clone();
+        let offered: Vec<Uuid> = frames
+            .iter()
+            .find_map(|frame| match frame {
+                CoreFrame::RouteStart { mini_mes, .. } => {
+                    Some(mini_mes.iter().map(|m| m.id).collect())
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert!(offered.contains(&saved.id));
     }
 
     #[test]

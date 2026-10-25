@@ -50,9 +50,8 @@ export function SettingsView() {
   }, [refresh]);
 
   return (
-    <div className="flex min-h-full">
-      <nav className="w-[220px] shrink-0 border-r border-border px-3 py-10">
-        <h1 className="mb-4 px-2.5 text-page font-bold">Settings</h1>
+    <main className="mx-auto grid w-full max-w-[960px] grid-cols-[160px_minmax(0,1fr)] gap-10 px-8 py-10">
+      <nav aria-label="Settings sections" className="sticky top-10 self-start">
         <SidebarMenu>
           {PAGES.map((p) => (
             <SidebarMenuItem key={p.id}>
@@ -63,23 +62,21 @@ export function SettingsView() {
           ))}
         </SidebarMenu>
       </nav>
-      <main className="min-w-0 flex-1 px-14 py-12">
-        <div className="max-w-[720px]">
-          {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
-          {settings && page === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
-          {settings && page === "accounts" && (
-            <AccountsPage settings={settings} onChanged={refresh} />
-          )}
-        </div>
-      </main>
-    </div>
+      <div className="min-w-0">
+        {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
+        {settings && page === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
+        {settings && page === "accounts" && (
+          <AccountsPage settings={settings} onChanged={refresh} />
+        )}
+      </div>
+    </main>
   );
 }
 
 function PageHeader({ title, lead }: { title: string; lead: string }) {
   return (
     <header className="mb-10">
-      <h2 className="text-page font-bold">{title}</h2>
+      <h1 className="text-page font-bold">{title}</h1>
       <p className="mt-1.5 text-ui text-ink-2">{lead}</p>
     </header>
   );
