@@ -96,15 +96,22 @@ first.
 - **THEN** *Translate* is kept, and the editor says "Field Translator" still uses it
 
 ### Requirement: Editing a user-made Mini-Me
-The Mini-Me editor SHALL let the user set the name, the description and the group
-(`thinking`, `literature` or `data`), and pick the avatar's base, face and optional accessory
-from the avatar parts, showing a live preview. The description SHALL be required, because
-routing uses it to choose a Mini-Me.
+The Mini-Me editor SHALL show three tabs: Workflow, Traits (with how many Traits the
+Workflow runs) and Appearance. The Appearance tab SHALL let the user set the name, the
+description and the group (`thinking`, `literature` or `data`), and pick the avatar's base,
+face and optional accessory from the avatar parts, showing a live preview. The description
+SHALL be required, because routing uses it to choose a Mini-Me. The Traits tab SHALL list
+the Traits the Workflow runs, each opening its Trait editor. Save SHALL save every tab.
 
 #### Scenario: New Mini-Me
 - **WHEN** the user creates "Field Translator" in the Thinking group with a base, a face, no
   accessory and a description, and saves
 - **THEN** "Field Translator" is listed under Thinking in the `@` list with that avatar
+
+#### Scenario: Traits tab
+- **WHEN** the user opens Investigator's Traits tab
+- **THEN** it reads "Traits · 5" and lists *Scout*, *Wonder*, *Plan*, *Refute* and
+  *Experiment*, each opening its Trait editor
 
 ### Requirement: Picking a Mini-Me's colour
 The Mini-Me editor SHALL offer the colour families as swatches and a hue slider. The chosen
@@ -120,34 +127,6 @@ the tint of the same hue (oklch lightness 0.94, chroma 0.04). A family with fixe
 #### Scenario: Colour family
 - **WHEN** the user picks the Purple swatch
 - **THEN** the `solid` is `#6E5BFF` and the `ink` is `#4A3AE0`
-
-### Requirement: A user-made Mini-Me's Workflow is a list of Trait Steps
-When a user-made Mini-Me's Workflow has only Trait Steps, the editor SHALL show it as an
-ordered list. The user SHALL be able to add a Trait Step for any Trait except the placeholder
-Traits, and to remove and reorder Steps. A Workflow SHALL keep at least one Step. Each new
-Step SHALL get an ID unique within the Workflow.
-
-#### Scenario: Three Steps
-- **WHEN** the user adds *Scout*, *Plan* and *Refute* in that order and saves
-- **THEN** a reply from that Mini-Me runs *Scout*, then *Plan*, then *Refute*
-
-#### Scenario: Same Trait twice
-- **WHEN** the user adds *Plan* twice
-- **THEN** both Steps are kept, with different Step IDs
-
-#### Scenario: Last Step
-- **WHEN** the Workflow has one Step
-- **THEN** that Step cannot be removed
-
-### Requirement: Workflows with control Steps are locked
-When a user-made Mini-Me's Workflow has a control Step, the editor SHALL show its Steps,
-nested as they run, but SHALL NOT let the user change them. The other fields stay editable,
-and saving SHALL keep the Workflow unchanged.
-
-#### Scenario: Duplicated Investigator
-- **WHEN** the user duplicates Investigator, renames the copy and saves
-- **THEN** the copy runs the same parallel, loop, condition and approval Steps as
-  Investigator, and its Workflow could not be edited
 
 ### Requirement: Names are unique
 A save SHALL be refused when the name is empty, or when another Mini-Me (for a Mini-Me) or
