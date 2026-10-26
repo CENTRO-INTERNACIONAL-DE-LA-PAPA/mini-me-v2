@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
 import { MINI_ME_GROUPS } from "../protocol/references";
 import type { LibraryView as Library } from "../protocol/types";
-import { OriginBadge } from "./LibraryParts";
+import { List, Row } from "./LibraryParts";
 import { MiniMeAvatar } from "./MiniMeAvatar";
 import type { LibraryTab, View } from "./shell/view";
 
@@ -157,48 +157,5 @@ function Problems({ library }: { library: Library }) {
         </>
       )}
     </section>
-  );
-}
-
-function List({ children }: { children: ReactNode }) {
-  return (
-    <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-      {children}
-    </ul>
-  );
-}
-
-function Row({
-  icon,
-  name,
-  description,
-  tag,
-  builtIn,
-  onOpen,
-}: {
-  icon?: ReactNode;
-  name: string;
-  description: string;
-  /** An attribute shown before the origin, such as a Mini-Me's group. */
-  tag?: string;
-  builtIn: boolean;
-  onOpen: () => void;
-}) {
-  return (
-    <li>
-      <button
-        type="button"
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 ease-out outline-none hover:bg-accent focus-visible:bg-accent"
-        onClick={onOpen}
-      >
-        {icon}
-        <span className="grid min-w-0 flex-1 gap-0.5">
-          <span className="text-ui font-medium">{name}</span>
-          <span className="truncate text-meta text-muted-foreground">{description}</span>
-        </span>
-        {tag && <span className="shrink-0 text-meta text-muted-foreground">{tag}</span>}
-        <OriginBadge builtIn={builtIn} />
-      </button>
-    </li>
   );
 }

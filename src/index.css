@@ -50,6 +50,8 @@
     --color-surface-3: var(--surface-3);
     --color-success: var(--success);
     --color-off: var(--off);
+    --color-canvas-dot: var(--canvas-dot);
+    --color-connector: var(--connector);
 
     --radius-xs: 5px;
     --radius-sm: 6px;
@@ -120,6 +122,9 @@
     --surface-3: #ebeae4;
     --success: #2fa36b;
     --off: #d0cfc9;
+    /* The Workflow canvas (on surface-1): its dot grid and its connectors. */
+    --canvas-dot: #dedcd5;
+    --connector: #bfbdb6;
 
     /* Neutral fallbacks; a chart series made by a Mini-Me uses that Mini-Me's colour. */
     --chart-1: #0a0a0a;
