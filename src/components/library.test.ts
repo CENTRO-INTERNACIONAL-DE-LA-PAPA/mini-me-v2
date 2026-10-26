@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import library from "../../src-tauri/library/builtin.json";
-import type { WorkflowStep } from "../protocol/types";
-import { copyName, isListWorkflow, nextStepId } from "./library";
+import { copyName, nextStepId } from "./library";
 
 describe("copyName", () => {
   it("adds Copy, then the smallest free number", () => {
@@ -16,17 +14,5 @@ describe("nextStepId", () => {
     expect(nextStepId("Find Papers", [])).toBe("find-papers");
     expect(nextStepId("Plan", ["plan"])).toBe("plan-2");
     expect(nextStepId("Plan", ["plan", "plan-2"])).toBe("plan-3");
-  });
-});
-
-describe("isListWorkflow", () => {
-  it("is true only for Workflows of Trait Steps", () => {
-    const steps = (name: string) =>
-      library.mini_mes.find((m) => m.name === name)!.workflow.steps.map((s) => ({
-        type: "trait",
-        ...s,
-      })) as WorkflowStep[];
-    expect(isListWorkflow(steps("Skeptic"))).toBe(true);
-    expect(isListWorkflow(steps("Investigator"))).toBe(false);
   });
 });

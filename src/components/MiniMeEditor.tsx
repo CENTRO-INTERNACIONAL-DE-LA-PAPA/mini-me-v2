@@ -1,30 +1,22 @@
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowDownIcon, ArrowUpIcon, LockIcon, PlusIcon, XIcon } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
 import { MINI_ME_GROUPS } from "../protocol/references";
-import type {
-  LibraryView,
-  MiniMeDefinition,
-  TraitSummary,
-  WorkflowStep,
-} from "../protocol/types";
+import type { LibraryView, MiniMeDefinition, WorkflowStep } from "../protocol/types";
 import { Avatar } from "./avatar/Avatar";
 import { ColorPicker } from "./avatar/ColorPicker";
 import { COLOR_FAMILIES, hueOf, miniMeColors } from "./avatar/palette";
 import { PartTabs } from "./avatar/PartGrid";
-import { copyName, isListWorkflow, nextStepId, NIL_ID } from "./library";
-import { DeleteButton, EditorPage, Field } from "./LibraryParts";
+import { copyName, NIL_ID } from "./library";
+import { DeleteButton, EditorHeader, EditorPage, Field, List, Row } from "./LibraryParts";
 import type { View } from "./shell/view";
 import { refreshMiniMes } from "./useMiniMes";
+import { StepInspector } from "./workflow/StepInspector";
+import { WorkflowCanvas } from "./workflow/WorkflowCanvas";
+import { traitIds } from "./workflow/workflowEdit";
 
 const yellow = COLOR_FAMILIES.find((f) => f.name === "Yellow")!;
 
@@ -39,7 +31,11 @@ const EMPTY: MiniMeDefinition = {
   workflow: { steps: [] },
 };
 
-/** A Mini-Me's editor: `id` opens one, `from` starts a copy of one, neither a new Mini-Me. */
+// The design's editor tabs are taller than the shared ones, and the active one is bold.
+const TAB = "h-auto py-3 data-active:font-semibold";
+
+/** A Mini-Me's editor: `id` opens one, `from` starts a copy of one, neither a new Mini-Me.
+ * It fills the main area, so the Workflow canvas can take the remaining height. */
 export function MiniMeEditor({
   id,
   from,
@@ -54,6 +50,7 @@ export function MiniMeEditor({
   const [library, setLibrary] = useState<LibraryView | null>(null);
   const [draft, setDraft] = useState<MiniMeDefinition | null>(null);
   const [problems, setProblems] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -91,7 +88,11 @@ export function MiniMeEditor({
 
   const readOnly = draft.built_in || !!library.unreadable;
   const update = (change: Partial<MiniMeDefinition>) => setDraft({ ...draft, ...change });
-  const hue = hueOf(draft.colors);
+  const setSteps = (steps: WorkflowStep[]) => update({ workflow: { steps } });
+  const used = traitIds(draft.workflow.steps).flatMap((t) => {
+    const found = library.traits.find((x) => x.id === t);
+    return found ? [found] : [];
+  });
 
   async function save() {
     try {
@@ -115,34 +116,115 @@ export function MiniMeEditor({
     }
   }
 
-  const actions = draft.built_in ? (
-    <Button variant="outline" onClick={() => onOpen({ kind: "mini-me", from: draft.id })}>
-      Duplicate
-    </Button>
-  ) : (
-    <>
-      {id && !library.unreadable && <DeleteButton onDelete={remove} />}
-      <Button disabled={readOnly} onClick={save}>
-        Save
-      </Button>
-    </>
-  );
-
   return (
-    <EditorPage
-      title={draft.name || "New Mini-Me"}
-      icon={<Avatar {...draft.avatar} color={draft.colors} size={36} />}
-      builtIn={draft.built_in}
-      actions={actions}
-      problems={problems}
-      onBack={onBack}
-    >
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="px-8 pt-6">
+        <EditorHeader
+          title={draft.name || "New Mini-Me"}
+          icon={<Avatar {...draft.avatar} color={draft.colors} size={36} />}
+          subtitle={draft.description}
+          builtIn={draft.built_in}
+          actions={
+            draft.built_in ? (
+              <Button variant="outline" onClick={() => onOpen({ kind: "mini-me", from: draft.id })}>
+                Duplicate
+              </Button>
+            ) : (
+              <>
+                {id && !library.unreadable && <DeleteButton onDelete={remove} />}
+                <Button disabled={readOnly} onClick={save}>
+                  Save
+                </Button>
+              </>
+            )
+          }
+          problems={problems}
+          onBack={onBack}
+        />
+      </div>
+      <Tabs defaultValue="workflow" className="min-h-0 flex-1 gap-0">
+        <TabsList className="gap-6 px-8">
+          <TabsTrigger value="workflow" className={TAB}>
+            Workflow
+          </TabsTrigger>
+          <TabsTrigger value="traits" className={TAB}>
+            Traits · {used.length}
+          </TabsTrigger>
+          <TabsTrigger value="appearance" className={TAB}>
+            Appearance
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="workflow" className="flex min-h-0">
+          <div className="min-w-0 flex-1">
+            <WorkflowCanvas
+              steps={draft.workflow.steps}
+              traits={library.traits}
+              miniMe={draft}
+              selectedId={selected}
+              editable={!readOnly}
+              onSelect={setSelected}
+              onChange={setSteps}
+            />
+          </div>
+          <StepInspector
+            steps={draft.workflow.steps}
+            selectedId={selected}
+            traits={library.traits}
+            editable={!readOnly}
+            onChange={setSteps}
+            onSelect={setSelected}
+            onOpen={onOpen}
+          />
+        </TabsContent>
+        <TabsContent value="traits" className="min-h-0 overflow-y-auto">
+          <div className="mx-auto max-w-[760px] px-8 py-8">
+            {used.length === 0 ? (
+              <p className="text-ui text-muted-foreground">
+                Its Workflow runs no Traits yet. Add Trait steps on the Workflow tab.
+              </p>
+            ) : (
+              <List>
+                {used.map((t) => (
+                  <Row
+                    key={t.id}
+                    name={t.name}
+                    description={t.description}
+                    builtIn={t.built_in}
+                    onOpen={() => onOpen({ kind: "trait", id: t.id })}
+                  />
+                ))}
+              </List>
+            )}
+          </div>
+        </TabsContent>
+        <TabsContent value="appearance" className="min-h-0 overflow-y-auto">
+          <div className="mx-auto grid max-w-[760px] gap-6 px-8 py-8">
+            <Appearance draft={draft} readOnly={readOnly} onChange={update} />
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function Appearance({
+  draft,
+  readOnly,
+  onChange,
+}: {
+  draft: MiniMeDefinition;
+  readOnly: boolean;
+  onChange: (change: Partial<MiniMeDefinition>) => void;
+}) {
+  const hue = hueOf(draft.colors);
+  return (
+    <>
       <Field label="Name" htmlFor="mini-me-name">
         <Input
           id="mini-me-name"
           value={draft.name}
           disabled={readOnly}
-          onChange={(e) => update({ name: e.target.value })}
+          onChange={(e) => onChange({ name: e.target.value })}
         />
       </Field>
       <Field
@@ -154,7 +236,7 @@ export function MiniMeEditor({
           id="mini-me-description"
           value={draft.description}
           disabled={readOnly}
-          onChange={(e) => update({ description: e.target.value })}
+          onChange={(e) => onChange({ description: e.target.value })}
         />
       </Field>
       <Field label="Group" hint="The heading it is listed under when you type @">
@@ -165,7 +247,7 @@ export function MiniMeEditor({
               variant="outline"
               aria-pressed={draft.group === group}
               disabled={readOnly}
-              onClick={() => update({ group })}
+              onClick={() => onChange({ group })}
             >
               {label}
             </Button>
@@ -181,186 +263,19 @@ export function MiniMeEditor({
               </div>
               <ColorPicker
                 value={{ hue: hue ?? yellow.hue, solid: draft.colors.solid, ink: draft.colors.ink }}
-                onChange={(color) => update({ colors: miniMeColors(color) })}
+                onChange={(color) => onChange({ colors: miniMeColors(color) })}
               />
             </div>
             <PartTabs
               style={draft.avatar}
               color={draft.colors}
               onChange={({ base, face, accessory }) =>
-                update({ avatar: { base, face, ...(accessory ? { accessory } : {}) } })
+                onChange({ avatar: { base, face, ...(accessory ? { accessory } : {}) } })
               }
             />
           </div>
         </Field>
       )}
-      <Field label="Workflow" hint="The Traits it runs to answer, in order">
-        {isListWorkflow(draft.workflow.steps) ? (
-          <StepList
-            steps={draft.workflow.steps}
-            traits={library.traits}
-            readOnly={readOnly}
-            onChange={(steps) => update({ workflow: { steps } })}
-          />
-        ) : (
-          <LockedWorkflow steps={draft.workflow.steps} traits={library.traits} />
-        )}
-      </Field>
-    </EditorPage>
+    </>
   );
-}
-
-const traitName = (traits: TraitSummary[], id: string) =>
-  traits.find((t) => t.id === id)?.name ?? "Unknown Trait";
-
-/** A Workflow of Trait Steps as an ordered list to add to, remove from and reorder. */
-function StepList({
-  steps,
-  traits,
-  readOnly,
-  onChange,
-}: {
-  steps: WorkflowStep[];
-  traits: TraitSummary[];
-  readOnly: boolean;
-  onChange: (steps: WorkflowStep[]) => void;
-}) {
-  const move = (from: number, to: number) => {
-    const next = [...steps];
-    next.splice(to, 0, ...next.splice(from, 1));
-    onChange(next);
-  };
-  const add = (t: TraitSummary) => {
-    const id = nextStepId(
-      t.name,
-      steps.map((s) => s.id),
-    );
-    onChange([...steps, { id, type: "trait", trait: t.id }]);
-  };
-  return (
-    <div className="grid gap-3">
-      {steps.length > 0 && (
-        <ol className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-          {steps.map((step, i) => (
-            <li key={step.id} className="flex items-center gap-3 px-4 py-2.5">
-              <span className="w-5 text-meta text-muted-foreground">{i + 1}</span>
-              <span className="flex-1 text-ui font-medium">
-                {step.type === "trait" && traitName(traits, step.trait)}
-              </span>
-              {!readOnly && (
-                <span className="flex gap-0.5">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Move up"
-                    disabled={i === 0}
-                    onClick={() => move(i, i - 1)}
-                  >
-                    <ArrowUpIcon />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Move down"
-                    disabled={i === steps.length - 1}
-                    onClick={() => move(i, i + 1)}
-                  >
-                    <ArrowDownIcon />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Remove"
-                    title={steps.length === 1 ? "A Workflow keeps at least one Step" : undefined}
-                    disabled={steps.length === 1}
-                    onClick={() => onChange(steps.filter((_, j) => j !== i))}
-                  >
-                    <XIcon />
-                  </Button>
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
-      {!readOnly && (
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="outline" className="w-fit" />}>
-            <PlusIcon />
-            Add Trait
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="max-h-80 w-64 overflow-y-auto">
-            {traits.map((t) => (
-              <DropdownMenuItem key={t.id} onClick={() => add(t)}>
-                {t.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </div>
-  );
-}
-
-/** A Workflow with control Steps, shown nested as it runs; it can't be edited here. */
-function LockedWorkflow({ steps, traits }: { steps: WorkflowStep[]; traits: TraitSummary[] }) {
-  return (
-    <div className="grid gap-2">
-      <p className="flex items-center gap-1.5 text-meta text-muted-foreground">
-        <LockIcon className="size-3.5" />
-        This Workflow has approvals, conditions, loops or parallel branches, so it can't be edited
-        as a list.
-      </p>
-      <div className="rounded-xl border border-border bg-card px-4 py-3">
-        <StepTree steps={steps} traits={traits} />
-      </div>
-    </div>
-  );
-}
-
-function StepTree({ steps, traits }: { steps: WorkflowStep[]; traits: TraitSummary[] }) {
-  return (
-    <ol className="grid gap-1.5 text-ui">
-      {steps.map((step) => (
-        <li key={step.id}>
-          <StepLine step={step} traits={traits} />
-          {step.type === "loop" && (
-            <Nested>
-              <StepTree steps={step.steps} traits={traits} />
-            </Nested>
-          )}
-          {(step.type === "condition" || step.type === "parallel") &&
-            step.branches.map((branch) => (
-              <Nested key={branch.label}>
-                <p className="mb-1 text-meta text-muted-foreground">{branch.label}</p>
-                <StepTree steps={branch.steps} traits={traits} />
-              </Nested>
-            ))}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function StepLine({ step, traits }: { step: WorkflowStep; traits: TraitSummary[] }) {
-  switch (step.type) {
-    case "trait":
-      return <span className="font-medium">{traitName(traits, step.trait)}</span>;
-    case "approval":
-      return <span>Ask you: {step.prompt}</span>;
-    case "condition":
-      return <span>Decide: {step.question}</span>;
-    case "loop":
-      return (
-        <span>
-          Repeat up to {step.max_iterations} times while: {step.question}
-        </span>
-      );
-    case "parallel":
-      return <span>{step.label ?? "In parallel"}</span>;
-  }
-}
-
-function Nested({ children }: { children: ReactNode }) {
-  return <div className="mt-1.5 ml-[9px] border-l-2 border-border pl-[19px]">{children}</div>;
 }

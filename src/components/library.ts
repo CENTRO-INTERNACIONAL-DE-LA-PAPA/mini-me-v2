@@ -1,5 +1,3 @@
-import type { WorkflowStep } from "../protocol/types";
-
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /** The name of a copy of `name`: "<name> Copy", or "<name> Copy <n>" with the smallest n from 2
@@ -25,11 +23,6 @@ export function nextStepId(traitName: string, ids: string[]): string {
   let n = 2;
   while (ids.includes(`${base}-${n}`)) n++;
   return `${base}-${n}`;
-}
-
-/** Whether a Workflow has only Trait Steps, so it can be edited as a list. */
-export function isListWorkflow(steps: WorkflowStep[]): boolean {
-  return steps.every((step) => step.type === "trait");
 }
 
 /** The ID that asks the core to create a definition instead of replacing one. */

@@ -153,14 +153,14 @@ function Main({
     case "library":
       return scrolling(<LibraryView tab={view.tab ?? "mini-mes"} onOpen={onNavigate} />);
     case "mini-me":
-      return scrolling(
+      return (
         <MiniMeEditor
           key={`${view.id ?? ""}-${view.from ?? ""}`}
           id={view.id}
           from={view.from}
           onOpen={onNavigate}
           onBack={() => onNavigate({ kind: "library", tab: "mini-mes" })}
-        />,
+        />
       );
     case "trait":
       return scrolling(
