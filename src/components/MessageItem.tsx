@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { memo, useCallback, useState } from "react";
@@ -12,6 +11,8 @@ import { InteractiveComponent } from "./interactive/InteractiveComponent";
 import { Markdown } from "./Markdown";
 import { MiniMeAvatar } from "./MiniMeAvatar";
 import { MiniMePill } from "./MiniMePill";
+import { MiniMeSurface } from "./MiniMeSurface";
+import { ReferenceChip } from "./ReferenceChip";
 import { TextComponentChip } from "./TextComponentChip";
 import { useMiniMes } from "./useMiniMes";
 import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
@@ -107,14 +108,9 @@ export const MessageItem = memo(function MessageItem({
   const attachments = message.attachments.length > 0 && (
     <div className="flex flex-wrap gap-1.5">
       {message.attachments.map((asset) => (
-        <Badge
-          key={asset.id}
-          variant="secondary"
-          className="cursor-pointer"
-          render={<button onClick={() => open(asset.id)} />}
-        >
+        <ReferenceChip key={asset.id} title="Open file" onOpen={() => open(asset.id)}>
           {asset.name} · {formatSize(asset.size_bytes)}
-        </Badge>
+        </ReferenceChip>
       ))}
     </div>
   );
@@ -130,7 +126,7 @@ export const MessageItem = memo(function MessageItem({
             <Tooltip>
               <TooltipTrigger
                 render={<span />}
-                className="flex h-6 items-center gap-1 rounded-full border border-border bg-card px-1.5 text-meta shadow-xs"
+                className="flex h-6 items-center gap-1 rounded-full border border-border bg-card px-1.5 text-meta"
               >
                 {byMiniMes.slice(0, 3).map((reaction, index) => (
                   <MiniMeAvatar
@@ -175,8 +171,8 @@ export const MessageItem = memo(function MessageItem({
 
   if (fromUser) {
     return (
-      <article data-message-id={message.id} className="flex max-w-[560px] flex-col items-end gap-1.5 self-end">
-        <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] border border-border bg-card px-4 py-3">
+      <article data-message-id={message.id} className="flex max-w-[520px] flex-col items-end gap-1.5 self-end">
+        <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] border border-border bg-muted px-[15px] py-[11px] text-foreground">
           {text}
           {attachments}
           {reactionPills}
@@ -190,16 +186,20 @@ export const MessageItem = memo(function MessageItem({
   }
 
   return (
-    <article data-message-id={message.id} className="relative flex flex-col gap-2 text-ink-2">
-      <header className="flex items-center gap-2 text-meta">
-        <MiniMeAvatar miniMe={authorMiniMe} size={26} />
-        <strong className="text-[14.5px] font-semibold text-foreground">{name}</strong>
-        <span className="text-muted-foreground">{time}</span>
-        {status && (
-          <span className={message.status === "failed" ? "text-destructive" : "text-muted-foreground"}>
-            {status}
-          </span>
-        )}
+    <MiniMeSurface
+      miniMe={authorMiniMe}
+      render={<article />}
+      data-message-id={message.id}
+      className="relative flex flex-col gap-3.5 px-[18px] py-4 text-foreground"
+    >
+      <header className="flex items-center gap-[9px] text-meta">
+        <MiniMeAvatar miniMe={authorMiniMe} size={28} />
+        <strong className="font-serif text-name font-medium text-foreground">{name}</strong>
+        <span className="text-mm-ink">
+          {time}
+          {status && message.status !== "failed" && ` · ${status}`}
+        </span>
+        {message.status === "failed" && <span className="text-destructive">{status}</span>}
       </header>
       {showsProgress(message.steps) && (
         <WorkflowProgress
@@ -245,7 +245,7 @@ export const MessageItem = memo(function MessageItem({
       {attachments}
       {reactionPills}
       {notes}
-    </article>
+    </MiniMeSurface>
   );
 });
 

@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   Background,
@@ -32,6 +33,7 @@ import {
   type ReactNode,
 } from "react";
 import type { MiniMe, TraitSummary, WorkflowStep } from "../../protocol/types";
+import { surfaceStyle } from "../miniMeColors";
 import { MiniMeAvatar } from "../MiniMeAvatar";
 import { toolCount } from "./tools";
 import { useStepDrag, type DragPayload, type DragState } from "./useStepDrag";
@@ -137,7 +139,11 @@ export function WorkflowCanvas({
   );
   return (
     <CanvasContext.Provider value={state}>
-      <div className="relative h-full w-full bg-surface-1">
+      {/* The board: a grey card with a dot grid, inside the editor's sheet. */}
+      <div
+        style={surfaceStyle(miniMe.colors)}
+        className="relative h-full w-full overflow-hidden rounded-card border border-border bg-muted"
+      >
         <ReactFlow<LayoutNode, LayoutEdge>
           nodes={nodes}
           edges={edges}
@@ -157,7 +163,7 @@ export function WorkflowCanvas({
           <Background
             variant={BackgroundVariant.Dots}
             gap={18}
-            size={1}
+            size={1.5}
             color="var(--canvas-dot)"
           />
           <Controls showInteractive={false} position="bottom-left" />
@@ -185,17 +191,18 @@ export function WorkflowCanvas({
 function Toolbar() {
   const { start } = useCanvas();
   return (
-    <div className="absolute top-4 left-5 z-10 grid gap-0.5 rounded-[10px] border border-border bg-card p-[5px]">
+    <div className="absolute top-3.5 left-3.5 z-10 grid gap-0.5 rounded-xl border border-border bg-card p-1">
       {TOOLBAR.map(({ kind, label, icon: Icon }) => (
-        <button
+        <Button
           key={kind}
-          type="button"
-          className="flex cursor-grab items-center gap-1.5 rounded-[7px] px-[9px] py-[5px] text-meta transition-colors duration-150 ease-out select-none hover:bg-accent active:cursor-grabbing"
+          variant="ghost"
+          size="xs"
+          className="cursor-grab justify-start gap-[7px] rounded-lg px-2.5 py-1.5 font-normal text-foreground select-none active:cursor-grabbing"
           onPointerDown={start({ kind: "new", step: kind, label })}
         >
-          <Icon className="size-4" strokeWidth={1.4} />
+          <Icon className="size-4" />
           {label}
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -205,7 +212,7 @@ function Toolbar() {
 function Ghost({ label, at }: { label: string; at: { x: number; y: number } }) {
   return (
     <div
-      className="pointer-events-none fixed z-50 rounded-full border border-border bg-card px-3 py-1 text-meta font-medium shadow-sm"
+      className="pointer-events-none fixed z-50 rounded-full border border-border bg-card px-3 py-1 text-meta font-medium"
       style={{ left: at.x + 12, top: at.y + 12 }}
     >
       {label}
@@ -243,7 +250,7 @@ function TraitMenu({
       <div
         role="menu"
         aria-label="Pick the Trait this Step runs"
-        className="fixed z-50 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-md"
+        className="fixed z-50 overflow-y-auto rounded-lg border border-border bg-card p-1"
         style={{ left, top, width: MENU.width, maxHeight: MENU.maxHeight }}
       >
         <p className="px-2 py-1.5 text-meta text-muted-foreground">
@@ -308,17 +315,19 @@ function StepCard({
       {...press}
       className={cn(
         press.className,
-        "flex h-14 w-[220px] items-center gap-3 rounded-[10px] border border-border bg-card px-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+        "group/step flex h-14 w-[220px] items-center gap-2.5 rounded-2xl bg-card px-3.5",
+        "border border-border",
         editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
-        selectedId === step.id && "border-primary ring-1 ring-primary",
+        selectedId === step.id && "border-foreground outline-4 outline-tint",
       )}
+      data-selected={selectedId === step.id || undefined}
     >
       <Ends />
-      <span className="grid size-[30px] shrink-0 place-items-center rounded-md border border-border bg-card">
-        <Icon className="size-4" strokeWidth={1.4} />
+      <span className="grid size-8 shrink-0 place-items-center rounded-control bg-muted text-foreground group-data-selected/step:bg-tint group-data-selected/step:text-(--mm-ink,var(--foreground))">
+        <Icon className="size-4" />
       </span>
       <span className="grid min-w-0 gap-px">
-        <span className="truncate text-[14px] font-semibold">{name}</span>
+        <span className="truncate text-ui font-semibold">{name}</span>
         <span className="truncate text-meta text-muted-foreground">{meta}</span>
       </span>
     </div>
@@ -361,9 +370,9 @@ function Pill({
       {...press}
       className={cn(
         press.className,
-        "flex h-8 w-[180px] items-center justify-center gap-[7px] rounded-full border border-border bg-card px-3 text-[12.5px] font-medium shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+        "flex h-8 w-[180px] items-center justify-center gap-[7px] rounded-full border border-border bg-card px-3 text-control font-medium",
         step && (editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"),
-        step && selectedId === step.id && "border-primary ring-1 ring-primary",
+        step && selectedId === step.id && "border-foreground outline-4 outline-tint",
         className,
       )}
     >
@@ -416,7 +425,7 @@ function LoopNode({ data }: NodeProps<LayoutNode>) {
 function FrameNode({ width, height }: NodeProps<LayoutNode>) {
   return (
     <div
-      className="rounded-xl border border-dashed border-border-strong"
+      className="rounded-card border border-dashed border-dash"
       style={{ width, height }}
     />
   );

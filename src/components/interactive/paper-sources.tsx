@@ -31,7 +31,7 @@ function SourceCard({ paper }: { paper: Paper }) {
       {paper.reason && <span className="line-clamp-3 text-meta text-ink-2">{paper.reason}</span>}
     </>
   );
-  const card = "flex w-full flex-col gap-1 rounded-[10px] border border-border bg-card px-4 py-3 text-left";
+  const card = "flex w-full flex-col gap-1 rounded-xl bg-card border border-edge px-4 py-3 text-left";
   if (!url) {
     return <div className={card}>{body}</div>;
   }

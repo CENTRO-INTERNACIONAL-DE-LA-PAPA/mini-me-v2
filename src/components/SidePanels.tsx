@@ -1,18 +1,20 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { CircleAlertIcon, CheckIcon, PlusIcon, XIcon } from "lucide-react";
+import { CircleAlertIcon, CheckIcon, PlusIcon } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { PLACEHOLDER_JOBS, PLACEHOLDER_TODOS } from "../placeholders";
 import type { MessageView } from "../protocol/eventStore";
 import type { MiniMe } from "../protocol/types";
 import { Markdown } from "./Markdown";
+import { MiniMeSurface } from "./MiniMeSurface";
 import { MiniMeAvatar } from "./MiniMeAvatar";
 import { MiniMePill } from "./MiniMePill";
 import { SampleTag } from "./SampleTag";
+import { ToolSheet } from "./shell/Sheet";
 import { useMiniMes } from "./useMiniMes";
 import {
   StepComponents,
@@ -37,28 +39,16 @@ function SidePanel({
   children: ReactNode;
 }) {
   return (
-    <aside
-      aria-label={title}
-      className="flex w-[400px] shrink-0 flex-col border-l border-border bg-background"
-    >
-      <header className="flex items-start gap-3 border-b border-border px-6 py-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-body font-bold">{title}</h2>
-          <p className="truncate text-meta text-muted-foreground">{meta}</p>
-        </div>
-        <Button variant="ghost" size="icon-sm" aria-label="Close" title="Close" onClick={onClose}>
-          <XIcon />
-        </Button>
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
-    </aside>
+    <ToolSheet title={title} meta={meta} onClose={onClose}>
+      {children}
+    </ToolSheet>
   );
 }
 
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section className="mt-6 first:mt-0">
-      <h3 className="mb-2 text-meta text-muted-foreground">{label}</h3>
+      <h3 className="mb-2.5 font-serif text-subheading text-foreground">{label}</h3>
       {children}
     </section>
   );
@@ -82,29 +72,38 @@ export function TodoPanel({ onClose }: { onClose: () => void }) {
     setDraft("");
   }
 
-  const row = (todo: (typeof todos)[number]) => (
-    <li key={todo.title} className="flex gap-3 border-b border-border py-3 last:border-b-0">
-      <Checkbox
-        className="mt-0.5"
-        checked={todo.done}
-        aria-label={todo.title}
-        onCheckedChange={(checked) =>
-          setTodos(todos.map((t) => (t === todo ? { ...t, done: checked } : t)))
-        }
-      />
-      <div className="grid min-w-0 gap-1">
-        <span className={cn(todo.done && "text-muted-foreground line-through")}>{todo.title}</span>
-        {!todo.done &&
-          (todo.miniMe ? (
-            <span>
-              <MiniMePill miniMe={byName(miniMes, todo.miniMe)}>{todo.miniMe}</MiniMePill>
-            </span>
-          ) : (
-            <span className="text-meta text-muted-foreground">Added by you</span>
-          ))}
-      </div>
-    </li>
-  );
+  // A task a Mini-Me handed back is a card in its wash; yours are neutral cards.
+  const row = (todo: (typeof todos)[number]) => {
+    const owner = byName(miniMes, todo.miniMe);
+    return (
+      <MiniMeSurface
+        key={todo.title}
+        miniMe={todo.done ? undefined : owner}
+        render={<li />}
+        className="flex gap-3 px-4 py-3.5"
+      >
+        <Checkbox
+          className="mt-0.5"
+          checked={todo.done}
+          aria-label={todo.title}
+          onCheckedChange={(checked) =>
+            setTodos(todos.map((t) => (t === todo ? { ...t, done: checked } : t)))
+          }
+        />
+        <div className="grid min-w-0 gap-1">
+          <span className={cn(todo.done && "text-muted-foreground line-through")}>{todo.title}</span>
+          {!todo.done &&
+            (todo.miniMe ? (
+              <span>
+                <MiniMePill miniMe={owner}>{todo.miniMe}</MiniMePill>
+              </span>
+            ) : (
+              <span className="text-meta text-muted-foreground">Added by you</span>
+            ))}
+        </div>
+      </MiniMeSurface>
+    );
+  };
 
   return (
     <SidePanel
@@ -127,11 +126,11 @@ export function TodoPanel({ onClose }: { onClose: () => void }) {
       </form>
       <div className="mt-5">
         <Group label={`Needs you · ${open.length}`}>
-          <ul>{open.map(row)}</ul>
+          <ul className="grid gap-2">{open.map(row)}</ul>
         </Group>
         {done.length > 0 && (
           <Group label={`Done · ${done.length}`}>
-            <ul>{done.map(row)}</ul>
+            <ul className="grid gap-2">{done.map(row)}</ul>
           </Group>
         )}
       </div>
@@ -157,31 +156,32 @@ export function JobsPanel({ onClose }: { onClose: () => void }) {
         {jobs.running.map((job) => {
           const miniMe = byName(miniMes, job.miniMe);
           return (
-            <div key={job.title} className="grid gap-3 rounded-xl border border-border bg-card p-4">
+            // The running job takes its Mini-Me's wash and edge; the others stay neutral.
+            <MiniMeSurface key={job.title} miniMe={miniMe} className="grid gap-3 p-4">
               <div className="flex items-center gap-3">
                 <MiniMeAvatar miniMe={miniMe} size={26} />
                 <div className="grid min-w-0 flex-1">
                   <span className="font-medium">{job.title}</span>
-                  <span className="text-meta text-muted-foreground">{job.miniMe}</span>
+                  <span className="text-meta text-mm-ink">
+                    {job.miniMe}
+                  </span>
                 </div>
               </div>
-              <Progress value={job.progress * 100} color={miniMe?.colors.solid}>
-                <span className="flex w-full justify-between text-meta">
-                  <span>{job.step}</span>
-                  <span style={{ color: miniMe?.colors.ink }}>
-                    {Math.round(job.progress * 100)}%
-                  </span>
-                </span>
+              <Progress value={job.progress * 100} className="gap-1.5">
+                <ProgressLabel className="font-normal text-mm-ink">
+                  {job.step}
+                </ProgressLabel>
+                <ProgressValue className="text-mm-ink" />
               </Progress>
               <div className="flex gap-1.5">
-                <Button variant="outline" size="xs" disabled>
+                <Button variant="mini-me" size="xs" disabled>
                   Pause
                 </Button>
                 <Button variant="destructive" size="xs" disabled>
                   Stop
                 </Button>
               </div>
-            </div>
+            </MiniMeSurface>
           );
         })}
       </Group>

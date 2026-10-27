@@ -104,7 +104,7 @@ const ELEMENTS: Components = {
       "first:mt-0 [&_code]:bg-transparent [&_code]:p-0",
   ),
   table: ({ node: _node, ...props }) => (
-    <div className="mt-2 overflow-x-auto rounded-xl border border-border bg-card first:mt-0">
+    <div className="mt-2 overflow-x-auto rounded-xl bg-card border border-edge first:mt-0">
       <table className="w-full border-collapse text-ui tabular-nums" {...props} />
     </div>
   ),

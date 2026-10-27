@@ -13,7 +13,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
@@ -26,12 +25,10 @@ import { cn } from "@/lib/utils";
 import {
   BugIcon,
   CheckIcon,
-  ChevronsUpDownIcon,
+  ChevronDownIcon,
   FolderIcon,
   HomeIcon,
   LayoutGridIcon,
-  ChevronRightIcon,
-  LeafIcon,
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
@@ -70,9 +67,9 @@ export function AppSidebar({
   const sidecar = useSidecarStatus();
 
   return (
-    <Sidebar>
-      <SidebarHeader className="gap-3 px-3 pt-4">
-        <div className="flex items-center justify-between pl-2.5">
+    <Sidebar variant="floating">
+      <SidebarHeader className="gap-[22px] px-3.5 pt-5 pb-0">
+        <div className="flex items-center justify-between px-2">
           <Wordmark height={16} />
           <SidebarTrigger />
         </div>
@@ -83,9 +80,9 @@ export function AppSidebar({
           onHome={() => onNavigate({ kind: "home" })}
         />
       </SidebarHeader>
-      <SidebarContent className="px-1">
+      <SidebarContent className="gap-[22px] px-1.5 pt-[22px]">
         {!project && (
-          <SidebarGroup>
+          <SidebarGroup className="py-0">
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
@@ -100,8 +97,8 @@ export function AppSidebar({
           </SidebarGroup>
         )}
         {project && (
-          <SidebarGroup>
-            <SidebarMenu>
+          <SidebarGroup className="py-0">
+            <SidebarMenu className="gap-0.5">
               <SidebarMenuItem>
                 <SidebarMenuButton
                   isActive={view.kind === "overview"}
@@ -119,19 +116,30 @@ export function AppSidebar({
                   <FolderIcon />
                   <span>Files</span>
                 </SidebarMenuButton>
-                <SidebarMenuBadge>{fileCount}</SidebarMenuBadge>
+                <SidebarMenuBadge className="font-normal text-muted-foreground">
+                  {fileCount}
+                </SidebarMenuBadge>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
         )}
         {project && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Conversations</SidebarGroupLabel>
-            <SidebarGroupAction title="New conversation" onClick={onNewConversation}>
-              <PlusIcon />
-              <span className="sr-only">New conversation</span>
-            </SidebarGroupAction>
-            <SidebarMenu>
+          <SidebarGroup className="py-0">
+            <div className="flex items-center justify-between pr-1 pb-1.5 pl-2.5">
+              <SidebarGroupLabel className="h-auto p-0 font-serif text-subheading font-normal text-foreground">
+                Conversations
+              </SidebarGroupLabel>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="New conversation"
+                title="New conversation"
+                onClick={onNewConversation}
+              >
+                <PlusIcon />
+              </Button>
+            </div>
+            <SidebarMenu className="gap-1">
               {conversations.map((conversation) => {
                 const active = view.kind === "conversation" && view.id === conversation.id;
                 return (
@@ -139,16 +147,11 @@ export function AppSidebar({
                     <SidebarMenuButton
                       size="lg"
                       isActive={active}
-                      className="flex-col items-start gap-0"
+                      className="h-auto flex-col items-start gap-0 py-[9px]"
                       onClick={() => onNavigate({ kind: "conversation", id: conversation.id })}
                     >
-                      <span className="w-full truncate">{conversation.title}</span>
-                      <span
-                        className={cn(
-                          "text-meta",
-                          active ? "text-muted-on-ink" : "text-muted-foreground",
-                        )}
-                      >
+                      <span className="w-full truncate text-foreground">{conversation.title}</span>
+                      <span className="text-meta font-normal text-muted-foreground">
                         {formatRelative(conversation.last_activity_at)}
                       </span>
                     </SidebarMenuButton>
@@ -162,71 +165,51 @@ export function AppSidebar({
           </SidebarGroup>
         )}
       </SidebarContent>
-      <SidebarFooter className="gap-3 px-3 pb-3">
-        <div className="grid gap-2 px-2.5">
+      <SidebarFooter className="gap-3 px-3.5 pb-3.5">
+        <div className="grid gap-2 px-2">
           <SidecarStatusLine status={sidecar} />
           <UpdateStatusLine />
         </div>
-        <SidebarMenu className="border-t border-sidebar-border pt-3">
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              isActive={["library", "mini-me", "trait"].includes(view.kind)}
-              onClick={() => onNavigate({ kind: "library" })}
-            >
-              <AvatarStack />
-              <span className="flex-1">Mini-Mes & Traits</span>
-              <ChevronRightIcon className="text-muted-foreground group-data-active/menu-button:text-current" />
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <div className="flex items-center gap-2.5 border-t border-sidebar-border pt-3 pl-2.5">
-          {PLACEHOLDER_USER && (
-            <>
-              <span
-                aria-hidden
-                className="flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-card text-[10.5px] font-semibold"
-              >
-                {PLACEHOLDER_USER.initials}
-              </span>
-              <span className="grid min-w-0 leading-tight">
-                <span className="truncate font-medium">{PLACEHOLDER_USER.name}</span>
-                <span className="truncate text-meta text-muted-foreground">
-                  {PLACEHOLDER_USER.detail}
-                </span>
-              </span>
-            </>
-          )}
-          <span className="ml-auto flex gap-0.5">
-            {import.meta.env.DEV && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="[DEBUG] Avatars"
-                title="[DEBUG] Avatars"
-                aria-pressed={view.kind === "avatars"}
-                onClick={() => onNavigate({ kind: "avatars" })}
-              >
-                <BugIcon />
-              </Button>
-            )}
+        {/* The Mini-Mes stack opens the Library; your avatar opens Settings. */}
+        <div className="flex items-center gap-1 rounded-well border border-border bg-card p-1">
+          <Button
+            variant="ghost"
+            aria-pressed={["library", "mini-me", "trait"].includes(view.kind)}
+            onClick={() => onNavigate({ kind: "library" })}
+            className="h-auto min-w-0 flex-1 justify-start gap-2.5 rounded-control px-1.5 py-1.5 text-control font-normal text-foreground aria-pressed:bg-accent aria-pressed:font-medium aria-pressed:text-foreground"
+          >
+            <AvatarStack />
+            <span className="truncate">Mini-Mes</span>
+          </Button>
+          {import.meta.env.DEV && (
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Settings"
-              title="Settings"
-              aria-pressed={view.kind === "settings"}
-              onClick={() => onNavigate({ kind: "settings" })}
+              aria-label="[DEBUG] Avatars"
+              title="[DEBUG] Avatars"
+              aria-pressed={view.kind === "avatars"}
+              onClick={() => onNavigate({ kind: "avatars" })}
             >
-              <SettingsIcon />
+              <BugIcon />
             </Button>
-          </span>
+          )}
+          <Button
+            size="icon"
+            aria-label="Settings"
+            title={PLACEHOLDER_USER ? `${PLACEHOLDER_USER.name} · Settings` : "Settings"}
+            aria-pressed={view.kind === "settings"}
+            onClick={() => onNavigate({ kind: "settings" })}
+            className="rounded-full text-[10px] font-semibold aria-pressed:ring-2 aria-pressed:ring-border-strong"
+          >
+            {PLACEHOLDER_USER ? PLACEHOLDER_USER.initials : <SettingsIcon />}
+          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>
   );
 }
 
-/** Mini-Mes the Library entry shows, one per group, overlapping by about a quarter. */
+/** Mini-Mes the Library entry shows, one per group, overlapping by about a third. */
 const STACKED = ["Researcher", "Curator", "Planner"];
 
 function AvatarStack() {
@@ -235,16 +218,17 @@ function AvatarStack() {
     (m) => m !== undefined,
   );
   return (
-    // Menu buttons size every svg as an icon; avatar bodies are svgs that fill their box.
+    // Buttons size every svg as an icon; avatar bodies are svgs that fill their box.
     <span className="flex shrink-0 [&_svg]:size-full!">
       {shown.map((m, i) => (
-        <MiniMeAvatar key={m.id} miniMe={m} size={18} className={i > 0 ? "-ml-[5px]" : undefined} />
+        <MiniMeAvatar key={m.id} miniMe={m} size={20} className={i > 0 ? "-ml-1.5" : undefined} />
       ))}
     </span>
   );
 }
 
-/** The card at the top of the sidebar: the open Project, and a menu to switch to another. */
+/** The open Project at the top of the navigation: a "Project" switcher above its serif name,
+ * or a dashed card when none is open. Its menu switches to another Project. */
 function ProjectSwitcher({
   project,
   projects,
@@ -256,37 +240,37 @@ function ProjectSwitcher({
   onOpen: (project: ProjectSummary) => void;
   onHome: () => void;
 }) {
-  const position = project ? projects.findIndex((p) => p.id === project.id) + 1 : 0;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <button
             className={cn(
-              "flex w-full items-center gap-2.5 rounded-xl border bg-card px-2.5 py-2 text-left outline-none",
-              "transition-colors duration-150 hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring",
-              project ? "border-border" : "border-dashed border-border-strong",
+              "flex w-full cursor-pointer flex-col items-start gap-2 rounded-xl text-left outline-none",
+              "focus-visible:outline-2 focus-visible:outline-ring",
+              project
+                ? "px-2 [&:hover_.switcher-label]:text-foreground"
+                : "border border-dashed border-dash px-3 py-3 transition-colors duration-150 hover:bg-accent",
             )}
           />
         }
       >
-        <span
-          className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-md",
-            project ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground",
-          )}
-        >
-          <LeafIcon className="size-3.5" />
-        </span>
-        <span className="grid min-w-0 flex-1 leading-tight">
-          <span className="truncate font-medium">{project?.name ?? "No project open"}</span>
-          <span className="truncate text-meta text-muted-foreground">
-            {project
-              ? position > 0 && `Project ${position} of ${projects.length}`
-              : "Choose one or start new"}
+        {project ? (
+          <>
+            <span className="switcher-label flex items-center gap-1 text-meta text-muted-foreground transition-colors duration-150">
+              Project
+              <ChevronDownIcon className="size-3.5" />
+            </span>
+            <span className="line-clamp-2 font-serif text-nav-project font-medium text-foreground">
+              {project.name}
+            </span>
+          </>
+        ) : (
+          <span className="grid leading-tight">
+            <span className="font-medium text-foreground">No project open</span>
+            <span className="text-meta text-muted-foreground">Choose one or start new</span>
           </span>
-        </span>
-        <ChevronsUpDownIcon className="size-4 shrink-0 text-muted-foreground" />
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-60">
         <DropdownMenuGroup>

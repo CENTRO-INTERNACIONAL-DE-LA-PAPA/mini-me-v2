@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { AssetRef } from "../protocol/types";
 import { formatSize } from "./format";
-import { Badge } from "@/components/ui/badge";
+import { ReferenceChip } from "./ReferenceChip";
 
 /** Media types the core reads for a thumbnail, as every webview the app runs in draws them. */
 const THUMBNAIL_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
@@ -27,10 +27,10 @@ export function AttachmentTray({
           {THUMBNAIL_TYPES.includes(asset.media_type) ? (
             <ImageAttachment projectId={projectId} asset={asset} onRemove={onRemove} />
           ) : (
-            <Badge variant="secondary">
+            <ReferenceChip>
               {asset.name} · {formatSize(asset.size_bytes)}
               <RemoveButton asset={asset} onRemove={onRemove} />
-            </Badge>
+            </ReferenceChip>
           )}
         </li>
       ))}

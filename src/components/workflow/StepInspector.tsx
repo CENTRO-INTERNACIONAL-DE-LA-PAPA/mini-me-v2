@@ -12,7 +12,9 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import type { TraitSummary, WorkflowBranch, WorkflowStep } from "../../protocol/types";
+import type { MiniMe, TraitSummary, WorkflowBranch, WorkflowStep } from "../../protocol/types";
+import { MiniMeSurface } from "../MiniMeSurface";
+import { ToolSheet } from "../shell/Sheet";
 import type { View } from "../shell/view";
 import { toolLabel } from "./tools";
 import {
@@ -41,7 +43,10 @@ export function StepInspector({
   onChange,
   onSelect,
   onOpen,
+  miniMe,
 }: {
+  /** The Mini-Me being edited, whose colours the Trait card takes. */
+  miniMe?: MiniMe;
   steps: WorkflowStep[];
   selectedId: string | null;
   traits: TraitSummary[];
@@ -51,148 +56,141 @@ export function StepInspector({
   onOpen: (view: View) => void;
 }) {
   const step = selectedId ? findStep(steps, selectedId) : null;
-  if (!step) {
-    return (
-      <Panel>
-        <p className="text-meta text-muted-foreground">
-          {editable
-            ? "Select a Step to edit it. Drag Steps from the toolbar onto a connector to add them, or drag a Step to move it."
-            : "Select a Step to see what it does."}
-        </p>
-      </Panel>
-    );
-  }
+  if (!step) return null;
   const change = (next: WorkflowStep) => onChange(updateStep(steps, step.id, () => next));
   const remaining = removeStep(steps, step.id);
   const trait = step.type === "trait" ? traits.find((t) => t.id === step.trait) : undefined;
 
   return (
-    <Panel>
-      <header className="grid gap-1">
-        <span className="text-meta text-muted-foreground">{TYPE_NAMES[step.type]}</span>
-        <span className="text-[18px] font-bold tracking-[-0.01em]">
-          {step.type === "trait"
-            ? (trait?.name ?? "Unknown Trait")
-            : (step.label ?? TYPE_NAMES[step.type])}
-        </span>
-      </header>
-      {step.type === "trait" && (
-        <>
-          <Row label="Trait">
-            <Select
-              value={step.trait}
-              disabled={!editable}
-              onValueChange={(id) => id && change({ ...step, trait: id as string })}
-            >
-              <SelectTrigger aria-label="Trait" className="w-full">
-                <SelectValue>
-                  {(id: string) => traits.find((t) => t.id === id)?.name ?? "Unknown Trait"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {traits.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Row>
-          {trait && (
-            <div className="grid gap-2.5 rounded-[10px] bg-muted px-3.5 py-3">
-              <p className="text-ui leading-normal text-ink-2">{trait.description}</p>
-              <div className="flex items-center justify-between text-meta">
-                <span className="text-muted-foreground">
-                  Used by {trait.used_by.length} Mini-Me{trait.used_by.length === 1 ? "" : "s"}
-                </span>
-                <Button
-                  variant="link"
-                  className="text-meta font-semibold"
-                  onClick={() => onOpen({ kind: "trait", id: trait.id })}
-                >
-                  Edit Trait
-                </Button>
-              </div>
-            </div>
-          )}
-          {trait && (
-            <Row label="Tools">
-              <p className="text-ui text-ink-2">
-                {trait.tools.length === 0 ? "None" : trait.tools.map(toolLabel).join(" · ")}
-              </p>
+    <ToolSheet
+      title={
+        step.type === "trait"
+          ? (trait?.name ?? "Unknown Trait")
+          : (step.label ?? TYPE_NAMES[step.type])
+      }
+      meta={TYPE_NAMES[step.type]}
+      onClose={() => onSelect(null)}
+      className="w-[340px]"
+    >
+      <div className="grid gap-[18px]">
+        {step.type === "trait" && (
+          <>
+            <Row label="Trait">
+              <Select
+                value={step.trait}
+                disabled={!editable}
+                onValueChange={(id) => id && change({ ...step, trait: id as string })}
+              >
+                <SelectTrigger aria-label="Trait" className="w-full">
+                  <SelectValue>
+                    {(id: string) => traits.find((t) => t.id === id)?.name ?? "Unknown Trait"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {traits.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Row>
-          )}
-          <div className="flex items-start justify-between gap-4">
-            <div className="grid gap-0.5">
-              <Label htmlFor="ask-before" className="font-medium">
-                Ask before running
-              </Label>
-              <p className="text-meta text-muted-foreground">Adds an approval before this Step.</p>
+            {trait && (
+              <MiniMeSurface miniMe={miniMe} className="grid gap-2.5 rounded-2xl p-3.5">
+                <p className="text-ui leading-normal text-foreground">{trait.description}</p>
+                <div className="flex items-center justify-between text-meta">
+                  <span className="text-mm-ink">
+                    Used by {trait.used_by.length} Mini-Me{trait.used_by.length === 1 ? "" : "s"}
+                  </span>
+                  <Button
+                    variant="link"
+                    className="text-meta font-semibold"
+                    onClick={() => onOpen({ kind: "trait", id: trait.id })}
+                  >
+                    Edit Trait →
+                  </Button>
+                </div>
+              </MiniMeSurface>
+            )}
+            {trait && (
+              <Row label="Tools">
+                <p className="text-ui text-ink-2">
+                  {trait.tools.length === 0 ? "None" : trait.tools.map(toolLabel).join(" · ")}
+                </p>
+              </Row>
+            )}
+            <div className="flex items-start justify-between gap-4">
+              <div className="grid gap-0.5">
+                <Label htmlFor="ask-before" className="font-medium">
+                  Ask before running
+                </Label>
+                <p className="text-meta text-muted-foreground">Adds an approval before this Step.</p>
+              </div>
+              <Switch
+                id="ask-before"
+                checked={asksBeforeRunning(steps, step.id, trait?.name ?? "this Step")}
+                disabled={!editable}
+                onCheckedChange={(on) =>
+                  onChange(setAskBeforeRunning(steps, step.id, on, trait?.name ?? "this Step"))
+                }
+              />
             </div>
-            <Switch
-              id="ask-before"
-              checked={asksBeforeRunning(steps, step.id, trait?.name ?? "this Step")}
+          </>
+        )}
+        {step.type === "approval" && (
+          <Row label="What you are asked">
+            <Textarea
+              value={step.prompt}
               disabled={!editable}
-              onCheckedChange={(on) =>
-                onChange(setAskBeforeRunning(steps, step.id, on, trait?.name ?? "this Step"))
-              }
+              onChange={(e) => change({ ...step, prompt: e.target.value })}
             />
-          </div>
-        </>
-      )}
-      {step.type === "approval" && (
-        <Row label="What you are asked">
-          <Textarea
-            value={step.prompt}
-            disabled={!editable}
-            onChange={(e) => change({ ...step, prompt: e.target.value })}
+          </Row>
+        )}
+        {(step.type === "condition" || step.type === "loop") && (
+          <Row
+            label={step.type === "loop" ? "Repeat while" : "Question"}
+            hint="The AI model answers it from the outputs so far."
+          >
+            <Textarea
+              value={step.question}
+              disabled={!editable}
+              onChange={(e) => change({ ...step, question: e.target.value })}
+            />
+          </Row>
+        )}
+        {step.type === "loop" && (
+          <Row label="At most" hint="From 1 to 10 times.">
+            <LimitInput
+              value={step.max_iterations}
+              disabled={!editable}
+              onChange={(max_iterations) => change({ ...step, max_iterations })}
+            />
+          </Row>
+        )}
+        {(step.type === "condition" || step.type === "parallel") && (
+          <Branches
+            branches={step.branches}
+            editable={editable}
+            onChange={(branches) => change({ ...step, branches })}
           />
-        </Row>
-      )}
-      {(step.type === "condition" || step.type === "loop") && (
-        <Row
-          label={step.type === "loop" ? "Repeat while" : "Question"}
-          hint="The AI model answers it from the outputs so far."
-        >
-          <Textarea
-            value={step.question}
-            disabled={!editable}
-            onChange={(e) => change({ ...step, question: e.target.value })}
-          />
-        </Row>
-      )}
-      {step.type === "loop" && (
-        <Row label="At most" hint="From 1 to 10 times.">
-          <LimitInput
-            value={step.max_iterations}
-            disabled={!editable}
-            onChange={(max_iterations) => change({ ...step, max_iterations })}
-          />
-        </Row>
-      )}
-      {(step.type === "condition" || step.type === "parallel") && (
-        <Branches
-          branches={step.branches}
-          editable={editable}
-          onChange={(branches) => change({ ...step, branches })}
-        />
-      )}
-      {editable && (
-        <Button
-          variant="outline"
-          className="w-fit text-destructive"
-          disabled={!remaining}
-          title={remaining ? undefined : "A Workflow keeps at least one Step"}
-          onClick={() => {
-            if (!remaining) return;
-            onChange(remaining);
-            onSelect(null);
-          }}
-        >
-          Remove step
-        </Button>
-      )}
-    </Panel>
+        )}
+        {editable && (
+          <Button
+            variant="outline"
+            className="w-fit text-destructive"
+            disabled={!remaining}
+            title={remaining ? undefined : "A Workflow keeps at least one Step"}
+            onClick={() => {
+              if (!remaining) return;
+              onChange(remaining);
+              onSelect(null);
+            }}
+          >
+            Remove step
+          </Button>
+        )}
+      </div>
+    </ToolSheet>
   );
 }
 
@@ -317,14 +315,6 @@ function Branches({
 function stepCount(steps: WorkflowStep[]): string {
   const n = allIds(steps).length;
   return n === 1 ? "1 Step" : `${n} Steps`;
-}
-
-function Panel({ children }: { children: ReactNode }) {
-  return (
-    <aside className="flex w-[320px] shrink-0 flex-col gap-5 overflow-y-auto border-l border-border bg-background px-[22px] py-[22px]">
-      {children}
-    </aside>
-  );
 }
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
