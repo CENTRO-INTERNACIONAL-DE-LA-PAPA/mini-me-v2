@@ -4,6 +4,7 @@ import { CheckIcon } from "lucide-react";
 import { useState } from "react";
 import type { Component, MessageStatus, MessageStep } from "../protocol/types";
 import { approvalState } from "./interactive/approval";
+import { InteractiveComponent } from "./interactive/InteractiveComponent";
 import { Markdown } from "./Markdown";
 
 export type StepState = "done" | "running" | "waiting" | "pending";
@@ -45,10 +46,39 @@ export function approvalAnswers(
   });
 }
 
+/**
+ * Where a reply's components are drawn. While the reply streams or waits, all of them are
+ * its own, below its text. Once it has ended, its own are those no Trait Step added and
+ * those of its last Trait Step run; each other component goes with the Step run that added
+ * it, under `byStep` at that run's index in `steps`.
+ */
+export function componentPlaces(
+  steps: MessageStep[],
+  components: Component[],
+  replyStatus: MessageStatus,
+): { own: Component[]; byStep: Map<number, Component[]> } {
+  const byStep = new Map<number, Component[]>();
+  if (replyStatus === "streaming" || replyStatus === "paused") {
+    return { own: components, byStep };
+  }
+  const last = steps.map((s) => s.type).lastIndexOf("trait");
+  const own: Component[] = [];
+  for (const component of components) {
+    const index = component.step_index;
+    if (index == null || index === last) {
+      own.push(component);
+    } else {
+      byStep.set(index, [...(byStep.get(index) ?? []), component]);
+    }
+  }
+  return { own, byStep };
+}
+
 interface Props {
   steps: MessageStep[];
-  /** The reply's Interactive Components, which hold its approvals' answers. */
+  /** The reply's Interactive Components: its approvals' answers, and what its Steps added. */
   components: Component[];
+  messageId?: string;
   replyStatus: MessageStatus;
   /** The Mini-Me's solid colour, for the running Step's spinner. */
   color?: string;
@@ -58,10 +88,12 @@ interface Props {
   stepsShown?: boolean;
 }
 
-/** The Steps a reply's Workflow has run, in a row. A done Trait Step opens its output. */
+/** The Steps a reply's Workflow has run, in a row. A done Trait Step opens its output and
+ * the components it added. */
 export function WorkflowProgress({
   steps,
   components,
+  messageId,
   replyStatus,
   color,
   onShowSteps,
@@ -70,6 +102,8 @@ export function WorkflowProgress({
   const [open, setOpen] = useState<number | null>(null);
   const opened = open === null ? null : steps[open];
   const answers = approvalAnswers(steps, components);
+  const { byStep } = componentPlaces(steps, components, replyStatus);
+  const added = open === null ? [] : (byStep.get(open) ?? []);
 
   return (
     <div className="rounded-[10px] border border-border bg-card px-4 py-3">
@@ -92,7 +126,8 @@ export function WorkflowProgress({
                 </span>
               </>
             );
-            const openable = step.type === "trait" && step.done && step.output;
+            const openable =
+              step.type === "trait" && step.done && (step.output || byStep.has(index));
             return (
               <li key={index} className="flex items-center">
                 {openable ? (
@@ -126,13 +161,46 @@ export function WorkflowProgress({
           </Button>
         )}
       </div>
-      {opened?.output && (
-        <div className="mt-3 border-t border-border pt-3 text-ink-2">
-          <Markdown content={opened.output} size="ui" />
+      {opened && (opened.output || added.length > 0) && (
+        <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3">
+          {opened.output && (
+            <div className="text-ink-2">
+              <Markdown content={opened.output} size="ui" />
+            </div>
+          )}
+          <StepComponents
+            components={added}
+            messageId={messageId}
+            replyStatus={replyStatus}
+            color={color}
+          />
         </div>
       )}
     </div>
   );
+}
+
+/** The components a Step run added, drawn below its output. */
+export function StepComponents({
+  components,
+  messageId,
+  replyStatus,
+  color,
+}: {
+  components: Component[];
+  messageId?: string;
+  replyStatus: MessageStatus;
+  color?: string;
+}) {
+  return components.map((component) => (
+    <InteractiveComponent
+      key={component.id}
+      component={component}
+      messageId={messageId}
+      replyStatus={replyStatus}
+      color={color}
+    />
+  ));
 }
 
 export function StepMark({ state, color }: { state: StepState; color?: string }) {

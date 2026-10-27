@@ -14,7 +14,7 @@ import { MiniMeAvatar } from "./MiniMeAvatar";
 import { MiniMePill } from "./MiniMePill";
 import { TextComponentChip } from "./TextComponentChip";
 import { useMiniMes } from "./useMiniMes";
-import { WorkflowProgress, showsProgress } from "./WorkflowProgress";
+import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
 
 const STATUS_LABEL: Record<string, string | undefined> = {
   streaming: "Replying…",
@@ -64,8 +64,9 @@ export const MessageItem = memo(function MessageItem({
   }
   const miniMe = (id: string) => miniMes.find((m) => m.id === id);
   const reactors = (emoji: string) => message.reactions.filter((r) => r.emoji === emoji);
+  const { own } = componentPlaces(message.steps, message.components, message.status);
   // An approval shows only while it asks; once answered, the progress card shows its answer.
-  const shown = message.components.filter(
+  const shown = own.filter(
     (c) => c.kind !== "approval" || approvalState(c.answer, message.status) === "asking",
   );
 
@@ -204,6 +205,7 @@ export const MessageItem = memo(function MessageItem({
         <WorkflowProgress
           steps={message.steps}
           components={message.components}
+          messageId={message.id}
           replyStatus={message.status}
           color={authorMiniMe?.colors.solid}
           onShowSteps={onToggleSteps && (() => onToggleSteps(message.id))}

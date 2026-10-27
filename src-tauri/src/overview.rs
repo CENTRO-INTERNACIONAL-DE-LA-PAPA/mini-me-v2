@@ -127,6 +127,8 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
                             .map(|a| serde_json::from_str(&a))
                             .transpose()?
                             .unwrap_or_default(),
+                        // The Overview draws the component on its own, outside its reply.
+                        step_index: None,
                     },
                     author: author(&a_kind, a_id)?,
                     conversation_id: parse_id(&conversation)?,
@@ -359,6 +361,7 @@ mod tests {
             data,
             text: format!("{kind} text"),
             answer: serde_json::Value::Null,
+            step_index: None,
         };
         let id = component.id;
         let event = EventKind::ComponentAdded { message_id: message, component };

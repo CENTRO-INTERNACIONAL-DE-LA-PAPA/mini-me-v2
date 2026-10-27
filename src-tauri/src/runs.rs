@@ -160,10 +160,10 @@ struct Inner {
 
 impl Inner {
     /// The run holding the open call `call_id`.
-    fn run_of_call(&self, call_id: Uuid) -> Option<(&Run, &CallKind)> {
-        self.runs
-            .values()
-            .find_map(|run| run.calls.get(&call_id).map(|(_, kind)| (run, kind)))
+    fn run_of_call(&self, call_id: Uuid) -> Option<(&Run, &str, &CallKind)> {
+        self.runs.values().find_map(|run| {
+            run.calls.get(&call_id).map(|(step_id, kind)| (run, step_id.as_str(), kind))
+        })
     }
 }
 
@@ -756,17 +756,20 @@ impl Runs {
             answers: Uuid,
             reply: Uuid,
             provider: Option<String>,
+            /// The Step the call runs.
+            step_id: String,
             /// The adapter of a Trait call; `None` for a decision.
             call: Option<String>,
         }
         let (place, is_route, summary_provider) = {
             let inner = self.lock();
-            let place = inner.run_of_call(call_id).map(|(run, kind)| Place {
+            let place = inner.run_of_call(call_id).map(|(run, step_id, kind)| Place {
                 project: Arc::clone(&run.project),
                 conversation_id: run.conversation_id,
                 answers: run.answers,
                 reply: run.message_id,
                 provider: run.provider.clone(),
+                step_id: step_id.to_string(),
                 call: match kind {
                     CallKind::Trait { adapter } => Some(adapter.clone()),
                     CallKind::Decision => None,
@@ -822,7 +825,8 @@ impl Runs {
             "component.add" => {
                 let p: ComponentAddParams = parse_params(params)?;
                 let component = (p.kind.as_str(), p.version, p.data, p.text);
-                let id = conversations::add_component(&project, reply, component)
+                let step_id = Some(place.step_id.as_str());
+                let id = conversations::add_component(&project, reply, step_id, component)
                     .map_err(reply_ended)?;
                 Ok(json!({ "component_id": id }))
             }
@@ -1345,6 +1349,21 @@ mod tests {
         assert_eq!(message.components.len(), 1);
         assert_eq!(json!(message.components[0].id), id);
         assert_eq!(message.components[0].kind, "paper-sources");
+    }
+
+    #[test]
+    fn a_component_records_the_step_run_that_added_it() {
+        let f = quick();
+        let (run_id, reply) = f.start("echo");
+        f.step(run_id, STEP);
+        f.runs.handle(SidecarFrame::StepCompleted { run_id, step_id: STEP.into(), output: None });
+        let call_id = f.step(run_id, STEP);
+        let params = json!({
+            "kind": "paper-sources", "version": 1, "data": papers(), "text": "1. Late blight"
+        });
+        result(add_component(&f, call_id, params));
+
+        assert_eq!(f.message(reply).components[0].step_index, Some(1));
     }
 
     #[test]

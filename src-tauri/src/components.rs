@@ -123,9 +123,9 @@ mod tests {
         let reply = start_reply(&project, conversation, question.id, author).unwrap();
         let columns = json!([{ "name": "yield", "type": "number" }]);
         let preview = json!({ "columns": columns, "rows": [[1]], "source_id": asset.id });
-        let table = add_component(&project, reply, ("table", 1, preview, "t".into())).unwrap();
+        let table = add_component(&project, reply, None, ("table", 1, preview, "t".into())).unwrap();
         let plain = json!({ "columns": columns, "rows": [[1]] });
-        let other = add_component(&project, reply, ("table", 1, plain, "t".into())).unwrap();
+        let other = add_component(&project, reply, None, ("table", 1, plain, "t".into())).unwrap();
 
         let state = project.lock();
         let read = read(&state, conversation, table).unwrap();
