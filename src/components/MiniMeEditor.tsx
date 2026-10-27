@@ -11,7 +11,16 @@ import { ColorPicker } from "./avatar/ColorPicker";
 import { COLOR_FAMILIES, hueOf, miniMeColors } from "./avatar/palette";
 import { PartTabs } from "./avatar/PartGrid";
 import { copyName, NIL_ID } from "./library";
-import { DeleteButton, EditorHeader, EditorPage, Field, List, Row } from "./LibraryParts";
+import {
+  DeleteButton,
+  EditorHeader,
+  EditorPage,
+  Field,
+  List,
+  OriginBadge,
+  Row,
+  TraitIcon,
+} from "./LibraryParts";
 import type { View } from "./shell/view";
 import { refreshMiniMes } from "./useMiniMes";
 import { StepInspector } from "./workflow/StepInspector";
@@ -187,9 +196,10 @@ export function MiniMeEditor({
                 {used.map((t) => (
                   <Row
                     key={t.id}
+                    icon={<TraitIcon size={32} />}
                     name={t.name}
                     description={t.description}
-                    builtIn={t.built_in}
+                    details={<OriginBadge builtIn={t.built_in} />}
                     onOpen={() => onOpen({ kind: "trait", id: t.id })}
                   />
                 ))}

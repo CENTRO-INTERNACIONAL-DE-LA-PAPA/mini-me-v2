@@ -1,12 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useEffect, useState } from "react";
+import { ChevronLeftIcon, InfoIcon, TriangleAlertIcon } from "lucide-react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "../api";
-import type { LibraryView, TraitDraft, TraitSummary } from "../protocol/types";
+import type { LibraryView, MiniMe, TraitDraft, TraitSummary } from "../protocol/types";
 import { copyName, NIL_ID } from "./library";
-import { DeleteButton, EditorPage, Field } from "./LibraryParts";
+import { DeleteButton, EditorPage, TraitIcon } from "./LibraryParts";
 import { MiniMePill } from "./MiniMePill";
 import type { View } from "./shell/view";
 
@@ -113,53 +115,85 @@ export function TraitEditor({
     </>
   );
 
+  const name = draft.name || "New Trait";
   return (
-    <EditorPage
-      title={draft.name || "New Trait"}
-      builtIn={builtIn}
-      actions={actions}
-      problems={problems}
-      onBack={onBack}
-    >
-      <Field label="Name" htmlFor="trait-name" hint="An imperative verb in Title Case, like Translate">
-        <Input
-          id="trait-name"
-          value={draft.name}
-          disabled={readOnly}
-          onChange={(e) => update({ name: e.target.value })}
-        />
-      </Field>
-      <Field label="Description" htmlFor="trait-description">
-        <Input
-          id="trait-description"
-          value={draft.description}
-          disabled={readOnly}
-          onChange={(e) => update({ description: e.target.value })}
-        />
-      </Field>
-      {promptBased ? (
-        <>
-          <Field
-            label="Instructions"
-            htmlFor="trait-instructions"
-            hint="What the AI model is told to do with the message and the files it references"
-          >
-            <Textarea
-              id="trait-instructions"
-              className="min-h-40"
-              value={draft.instructions}
+    <div className="flex flex-col">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 px-8 pt-4 text-meta">
+        <Button variant="link" className="gap-1 text-muted-foreground" onClick={onBack}>
+          <ChevronLeftIcon className="size-4" />
+          Traits
+        </Button>
+        <span aria-hidden className="text-off">
+          /
+        </span>
+        <span className="truncate">{name}</span>
+      </nav>
+      <header className="flex items-center gap-4 border-b border-border px-8 pt-2.5 pb-5">
+        <TraitIcon size={40} />
+        <div className="grid min-w-0 flex-1 gap-1">
+          <h1 className="truncate text-page font-bold">{name}</h1>
+          <p className="text-ui text-ink-2">
+            {builtIn ? "Built-in Trait" : saved ? "Your Trait" : "Not saved yet"}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">{actions}</div>
+      </header>
+      <div className="grid gap-5 px-8 py-6">
+        {problems && (
+          <ul className="grid max-h-32 gap-1 overflow-y-auto rounded-lg border border-border bg-card px-4 py-3 text-meta text-destructive">
+            {problems.split("\n").map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        )}
+        {saved && <UsedBy users={users} builtIn={builtIn} />}
+        {!builtIn && (
+          <Labelled label="Name" htmlFor="trait-name">
+            <Input
+              id="trait-name"
+              placeholder="An imperative verb in Title Case, like Translate"
+              value={draft.name}
               disabled={readOnly}
-              onChange={(e) => update({ instructions: e.target.value })}
+              onChange={(e) => update({ name: e.target.value })}
             />
-          </Field>
-          <Field label="Tools" hint="It can always read the files and tables the message references">
-            <div className="grid gap-3">
-              {MODEL_TOOLS.map((tool) => (
-                <label key={tool.id} className="flex items-start gap-3 text-ui">
-                  <Checkbox
+          </Labelled>
+        )}
+        <Labelled label="What it does" htmlFor="trait-description">
+          <Input
+            id="trait-description"
+            value={draft.description}
+            disabled={readOnly}
+            onChange={(e) => update({ description: e.target.value })}
+          />
+        </Labelled>
+        {promptBased ? (
+          <>
+            <Labelled label="Instructions" htmlFor="trait-instructions">
+              <Textarea
+                id="trait-instructions"
+                className="min-h-40"
+                placeholder="What the AI model is told to do with the message and the files it references"
+                value={draft.instructions}
+                disabled={readOnly}
+                onChange={(e) => update({ instructions: e.target.value })}
+              />
+            </Labelled>
+            <Labelled label="Tools">
+              <ul className="border-t border-border">
+                <ToolRow
+                  label="Read files"
+                  hint="Read the files and tables the message references"
+                  checked
+                  disabled
+                />
+                {MODEL_TOOLS.map((tool) => (
+                  <ToolRow
+                    key={tool.id}
+                    label={tool.label}
+                    hint={tool.hint}
                     checked={draft.tools.includes(tool.id)}
                     disabled={readOnly}
-                    onCheckedChange={(checked) =>
+                    onChange={(checked) =>
                       update({
                         tools: checked
                           ? [...draft.tools, tool.id]
@@ -167,35 +201,96 @@ export function TraitEditor({
                       })
                     }
                   />
-                  <span className="grid gap-0.5">
-                    <span className="font-medium">{tool.label}</span>
-                    <span className="text-meta text-muted-foreground">{tool.hint}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </Field>
-        </>
+                ))}
+              </ul>
+            </Labelled>
+          </>
+        ) : (
+          <p className="text-meta text-muted-foreground">
+            This Trait runs built-in code rather than instructions, so it can't be duplicated.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The Mini-Mes that run a Trait, so the reach of an edit is plain before saving. */
+function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: boolean }) {
+  const reach =
+    users.length === 1 ? "that Mini-Me" : users.length === 2 ? "both" : `all ${users.length}`;
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-2.5 text-ui text-ink-2">
+      {users.length > 0 ? (
+        <TriangleAlertIcon aria-hidden className="size-4 shrink-0" />
       ) : (
-        <p className="text-meta text-muted-foreground">
-          This Trait runs built-in code rather than instructions, so it can't be duplicated.
-        </p>
+        <InfoIcon aria-hidden className="size-4 shrink-0" />
       )}
-      {saved && (
-        <Field label="Used by">
-          {users.length === 0 ? (
-            <p className="text-meta text-muted-foreground">No Mini-Me runs this Trait.</p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {users.map((m, i) => (
-                <MiniMePill key={m?.id ?? i} miniMe={m}>
+      <p className="flex-1">
+        {users.length === 0 ? (
+          "No Mini-Me runs this Trait yet."
+        ) : (
+          <>
+            Used by{" "}
+            {users.map((m, i) => (
+              <Fragment key={m?.id ?? i}>
+                {i > 0 && (i === users.length - 1 ? " and " : ", ")}
+                <MiniMePill miniMe={m} className="font-medium">
                   {m?.name ?? "Mini-Me"}
                 </MiniMePill>
-              ))}
-            </div>
-          )}
-        </Field>
-      )}
-    </EditorPage>
+              </Fragment>
+            ))}
+            .{!builtIn && ` Changes apply to ${reach}.`}
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
+/** A field under a small grey label. */
+function Labelled({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor={htmlFor} className="text-meta font-medium text-muted-foreground">
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+/** A tool the Trait's model may use, ticked when it is offered. */
+function ToolRow({
+  label,
+  hint,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange?: (checked: boolean) => void;
+}) {
+  return (
+    <li>
+      <label className="flex items-center gap-3 border-b border-border py-2.5">
+        <Checkbox checked={checked} disabled={disabled} onCheckedChange={onChange} />
+        <span className="grid gap-px">
+          <span className="text-ui font-medium">{label}</span>
+          <span className="text-meta text-muted-foreground">{hint}</span>
+        </span>
+      </label>
+    </li>
   );
 }

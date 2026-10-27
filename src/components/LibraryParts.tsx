@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { ChevronRightIcon, PuzzleIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 interface HeaderProps {
@@ -127,28 +128,39 @@ export function List({ children }: { children: ReactNode }) {
   );
 }
 
+/** A Trait's mark: a puzzle piece on a tile, the same piece a Trait Step shows. */
+export function TraitIcon({ size = 36 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden
+      className="flex shrink-0 items-center justify-center rounded-lg bg-sidebar"
+      style={{ width: size, height: size }}
+    >
+      <PuzzleIcon className="size-[18px]" strokeWidth={1.6} />
+    </span>
+  );
+}
+
 /** One Mini-Me or Trait in a list, opening its editor. */
 export function Row({
   icon,
   name,
   description,
-  tag,
-  builtIn,
+  details,
   onOpen,
 }: {
   icon?: ReactNode;
   name: string;
   description: string;
-  /** An attribute shown before the origin, such as a Mini-Me's group. */
-  tag?: string;
-  builtIn: boolean;
+  /** What is shown between the description and the arrow, such as the Mini-Mes using a Trait. */
+  details?: ReactNode;
   onOpen: () => void;
 }) {
   return (
     <li>
       <button
         type="button"
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 ease-out outline-none hover:bg-accent focus-visible:bg-accent"
+        className="flex w-full items-center gap-3.5 px-4 py-3 text-left transition-colors duration-150 ease-out outline-none hover:bg-accent focus-visible:bg-accent"
         onClick={onOpen}
       >
         {icon}
@@ -156,8 +168,8 @@ export function Row({
           <span className="text-ui font-medium">{name}</span>
           <span className="truncate text-meta text-muted-foreground">{description}</span>
         </span>
-        {tag && <span className="shrink-0 text-meta text-muted-foreground">{tag}</span>}
-        <OriginBadge builtIn={builtIn} />
+        {details}
+        <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
       </button>
     </li>
   );

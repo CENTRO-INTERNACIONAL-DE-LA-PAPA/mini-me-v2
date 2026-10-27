@@ -8,12 +8,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { KeyRoundIcon, UserRoundIcon } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api, errorMessage } from "../api";
 import type { Ai2Status, AiSettings, KeyAccount, ProviderId } from "../protocol/types";
+import { SectionPage, type Section } from "./shell/SectionPage";
 
 const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "openai", name: "OpenAI" },
@@ -27,9 +28,9 @@ const providerName = (id: KeyAccount) =>
 
 type Page = "models" | "accounts";
 
-const PAGES: { id: Page; name: string }[] = [
-  { id: "models", name: "Models & keys" },
-  { id: "accounts", name: "Accounts" },
+const PAGES: Section<Page>[] = [
+  { id: "models", name: "Models & keys", icon: KeyRoundIcon },
+  { id: "accounts", name: "Accounts", icon: UserRoundIcon },
 ];
 
 export function SettingsView() {
@@ -50,20 +51,12 @@ export function SettingsView() {
   }, [refresh]);
 
   return (
-    // An empty column as wide as the section list mirrors it on the right, so the content
-    // column stays in the middle of the page at any width.
-    <main className="grid w-full grid-cols-[160px_minmax(0,760px)_160px] justify-center gap-10 px-8 py-10">
-      <nav aria-label="Settings sections" className="sticky top-10 self-start">
-        <SidebarMenu>
-          {PAGES.map((p) => (
-            <SidebarMenuItem key={p.id}>
-              <SidebarMenuButton isActive={page === p.id} onClick={() => setPage(p.id)}>
-                <span>{p.name}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </nav>
+    <SectionPage
+      title="Settings"
+      sections={PAGES}
+      active={page}
+      onSelect={setPage}
+    >
       <div className="min-w-0">
         {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
         {settings && page === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
@@ -71,7 +64,7 @@ export function SettingsView() {
           <AccountsPage settings={settings} onChanged={refresh} />
         )}
       </div>
-    </main>
+    </SectionPage>
   );
 }
 
