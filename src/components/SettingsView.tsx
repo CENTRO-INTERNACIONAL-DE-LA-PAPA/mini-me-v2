@@ -50,7 +50,9 @@ export function SettingsView() {
   }, [refresh]);
 
   return (
-    <main className="mx-auto grid w-full max-w-[960px] grid-cols-[160px_minmax(0,1fr)] gap-10 px-8 py-10">
+    // An empty column as wide as the section list mirrors it on the right, so the content
+    // column stays in the middle of the page at any width.
+    <main className="grid w-full grid-cols-[160px_minmax(0,760px)_160px] justify-center gap-10 px-8 py-10">
       <nav aria-label="Settings sections" className="sticky top-10 self-start">
         <SidebarMenu>
           {PAGES.map((p) => (
