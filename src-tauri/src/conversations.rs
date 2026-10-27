@@ -253,15 +253,21 @@ pub fn append_step_completed(
 }
 
 /// Adds an Interactive Component `(kind, version, data, text)` from a Trait to a streaming
-/// reply; returns its new ID.
+/// reply; returns its new ID. `step_id` is the Step whose Trait call added it, if any; the
+/// component records that Step's latest run.
 pub fn add_component(
     project: &Project,
     message_id: Uuid,
+    step_id: Option<&str>,
     (kind, version, data, text): (&str, u32, serde_json::Value, String),
 ) -> AppResult<Uuid> {
     components::check(kind, &data, &text)?;
     let mut state = project.lock();
     let conversation = streaming_reply(&state, message_id)?;
+    let step_index = match step_id {
+        Some(step_id) => state.latest_step_index(message_id, step_id)?,
+        None => None,
+    };
     let component = Component {
         id: new_id(),
         kind: kind.to_string(),
@@ -269,6 +275,7 @@ pub fn add_component(
         data,
         text,
         answer: serde_json::Value::Null,
+        step_index,
     };
     let id = component.id;
     state.persist(conversation, EventKind::ComponentAdded { message_id, component })?;
@@ -406,6 +413,7 @@ pub fn pause_reply(
         data: serde_json::json!({ "step_id": paused.step_id, "prompt": prompt }),
         text: prompt.to_string(),
         answer: serde_json::Value::Null,
+        step_index: None,
     };
     let kinds = vec![
         EventKind::ComponentAdded { message_id, component },
@@ -765,7 +773,7 @@ mod tests {
         let question = send_message(project, conversation, text("profile"), new_id()).unwrap();
         let reply = start_reply(project, conversation, question.id, echo()).unwrap();
         let ids = ["table", "chart", "theories"].map(|kind| {
-            add_component(project, reply, (kind, 1, serde_json::json!({}), "t".into())).unwrap()
+            add_component(project, reply, None, (kind, 1, serde_json::json!({}), "t".into())).unwrap()
         });
         complete_reply(project, reply).unwrap();
         (conversation, ids)

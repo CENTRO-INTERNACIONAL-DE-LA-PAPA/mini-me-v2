@@ -240,6 +240,10 @@ pub struct Component {
     /// The user's answer, for kinds that ask for one; `null` until answered.
     #[serde(default)]
     pub answer: Value,
+    /// The position, from 0, in the reply's started Steps of the Step run whose Trait call
+    /// added it; absent when no Trait Step added it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_index: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

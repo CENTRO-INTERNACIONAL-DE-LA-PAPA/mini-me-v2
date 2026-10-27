@@ -433,6 +433,17 @@ impl ProjectState {
         Ok(steps)
     }
 
+    /// The position, from 0, of the latest run of `step_id` among `message_id`'s started
+    /// Steps; `None` when that Step has not started.
+    pub fn latest_step_index(&self, message_id: Uuid, step_id: &str) -> AppResult<Option<u32>> {
+        let position: Option<u32> = self.conn.query_row(
+            "SELECT MAX(position) FROM message_steps WHERE message_id = ?1 AND step_id = ?2",
+            params![message_id.to_string(), step_id],
+            |row| row.get(0),
+        )?;
+        Ok(position.map(|p| p - 1))
+    }
+
     /// The Interactive Component `component_id` with its data, when a message of the
     /// Conversation holds it.
     pub fn conversation_component(
@@ -642,11 +653,11 @@ impl Scope {
 /// unless `with_data` is set.
 fn component_columns(with_data: bool) -> String {
     let data = if with_data { "c.data" } else { "'null'" };
-    format!("c.id, c.kind, c.version, {data}, c.text, c.answer")
+    format!("c.id, c.kind, c.version, {data}, c.text, c.answer, c.step_index")
 }
 
 /// The raw `component_columns`, starting at column `first`.
-type ComponentRow = (String, String, u32, String, String, Option<String>);
+type ComponentRow = (String, String, u32, String, String, Option<String>, Option<u32>);
 
 fn component_row(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<ComponentRow> {
     Ok((
@@ -656,10 +667,13 @@ fn component_row(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Comp
         row.get(first + 3)?,
         row.get(first + 4)?,
         row.get(first + 5)?,
+        row.get(first + 6)?,
     ))
 }
 
-fn component((id, kind, version, data, text, answer): ComponentRow) -> AppResult<Component> {
+fn component(
+    (id, kind, version, data, text, answer, step_index): ComponentRow,
+) -> AppResult<Component> {
     Ok(Component {
         id: Uuid::parse_str(&id)
             .map_err(|_| AppError::storage("stored component is not readable"))?,
@@ -668,6 +682,7 @@ fn component((id, kind, version, data, text, answer): ComponentRow) -> AppResult
         data: serde_json::from_str(&data)?,
         text,
         answer: answer.map(|a| serde_json::from_str(&a)).transpose()?.unwrap_or_default(),
+        step_index,
     })
 }
 
@@ -774,8 +789,9 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
         }
         EventKind::ComponentAdded { message_id, component } => {
             tx.execute(
-                "INSERT INTO components (id, message_id, kind, version, data, text, created_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO components \
+                 (id, message_id, kind, version, data, text, step_index, created_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     component.id.to_string(),
                     message_id.to_string(),
@@ -783,6 +799,7 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
                     component.version,
                     serde_json::to_string(&component.data)?,
                     component.text,
+                    component.step_index,
                     event.ts
                 ],
             )?;
@@ -1053,6 +1070,7 @@ mod tests {
             data: serde_json::json!({ "papers": [] }),
             text: text.into(),
             answer: serde_json::Value::Null,
+            step_index: None,
         };
         let first = component("paper-sources", "first");
         let second = component("theories", "second");
@@ -1117,6 +1135,7 @@ mod tests {
             data: serde_json::json!({ "step_id": "ask", "prompt": "Go on?" }),
             text: "Go on?".into(),
             answer: serde_json::Value::Null,
+            step_index: None,
         };
         let answered = |approved: bool| EventKind::ComponentAnswered {
             message_id: reply,

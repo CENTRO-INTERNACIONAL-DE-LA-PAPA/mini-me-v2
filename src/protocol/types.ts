@@ -43,6 +43,9 @@ export interface Component {
   text: string;
   /** The user's answer, for kinds that ask for one; null until answered. */
   answer: unknown;
+  /** The position in the reply's `steps` of the Step run whose Trait call added it; absent
+   * when no Trait Step added it. */
+  step_index?: number | null;
 }
 
 /** A Step of a reply's Workflow that has started. `output` is a Trait Step's text, a

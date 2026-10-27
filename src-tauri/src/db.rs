@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 4;
+pub const SCHEMA_VERSION: i32 = 5;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -114,6 +114,10 @@ CREATE TABLE overview (
     featured_component  TEXT REFERENCES components(id)
 );
 INSERT INTO overview (id) VALUES (1);
+"#,
+    r#"
+-- The position in its reply's message_steps (minus 1) of the Step run that added it.
+ALTER TABLE components ADD COLUMN step_index INTEGER;
 "#,
 ];
 

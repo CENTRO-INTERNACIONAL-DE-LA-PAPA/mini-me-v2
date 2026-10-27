@@ -287,6 +287,7 @@ mod tests {
             data: serde_json::json!({ "papers": [] }),
             text: "1. Late blight\n2. Wild potato".into(),
             answer: serde_json::Value::Null,
+            step_index: None,
         });
         let all = [user("papers?"), reply, user("summarize the second paper")];
         let library = Library::builtin();
@@ -336,6 +337,7 @@ mod tests {
             data: serde_json::Value::Null,
             text: "a\tb".into(),
             answer: serde_json::Value::Null,
+            step_index: None,
         });
         id
     }

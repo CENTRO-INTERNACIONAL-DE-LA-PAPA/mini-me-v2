@@ -14,7 +14,13 @@ import { MiniMeAvatar } from "./MiniMeAvatar";
 import { MiniMePill } from "./MiniMePill";
 import { SampleTag } from "./SampleTag";
 import { useMiniMes } from "./useMiniMes";
-import { StepMark, approvalAnswers, stepState } from "./WorkflowProgress";
+import {
+  StepComponents,
+  StepMark,
+  approvalAnswers,
+  componentPlaces,
+  stepState,
+} from "./WorkflowProgress";
 
 /** A panel docked to the right of a Conversation. */
 export type Panel = { kind: "todo" } | { kind: "jobs" } | { kind: "steps"; messageId: string };
@@ -255,11 +261,13 @@ const REPLY_STATE: Record<string, string> = {
   cancelled: "Stopped",
 };
 
-/** A reply's Workflow as a vertical timeline: each Step, its outcome and its output. */
+/** A reply's Workflow as a vertical timeline: each Step, its outcome, its output and the
+ * components it added. */
 export function StepsPanel({ message, onClose }: { message: MessageView; onClose: () => void }) {
   const miniMes = useMiniMes();
   const miniMe = miniMes.find((m) => m.id === message.author.id);
   const answers = approvalAnswers(message.steps, message.components);
+  const { byStep } = componentPlaces(message.steps, message.components, message.status);
   const done = message.steps.filter((s) => s.done).length;
 
   return (
@@ -301,6 +309,16 @@ export function StepsPanel({ message, onClose }: { message: MessageView; onClose
                 {step.type === "trait" && step.done && step.output && (
                   <div className="text-ink-2">
                     <Markdown content={step.output} size="ui" />
+                  </div>
+                )}
+                {byStep.has(index) && (
+                  <div className="mt-2 flex min-w-0 flex-col gap-3">
+                    <StepComponents
+                      components={byStep.get(index) ?? []}
+                      messageId={message.id}
+                      replyStatus={message.status}
+                      color={miniMe?.colors.solid}
+                    />
                   </div>
                 )}
               </div>
