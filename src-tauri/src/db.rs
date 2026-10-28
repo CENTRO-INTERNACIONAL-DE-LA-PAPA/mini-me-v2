@@ -150,6 +150,11 @@ pub fn open(path: &Path) -> AppResult<Connection> {
     Ok(conn)
 }
 
+/// Whether the database was made by a newer app version than this one.
+pub fn is_newer(conn: &Connection) -> AppResult<bool> {
+    Ok(user_version(conn)? > SCHEMA_VERSION)
+}
+
 /// Opens a Project database for reading only, without migrating it.
 pub fn open_read_only(path: &Path) -> AppResult<Connection> {
     Ok(Connection::open_with_flags(

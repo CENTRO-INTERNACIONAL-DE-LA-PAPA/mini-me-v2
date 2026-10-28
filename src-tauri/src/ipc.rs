@@ -11,6 +11,7 @@ use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
 
 use crate::ai2::{Ai2, Ai2Status, AppSecrets};
+use crate::approvals::{self, PausedApproval};
 use crate::assets;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
 use crate::error::{AppError, AppResult};
@@ -19,9 +20,10 @@ use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, OpenedConver
 use crate::history::HISTORY_BUDGET_CHARS;
 use crate::library::{MiniMe, MiniMeSummary, TraitSummary};
 use crate::user_library::{LibraryStore, Skipped, TraitDraft};
+use crate::user_profile::{ProfileStore, UserProfile};
 use crate::overview;
 use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
-use crate::runs::{CANCEL_TIMEOUT, Runs};
+use crate::runs::{CANCEL_TIMEOUT, RunningReply, Runs};
 use crate::secrets::KeychainSecrets;
 use crate::settings::{AiSettings, Settings};
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
@@ -43,6 +45,7 @@ pub struct AppState {
     runs: Arc<Runs>,
     routing: Arc<Routing>,
     library: Arc<LibraryStore>,
+    profile: ProfileStore,
     pub sidecar: Arc<Supervisor>,
     pub updates: Arc<Updates>,
     ai2: Arc<Ai2>,
@@ -73,6 +76,7 @@ impl AppState {
         let log = Arc::new(SidecarLog::new(&log_dir));
         let data_root = projects::ensure_data_root(&documents)?;
         let library = Arc::new(LibraryStore::open(&data_root));
+        let profile = ProfileStore::open(&data_root);
         let ai2 = Ai2::system();
         let runs = Arc::new(Runs::new(
             Box::new(AppSecrets {
@@ -102,6 +106,7 @@ impl AppState {
             runs,
             routing: Routing::new(Arc::clone(&library)),
             library,
+            profile,
             sidecar,
             updates,
             ai2,
@@ -376,6 +381,17 @@ pub struct AiSettingsView {
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub async fn get_user_profile(state: State<'_, AppState>) -> AppResult<UserProfile> {
+    Ok(state.profile.current())
+}
+
+/// Saves the user's name, or clears it when `name` is empty.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn save_user_name(state: State<'_, AppState>, name: String) -> AppResult<UserProfile> {
+    state.profile.save_name(&name)
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettingsView> {
     let settings = state.settings();
     Ok(AiSettingsView {
@@ -484,6 +500,30 @@ pub async fn answer_approval(
             .ok_or_else(|| AppError::not_found("Message not found"))?;
         state.runs.resume(project, conversation_id, paused, state.settings().ai.model());
     }
+    Ok(())
+}
+
+/// Every reply paused at an approval, across all Projects, newest first.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn list_paused_approvals(state: State<'_, AppState>) -> AppResult<Vec<PausedApproval>> {
+    approvals::list(&state.data_root)
+}
+
+/// Every reply whose Mini-Me run is in flight, in any Project.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_running_replies(state: State<'_, AppState>) -> AppResult<Vec<RunningReply>> {
+    Ok(state.runs.running())
+}
+
+/// Sends the running replies now and the whole list again each time it changes.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn subscribe_running_replies(
+    state: State<'_, AppState>,
+    on_change: Channel<Vec<RunningReply>>,
+) -> AppResult<()> {
+    state
+        .runs
+        .subscribe(Box::new(move |running| on_change.send(running.to_vec()).is_ok()));
     Ok(())
 }
 

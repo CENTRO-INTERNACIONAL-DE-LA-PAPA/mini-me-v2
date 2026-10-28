@@ -12,7 +12,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileIcon, FileTextIcon, ImageIcon, SearchIcon, Table2Icon, UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "../../api";
-import { PLACEHOLDER_USER } from "../../placeholders";
+import { useUserProfile } from "../../hooks/useUserProfile";
+import { initials } from "../../lib/names";
 import type { FileEntry, ProjectSummary } from "../../protocol/types";
 import { fileKind, type FileKind } from "./files";
 import { formatRelative, formatSize } from "../../lib/format";
@@ -186,6 +187,7 @@ function FileRow({
   onOpenConversation: (id: string) => void;
 }) {
   const miniMes = useMiniMes();
+  const name = useUserProfile()?.name;
   const Icon = ICONS[fileKind(entry.media_type, entry.name)];
   const by = entry.added_by;
   const miniMe = by?.kind === "mini_me" ? miniMes.find((m) => m.id === by.id) : undefined;
@@ -201,9 +203,9 @@ function FileRow({
       <TableCell>
         {by?.kind === "user" ? (
           <span className="flex items-center gap-2">
-            {PLACEHOLDER_USER && (
+            {name && (
               <span className="flex size-4 items-center justify-center rounded-full border border-border bg-muted text-[7px] font-semibold">
-                {PLACEHOLDER_USER.initials}
+                {initials(name)}
               </span>
             )}
             You

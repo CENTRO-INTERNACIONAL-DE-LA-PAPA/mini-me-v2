@@ -13,7 +13,7 @@ import { AppSidebar } from "./components/shell/AppSidebar";
 import { MainSheet } from "./components/shell/Sheet";
 import { isAppView, type View } from "./components/shell/view";
 import { TraitEditor } from "./components/library/TraitEditor";
-import type { ConversationSummary, ProjectSummary } from "./protocol/types";
+import type { ConversationSummary, ProjectSummary, Uuid } from "./protocol/types";
 
 export default function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -58,10 +58,11 @@ export default function App() {
     setView(next);
   }
 
-  async function openProject(summary: ProjectSummary) {
+  /** Opens a Project, then shows `next` in it. */
+  async function openProject(summary: ProjectSummary, next: View = { kind: "overview" }) {
     try {
       setProject(await api.openProject(summary.id));
-      setView({ kind: "overview" });
+      setView(next);
       setError(null);
     } catch (e) {
       fail(e);
@@ -76,6 +77,18 @@ export default function App() {
     } catch (e) {
       fail(e);
     }
+  }
+
+  /** Shows a reply in its Conversation, opening its Project first when another is open. */
+  async function openReply(projectId: Uuid, conversationId: Uuid, messageId: Uuid) {
+    const next: View = { kind: "conversation", id: conversationId, messageId };
+    if (project?.id === projectId) {
+      navigate(next);
+      return;
+    }
+    const summary = projects.find((p) => p.id === projectId);
+    if (summary) await openProject(summary, next);
+    else setError("That Project is no longer in Mini-Me Data.");
   }
 
   async function newConversation() {
@@ -121,6 +134,7 @@ export default function App() {
           onCreateProject={createProject}
           onConversationActivity={refreshConversations}
           onNavigate={navigate}
+          onOpenReply={openReply}
           onBack={() => setView(previous)}
         />
       </SidebarInset>
@@ -137,6 +151,7 @@ function Main({
   onCreateProject,
   onConversationActivity,
   onNavigate,
+  onOpenReply,
   onBack,
 }: {
   view: View;
@@ -147,6 +162,7 @@ function Main({
   onCreateProject: (name: string) => Promise<void>;
   onConversationActivity: () => void;
   onNavigate: (view: View) => void;
+  onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
   onBack: () => void;
 }) {
   // A Conversation and the Mini-Me editor lay out their own sheets; other views fill the main
@@ -215,6 +231,7 @@ function Main({
           messageId={view.messageId}
           title={conversations.find((c) => c.id === view.id)?.title ?? "Conversation"}
           onActivity={onConversationActivity}
+          onOpenReply={onOpenReply}
         />
       ) : null;
     case "home":
@@ -224,7 +241,12 @@ function Main({
         </MainSheet>
       ) : (
         scrolling(
-          <HomeView projects={projects} onOpen={onOpenProject} onCreate={onCreateProject} />,
+          <HomeView
+            projects={projects}
+            onOpen={onOpenProject}
+            onCreate={onCreateProject}
+            onOpenReply={onOpenReply}
+          />,
         )
       );
   }

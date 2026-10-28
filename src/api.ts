@@ -13,14 +13,17 @@ import type {
   MiniMe,
   MiniMeDefinition,
   Overview,
+  PausedApproval,
   ProjectSummary,
   ProtocolEvent,
   ProviderId,
+  RunningReply,
   SavedDefinition,
   SendMessageInput,
   SidecarStatus,
   TraitDraft,
   UpdateStatus,
+  UserProfile,
   Uuid,
 } from "./protocol/types";
 
@@ -78,6 +81,8 @@ export const api = {
   /** Answers the approval a paused reply waits for; approving resumes its Workflow. */
   answerApproval: (project_id: Uuid, message_id: Uuid, component_id: Uuid, approved: boolean) =>
     invoke<void>("answer_approval", { project_id, message_id, component_id, approved }),
+  /** Every reply paused at an approval, across all Projects, newest first. */
+  listPausedApprovals: () => invoke<PausedApproval[]>("list_paused_approvals"),
 
   addReaction: (project_id: Uuid, message_id: Uuid, emoji: string) =>
     invoke<void>("add_reaction", { project_id, message_id, emoji }),
@@ -117,6 +122,13 @@ export const api = {
   openAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("open_asset", { project_id, asset_id }),
 
+  getRunningReplies: () => invoke<RunningReply[]>("get_running_replies"),
+  /** Calls `onChange` with the running replies, then with the whole list on every change. */
+  subscribeRunningReplies: (onChange: (running: RunningReply[]) => void) => {
+    const on_change = new Channel<RunningReply[]>();
+    on_change.onmessage = onChange;
+    return invoke<void>("subscribe_running_replies", { on_change });
+  },
   getSidecarStatus: () => invoke<SidecarStatus>("get_sidecar_status"),
   /** Calls `onStatus` with the current sidecar status, then with every change. */
   subscribeSidecarStatus: (onStatus: (status: SidecarStatus) => void) => {
@@ -136,6 +148,10 @@ export const api = {
   saveTrait: (draft: TraitDraft) => invoke<SavedDefinition>("save_trait", { draft }),
   deleteMiniMe: (id: Uuid) => invoke<LibraryView>("delete_mini_me", { id }),
   deleteTrait: (id: Uuid) => invoke<LibraryView>("delete_trait", { id }),
+
+  getUserProfile: () => invoke<UserProfile>("get_user_profile"),
+  /** Saves the trimmed name; an empty name clears it. */
+  saveUserName: (name: string) => invoke<UserProfile>("save_user_name", { name }),
 
   getAiSettings: () => invoke<AiSettings>("get_ai_settings"),
   setAiModel: (provider: ProviderId, model: string) =>

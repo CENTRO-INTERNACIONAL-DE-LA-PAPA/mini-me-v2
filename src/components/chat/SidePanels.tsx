@@ -1,19 +1,11 @@
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { CircleAlertIcon, CheckIcon, PlusIcon } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
-import { PLACEHOLDER_JOBS, PLACEHOLDER_TODOS } from "../../placeholders";
+import { useState, type ReactNode } from "react";
 import type { MessageView } from "../../protocol/eventStore";
-import type { MiniMe } from "../../protocol/types";
+import type { RunningReply } from "../../protocol/types";
+import type { Outline, OutlineEntry } from "./outline";
 import { Markdown } from "./Markdown";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
-import { MiniMePill } from "../minime/MiniMePill";
-import { SampleTag } from "../minime/SampleTag";
 import { ToolSheet } from "../shell/Sheet";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import {
@@ -25,7 +17,7 @@ import {
 } from "./WorkflowProgress";
 
 /** A panel docked to the right of a Conversation. */
-export type Panel = { kind: "todo" } | { kind: "jobs" } | { kind: "steps"; messageId: string };
+export type Panel = { kind: "outline" } | { kind: "jobs" } | { kind: "steps"; messageId: string };
 
 function SidePanel({
   title,
@@ -54,202 +46,127 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-const byName = (miniMes: MiniMe[], name: string | null) =>
-  name ? miniMes.find((m) => m.name === name) : undefined;
-
-/** Tasks for the user, including ones Mini-Mes hand back. Sample data until to-dos exist. */
-export function TodoPanel({ onClose }: { onClose: () => void }) {
+/** What the Conversation uses: its Mini-Mes, files and tables and charts. Clicking an entry
+ * scrolls to the next message it appears in, wrapping back to the first. */
+export function OutlinePanel({ outline, onClose }: { outline: Outline; onClose: () => void }) {
   const miniMes = useMiniMes();
-  const [todos, setTodos] = useState(PLACEHOLDER_TODOS ?? []);
-  const [draft, setDraft] = useState("");
-  const open = todos.filter((t) => !t.done);
-  const done = todos.filter((t) => t.done);
+  // Per entry, the position in its `messageIds` of the message it last scrolled to.
+  const [visited, setVisited] = useState<Map<string, number>>(new Map());
 
-  function add(event: FormEvent) {
-    event.preventDefault();
-    if (!draft.trim()) return;
-    setTodos([{ title: draft.trim(), miniMe: null, done: false }, ...todos]);
-    setDraft("");
+  function jump(entry: OutlineEntry) {
+    const last = visited.get(entry.id);
+    const next = last === undefined ? 0 : (last + 1) % entry.messageIds.length;
+    setVisited(new Map(visited).set(entry.id, next));
+    document
+      .querySelector(`[data-message-id="${entry.messageIds[next]}"]`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
-  // A task a Mini-Me handed back is a card in its wash; yours are neutral cards.
-  const row = (todo: (typeof todos)[number]) => {
-    const owner = byName(miniMes, todo.miniMe);
-    return (
-      <MiniMeSurface
-        key={todo.title}
-        miniMe={todo.done ? undefined : owner}
-        render={<li />}
-        className="flex gap-3 px-4 py-3.5"
-      >
-        <Checkbox
-          className="mt-0.5"
-          checked={todo.done}
-          aria-label={todo.title}
-          onCheckedChange={(checked) =>
-            setTodos(todos.map((t) => (t === todo ? { ...t, done: checked } : t)))
-          }
-        />
-        <div className="grid min-w-0 gap-1">
-          <span className={cn(todo.done && "text-muted-foreground line-through")}>{todo.title}</span>
-          {!todo.done &&
-            (todo.miniMe ? (
-              <span>
-                <MiniMePill miniMe={owner}>{todo.miniMe}</MiniMePill>
-              </span>
-            ) : (
-              <span className="text-meta text-muted-foreground">Added by you</span>
-            ))}
-        </div>
-      </MiniMeSurface>
-    );
-  };
+  const groups: Array<{ label: string; entries: OutlineEntry[]; sign: string }> = [
+    { label: "Mini-Mes", entries: outline.miniMes, sign: "@" },
+    { label: "Files", entries: outline.files, sign: "#" },
+    { label: "Tables and charts", entries: outline.components, sign: "$" },
+  ].filter((group) => group.entries.length > 0);
+  const total = groups.reduce((sum, group) => sum + group.entries.length, 0);
 
   return (
-    <SidePanel
-      title="To-do"
-      meta={`${open.length} open · ${done.length} done`}
-      onClose={onClose}
-    >
-      <div className="mb-5 flex items-center justify-between">
-        <SampleTag />
-      </div>
-      <form onSubmit={add} className="relative">
-        <PlusIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          aria-label="Add a to-do"
-          placeholder="Add a to-do"
-          className="pl-9"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-      </form>
-      <div className="mt-5">
-        <Group label={`Needs you · ${open.length}`}>
-          <ul className="grid gap-2">{open.map(row)}</ul>
+    <SidePanel title="Outline" meta={`${total} used`} onClose={onClose}>
+      {groups.length === 0 && (
+        <p className="text-body text-muted-foreground">Nothing has been used yet.</p>
+      )}
+      {groups.map((group) => (
+        <Group key={group.label} label={group.label}>
+          {/* `grid-cols-1` lets rows shrink below their content, so long names truncate. */}
+          <ul className="grid grid-cols-1">
+            {group.entries.map((entry) => {
+              const miniMe =
+                group.sign === "@" ? miniMes.find((m) => m.id === entry.id) : undefined;
+              const name = miniMe?.name ?? entry.label;
+              return (
+                <li key={entry.id} className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => jump(entry)}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    {miniMe ? (
+                      <MiniMeAvatar miniMe={miniMe} size={22} />
+                    ) : (
+                      <span aria-hidden className="w-[22px] shrink-0 text-center text-muted-foreground">
+                        {group.sign}
+                      </span>
+                    )}
+                    <span title={name} className="min-w-0 flex-1 truncate">
+                      {name}
+                    </span>
+                    <span
+                      aria-label={`in ${entry.messageIds.length} messages`}
+                      className="ml-auto shrink-0 text-right text-meta text-muted-foreground tabular-nums"
+                    >
+                      {entry.messageIds.length}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </Group>
-        {done.length > 0 && (
-          <Group label={`Done · ${done.length}`}>
-            <ul className="grid gap-2">{done.map(row)}</ul>
-          </Group>
-        )}
-      </div>
+      ))}
     </SidePanel>
   );
 }
 
-/** Work that runs outside a reply: now, next or on a schedule. Sample data until jobs exist. */
-export function JobsPanel({ onClose }: { onClose: () => void }) {
-  const miniMes = useMiniMes();
-  const jobs = PLACEHOLDER_JOBS;
-  if (!jobs) return null;
-  return (
-    <SidePanel
-      title="Background jobs"
-      meta={`${jobs.running.length} running · ${jobs.queued.length} queued · ${jobs.scheduled.length} scheduled`}
-      onClose={onClose}
-    >
-      <div className="mb-5">
-        <SampleTag />
-      </div>
-      <Group label="Running">
-        {jobs.running.map((job) => {
-          const miniMe = byName(miniMes, job.miniMe);
-          return (
-            // The running job takes its Mini-Me's wash and edge; the others stay neutral.
-            <MiniMeSurface key={job.title} miniMe={miniMe} className="grid gap-3 p-4">
-              <div className="flex items-center gap-3">
-                <MiniMeAvatar miniMe={miniMe} size={26} />
-                <div className="grid min-w-0 flex-1">
-                  <span className="font-medium">{job.title}</span>
-                  <span className="text-meta text-mm-ink">
-                    {job.miniMe}
-                  </span>
-                </div>
-              </div>
-              <Progress value={job.progress * 100} className="gap-1.5">
-                <ProgressLabel className="font-normal text-mm-ink">
-                  {job.step}
-                </ProgressLabel>
-                <ProgressValue className="text-mm-ink" />
-              </Progress>
-              <div className="flex gap-1.5">
-                <Button variant="mini-me" size="xs" disabled>
-                  Pause
-                </Button>
-                <Button variant="destructive" size="xs" disabled>
-                  Stop
-                </Button>
-              </div>
-            </MiniMeSurface>
-          );
-        })}
-      </Group>
-      <Group label={`Queued · ${jobs.queued.length}`}>
-        {jobs.queued.map((job) => (
-          <JobLine key={job.title} title={job.title} detail={job.detail} />
-        ))}
-      </Group>
-      <Group label={`Scheduled · ${jobs.scheduled.length}`}>
-        {jobs.scheduled.map((job) => (
-          <JobLine key={job.title} title={job.title} detail={job.detail}>
-            <Switch defaultChecked aria-label={`Run ${job.title}`} />
-          </JobLine>
-        ))}
-      </Group>
-      <Group label="Recent">
-        {jobs.recent.map((job) => (
-          <JobLine
-            key={job.title}
-            title={job.title}
-            detail={job.detail}
-            icon={
-              job.failed ? (
-                <CircleAlertIcon className="size-[18px] text-destructive" />
-              ) : (
-                <span className="flex size-[18px] items-center justify-center rounded-full bg-primary">
-                  <CheckIcon className="size-3 text-primary-foreground" strokeWidth={2} />
-                </span>
-              )
-            }
-            failed={job.failed}
-          >
-            {job.failed && (
-              <Button variant="outline" size="xs" disabled>
-                Retry
-              </Button>
-            )}
-          </JobLine>
-        ))}
-      </Group>
-    </SidePanel>
-  );
-}
-
-function JobLine({
-  title,
-  detail,
-  icon,
-  failed,
-  children,
+/** Every running reply, in any Project; `conversationId`'s are shown as in this one. */
+export function JobsPanel({
+  replies,
+  conversationId,
+  onOpen,
+  onClose,
 }: {
-  title: string;
-  detail: string;
-  icon?: ReactNode;
-  failed?: boolean;
-  children?: ReactNode;
+  replies: RunningReply[];
+  conversationId: string;
+  onOpen: (reply: RunningReply) => void;
+  onClose: () => void;
 }) {
+  const miniMes = useMiniMes();
   return (
-    <div className="flex items-center gap-3 border-b border-border py-2.5 last:border-b-0">
-      {icon}
-      <div className="grid min-w-0 flex-1">
-        <span className="truncate">{title}</span>
-        <span className={cn("text-meta", failed ? "text-destructive" : "text-muted-foreground")}>
-          {detail}
-        </span>
-      </div>
-      {children}
-    </div>
+    <SidePanel title="Jobs" meta={`${replies.length} running`} onClose={onClose}>
+      {replies.length === 0 ? (
+        <p className="text-body text-muted-foreground">Nothing is running.</p>
+      ) : (
+        <ul className="grid gap-2">
+          {replies.map((reply) => {
+            const miniMe = miniMes.find((m) => m.id === reply.mini_me.id);
+            return (
+              <MiniMeSurface
+                key={reply.message_id}
+                miniMe={miniMe}
+                render={<li />}
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpen(reply)}
+                  className="flex w-full items-center gap-3 p-4 text-left focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <MiniMeAvatar miniMe={miniMe} size={26} />
+                  <span className="grid min-w-0 flex-1 gap-0.5">
+                    <span className="font-medium">{reply.mini_me.name}</span>
+                    <span className="truncate text-meta text-mm-ink">
+                      {reply.step ? `Running ${reply.step}` : "Starting"}
+                    </span>
+                    <span className="truncate text-meta text-muted-foreground">
+                      {reply.conversation_id === conversationId
+                        ? "This conversation"
+                        : `${reply.conversation_title} · ${reply.project_name}`}
+                    </span>
+                  </span>
+                </button>
+              </MiniMeSurface>
+            );
+          })}
+        </ul>
+      )}
+    </SidePanel>
   );
 }
 
