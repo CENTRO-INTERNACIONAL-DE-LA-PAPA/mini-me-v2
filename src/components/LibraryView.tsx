@@ -1,13 +1,16 @@
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { PlusIcon, PuzzleIcon, SearchIcon, SmileIcon } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { PlusIcon, SearchIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "../api";
 import { MINI_ME_GROUPS } from "../protocol/references";
 import type { LibraryView as Library, MiniMe, TraitSummary } from "../protocol/types";
-import { List, Row, TraitIcon } from "./LibraryParts";
+import { List, MiniMeCard, Row, TraitIcon } from "./LibraryParts";
 import { MiniMeAvatar } from "./MiniMeAvatar";
-import { SectionPage, type Section } from "./shell/SectionPage";
+import { SheetPage } from "./shell/Sheet";
 import type { LibraryTab, View } from "./shell/view";
 
 /** A group's heading as the `@` list shows it, or the group itself for one it doesn't know. */
@@ -29,55 +32,60 @@ export function LibraryView({ tab, onOpen }: { tab: LibraryTab; onOpen: (view: V
   }, []);
 
   const traits = tab === "traits";
-  const sections: Section<LibraryTab>[] = [
-    { id: "mini-mes", name: "Mini-Mes", icon: SmileIcon, count: library?.mini_mes.length },
-    { id: "traits", name: "Traits", icon: PuzzleIcon, count: library?.traits.length },
-  ];
 
   return (
-    <SectionPage
-      title="Library"
-      sections={sections}
-      active={tab}
-      onSelect={(id) => onOpen({ kind: "library", tab: id })}
-    >
-      <header className="mb-6 flex items-start gap-8">
-        <div className="flex-1">
-          <h1 className="text-page font-bold">{traits ? "Traits" : "Mini-Mes"}</h1>
-          <p className="mt-1.5 max-w-[600px] text-ui text-pretty text-ink-2">
-            {traits
-              ? "A Trait is one Step a Mini-Me can run. Editing a Trait changes every Mini-Me that uses it."
-              : "Mini-Mes answer in your Conversations by running the Traits in their Workflow. Built-in ones can be duplicated; your own can be edited and deleted."}
-          </p>
-        </div>
-        {library && (
-          <Button
-            disabled={!!library.unreadable}
-            onClick={() => onOpen(traits ? { kind: "trait" } : { kind: "mini-me" })}
+    <SheetPage
+      title={traits ? "Traits" : "Mini-Mes"}
+      description={
+        traits
+          ? "A Trait is one Step a Mini-Me can run. Editing a Trait changes every Mini-Me that uses it."
+          : "Mini-Mes answer in your Conversations by running the Traits in their Workflow. Built-in ones can be duplicated; your own can be edited and deleted."
+      }
+      actions={
+        <>
+          <Tabs
+            value={tab}
+            onValueChange={(id) => onOpen({ kind: "library", tab: id as LibraryTab })}
           >
-            <PlusIcon />
-            {traits ? "New Trait" : "New Mini-Me"}
-          </Button>
-        )}
-      </header>
-      {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
+            <TabsList aria-label="Library">
+              <TabsTrigger value="mini-mes">
+                Mini-Mes
+                {library && <span className="tabular-nums">{library.mini_mes.length}</span>}
+              </TabsTrigger>
+              <TabsTrigger value="traits">
+                Traits
+                {library && <span className="tabular-nums">{library.traits.length}</span>}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {library && (
+            <Button
+              disabled={!!library.unreadable}
+              onClick={() => onOpen(traits ? { kind: "trait" } : { kind: "mini-me" })}
+            >
+              <PlusIcon />
+              {traits ? "New Trait" : "New Mini-Me"}
+            </Button>
+          )}
+        </>
+      }
+    >
+      {error && <p className="text-meta text-destructive">{error}</p>}
       {library && <Problems library={library} />}
       {library && (
         <>
-          <div className="mb-6 flex items-center gap-4">
-            <div className="flex flex-1 flex-wrap gap-1.5" aria-label="Filter by group">
-              {!traits && <GroupChips library={library} group={group} onSelect={setGroup} />}
-            </div>
-            <div className="relative w-60 shrink-0">
+          <div className="flex items-center justify-between gap-4">
+            {!traits && <GroupFilter library={library} group={group} onSelect={setGroup} />}
+            <div className="relative ml-auto w-60 shrink-0">
               <SearchIcon
                 aria-hidden
-                className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
               />
               <Input
                 type="search"
                 aria-label={traits ? "Search Traits" : "Search Mini-Mes"}
                 placeholder="Search"
-                className="pl-8"
+                className="pl-9"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -90,7 +98,7 @@ export function LibraryView({ tab, onOpen }: { tab: LibraryTab; onOpen: (view: V
           )}
         </>
       )}
-    </SectionPage>
+    </SheetPage>
   );
 }
 
@@ -100,8 +108,9 @@ function matches(entry: { name: string; description: string }, query: string): b
   return entry.name.toLowerCase().includes(q) || entry.description.toLowerCase().includes(q);
 }
 
-/** One chip per group in use, known ones first in the `@` list's order, each with its count. */
-function GroupChips({
+/** A tab switch with "All" and one option per group in use, known groups first in the `@`
+ * list's order, each with its count. */
+function GroupFilter({
   library,
   group,
   onSelect,
@@ -115,22 +124,27 @@ function GroupChips({
   );
   const count = (g: string | null) =>
     library.mini_mes.filter((m) => g === null || m.group === g).length;
-  return [null, ...groups].map((g) => (
-    <Button
-      key={g ?? "all"}
-      variant="outline"
-      size="xs"
-      className="group/chip rounded-full px-2.5"
-      aria-pressed={group === g}
-      onClick={() => onSelect(g)}
+  return (
+    <ToggleGroup
+      aria-label="Filter by group"
+      variant="switch"
+      size="switch"
+      spacing={1}
+      value={[group ?? ALL]}
+      onValueChange={(value) => value.length > 0 && onSelect(value[0] === ALL ? null : value[0])}
     >
-      {g === null ? "All" : groupLabel(g)}
-      <span className="text-muted-foreground tabular-nums group-aria-pressed/chip:text-muted-on-ink">
-        {count(g)}
-      </span>
-    </Button>
-  ));
+      {[null, ...groups].map((g) => (
+        <ToggleGroupItem key={g ?? ALL} value={g ?? ALL}>
+          {g === null ? "All" : groupLabel(g)}
+          <span className="tabular-nums">{count(g)}</span>
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  );
 }
+
+/** The filter's value for every group. */
+const ALL = "all";
 
 function MiniMeLists({
   library,
@@ -146,35 +160,21 @@ function MiniMeLists({
   const shown = library.mini_mes.filter(
     (m) => (group === null || m.group === group) && matches(m, query),
   );
-  const row = (m: MiniMe) => {
-    const traitCount = library.traits.filter((t) => t.used_by.includes(m.id)).length;
-    return (
-      <Row
-        key={m.id}
-        icon={<MiniMeAvatar miniMe={m} size={34} />}
-        name={m.name}
-        description={m.description}
-        details={
-          <>
-            <span className="flex w-36 shrink-0 items-center gap-2 text-meta text-muted-foreground">
-              <PuzzleIcon aria-hidden className="size-4 text-ink-2" strokeWidth={1.6} />
-              {traitCount === 1 ? "1 Trait" : `${traitCount} Traits`}
-            </span>
-            <span className="w-24 shrink-0 truncate text-meta text-muted-foreground">
-              {groupLabel(m.group)}
-            </span>
-          </>
-        }
-        onOpen={() => onOpen({ kind: "mini-me", id: m.id })}
-      />
-    );
-  };
+  const card = (m: MiniMe) => (
+    <MiniMeCard
+      key={m.id}
+      miniMe={m}
+      traitCount={library.traits.filter((t) => t.used_by.includes(m.id)).length}
+      onOpen={() => onOpen({ kind: "mini-me", id: m.id })}
+    />
+  );
   return (
     <Origins
       entries={shown}
       builtInNote="duplicate to customise"
       empty={query.trim() ? "No Mini-Me matches your search." : "No Mini-Mes in this group."}
-      row={row}
+      row={card}
+      grid
     />
   );
 }
@@ -201,7 +201,12 @@ function TraitLists({
             {users.length > 0 && (
               <span className="flex">
                 {users.map((m, i) => (
-                  <MiniMeAvatar key={m?.id ?? i} miniMe={m} size={20} />
+                  <MiniMeAvatar
+                    key={m?.id ?? i}
+                    miniMe={m}
+                    size={22}
+                    className={i > 0 ? "-ml-1.5" : undefined}
+                  />
                 ))}
               </span>
             )}
@@ -232,6 +237,7 @@ function Origins<T extends { id: string; built_in: boolean }>({
   builtInNote,
   empty,
   row,
+  grid = false,
 }: {
   entries: T[];
   /** Shown after the built-in count. */
@@ -239,6 +245,8 @@ function Origins<T extends { id: string; built_in: boolean }>({
   /** Shown when there are no entries at all. */
   empty: string;
   row: (entry: T) => ReactNode;
+  /** Lay the entries out as cards, three to a row, instead of a list. */
+  grid?: boolean;
 }) {
   if (entries.length === 0) return <p className="text-ui text-muted-foreground">{empty}</p>;
   const lists = [
@@ -250,15 +258,21 @@ function Origins<T extends { id: string; built_in: boolean }>({
       {lists
         .filter((list) => list.entries.length > 0)
         .map((list) => (
-          <section key={list.name} className="grid gap-2.5">
+          <section key={list.name} className="grid gap-3">
             <h2 className="flex items-baseline gap-2.5">
-              <span className="text-section font-semibold">{list.name}</span>
-              <span className="text-meta font-normal text-muted-foreground">
+              <span className="font-serif text-heading text-foreground">{list.name}</span>
+              <span className="text-meta text-muted-foreground">
                 {list.entries.length}
                 {list.note && ` · ${list.note}`}
               </span>
             </h2>
-            <List>{list.entries.map(row)}</List>
+            {grid ? (
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
+                {list.entries.map(row)}
+              </ul>
+            ) : (
+              <List>{list.entries.map(row)}</List>
+            )}
           </section>
         ))}
     </div>
@@ -274,7 +288,7 @@ function rank(group: string): number {
 function Problems({ library }: { library: Library }) {
   if (!library.unreadable && library.skipped.length === 0) return null;
   return (
-    <section className="mb-8 rounded-xl border border-border bg-card px-5 py-4 text-meta">
+    <Card render={<section />} className="gap-0 px-5 py-4 text-meta">
       {library.unreadable ? (
         <p className="text-destructive">
           Your Mini-Mes and Traits could not be read, so they can't be changed until
@@ -295,6 +309,6 @@ function Problems({ library }: { library: Library }) {
           </ul>
         </>
       )}
-    </section>
+    </Card>
   );
 }

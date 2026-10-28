@@ -6,7 +6,7 @@ import { rendererFor } from "./catalogue";
  * or its renderer fails. */
 function Fallback({ text }: { text: string }) {
   return (
-    <div className="rounded-[10px] border border-border bg-card px-4 py-3 text-ui text-ink-2 whitespace-pre-wrap wrap-anywhere">
+    <div className="rounded-xl bg-card border border-edge px-4 py-3 text-ui text-ink-2 whitespace-pre-wrap wrap-anywhere">
       {text}
     </div>
   );

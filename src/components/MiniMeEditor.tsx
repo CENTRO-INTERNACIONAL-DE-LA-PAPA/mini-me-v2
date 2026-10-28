@@ -1,11 +1,13 @@
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
 import { MINI_ME_GROUPS } from "../protocol/references";
-import type { LibraryView, MiniMeDefinition, WorkflowStep } from "../protocol/types";
+import type { LibraryView, MiniMeDefinition, MiniMeGroup, WorkflowStep } from "../protocol/types";
 import { Avatar } from "./avatar/Avatar";
 import { ColorPicker } from "./avatar/ColorPicker";
 import { COLOR_FAMILIES, hueOf, miniMeColors } from "./avatar/palette";
@@ -21,6 +23,7 @@ import {
   Row,
   TraitIcon,
 } from "./LibraryParts";
+import { MainSheet } from "./shell/Sheet";
 import type { View } from "./shell/view";
 import { refreshMiniMes } from "./useMiniMes";
 import { StepInspector } from "./workflow/StepInspector";
@@ -40,9 +43,6 @@ const EMPTY: MiniMeDefinition = {
   workflow: { steps: [] },
 };
 
-// The design's editor tabs are taller than the shared ones, and the active one is bold.
-const TAB = "h-auto py-3 data-active:font-semibold";
-
 /** A Mini-Me's editor: `id` opens one, `from` starts a copy of one, neither a new Mini-Me.
  * It fills the main area, so the Workflow canvas can take the remaining height. */
 export function MiniMeEditor({
@@ -60,6 +60,7 @@ export function MiniMeEditor({
   const [draft, setDraft] = useState<MiniMeDefinition | null>(null);
   const [problems, setProblems] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [tab, setTab] = useState("workflow");
 
   useEffect(() => {
     (async () => {
@@ -83,15 +84,17 @@ export function MiniMeEditor({
 
   if (!library || !draft) {
     return problems ? (
-      <EditorPage
-        title="Mini-Me"
-        builtIn={false}
-        actions={null}
-        problems={problems}
-        onBack={onBack}
-      >
-        {null}
-      </EditorPage>
+      <MainSheet>
+        <EditorPage
+          title="Mini-Me"
+          back="Mini-Mes"
+          actions={null}
+          problems={problems}
+          onBack={onBack}
+        >
+          {null}
+        </EditorPage>
+      </MainSheet>
     ) : null;
   }
 
@@ -126,16 +129,30 @@ export function MiniMeEditor({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="px-8 pt-6">
+    <Tabs
+      value={tab}
+      onValueChange={(value) => setTab(value as string)}
+      className="min-h-0 min-w-0 flex-1 flex-row gap-3"
+    >
+      <MainSheet>
         <EditorHeader
           title={draft.name || "New Mini-Me"}
-          icon={<Avatar {...draft.avatar} color={draft.colors} size={36} />}
+          icon={<Avatar {...draft.avatar} color={draft.colors} size={48} />}
+          miniMe={draft}
           subtitle={draft.description}
-          builtIn={draft.built_in}
+          back="Mini-Mes"
+          tabs={
+            <TabsList aria-label="Editor">
+              <TabsTrigger value="workflow">Workflow</TabsTrigger>
+              <TabsTrigger value="traits">
+                Traits <span className="tabular-nums">{used.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="appearance">Appearance</TabsTrigger>
+            </TabsList>
+          }
           actions={
             draft.built_in ? (
-              <Button variant="outline" onClick={() => onOpen({ kind: "mini-me", from: draft.id })}>
+              <Button variant="secondary" onClick={() => onOpen({ kind: "mini-me", from: draft.id })}>
                 Duplicate
               </Button>
             ) : (
@@ -150,39 +167,15 @@ export function MiniMeEditor({
           problems={problems}
           onBack={onBack}
         />
-      </div>
-      <Tabs defaultValue="workflow" className="min-h-0 flex-1 gap-0">
-        <TabsList className="gap-6 px-8">
-          <TabsTrigger value="workflow" className={TAB}>
-            Workflow
-          </TabsTrigger>
-          <TabsTrigger value="traits" className={TAB}>
-            Traits · {used.length}
-          </TabsTrigger>
-          <TabsTrigger value="appearance" className={TAB}>
-            Appearance
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="workflow" className="flex min-h-0">
-          <div className="min-w-0 flex-1">
-            <WorkflowCanvas
-              steps={draft.workflow.steps}
-              traits={library.traits}
-              miniMe={draft}
-              selectedId={selected}
-              editable={!readOnly}
-              onSelect={setSelected}
-              onChange={setSteps}
-            />
-          </div>
-          <StepInspector
+        <TabsContent value="workflow" className="flex min-h-0 flex-col pt-5 pr-5 pb-5 pl-8">
+          <WorkflowCanvas
             steps={draft.workflow.steps}
-            selectedId={selected}
             traits={library.traits}
+            miniMe={draft}
+            selectedId={selected}
             editable={!readOnly}
-            onChange={setSteps}
             onSelect={setSelected}
-            onOpen={onOpen}
+            onChange={setSteps}
           />
         </TabsContent>
         <TabsContent value="traits" className="min-h-0 overflow-y-auto">
@@ -196,7 +189,7 @@ export function MiniMeEditor({
                 {used.map((t) => (
                   <Row
                     key={t.id}
-                    icon={<TraitIcon size={32} />}
+                    icon={<TraitIcon />}
                     name={t.name}
                     description={t.description}
                     details={<OriginBadge builtIn={t.built_in} />}
@@ -212,8 +205,21 @@ export function MiniMeEditor({
             <Appearance draft={draft} readOnly={readOnly} onChange={update} />
           </div>
         </TabsContent>
-      </Tabs>
-    </div>
+      </MainSheet>
+      {/* The selected Step's inspector opens as a tool sheet beside the board. */}
+      {tab === "workflow" && (
+        <StepInspector
+          miniMe={draft}
+          steps={draft.workflow.steps}
+          selectedId={selected}
+          traits={library.traits}
+          editable={!readOnly}
+          onChange={setSteps}
+          onSelect={setSelected}
+          onOpen={onOpen}
+        />
+      )}
+    </Tabs>
   );
 }
 
@@ -250,27 +256,29 @@ function Appearance({
         />
       </Field>
       <Field label="Group" hint="The heading it is listed under when you type @">
-        <div className="flex gap-2">
+        <ToggleGroup
+          aria-label="Group"
+          variant="switch"
+          size="switch"
+          spacing={1}
+          disabled={readOnly}
+          value={[draft.group]}
+          onValueChange={(value) => value.length > 0 && onChange({ group: value[0] as MiniMeGroup })}
+        >
           {MINI_ME_GROUPS.map(({ group, label }) => (
-            <Button
-              key={group}
-              variant="outline"
-              aria-pressed={draft.group === group}
-              disabled={readOnly}
-              onClick={() => onChange({ group })}
-            >
+            <ToggleGroupItem key={group} value={group}>
               {label}
-            </Button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
       </Field>
       {!readOnly && (
         <Field label="Look">
           <div className="grid grid-cols-[200px_1fr] items-start gap-8">
             <div className="grid gap-5">
-              <div className="grid place-items-center rounded-xl border border-border bg-card p-4">
+              <Card className="items-center p-4">
                 <Avatar {...draft.avatar} color={draft.colors} size={150} />
-              </div>
+              </Card>
               <ColorPicker
                 value={{ hue: hue ?? yellow.hue, solid: draft.colors.solid, ink: draft.colors.ink }}
                 onChange={(color) => onChange({ colors: miniMeColors(color) })}

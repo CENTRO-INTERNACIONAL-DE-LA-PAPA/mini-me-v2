@@ -21,6 +21,7 @@ import {
 import type { AssetRef, Message, MiniMe } from "../protocol/types";
 import { AttachmentTray } from "./AttachmentTray";
 import type { ComponentName } from "./interactive/component-names";
+import { surfaceStyle } from "./miniMeColors";
 import { MiniMePill } from "./MiniMePill";
 import { ReferenceNode } from "./ReferenceNode";
 import { sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
@@ -47,7 +48,19 @@ interface Props {
   onSent: (message: Message) => void;
   /** The Conversation's tables and charts, newest first, for the `$` list. */
   components: ComponentName[];
+  /** A tool sheet is open beside the Conversation, so the chat column is narrower. */
+  narrow?: boolean;
   ref?: Ref<ComposerHandle>;
+}
+
+/** The Conversation's chat column, centred in the sheet and narrower while a tool sheet is
+ * open beside it. The composer spans it; the messages sit 20px inside it on each side. */
+export function chatColumn(narrow: boolean, part: "composer" | "messages"): string {
+  return cn(
+    "mx-auto w-full",
+    narrow ? "max-w-[752px]" : "max-w-[892px]",
+    part === "composer" ? "px-9" : "px-14",
+  );
 }
 
 /** What the rest of the Conversation can do to the composer. */
@@ -98,6 +111,7 @@ export function Composer({
   choosing,
   onSent,
   components,
+  narrow = false,
   ref,
 }: Props) {
   const [attachments, setAttachments] = useState<AssetRef[]>([]);
@@ -320,7 +334,10 @@ export function Composer({
   }
 
   return (
-    <div className="relative mx-auto w-full max-w-[760px] px-8 pt-2 pb-5">
+    // Floats over the bottom of the Conversation sheet, centred on the chat column.
+    <div
+      className={cn("absolute inset-x-0 bottom-[22px] z-20", chatColumn(narrow, "composer"))}
+    >
       {suggestions.length > 0 && (
         <div
           role="listbox"
@@ -332,8 +349,8 @@ export function Composer({
                 : "Files"
           }
           className={cn(
-            "absolute bottom-full left-8 max-h-80 w-80 overflow-y-auto rounded-xl border",
-            "border-border bg-popover p-1 text-popover-foreground shadow-float",
+            "absolute bottom-full left-9 mb-2 max-h-80 w-80 overflow-y-auto rounded-well border",
+            "border-border bg-popover p-1 text-popover-foreground",
           )}
         >
           {sections.map((section, index) => (
@@ -361,14 +378,18 @@ export function Composer({
           {sidecar.detail}
         </p>
       )}
-      <div className="rounded-2xl border border-border-composer bg-card shadow-composer">
+      {/* Addressed to a Mini-Me, the box is outlined in its edge colour and sends in its ink. */}
+      <div
+        style={surfaceStyle(asked?.colors)}
+        className="rounded-composer border border-edge bg-card px-1.5 pt-1"
+      >
         <AttachmentTray
           projectId={projectId}
           attachments={attachments}
           onRemove={(asset) => setAttachments((current) => current.filter((a) => a !== asset))}
         />
         <EditorContent editor={editor} className="composer-editor" />
-        <div className="flex items-center gap-0.5 px-2 pb-2">
+        <div className="flex items-center gap-0.5 px-1 pb-2.5">
           <Button
             variant="ghost"
             size="icon"
@@ -408,7 +429,7 @@ export function Composer({
           {replying ? (
             <Button
               size="icon"
-              className="rounded-full"
+              className={cn("size-[34px] rounded-full", asked && "bg-(--mm-ink)")}
               aria-label="Stop the reply"
               title="Stop the reply"
               onClick={stop}
@@ -418,7 +439,7 @@ export function Composer({
           ) : (
             <Button
               size="icon"
-              className="rounded-full"
+              className={cn("size-[34px] rounded-full", asked && "bg-(--mm-ink)")}
               aria-label="Send"
               title="Send"
               onClick={send}
@@ -456,7 +477,7 @@ function SuggestionRow({
       className={cn(
         "flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5",
         "text-left",
-        selected ? "bg-primary text-primary-foreground" : "hover:bg-accent",
+        selected ? "bg-accent" : "hover:bg-accent",
       )}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onPick}
@@ -467,7 +488,7 @@ function SuggestionRow({
           <span
             className={cn(
               "line-clamp-1 text-meta",
-              selected ? "text-muted-on-ink" : "text-muted-foreground",
+              "text-muted-foreground",
             )}
           >
             {suggestion.miniMe.description}

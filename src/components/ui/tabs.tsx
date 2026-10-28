@@ -11,13 +11,14 @@ function Tabs({ className, ...props }: TabsPrimitive.Root.Props) {
   )
 }
 
-// Text tabs on a hairline; the active one is ink with a 2px black underline. No pill tabs.
+// The tab switch: a grey well holding the options; the selected one is an outlined white pill.
+// Vertical lists (Settings) use the same style with roomier options.
 function TabsList({ className, ...props }: TabsPrimitive.List.Props) {
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        "flex items-center gap-5 border-b border-border text-muted-foreground",
+        "flex w-fit items-center gap-1 rounded-well bg-well p-1 text-ink-2 data-[orientation=vertical]:w-full data-[orientation=vertical]:flex-col data-[orientation=vertical]:items-stretch data-[orientation=vertical]:p-[5px]",
         className
       )}
       {...props}
@@ -30,7 +31,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "-mb-px inline-flex h-9 cursor-pointer items-center gap-1.5 text-ui whitespace-nowrap transition-colors duration-150 ease-out outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40 data-active:text-foreground data-active:shadow-[inset_0_-2px_0_var(--foreground)] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-transparent px-3 py-[7px] text-control font-medium whitespace-nowrap transition-[color,background-color,box-shadow] duration-150 ease-out outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40 data-active:border-border data-active:bg-card data-active:text-foreground data-[orientation=vertical]:justify-start data-[orientation=vertical]:px-[11px] data-[orientation=vertical]:py-[9px] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[15px]",
         className
       )}
       {...props}

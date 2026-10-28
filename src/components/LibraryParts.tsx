@@ -1,64 +1,102 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { ChevronRightIcon, PuzzleIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon, PuzzleIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import type { MiniMe } from "../protocol/types";
+import { surfaceStyle } from "./miniMeColors";
+import { MiniMeAvatar } from "./MiniMeAvatar";
+import { MiniMeSurface } from "./MiniMeSurface";
 
 interface HeaderProps {
   title: string;
+  /** What the identity tile shows: a Mini-Me's avatar or a Trait's mark. */
   icon?: ReactNode;
+  /** The Mini-Me whose tint fills the identity tile; neutral without one. */
+  miniMe?: MiniMe;
   /** A line under the title, such as a Mini-Me's description. */
   subtitle?: string;
-  builtIn: boolean;
+  /** Where the back link returns to, such as "Mini-Mes". */
+  back: string;
+  /** Shown on the right before the actions, such as the editor's tab switch. */
+  tabs?: ReactNode;
   actions: ReactNode;
   /** Why the last save or delete was refused, one problem per line. */
   problems: string | null;
   onBack: () => void;
 }
 
-/** An editor's top: a back link, the title with its mark and actions, and the problems with
- * the last save. The problems scroll within a fixed height, so a long list never pushes the
- * rest of the editor out of view. */
+/** An editor's identity header: a back link, the identity tile with the serif name and a line
+ * under it, and the tab switch and actions on the right; then the problems with the last
+ * save. The problems scroll within a fixed height, so a long list never pushes the rest of
+ * the editor out of view. */
 export function EditorHeader({
   title,
   icon,
+  miniMe,
   subtitle,
-  builtIn,
+  back,
+  tabs,
   actions,
   problems,
   onBack,
 }: HeaderProps) {
   return (
-    <>
-      <Button variant="link" className="mb-2 px-0 text-muted-foreground" onClick={onBack}>
-        ← Library
-      </Button>
-      <header className="mb-6 flex items-center gap-4">
-        {icon}
-        <div className="grid min-w-0 flex-1 gap-0.5">
-          <h1 className="truncate text-page font-bold">{title}</h1>
-          {subtitle && <p className="truncate text-ui text-ink-2">{subtitle}</p>}
+    <div className="flex flex-col gap-4 pt-6 pr-6 pl-8">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div className="flex min-w-0 flex-col gap-3.5">
+          <Button
+            variant="link"
+            className="w-fit gap-1.5 text-control font-normal text-muted-foreground"
+            onClick={onBack}
+          >
+            <ChevronLeftIcon />
+            {back}
+          </Button>
+          <div className="flex min-w-0 items-center gap-4">
+            {icon && (
+              <span
+                style={surfaceStyle(miniMe?.colors)}
+                className="flex size-16 shrink-0 items-center justify-center rounded-sheet bg-tint text-foreground"
+              >
+                {icon}
+              </span>
+            )}
+            <div className="grid min-w-0 gap-1">
+              <h1 className="truncate font-serif text-identity font-medium text-foreground">
+                {title}
+              </h1>
+              {subtitle && <p className="truncate text-ui text-muted-foreground">{subtitle}</p>}
+            </div>
+          </div>
         </div>
-        <OriginBadge builtIn={builtIn} />
-        <div className="flex shrink-0 gap-2">{actions}</div>
+        <div className="flex shrink-0 items-center gap-2">
+          {tabs}
+          {actions}
+        </div>
       </header>
       {problems && (
-        <ul className="mb-6 grid max-h-32 gap-1 overflow-y-auto rounded-lg border border-border bg-card px-4 py-3 text-meta text-destructive">
+        <Card
+          render={<ul />}
+          className="max-h-32 gap-1 overflow-y-auto rounded-xl px-4 py-3 text-meta text-destructive"
+        >
           {problems.split("\n").map((problem) => (
             <li key={problem}>{problem}</li>
           ))}
-        </ul>
+        </Card>
       )}
-    </>
+    </div>
   );
 }
 
-/** An editor page: its header, then fields. */
+/** An editor page that only has its header, such as one that could not load. */
 export function EditorPage({ children, ...header }: HeaderProps & { children: ReactNode }) {
   return (
-    <main className="mx-auto w-full max-w-[760px] px-8 py-10">
+    <main className="flex w-full flex-col gap-6 pb-10">
       <EditorHeader {...header} />
-      <div className="grid gap-6">{children}</div>
+      <div className="grid gap-6 px-8">{children}</div>
     </main>
   );
 }
@@ -120,20 +158,17 @@ export function DeleteButton({ onDelete }: { onDelete: () => void }) {
   );
 }
 
+/** Flat rows on the sheet, divided by hairlines. */
 export function List({ children }: { children: ReactNode }) {
-  return (
-    <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-      {children}
-    </ul>
-  );
+  return <ul className="divide-y divide-border">{children}</ul>;
 }
 
 /** A Trait's mark: a puzzle piece on a tile, the same piece a Trait Step shows. */
-export function TraitIcon({ size = 36 }: { size?: number }) {
+export function TraitIcon({ size = 42 }: { size?: number }) {
   return (
     <span
       aria-hidden
-      className="flex shrink-0 items-center justify-center rounded-lg bg-sidebar"
+      className="flex shrink-0 items-center justify-center rounded-well border border-border bg-muted"
       style={{ width: size, height: size }}
     >
       <PuzzleIcon className="size-[18px]" strokeWidth={1.6} />
@@ -160,7 +195,7 @@ export function Row({
     <li>
       <button
         type="button"
-        className="flex w-full items-center gap-3.5 px-4 py-3 text-left transition-colors duration-150 ease-out outline-none hover:bg-accent focus-visible:bg-accent"
+        className="flex w-full items-center gap-3.5 rounded-xl px-2 py-3 text-left transition-colors duration-150 ease-out outline-none hover:bg-accent focus-visible:bg-accent"
         onClick={onOpen}
       >
         {icon}
@@ -169,8 +204,58 @@ export function Row({
           <span className="truncate text-meta text-muted-foreground">{description}</span>
         </span>
         {details}
-        <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-chev" />
       </button>
+    </li>
+  );
+}
+
+/** A Mini-Me as a library card: in its own wash when built in, neutral when it is yours, with
+ * its avatar, name, description and Trait count, opening its editor. */
+export function MiniMeCard({
+  miniMe,
+  traitCount,
+  onOpen,
+}: {
+  miniMe: MiniMe;
+  traitCount: number;
+  onOpen: () => void;
+}) {
+  const coloured = miniMe.built_in ? miniMe : undefined;
+  return (
+    <li>
+      <MiniMeSurface
+        miniMe={coloured}
+        render={<button type="button" onClick={onOpen} />}
+        className={cn(
+          "flex h-full w-full cursor-pointer flex-col gap-[18px] rounded-sheet p-5 text-left",
+          "transition-colors duration-150 ease-out hover:bg-tint",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+        )}
+      >
+        <span className="flex items-start justify-between">
+          <MiniMeAvatar miniMe={miniMe} size={56} />
+          <Badge
+            variant="outline"
+            className="h-auto border-transparent bg-card px-2.5 py-[3px] text-meta text-(--mm-ink,var(--ink-2)) border border-edge"
+          >
+            {miniMe.built_in ? "Built-in" : "Yours"}
+          </Badge>
+        </span>
+        <span className="flex flex-1 flex-col gap-1.5">
+          <span className="font-serif text-card-title font-medium text-foreground">
+            {miniMe.name}
+          </span>
+          <span className="line-clamp-3 text-ui text-pretty text-ink-2">{miniMe.description}</span>
+        </span>
+        <span className="flex items-center justify-between text-meta text-mm-ink">
+          {traitCount === 1 ? "1 Trait" : `${traitCount} Traits`}
+          <span className="flex items-center gap-1 font-medium">
+            Open
+            <ArrowRightIcon className="size-3.5" />
+          </span>
+        </span>
+      </MiniMeSurface>
     </li>
   );
 }

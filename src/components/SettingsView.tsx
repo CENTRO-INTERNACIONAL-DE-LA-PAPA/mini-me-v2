@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -11,7 +12,14 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { KeyRoundIcon, UserRoundIcon } from "lucide-react";
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { api, errorMessage } from "../api";
 import type { Ai2Status, AiSettings, KeyAccount, ProviderId } from "../protocol/types";
 import { SectionPage, type Section } from "./shell/SectionPage";
@@ -70,9 +78,9 @@ export function SettingsView() {
 
 function PageHeader({ title, lead }: { title: string; lead: string }) {
   return (
-    <header className="mb-10">
-      <h1 className="text-page font-bold">{title}</h1>
-      <p className="mt-1.5 text-ui text-ink-2">{lead}</p>
+    <header className="mb-7 grid gap-1.5">
+      <h1 className="font-serif text-sheet-title font-medium text-foreground">{title}</h1>
+      <p className="text-ui text-pretty text-muted-foreground">{lead}</p>
     </header>
   );
 }
@@ -87,8 +95,8 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="mt-10 first:mt-0">
-      <h3 className="text-section font-semibold">{title}</h3>
+    <section className="mt-7 first:mt-0">
+      <h3 className="font-serif text-heading text-foreground">{title}</h3>
       {description && <p className="mt-1 text-meta text-muted-foreground">{description}</p>}
       <div className="mt-3">{children}</div>
     </section>
@@ -120,6 +128,16 @@ function SettingRow({
   );
 }
 
+/** An account or key in Settings: a white outlined card, so the well-filled buttons and
+ * inputs inside it stand out. */
+function AccountCard({ render, children }: { render?: ReactElement; children: ReactNode }) {
+  return (
+    <Card render={render} className="gap-0 rounded-2xl bg-card px-4 py-3.5">
+      {children}
+    </Card>
+  );
+}
+
 /** A green or grey dot with its label, for whether something is set up. */
 function StatusDot({ on, children }: { on: boolean; children: ReactNode }) {
   return (
@@ -138,7 +156,7 @@ function ModelsPage({ settings, onChanged }: { settings: AiSettings; onChanged: 
         lead="Mini-Mes call the AI model you choose here, with your own key. Keys are kept in your system's keychain and are only sent to their provider."
       />
       <Section title="Providers">
-        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        <ul className="grid gap-2">
           {PROVIDERS.map((provider) => (
             <KeyRow
               key={provider.id}
@@ -174,7 +192,7 @@ function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged
         title="Choosing a Mini-Me"
         description="When you don't mention a Mini-Me, Typesafe's Jev chooses one. Your message's text and the names of its files are sent to Typesafe; file contents are not."
       >
-        <ul className="overflow-hidden rounded-xl border border-border bg-card">
+        <ul className="grid gap-2">
           <KeyRow
             account="typesafe"
             saved={settings.saved_keys.includes("typesafe")}
@@ -283,7 +301,7 @@ function Ai2Row() {
 
   const signedIn = status?.state === "signed_in";
   return (
-    <div className="rounded-xl border border-border bg-card px-4 py-3.5">
+    <AccountCard>
       <div className="flex items-center gap-3">
         <span className="grid flex-1 gap-0.5">
           <span className="font-medium">Ai2 account</span>
@@ -323,7 +341,7 @@ function Ai2Row() {
         <p className="mt-2 text-meta text-destructive">{status.error}</p>
       )}
       {error && <p className="mt-2 text-meta text-destructive">{error}</p>}
-    </div>
+    </AccountCard>
   );
 }
 
@@ -454,11 +472,11 @@ function KeyRow({
   }
 
   return (
-    <li className="px-4 py-3.5">
-      <div className="flex items-center gap-3">
+    <AccountCard render={<li />}>
+      <div className="flex items-center gap-3.5">
         <span
           aria-hidden
-          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted font-semibold"
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-muted font-serif text-name font-medium"
         >
           {name[0]}
         </span>
@@ -474,7 +492,7 @@ function KeyRow({
         </Button>
       </div>
       {editing && (
-        <form className="mt-3 flex gap-2 pl-11" onSubmit={save}>
+        <form className="mt-3 flex gap-2 pl-[50px]" onSubmit={save}>
           <Input
             aria-label={`${name} key`}
             type="password"
@@ -495,6 +513,6 @@ function KeyRow({
         </form>
       )}
       {error && <p className="mt-2 pl-11 text-meta text-destructive">{error}</p>}
-    </li>
+    </AccountCard>
   );
 }

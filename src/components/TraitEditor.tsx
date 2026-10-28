@@ -3,13 +3,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeftIcon, InfoIcon, TriangleAlertIcon } from "lucide-react";
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { PuzzleIcon } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "../api";
 import type { LibraryView, MiniMe, TraitDraft, TraitSummary } from "../protocol/types";
 import { copyName, NIL_ID } from "./library";
-import { DeleteButton, EditorPage, TraitIcon } from "./LibraryParts";
-import { MiniMePill } from "./MiniMePill";
+import { DeleteButton, EditorHeader, EditorPage } from "./LibraryParts";
+import { MiniMeAvatar } from "./MiniMeAvatar";
+import { MiniMeSurface } from "./MiniMeSurface";
+import { SheetSection } from "./shell/Sheet";
 import type { View } from "./shell/view";
 
 /** The tools a user-made Trait's model may be offered, besides the read tools. */
@@ -67,7 +69,7 @@ export function TraitEditor({
 
   if (!library || !draft) {
     return problems ? (
-      <EditorPage title="Trait" builtIn={false} actions={null} problems={problems} onBack={onBack}>
+      <EditorPage title="Trait" back="Traits" actions={null} problems={problems} onBack={onBack}>
         {null}
       </EditorPage>
     ) : null;
@@ -102,7 +104,7 @@ export function TraitEditor({
 
   const actions = builtIn ? (
     promptBased && (
-      <Button variant="outline" onClick={() => onOpen({ kind: "trait", from: draft.id })}>
+      <Button variant="secondary" onClick={() => onOpen({ kind: "trait", from: draft.id })}>
         Duplicate
       </Button>
     )
@@ -115,136 +117,119 @@ export function TraitEditor({
     </>
   );
 
-  const name = draft.name || "New Trait";
   return (
     <div className="flex flex-col">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 px-8 pt-4 text-meta">
-        <Button variant="link" className="gap-1 text-muted-foreground" onClick={onBack}>
-          <ChevronLeftIcon className="size-4" />
-          Traits
-        </Button>
-        <span aria-hidden className="text-off">
-          /
-        </span>
-        <span className="truncate">{name}</span>
-      </nav>
-      <header className="flex items-center gap-4 border-b border-border px-8 pt-2.5 pb-5">
-        <TraitIcon size={40} />
-        <div className="grid min-w-0 flex-1 gap-1">
-          <h1 className="truncate text-page font-bold">{name}</h1>
-          <p className="text-ui text-ink-2">
-            {builtIn ? "Built-in Trait" : saved ? "Your Trait" : "Not saved yet"}
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2">{actions}</div>
-      </header>
-      <div className="grid gap-5 px-8 py-6">
-        {problems && (
-          <ul className="grid max-h-32 gap-1 overflow-y-auto rounded-lg border border-border bg-card px-4 py-3 text-meta text-destructive">
-            {problems.split("\n").map((problem) => (
-              <li key={problem}>{problem}</li>
-            ))}
-          </ul>
-        )}
-        {saved && <UsedBy users={users} builtIn={builtIn} />}
-        {!builtIn && (
-          <Labelled label="Name" htmlFor="trait-name">
-            <Input
-              id="trait-name"
-              placeholder="An imperative verb in Title Case, like Translate"
-              value={draft.name}
-              disabled={readOnly}
-              onChange={(e) => update({ name: e.target.value })}
-            />
-          </Labelled>
-        )}
-        <Labelled label="What it does" htmlFor="trait-description">
-          <Input
-            id="trait-description"
-            value={draft.description}
-            disabled={readOnly}
-            onChange={(e) => update({ description: e.target.value })}
-          />
-        </Labelled>
-        {promptBased ? (
-          <>
-            <Labelled label="Instructions" htmlFor="trait-instructions">
-              <Textarea
-                id="trait-instructions"
-                className="min-h-40"
-                placeholder="What the AI model is told to do with the message and the files it references"
-                value={draft.instructions}
+      <EditorHeader
+        title={draft.name || "New Trait"}
+        icon={<PuzzleIcon className="size-6" />}
+        subtitle={builtIn ? "Built-in Trait" : saved ? "Your Trait" : "Not saved yet"}
+        back="Traits"
+        actions={actions}
+        problems={problems}
+        onBack={onBack}
+      />
+      <div className="grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5 pt-6 pr-7 pb-8 pl-8 max-lg:grid-cols-1">
+        <div className="grid gap-[18px]">
+          {!builtIn && (
+            <Labelled label="Name" htmlFor="trait-name">
+              <Input
+                id="trait-name"
+                placeholder="An imperative verb in Title Case, like Translate"
+                value={draft.name}
                 disabled={readOnly}
-                onChange={(e) => update({ instructions: e.target.value })}
+                onChange={(e) => update({ name: e.target.value })}
               />
             </Labelled>
-            <Labelled label="Tools">
-              <ul className="border-t border-border">
-                <ToolRow
-                  label="Read files"
-                  hint="Read the files and tables the message references"
-                  checked
-                  disabled
+          )}
+          <Labelled label="What it does" htmlFor="trait-description">
+            <Input
+              id="trait-description"
+              value={draft.description}
+              disabled={readOnly}
+              onChange={(e) => update({ description: e.target.value })}
+            />
+          </Labelled>
+          {promptBased ? (
+            <>
+              <Labelled label="Instructions" htmlFor="trait-instructions">
+                <Textarea
+                  id="trait-instructions"
+                  className="min-h-40"
+                  placeholder="What the AI model is told to do with the message and the files it references"
+                  value={draft.instructions}
+                  disabled={readOnly}
+                  onChange={(e) => update({ instructions: e.target.value })}
                 />
-                {MODEL_TOOLS.map((tool) => (
+              </Labelled>
+              <Labelled label="Tools">
+                <ul className="border-t border-border">
                   <ToolRow
-                    key={tool.id}
-                    label={tool.label}
-                    hint={tool.hint}
-                    checked={draft.tools.includes(tool.id)}
-                    disabled={readOnly}
-                    onChange={(checked) =>
-                      update({
-                        tools: checked
-                          ? [...draft.tools, tool.id]
-                          : draft.tools.filter((t) => t !== tool.id),
-                      })
-                    }
+                    label="Read files"
+                    hint="Read the files and tables the message references"
+                    checked
+                    disabled
                   />
-                ))}
-              </ul>
-            </Labelled>
-          </>
-        ) : (
-          <p className="text-meta text-muted-foreground">
-            This Trait runs built-in code rather than instructions, so it can't be duplicated.
-          </p>
-        )}
+                  {MODEL_TOOLS.map((tool) => (
+                    <ToolRow
+                      key={tool.id}
+                      label={tool.label}
+                      hint={tool.hint}
+                      checked={draft.tools.includes(tool.id)}
+                      disabled={readOnly}
+                      onChange={(checked) =>
+                        update({
+                          tools: checked
+                            ? [...draft.tools, tool.id]
+                            : draft.tools.filter((t) => t !== tool.id),
+                        })
+                      }
+                    />
+                  ))}
+                </ul>
+              </Labelled>
+            </>
+          ) : (
+            <p className="text-meta text-muted-foreground">
+              This Trait runs built-in code rather than instructions, so it can't be duplicated.
+            </p>
+          )}
+        </div>
+        {saved && <UsedBy users={users} builtIn={builtIn} />}
       </div>
     </div>
   );
 }
 
-/** The Mini-Mes that run a Trait, so the reach of an edit is plain before saving. */
+/** The Mini-Mes that run a Trait, each in its own colour, so the reach of an edit is plain
+ * before saving. */
 function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: boolean }) {
-  const reach =
-    users.length === 1 ? "that Mini-Me" : users.length === 2 ? "both" : `all ${users.length}`;
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-2.5 text-ui text-ink-2">
-      {users.length > 0 ? (
-        <TriangleAlertIcon aria-hidden className="size-4 shrink-0" />
+    <SheetSection title="Used by" meta={users.length > 0 ? users.length : undefined}>
+      {users.length === 0 ? (
+        <p className="text-ui text-muted-foreground">No Mini-Me runs this Trait yet.</p>
       ) : (
-        <InfoIcon aria-hidden className="size-4 shrink-0" />
+        <ul className="grid gap-2">
+          {users.map((m, i) => (
+            <MiniMeSurface
+              key={m?.id ?? i}
+              miniMe={m}
+              render={<li />}
+              className="flex items-center gap-3 rounded-2xl px-3.5 py-3"
+            >
+              <MiniMeAvatar miniMe={m} size={32} />
+              <span className="grid min-w-0">
+                <span className="truncate font-medium text-foreground">{m?.name ?? "Mini-Me"}</span>
+                {!builtIn && (
+                  <span className="text-meta text-mm-ink">
+                    Saving changes this Mini-Me too
+                  </span>
+                )}
+              </span>
+            </MiniMeSurface>
+          ))}
+        </ul>
       )}
-      <p className="flex-1">
-        {users.length === 0 ? (
-          "No Mini-Me runs this Trait yet."
-        ) : (
-          <>
-            Used by{" "}
-            {users.map((m, i) => (
-              <Fragment key={m?.id ?? i}>
-                {i > 0 && (i === users.length - 1 ? " and " : ", ")}
-                <MiniMePill miniMe={m} className="font-medium">
-                  {m?.name ?? "Mini-Me"}
-                </MiniMePill>
-              </Fragment>
-            ))}
-            .{!builtIn && ` Changes apply to ${reach}.`}
-          </>
-        )}
-      </p>
-    </div>
+    </SheetSection>
   );
 }
 
@@ -260,7 +245,7 @@ function Labelled({
 }) {
   return (
     <div className="grid gap-1.5">
-      <Label htmlFor={htmlFor} className="text-meta font-medium text-muted-foreground">
+      <Label htmlFor={htmlFor} className="text-control font-medium text-ink-2">
         {label}
       </Label>
       {children}

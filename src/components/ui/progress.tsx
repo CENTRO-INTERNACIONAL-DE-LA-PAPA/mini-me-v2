@@ -1,7 +1,8 @@
 import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
 import { cn } from "@/lib/utils"
 
-// `color` fills the bar, such as a Mini-Me's solid for its own work; ink when left out.
+// Inside a Mini-Me's surface the track is its tint and the fill its ink (`--mm-*`); `color`
+// overrides the fill. Neutral elsewhere.
 function Progress({
   className,
   children,
@@ -28,7 +29,7 @@ function ProgressTrack({ className, ...props }: ProgressPrimitive.Track.Props) {
   return (
     <ProgressPrimitive.Track
       className={cn(
-        "relative flex h-[3px] w-full items-center overflow-x-hidden rounded-full bg-border",
+        "relative flex h-1 w-full items-center overflow-x-hidden rounded-full bg-tint",
         className
       )}
       data-slot="progress-track"
@@ -44,7 +45,7 @@ function ProgressIndicator({
   return (
     <ProgressPrimitive.Indicator
       data-slot="progress-indicator"
-      className={cn("h-full bg-primary transition-all duration-200 ease-out", className)}
+      className={cn("h-full rounded-full bg-(--mm-ink,var(--primary)) transition-all duration-200 ease-out", className)}
       {...props}
     />
   )

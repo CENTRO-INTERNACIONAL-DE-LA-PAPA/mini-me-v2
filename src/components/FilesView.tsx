@@ -16,7 +16,10 @@ import { PLACEHOLDER_USER } from "../placeholders";
 import type { FileEntry, ProjectSummary } from "../protocol/types";
 import { fileKind, type FileKind } from "./files";
 import { formatRelative, formatSize } from "./format";
+import { FileTile } from "./FileTile";
+import { surfaceStyle } from "./miniMeColors";
 import { MiniMeAvatar } from "./MiniMeAvatar";
+import { SheetPage } from "./shell/Sheet";
 import { useMiniMes } from "./useMiniMes";
 
 type Tab = "all" | "data" | "document" | "outputs";
@@ -90,13 +93,34 @@ export function FilesView({ project, onOpenConversation, onChanged }: Props) {
   );
   const total = entries.reduce((sum, entry) => sum + entry.size_bytes, 0);
 
+  const made = entries.filter((entry) => entry.source === "generated").length;
+
   return (
-    <div className="px-8 pt-10 pb-12">
-      <header className="flex items-end gap-4">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-meta text-muted-foreground">{project.name}</p>
-          <h1 className="text-page font-bold">Files</h1>
-        </div>
+    <SheetPage
+      title="Files"
+      description={
+        <>
+          {entries.length} {entries.length === 1 ? "file" : "files"} in {project.name} ·{" "}
+          {made} made by Mini-Mes · {formatSize(total)}
+        </>
+      }
+      actions={
+        <Button onClick={upload}>
+          <UploadIcon />
+          Upload
+        </Button>
+      }
+    >
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
+          <TabsList aria-label="Show">
+            {TABS.map((t) => (
+              <TabsTrigger key={t.id} value={t.id}>
+                {t.name}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <div className="relative w-64">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -107,30 +131,11 @@ export function FilesView({ project, onOpenConversation, onChanged }: Props) {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <Button onClick={upload}>
-          <UploadIcon />
-          Upload
-        </Button>
-      </header>
+      </div>
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="mt-6">
-        <div className="flex items-center gap-4 border-b border-border">
-          <TabsList className="flex-1 border-b-0">
-            {TABS.map((t) => (
-              <TabsTrigger key={t.id} value={t.id}>
-                {t.name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <span className="text-meta text-muted-foreground">
-            {entries.length} {entries.length === 1 ? "item" : "items"} · {formatSize(total)}
-          </span>
-        </div>
-      </Tabs>
+      {error && <p className="text-meta text-destructive">{error}</p>}
 
-      {error && <p className="mt-4 text-meta text-destructive">{error}</p>}
-
-      <div className="mt-5">
+      <div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -163,11 +168,11 @@ export function FilesView({ project, onOpenConversation, onChanged }: Props) {
         </Table>
       </div>
 
-      <p className="mt-4 flex items-center gap-2 text-meta text-muted-foreground">
+      <p className="flex items-center gap-2 text-meta text-muted-foreground">
         <span aria-hidden className="size-[7px] rounded-full bg-success" />
         Every file here is stored on this computer, in the Project's folder.
       </p>
-    </div>
+    </SheetPage>
   );
 }
 
@@ -188,9 +193,9 @@ function FileRow({
   return (
     <TableRow className="cursor-pointer" onClick={onOpen}>
       <TableCell className="max-w-80">
-        <span className="flex items-center gap-2.5">
-          <Icon className="size-4 shrink-0 text-ink-2" />
-          <span className="truncate">{entry.name}</span>
+        <span className="flex items-center gap-3">
+          <FileTile miniMe={miniMe} icon={Icon} />
+          <span className="truncate font-medium">{entry.name}</span>
         </span>
       </TableCell>
       <TableCell>
@@ -204,8 +209,11 @@ function FileRow({
             You
           </span>
         ) : by?.kind === "mini_me" ? (
-          <span className="flex items-center gap-2">
-            <MiniMeAvatar miniMe={miniMe} size={16} />
+          <span
+            style={surfaceStyle(miniMe?.colors)}
+            className="flex items-center gap-[7px] text-(--mm-ink,var(--foreground))"
+          >
+            <MiniMeAvatar miniMe={miniMe} size={18} />
             {miniMe?.name ?? "Mini-Me"}
           </span>
         ) : (

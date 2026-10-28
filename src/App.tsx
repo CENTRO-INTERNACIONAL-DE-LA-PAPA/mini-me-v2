@@ -10,6 +10,7 @@ import { MiniMeEditor } from "./components/MiniMeEditor";
 import { OverviewView } from "./components/OverviewView";
 import { SettingsView } from "./components/SettingsView";
 import { AppSidebar } from "./components/shell/AppSidebar";
+import { MainSheet } from "./components/shell/Sheet";
 import { isAppView, type View } from "./components/shell/view";
 import { TraitEditor } from "./components/TraitEditor";
 import type { ConversationSummary, ProjectSummary } from "./protocol/types";
@@ -100,9 +101,17 @@ export default function App() {
         onNavigate={navigate}
         onNewConversation={newConversation}
       />
-      <SidebarInset className="h-svh min-w-0 overflow-hidden">
+      {/* The desk: the open view's sheets float on it, 12px from the window and each other. */}
+      <SidebarInset className="h-svh min-w-0 flex-row gap-3 overflow-hidden bg-transparent p-3">
         <OpenSidebarButton />
-        {error && <p className="px-8 pt-4 text-meta text-destructive">{error}</p>}
+        {error && (
+          <p
+            role="alert"
+            className="absolute top-5 left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-card px-4 py-2 text-meta text-destructive"
+          >
+            {error}
+          </p>
+        )}
         <Main
           view={view}
           project={project}
@@ -140,10 +149,12 @@ function Main({
   onNavigate: (view: View) => void;
   onBack: () => void;
 }) {
-  // A Conversation scrolls its message list itself, above the composer; other views scroll
-  // as a whole.
+  // A Conversation and the Mini-Me editor lay out their own sheets; other views fill the main
+  // sheet and scroll as a whole.
   const scrolling = (content: ReactNode) => (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{content}</div>
+    <MainSheet>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{content}</div>
+    </MainSheet>
   );
   switch (view.kind) {
     case "settings":
@@ -200,7 +211,6 @@ function Main({
         <ChatView
           key={`${view.id}-${view.messageId ?? ""}`}
           projectId={project.id}
-          projectName={project.name}
           conversationId={view.id}
           messageId={view.messageId}
           title={conversations.find((c) => c.id === view.id)?.title ?? "Conversation"}
@@ -209,7 +219,9 @@ function Main({
       ) : null;
     case "home":
       return project ? (
-        <p className="m-auto text-muted-foreground">Select or create a conversation.</p>
+        <MainSheet>
+          <p className="m-auto text-muted-foreground">Select or create a conversation.</p>
+        </MainSheet>
       ) : (
         scrolling(
           <HomeView projects={projects} onOpen={onOpenProject} onCreate={onCreateProject} />,
@@ -222,5 +234,5 @@ function Main({
 function OpenSidebarButton() {
   const { open } = useSidebar();
   if (open) return null;
-  return <SidebarTrigger className="fixed top-3 left-3 z-20" />;
+  return <SidebarTrigger className="fixed top-5 left-5 z-20" />;
 }

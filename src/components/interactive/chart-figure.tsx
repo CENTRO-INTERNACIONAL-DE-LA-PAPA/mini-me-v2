@@ -96,7 +96,7 @@ export default function ChartFigure({
       {tip && (
         <div
           role="tooltip"
-          className="pointer-events-none absolute z-10 grid max-w-64 gap-0.5 rounded-[10px] border border-border bg-popover px-2.5 py-1.5 text-meta whitespace-nowrap shadow-float"
+          className="pointer-events-none absolute z-10 grid max-w-64 gap-0.5 rounded-[10px] border border-border bg-popover px-2.5 py-1.5 text-meta whitespace-nowrap"
           style={{
             left: tip.left,
             top: tip.top,

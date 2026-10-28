@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ActivityIcon, ListTodoIcon, PaperclipIcon } from "lucide-react";
 import { api, errorMessage } from "../api";
 import { ConversationStore } from "../protocol/eventStore";
 import type { ProtocolEvent } from "../protocol/types";
-import { Composer, type ComposerHandle } from "./Composer";
+import { chatColumn, Composer, type ComposerHandle } from "./Composer";
 import { MessageItem } from "./MessageItem";
 import type { MessageView } from "../protocol/eventStore";
 import { PLACEHOLDER_JOBS, PLACEHOLDER_TODOS } from "../placeholders";
-import { MiniMeAvatar } from "./MiniMeAvatar";
+import { MiniMePill } from "./MiniMePill";
+import { MainSheet, SheetHeader, ToolSwitch, type ToolOption } from "./shell/Sheet";
 import { FeaturingProvider } from "./interactive/featuring";
 import { componentNames } from "./interactive/component-names";
 import { ComponentReferencesProvider } from "./interactive/component-references";
@@ -20,7 +20,6 @@ import { useMiniMes } from "./useMiniMes";
 
 interface Props {
   projectId: string;
-  projectName: string;
   conversationId: string;
   title: string;
   /** A message to scroll to once the Conversation has loaded, instead of the latest one. */
@@ -64,7 +63,6 @@ function useConversation(projectId: string, conversationId: string) {
 
 export function ChatView({
   projectId,
-  projectName,
   conversationId,
   title,
   messageId,
@@ -87,6 +85,9 @@ export function ChatView({
   const stepsOf =
     panel?.kind === "steps" ? state.messages.find((m) => m.id === panel.messageId) : undefined;
   const openTodos = PLACEHOLDER_TODOS?.filter((t) => !t.done).length ?? 0;
+  const tools: ToolOption<"todo" | "jobs">[] = [];
+  if (PLACEHOLDER_TODOS) tools.push({ id: "todo", label: "To-do", icon: ListTodoIcon, count: openTodos });
+  if (PLACEHOLDER_JOBS) tools.push({ id: "jobs", label: "Jobs", icon: ActivityIcon });
   const bottom = useRef<HTMLDivElement>(null);
   // The message sent from this view, until Mini-Me decides who answers it. Kept in memory
   // only, so reopening a Conversation never shows a stale "Choosing" status.
@@ -153,14 +154,14 @@ export function ChatView({
   return (
     <FeaturingProvider projectId={projectId}>
       <ComponentReferencesProvider names={names} append={appendReference}>
-        <div className="flex min-h-0 min-w-0 flex-1">
-          <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 gap-3">
+          <MainSheet>
             {dragging && (
               <div
                 role="status"
                 className={cn(
-                  "pointer-events-none absolute inset-3 z-20 flex flex-col items-center",
-                  "justify-center gap-2 rounded-2xl border-2 border-dashed border-primary",
+                  "pointer-events-none absolute inset-3 z-30 flex flex-col items-center",
+                  "justify-center gap-2 rounded-card border-2 border-dashed border-primary",
                   "bg-background/90 text-ui font-semibold",
                 )}
               >
@@ -168,45 +169,37 @@ export function ChatView({
                 Drop to attach
               </div>
             )}
-            <header className="flex items-center gap-4 border-b border-border px-8 py-3.5">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-meta text-muted-foreground">
-                  {projectName} / Conversation
-                </p>
-                <h1 className="truncate text-header font-bold">{title}</h1>
-              </div>
+            <SheetHeader
+              title={title}
+              compact={panel !== null}
+              actions={
+                tools.length > 0 && (
+                  <ToolSwitch
+                    label="Tools"
+                    options={tools}
+                    value={panel?.kind === "steps" ? null : (panel?.kind ?? null)}
+                    onToggle={(kind) => toggle({ kind })}
+                  />
+                )
+              }
+            >
               <Participants messages={state.messages} />
-              {PLACEHOLDER_TODOS && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-pressed={panel?.kind === "todo"}
-                  onClick={() => toggle({ kind: "todo" })}
-                >
-                  <ListTodoIcon />
-                  To-do
-                  <span className="opacity-60">{openTodos}</span>
-                </Button>
-              )}
-              {PLACEHOLDER_JOBS && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-pressed={panel?.kind === "jobs"}
-                  onClick={() => toggle({ kind: "jobs" })}
-                >
-                  <ActivityIcon />
-                  Background jobs
-                </Button>
-              )}
-            </header>
-            <div className="relative min-h-0 flex-1 overflow-y-auto">
-              {/* DESIGN.md's message-list fade: the list's top edge fades into the workspace. */}
+            </SheetHeader>
+            {/* A gutter on both sides keeps the column centred like the composer whether or
+                not a scrollbar shows. */}
+            <div className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
+              {/* The list's top edge fades into the sheet. */}
               <div
                 aria-hidden
-                className="pointer-events-none sticky top-0 z-10 -mb-6 h-6 bg-linear-to-b from-background to-transparent"
+                className="pointer-events-none sticky top-0 z-10 -mb-14 h-14 bg-linear-to-b from-background to-transparent"
               />
-              <div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 px-8 pt-6 pb-8">
+              {/* The bottom padding lets the last reply clear the floating composer. */}
+              <div
+                className={cn(
+                  "flex flex-col gap-[22px] pt-8 pb-[150px]",
+                  chatColumn(panel !== null, "messages"),
+                )}
+              >
                 {state.messages.map((message) => (
                   <MessageItem
                     key={message.id}
@@ -230,6 +223,7 @@ export function ChatView({
             {error && <p className="px-8 py-2 text-meta text-destructive">{error}</p>}
             <Composer
               ref={composer}
+              narrow={panel !== null}
               components={newestFirst}
               projectId={projectId}
               conversationId={conversationId}
@@ -240,7 +234,7 @@ export function ChatView({
                 onActivity();
               }}
             />
-          </section>
+          </MainSheet>
           {panel?.kind === "todo" && <TodoPanel onClose={() => setPanel(null)} />}
           {panel?.kind === "jobs" && <JobsPanel onClose={() => setPanel(null)} />}
           {stepsOf && <StepsPanel message={stepsOf} onClose={() => setPanel(null)} />}
@@ -250,22 +244,33 @@ export function ChatView({
   );
 }
 
-/** The avatars of the Mini-Mes that have replied in the Conversation, in order of first reply. */
+const TAG_STATUS: Record<string, string | undefined> = {
+  streaming: "Replying",
+  paused: "Waiting for you",
+};
+
+/** A name tag for each Mini-Me that has replied in the Conversation, in order of first reply,
+ * with what its latest reply is doing while it runs. */
 function Participants({ messages }: { messages: MessageView[] }) {
   const miniMes = useMiniMes();
-  const ids = [...new Set(messages.filter((m) => m.author.kind === "mini_me").map((m) => m.author.id))];
+  const replies = messages.filter((m) => m.author.kind === "mini_me");
+  const ids = [...new Set(replies.map((m) => m.author.id))];
   const shown = ids.map((id) => miniMes.find((m) => m.id === id)).filter((m) => m !== undefined);
   if (shown.length === 0) return null;
   return (
-    <div className="flex shrink-0 items-center" title={shown.map((m) => m.name).join(", ")}>
-      {shown.map((miniMe, index) => (
-        <MiniMeAvatar
-          key={miniMe.id}
-          miniMe={miniMe}
-          size={28}
-          className={index > 0 ? "-ml-[7px]" : undefined}
-        />
-      ))}
-    </div>
+    <ul aria-label="Mini-Mes in this conversation" className="flex flex-wrap gap-2">
+      {shown.map((miniMe) => {
+        const latest = [...replies].reverse().find((m) => m.author.id === miniMe.id);
+        const status = latest && TAG_STATUS[latest.status];
+        return (
+          <li key={miniMe.id}>
+            <MiniMePill miniMe={miniMe} size="tag">
+              {miniMe.name}
+              {status && <span className="font-normal opacity-80">· {status}</span>}
+            </MiniMePill>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

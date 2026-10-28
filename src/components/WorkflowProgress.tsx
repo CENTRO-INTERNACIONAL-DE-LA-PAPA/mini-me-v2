@@ -106,7 +106,7 @@ export function WorkflowProgress({
   const added = open === null ? [] : (byStep.get(open) ?? []);
 
   return (
-    <div className="rounded-[10px] border border-border bg-card px-4 py-3">
+    <div className="rounded-xl bg-card px-4 py-3 border border-edge">
       <div className="flex items-start gap-3">
         <ol
           aria-label="Workflow progress"
