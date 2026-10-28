@@ -1,5 +1,5 @@
-import type { MiniMe } from "../protocol/types";
-import { Avatar } from "./avatar/Avatar";
+import type { MiniMe } from "../../protocol/types";
+import { Avatar } from "../avatar/Avatar";
 
 // An unknown Mini-Me, such as the author of a reply from a Mini-Me that no longer exists, is
 // drawn as a plain potato in the neutral "off" colours.

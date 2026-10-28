@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, errorMessage } from "../api";
-import type { SidecarStatus } from "../protocol/types";
+import { api, errorMessage } from "../../api";
+import type { SidecarStatus } from "../../protocol/types";
 import { Button } from "@/components/ui/button";
 
 /** The sidecar's status, kept current; null until the first status arrives. */

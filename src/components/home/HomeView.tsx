@@ -3,14 +3,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PlusIcon } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { PLACEHOLDER_NEEDS_YOU, PLACEHOLDER_USER } from "../placeholders";
-import type { ProjectSummary } from "../protocol/types";
-import { formatRelative } from "./format";
-import { MiniMeAvatar } from "./MiniMeAvatar";
-import { MiniMeSurface } from "./MiniMeSurface";
-import { SampleTag } from "./SampleTag";
-import { SheetSection } from "./shell/Sheet";
-import { useMiniMes } from "./useMiniMes";
+import { PLACEHOLDER_NEEDS_YOU, PLACEHOLDER_USER } from "../../placeholders";
+import type { ProjectSummary } from "../../protocol/types";
+import { formatRelative } from "../../lib/format";
+import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { MiniMeSurface } from "../minime/MiniMeSurface";
+import { SampleTag } from "../minime/SampleTag";
+import { SheetSection } from "../shell/Sheet";
+import { useMiniMes } from "../../hooks/useMiniMes";
 
 interface Props {
   projects: ProjectSummary[];

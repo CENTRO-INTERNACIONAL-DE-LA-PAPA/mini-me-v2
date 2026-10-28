@@ -5,13 +5,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useEffect, useState } from "react";
-import { api, errorMessage } from "../api";
-import { MINI_ME_GROUPS } from "../protocol/references";
-import type { LibraryView, MiniMeDefinition, MiniMeGroup, WorkflowStep } from "../protocol/types";
-import { Avatar } from "./avatar/Avatar";
-import { ColorPicker } from "./avatar/ColorPicker";
-import { COLOR_FAMILIES, hueOf, miniMeColors } from "./avatar/palette";
-import { PartTabs } from "./avatar/PartGrid";
+import { api, errorMessage } from "../../api";
+import { MINI_ME_GROUPS } from "../../protocol/references";
+import type { LibraryView, MiniMeDefinition, MiniMeGroup, WorkflowStep } from "../../protocol/types";
+import { Avatar } from "../avatar/Avatar";
+import { ColorPicker } from "../avatar/ColorPicker";
+import { COLOR_FAMILIES, hueOf, miniMeColors } from "../avatar/palette";
+import { PartTabs } from "../avatar/PartGrid";
 import { copyName, NIL_ID } from "./library";
 import {
   DeleteButton,
@@ -23,12 +23,12 @@ import {
   Row,
   TraitIcon,
 } from "./LibraryParts";
-import { MainSheet } from "./shell/Sheet";
-import type { View } from "./shell/view";
-import { refreshMiniMes } from "./useMiniMes";
-import { StepInspector } from "./workflow/StepInspector";
-import { WorkflowCanvas } from "./workflow/WorkflowCanvas";
-import { traitIds } from "./workflow/workflowEdit";
+import { MainSheet } from "../shell/Sheet";
+import type { View } from "../shell/view";
+import { refreshMiniMes } from "../../hooks/useMiniMes";
+import { StepInspector } from "../workflow/StepInspector";
+import { WorkflowCanvas } from "../workflow/WorkflowCanvas";
+import { traitIds } from "../workflow/workflowEdit";
 
 const yellow = COLOR_FAMILIES.find((f) => f.name === "Yellow")!;
 

@@ -11,14 +11,14 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { api, errorMessage } from "../api";
-import type { MiniMe, Overview, OverviewOutput, ProjectSummary } from "../protocol/types";
-import { InteractiveComponent } from "./interactive/InteractiveComponent";
-import { FileTile } from "./FileTile";
-import { MiniMePill } from "./MiniMePill";
-import { SheetPage, SheetSection } from "./shell/Sheet";
+import { api, errorMessage } from "../../api";
+import type { MiniMe, Overview, OverviewOutput, ProjectSummary } from "../../protocol/types";
+import { InteractiveComponent } from "../interactive/InteractiveComponent";
+import { FileTile } from "../files/FileTile";
+import { MiniMePill } from "../minime/MiniMePill";
+import { SheetPage, SheetSection } from "../shell/Sheet";
 import { headerLine, relativeInSentence, shownOutputs } from "./overview";
-import { useMiniMes } from "./useMiniMes";
+import { useMiniMes } from "../../hooks/useMiniMes";
 
 interface Props {
   project: ProjectSummary;

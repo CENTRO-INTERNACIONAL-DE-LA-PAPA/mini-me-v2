@@ -2,21 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { cn } from "@/lib/utils";
 import { ActivityIcon, ListTodoIcon, PaperclipIcon } from "lucide-react";
-import { api, errorMessage } from "../api";
-import { ConversationStore } from "../protocol/eventStore";
-import type { ProtocolEvent } from "../protocol/types";
+import { api, errorMessage } from "../../api";
+import { ConversationStore } from "../../protocol/eventStore";
+import type { ProtocolEvent } from "../../protocol/types";
 import { chatColumn, Composer, type ComposerHandle } from "./Composer";
 import { MessageItem } from "./MessageItem";
-import type { MessageView } from "../protocol/eventStore";
-import { PLACEHOLDER_JOBS, PLACEHOLDER_TODOS } from "../placeholders";
-import { MiniMePill } from "./MiniMePill";
-import { MainSheet, SheetHeader, ToolSwitch, type ToolOption } from "./shell/Sheet";
-import { FeaturingProvider } from "./interactive/featuring";
-import { componentNames } from "./interactive/component-names";
-import { ComponentReferencesProvider } from "./interactive/component-references";
-import type { ReferenceTarget } from "../protocol/references";
+import type { MessageView } from "../../protocol/eventStore";
+import { PLACEHOLDER_JOBS, PLACEHOLDER_TODOS } from "../../placeholders";
+import { MiniMePill } from "../minime/MiniMePill";
+import { MainSheet, SheetHeader, ToolSwitch, type ToolOption } from "../shell/Sheet";
+import { FeaturingProvider } from "../interactive/featuring";
+import { componentNames } from "../interactive/component-names";
+import { ComponentReferencesProvider } from "../interactive/component-references";
+import type { ReferenceTarget } from "../../protocol/references";
 import { JobsPanel, StepsPanel, TodoPanel, type Panel } from "./SidePanels";
-import { useMiniMes } from "./useMiniMes";
+import { useMiniMes } from "../../hooks/useMiniMes";
 
 interface Props {
   projectId: string;

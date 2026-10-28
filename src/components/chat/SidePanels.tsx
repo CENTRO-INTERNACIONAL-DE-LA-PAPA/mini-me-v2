@@ -6,16 +6,16 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { CircleAlertIcon, CheckIcon, PlusIcon } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { PLACEHOLDER_JOBS, PLACEHOLDER_TODOS } from "../placeholders";
-import type { MessageView } from "../protocol/eventStore";
-import type { MiniMe } from "../protocol/types";
+import { PLACEHOLDER_JOBS, PLACEHOLDER_TODOS } from "../../placeholders";
+import type { MessageView } from "../../protocol/eventStore";
+import type { MiniMe } from "../../protocol/types";
 import { Markdown } from "./Markdown";
-import { MiniMeSurface } from "./MiniMeSurface";
-import { MiniMeAvatar } from "./MiniMeAvatar";
-import { MiniMePill } from "./MiniMePill";
-import { SampleTag } from "./SampleTag";
-import { ToolSheet } from "./shell/Sheet";
-import { useMiniMes } from "./useMiniMes";
+import { MiniMeSurface } from "../minime/MiniMeSurface";
+import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { MiniMePill } from "../minime/MiniMePill";
+import { SampleTag } from "../minime/SampleTag";
+import { ToolSheet } from "../shell/Sheet";
+import { useMiniMes } from "../../hooks/useMiniMes";
 import {
   StepComponents,
   StepMark,

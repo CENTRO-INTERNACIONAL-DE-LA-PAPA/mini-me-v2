@@ -1,4 +1,4 @@
-import type { UpdateStatus } from "../protocol/types";
+import type { UpdateStatus } from "../../protocol/types";
 
 /** The text shown for an update; null when there is nothing to show. */
 export function updateLabel(status: UpdateStatus): string | null {

@@ -1,5 +1,5 @@
-import type { Overview, OverviewOutput } from "../protocol/types";
-import { formatRelative } from "./format";
+import type { Overview, OverviewOutput } from "../../protocol/types";
+import { formatRelative } from "../../lib/format";
 
 /** How many outputs the Overview shows before "Show all". */
 export const LATEST_SHOWN = 6;

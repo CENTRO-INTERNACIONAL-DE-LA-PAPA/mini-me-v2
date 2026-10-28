@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Overview, OverviewOutput } from "../protocol/types";
+import type { Overview, OverviewOutput } from "../../protocol/types";
 import { headerLine, shownOutputs } from "./overview";
 
 const now = new Date(2026, 9, 21, 15, 0).getTime();

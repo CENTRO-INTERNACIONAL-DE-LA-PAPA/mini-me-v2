@@ -1,8 +1,8 @@
 import { XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api } from "../api";
-import type { AssetRef } from "../protocol/types";
-import { formatSize } from "./format";
+import { api } from "../../api";
+import type { AssetRef } from "../../protocol/types";
+import { formatSize } from "../../lib/format";
 import { ReferenceChip } from "./ReferenceChip";
 
 /** Media types the core reads for a thumbnail, as every webview the app runs in draws them. */

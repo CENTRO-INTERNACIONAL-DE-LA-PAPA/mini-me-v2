@@ -1,9 +1,9 @@
 import { mergeAttributes } from "@tiptap/core";
 import Mention from "@tiptap/extension-mention";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
-import type { ReferenceTarget } from "../protocol/references";
+import type { ReferenceTarget } from "../../protocol/references";
 import { TextComponentChip } from "./TextComponentChip";
-import { useMiniMes } from "./useMiniMes";
+import { useMiniMes } from "../../hooks/useMiniMes";
 
 /** A data attribute holding one of the reference's attributes, so a copied chip pastes back
  * into the editor as a chip. */

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { MiniMeColors } from "../protocol/types";
+import type { MiniMeColors } from "../../protocol/types";
 
 /** A Mini-Me's colours on the surfaces it owns: its stored `tint`, `solid` and `ink`, plus a
  * very light `wash` for its replies and cards and an `edge` for borders on that wash. */

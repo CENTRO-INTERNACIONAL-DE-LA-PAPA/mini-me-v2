@@ -2,17 +2,17 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
-import { ChatView } from "./components/ChatView";
-import { FilesView } from "./components/FilesView";
-import { HomeView } from "./components/HomeView";
-import { LibraryView } from "./components/LibraryView";
-import { MiniMeEditor } from "./components/MiniMeEditor";
-import { OverviewView } from "./components/OverviewView";
-import { SettingsView } from "./components/SettingsView";
+import { ChatView } from "./components/chat/ChatView";
+import { FilesView } from "./components/files/FilesView";
+import { HomeView } from "./components/home/HomeView";
+import { LibraryView } from "./components/library/LibraryView";
+import { MiniMeEditor } from "./components/library/MiniMeEditor";
+import { OverviewView } from "./components/overview/OverviewView";
+import { SettingsView } from "./components/settings/SettingsView";
 import { AppSidebar } from "./components/shell/AppSidebar";
 import { MainSheet } from "./components/shell/Sheet";
 import { isAppView, type View } from "./components/shell/view";
-import { TraitEditor } from "./components/TraitEditor";
+import { TraitEditor } from "./components/library/TraitEditor";
 import type { ConversationSummary, ProjectSummary } from "./protocol/types";
 
 export default function App() {

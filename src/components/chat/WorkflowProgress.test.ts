@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Component, MessageStep } from "../protocol/types";
+import type { Component, MessageStep } from "../../protocol/types";
 import { approvalAnswers, componentPlaces } from "./WorkflowProgress";
 
 const step = (step_id: string, type: MessageStep["type"], done = true): MessageStep => ({

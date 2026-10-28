@@ -5,14 +5,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PuzzleIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { api, errorMessage } from "../api";
-import type { LibraryView, MiniMe, TraitDraft, TraitSummary } from "../protocol/types";
+import { api, errorMessage } from "../../api";
+import type { LibraryView, MiniMe, TraitDraft, TraitSummary } from "../../protocol/types";
 import { copyName, NIL_ID } from "./library";
 import { DeleteButton, EditorHeader, EditorPage } from "./LibraryParts";
-import { MiniMeAvatar } from "./MiniMeAvatar";
-import { MiniMeSurface } from "./MiniMeSurface";
-import { SheetSection } from "./shell/Sheet";
-import type { View } from "./shell/view";
+import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { MiniMeSurface } from "../minime/MiniMeSurface";
+import { SheetSection } from "../shell/Sheet";
+import type { View } from "../shell/view";
 
 /** The tools a user-made Trait's model may be offered, besides the read tools. */
 const MODEL_TOOLS = [

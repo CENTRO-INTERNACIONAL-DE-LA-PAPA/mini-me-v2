@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { MiniMe } from "../protocol/types";
-import { surfaceStyle } from "./miniMeColors";
+import type { MiniMe } from "../../protocol/types";
+import { surfaceStyle } from "../minime/miniMeColors";
 
 /** A file's or output's icon tile: in the tint of the Mini-Me that made it, with its ink
  * icon, or neutral for your own. */
