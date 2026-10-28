@@ -1,6 +1,6 @@
 [package]
 name = "mini-me"
-version = "0.4.0"
+version = "0.4.1"
 description = "Local-first, customizable desktop research tool for scientists at the International Potato Center (CIP)"
 authors = ["International Potato Center"]
 edition = "2024"
