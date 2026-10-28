@@ -1,4 +1,5 @@
 mod ai2;
+mod approvals;
 mod assets;
 mod components;
 mod conversations;
@@ -8,18 +9,22 @@ mod history;
 mod ipc;
 mod library;
 mod link;
+mod overview;
 mod paths;
 mod projects;
+mod recent;
 mod protocol;
 mod routing;
+mod runs;
 mod secrets;
 mod settings;
 mod sidecar;
 mod store;
-mod trait_calls;
 mod updates;
+mod user_library;
+mod user_profile;
 
-use tauri::{Manager, RunEvent};
+use tauri::{DragDropEvent, Manager, RunEvent, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -32,30 +37,62 @@ pub fn run() {
             app.manage(state);
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) = event {
+                if let Some(state) = window.try_state::<ipc::AppState>() {
+                    state.record_drop(paths.clone());
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             ipc::list_projects,
             ipc::create_project,
             ipc::open_project,
             ipc::list_conversations,
             ipc::create_conversation,
+            ipc::open_conversation,
             ipc::subscribe_conversation,
+            ipc::unsubscribe_conversation,
+            ipc::reset_subscriptions,
             ipc::send_message,
             ipc::stop_reply,
+            ipc::answer_approval,
+            ipc::list_paused_approvals,
+            ipc::list_recent_conversations,
+            ipc::get_running_replies,
+            ipc::subscribe_running_replies,
             ipc::add_reaction,
             ipc::remove_reaction,
             ipc::import_assets,
+            ipc::import_pasted_image,
+            ipc::import_dropped,
+            ipc::read_image_asset,
             ipc::list_assets,
+            ipc::list_project_files,
+            ipc::get_overview,
+            ipc::feature_component,
+            ipc::update_overview_summary,
             ipc::open_asset,
             ipc::get_sidecar_status,
             ipc::subscribe_sidecar_status,
             ipc::restart_sidecar,
             ipc::list_mini_mes,
+            ipc::list_library,
+            ipc::get_mini_me,
+            ipc::save_mini_me,
+            ipc::save_trait,
+            ipc::delete_mini_me,
+            ipc::delete_trait,
+            ipc::get_user_profile,
+            ipc::save_user_name,
             ipc::get_ai_settings,
             ipc::set_ai_model,
             ipc::save_api_key,
             ipc::remove_api_key,
             ipc::set_routing_threshold,
             ipc::set_show_jev_answers,
+            ipc::get_home_settings,
+            ipc::set_show_home_mini_mes,
             ipc::ai2_start_sign_in,
             ipc::subscribe_ai2_status,
             ipc::ai2_sign_out,

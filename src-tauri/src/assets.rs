@@ -1,12 +1,16 @@
 //! The per-Project Asset registry. Asset files live in `assets/<asset-id>/<file name>`.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{OptionalExtension, params};
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::protocol::{AssetRef, new_id, now_ms};
+use crate::protocol::{
+    AssetRef, Author, AuthorKind, TextComponent, TextComponentKind, new_id, now_ms,
+};
 use crate::store::{Project, ProjectState};
 
 /// Copies a file the user picked into the Project and registers it. The original file is
@@ -32,6 +36,36 @@ pub fn import(project: &Project, source: &Path) -> AppResult<AssetRef> {
     register(project, AssetRef { id, name, media_type, size_bytes }, "upload", &rel_path)
 }
 
+/// Imports the files of `paths` that the user dropped on the window. Every path must be one of
+/// `dropped`, the paths the operating system reported for the latest drop, so the UI cannot
+/// name a file of its own; folders are skipped.
+pub fn import_dropped(
+    project: &Project,
+    paths: &[PathBuf],
+    dropped: &[PathBuf],
+) -> AppResult<Vec<AssetRef>> {
+    if let Some(path) = paths.iter().find(|path| !dropped.contains(path)) {
+        return Err(AppError::invalid_input(format!(
+            "{} was not dropped on Mini-Me.",
+            path.display()
+        )));
+    }
+    paths.iter().filter(|path| path.is_file()).map(|path| import(project, path)).collect()
+}
+
+/// Media types every webview the app runs in can draw as an image.
+pub const THUMBNAIL_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+/// The media type and bytes of an image Asset, for its thumbnail. Other media types are
+/// refused.
+pub fn read_image(project: &Project, id: Uuid) -> AppResult<(String, Vec<u8>)> {
+    let asset = find(&project.lock(), id)?;
+    if !THUMBNAIL_TYPES.contains(&asset.media_type.as_str()) {
+        return Err(AppError::invalid_input(format!("{} is not an image.", asset.name)));
+    }
+    Ok((asset.media_type, std::fs::read(file_path(project, id)?)?))
+}
+
 /// Characters Windows does not allow in file names, besides the path separators.
 const FORBIDDEN_IN_NAMES: &[char] = &['<', '>', ':', '"', '|', '?', '*'];
 
@@ -41,7 +75,7 @@ const WINDOWS_DEVICES: &[&str] = &[
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
-/// Refuses a name for a generated Asset that is empty, longer than 255 characters, or could
+/// Refuses a name for a stored Asset that is empty, longer than 255 characters, or could
 /// leave its folder or fail on Windows: `.` or `..`, path separators, control characters, the
 /// characters Windows forbids, a Windows device name, and a trailing dot or space.
 pub fn check_name(name: &str) -> AppResult<()> {
@@ -71,6 +105,45 @@ pub fn write_generated(
     media_type: &str,
     bytes: &[u8],
 ) -> AppResult<AssetRef> {
+    store(project, name, media_type, bytes, "generated")
+}
+
+/// Stores bytes the user pasted as an `upload` Asset named `name`.
+pub fn import_bytes(
+    project: &Project,
+    name: &str,
+    media_type: &str,
+    bytes: &[u8],
+) -> AppResult<AssetRef> {
+    store(project, name, media_type, bytes, "upload")
+}
+
+/// The name of a pasted image: the clipboard's file name when it gives a usable one, else
+/// `Pasted image` with the usual extension of `media_type`.
+pub fn pasted_name(clipboard_name: &str, media_type: &str) -> String {
+    let clipboard_name = clipboard_name.trim();
+    if !clipboard_name.is_empty() && check_name(clipboard_name).is_ok() {
+        return clipboard_name.to_string();
+    }
+    let extension = match media_type {
+        "image/jpeg" => Some("jpg"),
+        other => mime_guess::get_mime_extensions_str(other).and_then(|e| e.first().copied()),
+    };
+    match extension {
+        Some(extension) => format!("Pasted image.{extension}"),
+        None => "Pasted image".to_string(),
+    }
+}
+
+/// Writes `bytes` to a new folder under `assets` and registers them with `source`.
+/// `media_type` falls back to one guessed from the name when empty.
+fn store(
+    project: &Project,
+    name: &str,
+    media_type: &str,
+    bytes: &[u8],
+    source: &str,
+) -> AppResult<AssetRef> {
     check_name(name)?;
     let id = new_id();
     let rel_path = format!("assets/{id}/{name}");
@@ -85,7 +158,7 @@ pub fn write_generated(
         media_type.trim().to_string()
     };
     let asset = AssetRef { id, name: name.to_string(), media_type, size_bytes: bytes.len() as i64 };
-    register(project, asset, "generated", &rel_path).inspect_err(|_| {
+    register(project, asset, source, &rel_path).inspect_err(|_| {
         let _ = remove_files(project, id);
     })
 }
@@ -180,6 +253,109 @@ pub fn list(project: &Project, query: Option<&str>) -> AppResult<Vec<AssetRef>> 
         });
     }
     Ok(assets)
+}
+
+/// An Asset as the Project's Files screen lists it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FileEntry {
+    #[serde(flatten)]
+    pub asset: AssetRef,
+    /// `upload` for a file the user imported, `generated` for one a Mini-Me saved.
+    pub source: String,
+    /// When the Asset was registered, in milliseconds.
+    pub created_at: i64,
+    /// The author of the first message the Asset is attached to, if it is attached to one.
+    pub added_by: Option<Author>,
+    /// The Conversations whose messages attach or reference the Asset, in the order it first
+    /// appeared in them.
+    pub used_in: Vec<ConversationRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ConversationRef {
+    pub id: Uuid,
+    pub title: String,
+}
+
+/// Every Asset of the Project, newest first, with who added it and where it is used.
+pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
+    let state = project.lock();
+    let corrupt = || AppError::storage("stored ID is not readable");
+    let mut entries = Vec::new();
+    {
+        let mut stmt = state.conn.prepare(
+            "SELECT id, name, media_type, size_bytes, source, created_at FROM assets \
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })?;
+        for row in rows {
+            let (id, name, media_type, size_bytes, source, created_at) = row?;
+            entries.push(FileEntry {
+                asset: AssetRef {
+                    id: Uuid::parse_str(&id).map_err(|_| corrupt())?,
+                    name,
+                    media_type,
+                    size_bytes,
+                },
+                source,
+                created_at,
+                added_by: None,
+                used_in: Vec::new(),
+            });
+        }
+    }
+    let index: HashMap<Uuid, usize> =
+        entries.iter().enumerate().map(|(i, e)| (e.asset.id, i)).collect();
+
+    let mut stmt = state.conn.prepare(
+        "SELECT m.conversation_id, c.title, m.author_kind, m.author_id, m.attachments, \
+         m.text_components FROM messages m JOIN conversations c ON c.id = m.conversation_id \
+         ORDER BY m.rowid",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+        ))
+    })?;
+    for row in rows {
+        let (conversation, title, author_kind, author_id, attachments, text_components) = row?;
+        let conversation = Uuid::parse_str(&conversation).map_err(|_| corrupt())?;
+        let attached: Vec<AssetRef> = serde_json::from_str(&attachments)?;
+        let referenced: Vec<TextComponent> = serde_json::from_str(&text_components)?;
+        let author = AuthorKind::parse(&author_kind).map(|kind| Author { kind, id: author_id });
+        let ids = attached.iter().map(|a| (a.id, true)).chain(
+            referenced
+                .iter()
+                .filter(|t| t.kind == TextComponentKind::Asset)
+                .map(|t| (t.id, false)),
+        );
+        for (id, is_attachment) in ids {
+            let Some(entry) = index.get(&id).map(|&i| &mut entries[i]) else {
+                continue;
+            };
+            if is_attachment && entry.added_by.is_none() {
+                entry.added_by = author.clone();
+            }
+            if !entry.used_in.iter().any(|c| c.id == conversation) {
+                entry.used_in.push(ConversationRef { id: conversation, title: title.clone() });
+            }
+        }
+    }
+    Ok(entries)
 }
 
 /// The file behind an Asset, checked against Project-folder confinement.
@@ -333,5 +509,99 @@ mod tests {
         remove(&project, asset.id).unwrap();
         assert_eq!(find(&project.lock(), asset.id).unwrap_err().code, "not_found");
         assert_eq!(assets_folder_entries(&project), 0);
+    }
+
+    #[test]
+    fn project_files_lists_who_added_each_asset_and_where_it_is_used() {
+        use crate::conversations::{self, SendMessageInput};
+        let (dir, project) = temp_project();
+        let source = dir.path().join("field-trial.csv");
+        std::fs::write(&source, "plot,yield\n1,20\n").unwrap();
+        let trial = import(&project, &source).unwrap();
+        let unused = write_generated(&project, "notes.md", "", b"# Notes").unwrap();
+        let first = conversations::create(&project).unwrap().id;
+        let second = conversations::create(&project).unwrap().id;
+        let user = new_id();
+        let attach = SendMessageInput {
+            content: "Summarize this".into(),
+            attachments: vec![trial.id],
+            text_components: Vec::new(),
+        };
+        conversations::send_message(&project, first, attach, user).unwrap();
+        let reference = SendMessageInput {
+            content: "#field-trial.csv again".into(),
+            attachments: Vec::new(),
+            text_components: vec![TextComponent {
+                kind: TextComponentKind::Asset,
+                id: trial.id,
+                label: "#field-trial.csv".into(),
+                start: 0,
+                end: 16,
+            }],
+        };
+        conversations::send_message(&project, second, reference, user).unwrap();
+
+        let entries = project_files(&project).unwrap();
+        let entry = |id| entries.iter().find(|e| e.asset.id == id).unwrap();
+        assert_eq!(entry(trial.id).source, "upload");
+        assert_eq!(entry(trial.id).added_by.as_ref().unwrap().kind, AuthorKind::User);
+        let used: Vec<Uuid> = entry(trial.id).used_in.iter().map(|c| c.id).collect();
+        assert_eq!(used, [first, second]);
+        assert_eq!(entry(unused.id).source, "generated");
+        assert!(entry(unused.id).added_by.is_none() && entry(unused.id).used_in.is_empty());
+    }
+
+    #[test]
+    fn a_pasted_image_is_stored_as_an_upload() {
+        let (_dir, project) = temp_project();
+        let name = pasted_name("", "image/png");
+        assert_eq!(name, "Pasted image.png");
+        let asset = import_bytes(&project, &name, "image/png", b"png").unwrap();
+        assert_eq!((asset.name.as_str(), asset.size_bytes), ("Pasted image.png", 3));
+        assert_eq!(std::fs::read(file_path(&project, asset.id).unwrap()).unwrap(), b"png");
+        let source: String = project
+            .lock()
+            .conn
+            .query_row("SELECT source FROM assets WHERE id = ?1", [asset.id.to_string()], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(source, "upload");
+    }
+
+    #[test]
+    fn a_pasted_name_falls_back_when_the_clipboard_gives_none_or_a_bad_one() {
+        assert_eq!(pasted_name("field.jpg", "image/jpeg"), "field.jpg");
+        assert_eq!(pasted_name("what?.png", "image/jpeg"), "Pasted image.jpg");
+        assert_eq!(pasted_name("  ", "image/webp"), "Pasted image.webp");
+        assert_eq!(pasted_name("", "image/x-unknown"), "Pasted image");
+    }
+
+    #[test]
+    fn only_dropped_files_are_imported() {
+        let (dir, project) = temp_project();
+        let file = dir.path().join("plots.csv");
+        std::fs::write(&file, "plot\n1").unwrap();
+        let folder = dir.path().join("photos");
+        std::fs::create_dir(&folder).unwrap();
+        let dropped = [file.clone(), folder.clone()];
+
+        let imported = import_dropped(&project, &dropped, &dropped).unwrap();
+        assert_eq!(imported.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), ["plots.csv"]);
+
+        let other = dir.path().join("secret.txt");
+        std::fs::write(&other, "x").unwrap();
+        let err = import_dropped(&project, &[file, other], &dropped).unwrap_err();
+        assert_eq!(err.code, "invalid_input");
+        assert_eq!(list(&project, None).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn only_images_are_read_for_thumbnails() {
+        let (_dir, project) = temp_project();
+        let image = import_bytes(&project, "field.png", "", b"png").unwrap();
+        let table = import_bytes(&project, "plots.csv", "", b"plot").unwrap();
+        assert_eq!(read_image(&project, image.id).unwrap(), ("image/png".into(), b"png".to_vec()));
+        assert_eq!(read_image(&project, table.id).unwrap_err().code, "invalid_input");
     }
 }

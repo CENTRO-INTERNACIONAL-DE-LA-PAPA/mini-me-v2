@@ -1,5 +1,5 @@
 """Reads the tables a data Trait works on: the CSV, TSV and Excel Assets a message references
-with `#` or attaches, parsed into pandas DataFrames."""
+with `#` or attaches, parsed into pandas DataFrames, and the tables it references with `$`."""
 
 import csv
 import io
@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from mini_me_sidecar.context import CallContext, TraitError
+from mini_me_sidecar.context import TraitError
 
 TABLE_EXTENSIONS = (".csv", ".tsv", ".xlsx")
 
@@ -23,7 +23,9 @@ DATE_LIKE = re.compile(r"^\s*\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}([ T]\d{1,2}:\d{2}(:
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-NO_TABLE = "Reference a CSV, TSV or Excel (.xlsx) file with # or attach one."
+NO_TABLE = (
+    "Reference a CSV, TSV or Excel (.xlsx) file with # or a table with $, or attach a file."
+)
 
 
 @dataclass
@@ -45,32 +47,36 @@ class Table:
         return PurePosixPath(self.name).suffix.lower()
 
 
-def table_assets(message: dict[str, Any]) -> list[tuple[str, str]]:
-    """The `(asset_id, name)` of each table the message references, then of each it attaches,
-    without repeats."""
-    assets: dict[str, str] = {}
-    for component in message.get("text_components") or []:
+@dataclass(frozen=True)
+class TableSource:
+    """Where one table of a message comes from: a table file (`asset_id` and `name`), or a
+    `$` reference (`reference`, its Text Component)."""
+
+    asset_id: str | None = None
+    name: str = ""
+    reference: dict[str, Any] | None = None
+
+
+def table_sources(message: dict[str, Any]) -> list[TableSource]:
+    """The table files the message references with `#` and the tables it references with `$`,
+    in the order they appear, then the table files it attaches; each file once."""
+    sources: list[TableSource] = []
+    seen: set[str] = set()
+
+    def add_file(asset_id: str, name: str) -> None:
+        if asset_id not in seen and name.lower().endswith(TABLE_EXTENSIONS):
+            seen.add(asset_id)
+            sources.append(TableSource(asset_id=asset_id, name=name))
+
+    references = sorted(message.get("text_components") or [], key=lambda c: c.get("start", 0))
+    for component in references:
         if component.get("kind") == "asset":
-            label = str(component.get("label", "")).removeprefix("#")
-            assets.setdefault(str(component.get("id")), label)
+            add_file(str(component.get("id")), str(component.get("label", "")).removeprefix("#"))
+        elif component.get("kind") == "component":
+            sources.append(TableSource(reference=component))
     for attachment in message.get("attachments") or []:
-        assets.setdefault(str(attachment.get("id")), str(attachment.get("name", "")))
-    return [(i, name) for i, name in assets.items() if name.lower().endswith(TABLE_EXTENSIONS)]
-
-
-async def read_tables(ctx: CallContext, text: str) -> list[Table]:
-    """Every table the call's message points to, in order. Fails when there is none."""
-    tables = []
-    for asset_id, name in table_assets(ctx.message):
-        data = await ctx.read_asset(asset_id)
-        if len(data) > MAX_TABLE_BYTES:
-            raise TraitError(
-                "table_too_large", f"{name} is larger than 100 MiB, the limit for data files."
-            )
-        tables.append(parse_table(name, data, text))
-    if not tables:
-        raise TraitError("no_table", NO_TABLE)
-    return tables
+        add_file(str(attachment.get("id")), str(attachment.get("name", "")))
+    return sources
 
 
 def parse_table(name: str, data: bytes, text: str = "") -> Table:

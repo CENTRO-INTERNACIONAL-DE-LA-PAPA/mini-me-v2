@@ -3,7 +3,7 @@ import io
 import pandas as pd
 import pytest
 
-from mini_me_sidecar.adapters.data.tables import parse_table, table_assets, table_file
+from mini_me_sidecar.adapters.data.tables import TableSource, parse_table, table_file, table_sources
 from mini_me_sidecar.context import TraitError
 
 
@@ -30,7 +30,26 @@ def test_only_tables_are_read_references_first():
         "attachments": [{"id": "a", "name": "notes.txt"}, {"id": "b", "name": "plots.csv"}],
         "text_components": [{"kind": "asset", "id": "c", "label": "#harvest.xlsx"}],
     }
-    assert table_assets(message) == [("c", "harvest.xlsx"), ("b", "plots.csv")]
+    assert table_sources(message) == [
+        TableSource("c", "harvest.xlsx"),
+        TableSource("b", "plots.csv"),
+    ]
+
+
+def test_referenced_tables_and_files_are_read_in_message_order():
+    reference = {"kind": "component", "id": "t", "label": "$plots", "start": 12}
+    message = {
+        "attachments": [{"id": "h", "name": "harvest.csv"}],
+        "text_components": [
+            {"kind": "asset", "id": "h", "label": "#harvest.csv", "start": 40},
+            reference,
+        ],
+    }
+    assert table_sources(message) == [
+        TableSource(reference=reference),
+        TableSource("h", "harvest.csv"),
+    ]
+    assert table_sources({"content": "join them"}) == []
 
 
 def test_unparseable_file_names_it():

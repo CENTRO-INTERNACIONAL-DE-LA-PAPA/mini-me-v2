@@ -8,10 +8,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 4;
+pub const SIDECAR_PROTOCOL: u32 = 8;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -26,12 +27,16 @@ pub struct AdapterInfo {
     pub providers: Vec<String>,
 }
 
-/// The Trait a call runs, from the core's Trait library.
+/// A Trait a run's Workflow uses, from the core's Trait library.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CallTrait {
+pub struct RunTrait {
     pub id: Uuid,
     pub name: String,
     pub instructions: Option<String>,
+    /// The sidecar adapter that runs this Trait.
+    pub adapter: String,
+    /// The tools the Trait may use.
+    pub tools: Vec<String>,
 }
 
 /// The provider and model chosen in Settings.
@@ -42,7 +47,7 @@ pub struct CallModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CallContext {
+pub struct RunContext {
     pub project_id: Uuid,
     pub conversation_id: Uuid,
     pub message: Message,
@@ -50,9 +55,35 @@ pub struct CallContext {
     /// a decision.
     #[serde(default)]
     pub needs_context: Option<bool>,
-    /// The name of the Mini-Me whose reply this call produces.
-    #[serde(default)]
-    pub mini_me_name: Option<String>,
+}
+
+/// The Mini-Me whose reply a run produces.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunMiniMe {
+    pub id: Uuid,
+    pub name: String,
+}
+
+/// What a run executes. A paused run keeps it, so it resumes with the definitions it
+/// started with.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunPlan {
+    pub mini_me: RunMiniMe,
+    pub workflow: Workflow,
+    /// Each Trait the Workflow uses, once.
+    pub traits: Vec<RunTrait>,
+    /// The input of every Trait Step.
+    pub input: Value,
+    pub context: RunContext,
+}
+
+/// Where a resumed run continues: after the approval Step `step_id`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunResume {
+    /// The opaque state the sidecar sent in `run.paused`.
+    pub state: String,
+    pub step_id: String,
+    pub approved: bool,
 }
 
 /// A Mini-Me as the routing request describes it to Jev.
@@ -82,19 +113,16 @@ pub enum CoreFrame {
     Ping { nonce: String },
     #[serde(rename = "shutdown")]
     Shutdown {},
-    #[serde(rename = "call.start")]
-    CallStart {
-        call_id: Uuid,
-        adapter: String,
-        #[serde(rename = "trait")]
-        trait_def: CallTrait,
-        /// Set for adapters that declare providers.
+    #[serde(rename = "run.start")]
+    RunStart {
+        run_id: Uuid,
+        #[serde(flatten)]
+        plan: RunPlan,
         model: Option<CallModel>,
-        input: Value,
-        context: CallContext,
+        resume: Option<RunResume>,
     },
-    #[serde(rename = "call.cancel")]
-    CallCancel { call_id: Uuid },
+    #[serde(rename = "run.cancel")]
+    RunCancel { run_id: Uuid },
     #[serde(rename = "route.start")]
     RouteStart {
         route_id: Uuid,
@@ -102,6 +130,13 @@ pub enum CoreFrame {
         mini_mes: Vec<RouteMiniMe>,
         /// The question IDs to ask: `mini_me`, `reaction`, `needs_context`.
         ask: Vec<String>,
+    },
+    /// Asks for a summary of a Project's Conversations; `material` is their text.
+    #[serde(rename = "summary.start")]
+    SummaryStart {
+        summary_id: Uuid,
+        model: CallModel,
+        material: String,
     },
     /// Exactly one of `result` and `error` is set.
     #[serde(rename = "core.response")]
@@ -117,6 +152,9 @@ pub enum CoreFrame {
 /// Frames the sidecar sends to the core. Types this version does not know, including the
 /// reserved `call.input_requested`, parse as `Unknown`. Interactive Components arrive as the
 /// `component.add` request, so a `call.component` frame is `Unknown` too.
+///
+/// `call_id` identifies one Trait call, or one model decision of a condition or loop,
+/// inside a run; the sidecar announces it in `step.started`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SidecarFrame {
@@ -130,20 +168,41 @@ pub enum SidecarFrame {
     Adapters { adapters: Vec<AdapterInfo> },
     #[serde(rename = "pong")]
     Pong { nonce: String },
-    #[serde(rename = "call.delta")]
-    CallDelta { call_id: Uuid, text: String },
-    #[serde(rename = "call.progress")]
-    CallProgress {
-        call_id: Uuid,
+    #[serde(rename = "run.delta")]
+    RunDelta { run_id: Uuid, text: String },
+    #[serde(rename = "run.progress")]
+    RunProgress {
+        run_id: Uuid,
         label: String,
         fraction: Option<f64>,
     },
-    #[serde(rename = "call.done")]
-    CallDone { call_id: Uuid },
-    #[serde(rename = "call.error")]
-    CallError { call_id: Uuid, error: ErrorInfo },
-    #[serde(rename = "call.cancelled")]
-    CallCancelled { call_id: Uuid },
+    #[serde(rename = "step.started")]
+    StepStarted {
+        run_id: Uuid,
+        step_id: String,
+        call_id: Option<Uuid>,
+    },
+    #[serde(rename = "step.completed")]
+    StepCompleted {
+        run_id: Uuid,
+        step_id: String,
+        output: Option<String>,
+    },
+    /// The run reached the approval Step `step_id` and ended in the sidecar. `output` is the
+    /// Workflow's output so far; `state` is opaque to the core.
+    #[serde(rename = "run.paused")]
+    RunPaused {
+        run_id: Uuid,
+        step_id: String,
+        output: Option<String>,
+        state: String,
+    },
+    #[serde(rename = "run.done")]
+    RunDone { run_id: Uuid },
+    #[serde(rename = "run.error")]
+    RunError { run_id: Uuid, error: ErrorInfo },
+    #[serde(rename = "run.cancelled")]
+    RunCancelled { run_id: Uuid },
     #[serde(rename = "route.done")]
     RouteDone {
         route_id: Uuid,
@@ -151,6 +210,10 @@ pub enum SidecarFrame {
     },
     #[serde(rename = "route.error")]
     RouteError { route_id: Uuid, error: ErrorInfo },
+    #[serde(rename = "summary.done")]
+    SummaryDone { summary_id: Uuid, text: String },
+    #[serde(rename = "summary.error")]
+    SummaryError { summary_id: Uuid, error: ErrorInfo },
     #[serde(rename = "core.request")]
     CoreRequest {
         request_id: String,
@@ -245,18 +308,24 @@ mod tests {
             "ping",
             "pong",
             "shutdown",
-            "call.start",
-            "call.delta",
-            "call.progress",
-            "call.done",
-            "call.error",
-            "call.cancel",
-            "call.cancelled",
+            "run.start",
+            "run.cancel",
+            "run.delta",
+            "run.progress",
+            "step.started",
+            "step.completed",
+            "run.paused",
+            "run.done",
+            "run.error",
+            "run.cancelled",
             "core.request",
             "core.response",
             "route.start",
             "route.done",
             "route.error",
+            "summary.start",
+            "summary.done",
+            "summary.error",
         ] {
             assert!(types.iter().any(|t| t == expected), "fixture lacks {expected}");
         }

@@ -18,12 +18,17 @@ TEXT_ROWS = 20
 
 
 def table_data(
-    frame: pd.DataFrame, title: str | None = None, source: str | None = None
+    frame: pd.DataFrame,
+    title: str | None = None,
+    source: str | None = None,
+    source_id: str | None = None,
+    sheet: str | None = None,
 ) -> dict[str, Any]:
-    """`{ columns, rows }` with `title`, and with `total_rows` and `source` when the rows are
-    a preview of a larger table."""
+    """`{ columns, rows }` with `title`, `total_rows` when the rows are a preview of a larger
+    table, and the file the table was shown from: its name (`source`), Asset ID
+    (`source_id`) and Excel `sheet`."""
     columns = [{"name": str(name), "type": column_type(frame[name])} for name in frame.columns]
-    rows = [[_cell(value) for value in row] for row in frame.head(MAX_ROWS).itertuples(False)]
+    rows = [[json_value(value) for value in row] for row in frame.head(MAX_ROWS).itertuples(False)]
     while rows and len(json.dumps(rows)) > MAX_BYTES:
         rows = rows[: len(rows) // 2]
     data: dict[str, Any] = {"columns": columns, "rows": rows}
@@ -31,8 +36,9 @@ def table_data(
         data["title"] = title
     if len(rows) < len(frame):
         data["total_rows"] = len(frame)
-        if source:
-            data["source"] = source
+    for key, value in (("source", source), ("source_id", source_id), ("sheet", sheet)):
+        if value:
+            data[key] = value
     return data
 
 
@@ -48,7 +54,9 @@ def table_text(data: dict[str, Any]) -> str:
     return "\n".join([title, *lines] if title else lines)
 
 
-def _cell(value: Any) -> Any:
+def json_value(value: Any) -> Any:
+    """A cell as a JSON value: missing values and non-finite numbers as null, dates as ISO
+    text."""
     if value is None or value is pd.NaT:
         return None
     if isinstance(value, pd.Timestamp):

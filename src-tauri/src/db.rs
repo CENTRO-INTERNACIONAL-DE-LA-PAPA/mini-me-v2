@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 2;
+pub const SCHEMA_VERSION: i32 = 5;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -78,6 +78,47 @@ CREATE TABLE components (
 );
 CREATE INDEX components_by_message ON components(message_id, created_at);
 "#,
+    r#"
+CREATE TABLE message_steps (
+    message_id  TEXT NOT NULL REFERENCES messages(id),
+    position    INTEGER NOT NULL,
+    step_id     TEXT NOT NULL,
+    type        TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    output      TEXT,
+    done        INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (message_id, position)
+);
+
+ALTER TABLE components ADD COLUMN answer TEXT;
+
+-- What a reply paused at an approval needs to resume. Not derived from events: it is
+-- deleted once the approval is answered or the reply is stopped.
+CREATE TABLE paused_runs (
+    message_id    TEXT PRIMARY KEY REFERENCES messages(id),
+    step_id       TEXT NOT NULL,
+    component_id  TEXT NOT NULL,
+    run           TEXT NOT NULL,
+    output        TEXT,
+    state         TEXT NOT NULL,
+    created_at    INTEGER NOT NULL
+);
+"#,
+    r#"
+-- The Project Overview's own state: the summary the user asked for and the component they
+-- featured. Always exactly one row.
+CREATE TABLE overview (
+    id                  INTEGER PRIMARY KEY CHECK (id = 1),
+    summary             TEXT,
+    summary_at          INTEGER,
+    featured_component  TEXT REFERENCES components(id)
+);
+INSERT INTO overview (id) VALUES (1);
+"#,
+    r#"
+-- The position in its reply's message_steps (minus 1) of the Step run that added it.
+ALTER TABLE components ADD COLUMN step_index INTEGER;
+"#,
 ];
 
 fn user_version(conn: &Connection) -> AppResult<i32> {
@@ -107,6 +148,11 @@ pub fn open(path: &Path) -> AppResult<Connection> {
         tx.commit()?;
     }
     Ok(conn)
+}
+
+/// Whether the database was made by a newer app version than this one.
+pub fn is_newer(conn: &Connection) -> AppResult<bool> {
+    Ok(user_version(conn)? > SCHEMA_VERSION)
 }
 
 /// Opens a Project database for reading only, without migrating it.
@@ -156,7 +202,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), 2);
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
         let content: String = conn
             .query_row("SELECT content FROM messages WHERE id = 'm'", [], |row| row.get(0))
             .unwrap();
@@ -165,6 +211,51 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM components", [], |row| row.get(0))
             .unwrap();
         assert_eq!(components, 0);
+    }
+
+    #[test]
+    fn a_version_2_database_gains_steps_answers_and_paused_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(MIGRATIONS[0]).unwrap();
+            conn.execute_batch(MIGRATIONS[1]).unwrap();
+            conn.pragma_update(None, "user_version", 2).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        let tables: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN \
+                 ('message_steps', 'paused_runs')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(tables, 2);
+        conn.prepare("SELECT answer FROM components").unwrap();
+    }
+
+    #[test]
+    fn a_version_3_database_gains_an_empty_overview() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..3] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 3).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        let (summary, featured): (Option<String>, Option<String>) = conn
+            .query_row("SELECT summary, featured_component FROM overview", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap();
+        assert_eq!((summary, featured), (None, None));
     }
 
     #[test]

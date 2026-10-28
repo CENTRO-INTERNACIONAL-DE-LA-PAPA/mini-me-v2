@@ -1,104 +1,107 @@
 import { describe, expect, it } from "vitest";
-import {
-  activeQuery,
-  assetTarget,
-  insertReference,
-  miniMeTarget,
-  segments,
-  toTextComponents,
-  updateReferences,
-  type DraftReference,
-} from "./references";
-import type { AssetRef, MiniMe } from "./types";
+import { draftFromDoc, markdownSource, miniMeSuggestions, segments } from "./references";
+import type { MiniMe } from "./types";
 
-const asset: AssetRef = { id: "a1", name: "trial.csv", media_type: "text/csv", size_bytes: 10 };
 const scribe: MiniMe = {
   id: "m1",
   name: "Scribe",
   description: "",
   colors: { tint: "#E3DFFF", solid: "#6E5BFF", ink: "#4A3AE0" },
+  avatar: { base: "long", face: "quiet" },
+  group: "thinking",
+  built_in: true,
 };
+describe("draftFromDoc", () => {
+  const text = (value: string) => ({ type: "text", text: value });
+  const reference = (attrs: object) => ({ type: "reference", attrs });
+  const paragraph = (...content: object[]) => ({ type: "paragraph", content });
+  const doc = (...content: object[]) => ({ type: "doc", content });
 
-describe("activeQuery", () => {
-  it("finds the #query before the cursor", () => {
-    expect(activeQuery("see #tri", 8)).toEqual({ start: 4, query: "tri", kind: "asset" });
-    expect(activeQuery("#", 1)).toEqual({ start: 0, query: "", kind: "asset" });
+  it("puts each reference's label in the text with a Text Component over it", () => {
+    const skeptic = { kind: "mini_me", id: "m1", label: "@Skeptic" };
+    const sent = paragraph(text("Ask "), reference(skeptic), text(" about this"));
+    const draft = draftFromDoc(doc(sent));
+    expect(draft).toEqual({
+      content: "Ask @Skeptic about this",
+      text_components: [{ ...skeptic, start: 4, end: 12 }],
+    });
   });
 
-  it("finds the @query for Mini-Mes", () => {
-    expect(activeQuery("hi @scr", 7)).toEqual({ start: 3, query: "scr", kind: "mini_me" });
-    expect(activeQuery("email@host", 10)).toBeNull();
+  it("turns hard breaks and paragraphs into line breaks", () => {
+    const draft = draftFromDoc(
+      doc(paragraph(text("one"), { type: "hardBreak" }, text("two")), paragraph(text("three"))),
+    );
+    expect(draft.content).toBe("one\ntwo\nthree");
   });
 
-  it("ignores # inside a word or after a space", () => {
-    expect(activeQuery("issue#3", 7)).toBeNull();
-    expect(activeQuery("see #tri ", 9)).toBeNull();
-  });
-});
-
-describe("insertReference", () => {
-  it("replaces the query with the label and tracks its range", () => {
-    const result = insertReference("see #tri now", [], 4, 8, assetTarget(asset));
-    expect(result.text).toBe("see #trial.csv  now");
-    expect(result.references).toEqual([
-      { kind: "asset", id: "a1", label: "#trial.csv", start: 4, end: 14 },
-    ]);
-    expect(result.cursor).toBe(15);
-  });
-
-  it("inserts a Mini-Me mention", () => {
-    const result = insertReference("@Scr summarize", [], 0, 4, miniMeTarget(scribe));
-    expect(result.text).toBe("@Scribe  summarize");
-    expect(result.references).toEqual([
-      { kind: "mini_me", id: "m1", label: "@Scribe", start: 0, end: 7 },
-    ]);
-  });
-
-  it("shifts references that come after the insertion", () => {
-    const first = insertReference("# and #", [], 6, 7, assetTarget(asset));
-    const second = insertReference(first.text, first.references, 0, 1, assetTarget(asset));
-    expect(second.references.map((r) => [r.start, r.end])).toEqual([
-      [0, 10],
-      [16, 26],
-    ]);
-  });
-});
-
-describe("updateReferences", () => {
-  const ref: DraftReference = { kind: "asset", id: "a1", label: "#trial.csv", start: 4, end: 14 };
-  const text = "see #trial.csv now";
-
-  it("keeps references before an edit", () => {
-    expect(updateReferences(text, text + "!", [ref])).toEqual([ref]);
-  });
-
-  it("shifts references after an edit", () => {
-    expect(updateReferences(text, "please " + text, [ref])).toEqual([
-      { ...ref, start: 11, end: 21 },
-    ]);
-  });
-
-  it("drops a reference when the edit touches it", () => {
-    expect(updateReferences(text, "see #trial.cv now", [ref])).toEqual([]);
+  it("counts offsets in UTF-16 code units", () => {
+    const trial = { kind: "component", id: "c1", label: "$trial" };
+    const draft = draftFromDoc(doc(paragraph(text("🥔 "), reference(trial))));
+    expect(draft.text_components[0]).toMatchObject({ start: 3, end: 9 });
   });
 });
 
 describe("rendering helpers", () => {
-  it("converts drafts to text components", () => {
-    const components = toTextComponents([
-      { kind: "asset", id: "a1", label: "#x", start: 0, end: 2 },
-      { kind: "mini_me", id: "m1", label: "@Scribe", start: 3, end: 10 },
-    ]);
-    expect(components).toEqual([
-      { kind: "asset", id: "a1", label: "#x", start: 0, end: 2 },
-      { kind: "mini_me", id: "m1", label: "@Scribe", start: 3, end: 10 },
+  it("splits content around references", () => {
+    const component = { kind: "asset", id: "a1", label: "#x", start: 4, end: 6 } as const;
+    expect(segments("see #x now", [component]).map((s) => s.text)).toEqual(["see ", "#x", " now"]);
+  });
+});
+
+describe("markdownSource", () => {
+  const mention = { kind: "mini_me", id: "m1", label: "@Scribe", start: 4, end: 11 } as const;
+
+  it("turns Text Components into ref links", () => {
+    const file = { kind: "asset", id: "a1", label: "#trial.csv", start: 18, end: 28 } as const;
+    expect(markdownSource("ask @Scribe about #trial.csv", [mention, file])).toBe(
+      "ask [@Scribe](ref:0) about [#trial.csv](ref:1)",
+    );
+  });
+
+  it("escapes brackets in a label", () => {
+    const file = { kind: "asset", id: "a1", label: "#a]b.csv", start: 0, end: 8 } as const;
+    expect(markdownSource("#a]b.csv", [file])).toBe("[#a\\]b.csv](ref:0)");
+  });
+
+  it("leaves a component whose range doesn't hold its label", () => {
+    expect(markdownSource("ask @Scrabble", [mention])).toBe("ask @Scrabble");
+  });
+
+  it("escapes a ! right before a component, so it stays a link", () => {
+    const file = { kind: "asset", id: "a1", label: "#trial.csv", start: 5, end: 15 } as const;
+    expect(markdownSource("Look!#trial.csv", [file])).toBe("Look\\![#trial.csv](ref:0)");
+  });
+});
+
+describe("miniMeSuggestions", () => {
+  const miniMe = (name: string, group: MiniMe["group"]): MiniMe => ({
+    ...scribe,
+    id: name,
+    name,
+    group,
+  });
+  const all = [
+    miniMe("Profiler", "data"),
+    miniMe("Researcher", "literature"),
+    miniMe("Skeptic", "thinking"),
+    miniMe("Explorer", "thinking"),
+  ];
+  const names = (query: string) =>
+    miniMeSuggestions(all, query).map((s) => [s.label, s.miniMes.map((m) => m.name)]);
+
+  it("groups every Mini-Me for an empty query", () => {
+    expect(names("")).toEqual([
+      ["Thinking", ["Skeptic", "Explorer"]],
+      ["Literature", ["Researcher"]],
+      ["Data", ["Profiler"]],
     ]);
   });
 
-  it("splits content around references", () => {
-    const [component] = toTextComponents([
-      { kind: "asset", id: "a1", label: "#x", start: 4, end: 6 },
-    ]);
-    expect(segments("see #x now", [component]).map((s) => s.text)).toEqual(["see ", "#x", " now"]);
+  it("narrows by name, leaving out empty groups", () => {
+    expect(names("pro")).toEqual([["Data", ["Profiler"]]]);
+  });
+
+  it("ignores case and accents", () => {
+    expect(names("SKÉP")).toEqual([["Thinking", ["Skeptic"]]]);
   });
 });

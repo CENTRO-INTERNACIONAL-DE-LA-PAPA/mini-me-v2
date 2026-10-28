@@ -17,3 +17,11 @@ def test_values_are_json_safe():
     assert data["columns"] == [{"name": "y", "type": "number"}, {"name": "d", "type": "date"}]
     assert data["rows"] == [[1.5, "2024-05-01"], [None, None]]
     assert "total_rows" not in data
+
+
+def test_a_table_of_a_file_names_it_even_when_whole():
+    frame = pd.DataFrame({"x": range(3)})
+    data = table_data(frame, source="harvest.xlsx", source_id="a1", sheet="2025")
+    assert (data["source"], data["source_id"], data["sheet"]) == ("harvest.xlsx", "a1", "2025")
+    assert "total_rows" not in data
+    assert "source" not in table_data(frame)

@@ -1,6 +1,6 @@
 [package]
 name = "mini-me"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local-first, customizable desktop research tool for scientists at the International Potato Center (CIP)"
 authors = ["International Potato Center"]
 edition = "2024"
@@ -29,6 +29,7 @@ base64 = "0.22"
 tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
+percent-encoding = "2"
 reqwest = { version = "0.13", features = ["blocking", "json", "form"] }
 
 

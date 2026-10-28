@@ -51,6 +51,9 @@ class TraitDefinition:
     id: str
     name: str
     instructions: str | None
+    # The tools the Trait may use; for a prompt-based Trait, those its model is offered
+    # besides the read tools.
+    tools: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -62,12 +65,23 @@ class Model:
 
 
 class CallContext:
-    """One Trait call. `cancelled` is set when the call is cancelled; a long-running Trait
-    checks it between units of work and returns early. Blocking work must go through
-    `asyncio.to_thread`, so the sidecar keeps answering the core while the Trait runs."""
+    """One Trait call, made by a Step of a Mini-Me run. `cancelled` is set when the run is
+    cancelled; a long-running Trait checks it between units of work and returns early.
+    Blocking work must go through `asyncio.to_thread`, so the sidecar keeps answering the
+    core while the Trait runs."""
 
-    def __init__(self, link: Link, requests: "Requests", call_id: str, start: dict[str, Any]):
-        """`start` is the `call.start` frame."""
+    def __init__(
+        self,
+        link: Link,
+        requests: "Requests",
+        call_id: str,
+        start: dict[str, Any],
+        run_id: str = "",
+        stream: bool = True,
+    ):
+        """`start` holds the call's `trait`, `model` and `context`. Text the call writes goes
+        into the reply as `run.delta` of `run_id` only when `stream` is set; it is always
+        kept as the call's `output`."""
         context = start.get("context") or {}
         trait = start.get("trait") or {}
         model = start.get("model")
@@ -76,6 +90,7 @@ class CallContext:
             id=str(trait.get("id", "")),
             name=str(trait.get("name", "")),
             instructions=trait.get("instructions"),
+            tools=tuple(str(t) for t in trait.get("tools") or ()),
         )
         self.model = (
             Model(provider=str(model.get("provider", "")), model=str(model.get("model", "")))
@@ -89,6 +104,10 @@ class CallContext:
         self.needs_context: bool | None = context.get("needs_context")
         # The Mini-Me whose reply this call writes, which tells its own replies from others'.
         self.mini_me_name: str | None = context.get("mini_me_name")
+        # Outputs of the run's earlier Trait Steps, `{ step_id, name, output }`, in the order
+        # they finished.
+        self.steps: list[dict[str, Any]] = context.get("steps") or []
+        self.run_id = run_id
         self.cancelled = asyncio.Event()
         self.ended = False
         self._link = link
@@ -96,11 +115,26 @@ class CallContext:
         self._progress_sent_at = 0.0
         self._pending_progress: tuple[str, float | None] | None = None
         self._progress_timer: asyncio.TimerHandle | None = None
+        self._stream = stream
+        self._written: list[str] = []
+        # The Conversation's results, until the call adds a file or component of its own.
+        self._results: dict[str, Any] | None = None
+        # Files `read_file` has read and parsed, by kind and Asset ID, so that reading a file
+        # in parts reads it once per call; an Asset's content never changes.
+        self.reads: dict[tuple[str, str], Any] = {}
+
+    @property
+    def output(self) -> str:
+        """Everything the call has written."""
+        return "".join(self._written)
 
     def write(self, text: str) -> None:
-        """Appends `text` to the reply."""
+        """Appends `text` to the call's output, and to the reply when the call's Step streams
+        into it."""
         if text and not self.ended:
-            self._link.send({"type": "call.delta", "call_id": self.call_id, "text": text})
+            self._written.append(text)
+            if self._stream:
+                self._link.send({"type": "run.delta", "run_id": self.run_id, "text": text})
 
     def progress(self, label: str, fraction: float | None = None) -> None:
         """Reports what the Trait is doing; `fraction` is from 0 to 1, or None if unknown.
@@ -123,7 +157,7 @@ class CallContext:
         self._pending_progress = None
         self._progress_sent_at = time.monotonic()
         self._link.send(
-            {"type": "call.progress", "call_id": self.call_id, "label": label, "fraction": fraction}
+            {"type": "run.progress", "run_id": self.run_id, "label": label, "fraction": fraction}
         )
 
     async def read_asset(self, asset_id: str) -> bytes:
@@ -146,19 +180,37 @@ class CallContext:
         """The Conversation's earlier messages, `{ messages, truncated }`, oldest first."""
         return await self._requests.send(self.call_id, "conversation.history", {})
 
+    async def results(self) -> dict[str, Any]:
+        """The Conversation's Assets and Interactive Components, `{ assets, components }`,
+        each newest first. An Asset is `{ id, name, media_type, size_bytes, message_id,
+        current }`, where `current` marks the call's own message's files; a component is
+        `{ id, kind, version, message_id, author }`. Asked of the core once, and again after
+        the call saves a file or adds a component."""
+        if self._results is None:
+            self._results = await self._requests.send(self.call_id, "conversation.results", {})
+        return self._results
+
+    async def read_component(self, component_id: str) -> dict[str, Any]:
+        """A component of the Conversation, `{ kind, version, data, text }`. Raises
+        `CoreRequestError` with `not_found` for any other ID."""
+        return await self._requests.send(
+            self.call_id, "component.read", {"component_id": component_id}
+        )
+
     async def component(self, kind: str, version: int, data: Any, text: str) -> str:
-        """Adds an Interactive Component below the reply's text and returns its ID. `kind`
-        must be listed in the Trait's `components`, and `data` must have the shape that the
-        kind's renderer for `version` draws (`src/components/interactive/<kind>.tsx`). `text`
-        is a plain-text version of it, used in conversation history and wherever the kind is
-        not shown. Raises `CoreRequestError` with `component_not_allowed` or
-        `invalid_component` when the core refuses it; the Trait can then write `text`
-        instead."""
+        """Adds an Interactive Component below the reply's text and returns its ID. Adapters
+        call it through the show tools (`mini_me_sidecar.tools`). `data` must have the shape
+        that the kind's renderer for `version` draws (`src/components/interactive/<kind>.tsx`).
+        `text` is a plain-text version of it, used in conversation history and wherever the
+        kind is not shown. Raises `CoreRequestError` with `component_not_allowed` (an
+        `approval`, which only the core adds) or `invalid_component` when the core refuses
+        it."""
         result = await self._requests.send(
             self.call_id,
             "component.add",
             {"kind": kind, "version": version, "data": data, "text": text},
         )
+        self._results = None
         return str(result["component_id"])
 
     async def write_asset(self, name: str, media_type: str, data: bytes) -> dict[str, Any]:
@@ -169,6 +221,7 @@ class CallContext:
             "asset.write",
             {"name": name, "media_type": media_type, "data": base64.b64encode(data).decode()},
         )
+        self._results = None
         return result["asset"]
 
     async def secret(self, provider: str) -> Secret:

@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { ComponentReferencesProvider } from "./component-references";
 import { TableView } from "./table";
 
 const data = {
@@ -21,10 +22,21 @@ function bodyOrder(html: string): string[] {
 describe("table version 1", () => {
   it("sorts numbers with missing values last, both ways", () => {
     const sorted = (desc: boolean) =>
-      renderToStaticMarkup(<TableView data={data} initialSorting={[{ id: "1", desc }]} />);
+      renderToStaticMarkup(<TableView data={data} initialSorting={{ column: 1, desc }} />);
     const [up, down] = [sorted(false), sorted(true)];
     expect(bodyOrder(up)).toEqual(["a", "c", "b"]);
     expect(bodyOrder(down)).toEqual(["c", "a", "b"]);
+  });
+
+  it("sorts text in natural order, ignoring case", () => {
+    const plots = {
+      columns: [{ name: "plot", type: "text" }],
+      rows: [["plot 10"], ["plot 2"], ["Plot 1"]],
+    };
+    const html = renderToStaticMarkup(
+      <TableView data={plots} initialSorting={{ column: 0, desc: false }} />,
+    );
+    expect(bodyOrder(html)).toEqual(["Plot 1", "plot 2", "plot 10"]);
   });
 
   it("right-aligns numbers and leaves missing cells empty", () => {
@@ -39,5 +51,17 @@ describe("table version 1", () => {
     expect(html).toContain("Showing 3 of 12,340 rows");
     expect(html).toContain("trial-cleaned.csv");
     expect(renderToStaticMarkup(<TableView data={data} />)).not.toContain("Showing");
+  });
+
+  it("has a reference button inside a Conversation only", () => {
+    const names = new Map([["t1", { id: "t1", name: "trial", kind: "table" as const }]]);
+    const html = renderToStaticMarkup(
+      <ComponentReferencesProvider names={names} append={() => {}}>
+        <TableView data={data} componentId="t1" />
+      </ComponentReferencesProvider>,
+    );
+    expect(html).toContain('aria-label="Add $trial to the message"');
+    const outside = renderToStaticMarkup(<TableView data={data} componentId="t1" />);
+    expect(outside).not.toContain("<header");
   });
 });

@@ -19,15 +19,21 @@ context: |
     ordering. They live in a shared library: built-in or user-made, duplicable and editable;
     Mini-Mes reference Traits from that library, so editing a Trait affects every Mini-Me
     that uses it. "Skill" is reserved for LLM/Asta skill files and must not be used for Traits.
+  - Adapter: the sidecar engine that runs a Trait, which every Trait names; what the Trait
+    always does. A developer concept, never shown to users.
+  - Tool: one action a Trait takes while it runs, such as reading a file, saving a file or
+    showing an Interactive Component. Each Trait lists its tools; an adapter's code takes
+    them, or the adapter offers them to its AI model to choose. Adapters read, save and show
+    only through tools.
   - Workflow: how a Mini-Me uses its Traits. Each Mini-Me has exactly one Workflow: a graph
     of Steps that may include conditions, loops, parallel branches and human approvals.
   - Step: a node in a Workflow. A Trait Step runs a Trait (the same Trait may appear in
     several Steps); a control Step is an approval, condition, loop or parallel split/join.
     A Mini-Me's Traits are the Traits referenced by its Trait Steps.
-  - Text Component: an inline reference inside a message (@Mini-Me, #asset, #interactive
-    component, #selection within an interactive component). Shown as a chip in the UI and
-    carried as a typed ID reference; when a message reaches a Trait, the backend resolves each
-    reference so the Trait can access the referenced content.
+  - Text Component: an inline reference inside a message (@Mini-Me, #asset, $table or chart
+    Interactive Component). Shown as a chip in the UI and carried as a typed ID reference;
+    when a message reaches a Trait, the backend resolves each reference so the Trait can
+    access the referenced content.
   - Interactive Component: a rich, interactive element attached to an AI message (table,
     chart, diagram, ...). Each kind is a fixed, hand-coded type in a catalogue with a
     versioned spec. Traits emit data/specs for these; they never generate UI code.
@@ -58,7 +64,7 @@ context: |
     library inside our sidecar, never the backend or the protocol; LangGraph types and
     concepts stay internal to the sidecar and must not appear in the protocol or the UI.
   - Routing: if the user does not @-mention a Mini-Me, Typesafe's Jev picks one. Below a
-    configurable confidence threshold, the app asks the user to choose a Mini-Me.
+    configurable confidence threshold, or when Jev cannot be asked, Assistant answers.
   - The sidecar's Python runtime and dependencies are pinned and shipped with the app; the
     app refuses to run against a mismatched sidecar version. No WSL, Docker or other
     system-level prerequisites.
@@ -70,14 +76,15 @@ context: |
     components with the shadcn CLI so they match, then restyle each one to DESIGN.md
     (colours, typography, spacing, radius, shadows, focus states). DESIGN.md is the visual
     design system for the whole app.
-  - Charts and plots: d3, imported as individual modules (d3-scale, d3-shape, d3-array, ...).
-    d3 computes scales, shapes and layouts; React renders the SVG. d3 touches the DOM only
-    where it clearly pays off, such as zoom or brushing.
-  - Tables: TanStack Table (headless), styled with the same design tokens.
+  - Charts and plots: Observable Plot, drawn into a container that a React component owns;
+    React holds the state of a chart's controls. d3 (which Plot is built on) is used directly
+    only where Plot can't do the job, such as zoom or brushing.
+  - Tables: plain React components, styled with the same design tokens.
   - All UI colours come from the theme tokens in src/index.css; no other palette. The only
     exception is each Mini-Me's and Trait's own colour, used only where DESIGN.md allows.
     The UI is light only; there is no dark theme yet. Charts and tables take their colours
-    from the same tokens.
+    from the same tokens; chart series past the tokens' palette take generated colours as
+    DESIGN.md describes.
   - Fonts are bundled with the app, never loaded from a CDN, so the UI renders offline.
   - The UI runs in WebView2 (Windows), WebKit (macOS) and WebKitGTK (Linux); styles must work
     in all three.

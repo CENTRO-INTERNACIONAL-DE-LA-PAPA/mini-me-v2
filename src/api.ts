@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import type { OpenedConversation } from "./protocol/eventStore";
 import type {
   AppError,
   Ai2Status,
@@ -6,14 +7,25 @@ import type {
   AssetRef,
   KeyAccount,
   ConversationSummary,
+  LibraryView,
+  FileEntry,
+  HomeSettings,
   Message,
   MiniMe,
+  MiniMeDefinition,
+  Overview,
+  PausedApproval,
   ProjectSummary,
   ProtocolEvent,
   ProviderId,
+  RecentConversation,
+  RunningReply,
+  SavedDefinition,
   SendMessageInput,
   SidecarStatus,
+  TraitDraft,
   UpdateStatus,
+  UserProfile,
   Uuid,
 } from "./protocol/types";
 
@@ -27,27 +39,54 @@ export const api = {
   createConversation: (project_id: Uuid) =>
     invoke<ConversationSummary>("create_conversation", { project_id }),
 
-  /** Streams every event after `after_seq`, then new events as they are persisted. */
+  /** The Conversation as stored, and a subscription that sends `onEvents` every event
+   * persisted after it, in batches. A batch can arrive before the returned state. */
+  openConversation: (
+    project_id: Uuid,
+    conversation_id: Uuid,
+    onEvents: (events: ProtocolEvent[]) => void,
+  ) => {
+    const on_events = new Channel<ProtocolEvent[]>();
+    on_events.onmessage = onEvents;
+    return invoke<OpenedConversation>("open_conversation", {
+      project_id,
+      conversation_id,
+      on_events,
+    });
+  },
+  /** Streams every event after `after_seq`, then new events as they are persisted, in
+   * batches; resolves with the subscription's ID. */
   subscribeConversation: (
     project_id: Uuid,
     conversation_id: Uuid,
     after_seq: number,
-    onEvent: (event: ProtocolEvent) => void,
+    onEvents: (events: ProtocolEvent[]) => void,
   ) => {
-    const on_event = new Channel<ProtocolEvent>();
-    on_event.onmessage = onEvent;
-    return invoke<void>("subscribe_conversation", {
+    const on_events = new Channel<ProtocolEvent[]>();
+    on_events.onmessage = onEvents;
+    return invoke<Uuid>("subscribe_conversation", {
       project_id,
       conversation_id,
       after_seq,
-      on_event,
+      on_events,
     });
   },
+  unsubscribeConversation: (project_id: Uuid, subscription_id: Uuid) =>
+    invoke<void>("unsubscribe_conversation", { project_id, subscription_id }),
+  /** Ends every Conversation subscription, including those of a view before a reload. */
+  resetSubscriptions: () => invoke<void>("reset_subscriptions"),
 
   sendMessage: (project_id: Uuid, conversation_id: Uuid, input: SendMessageInput) =>
     invoke<Message>("send_message", { project_id, conversation_id, input }),
   stopReply: (project_id: Uuid, conversation_id: Uuid) =>
     invoke<void>("stop_reply", { project_id, conversation_id }),
+  /** Answers the approval a paused reply waits for; approving resumes its Workflow. */
+  answerApproval: (project_id: Uuid, message_id: Uuid, component_id: Uuid, approved: boolean) =>
+    invoke<void>("answer_approval", { project_id, message_id, component_id, approved }),
+  /** Every reply paused at an approval, across all Projects, newest first. */
+  listPausedApprovals: () => invoke<PausedApproval[]>("list_paused_approvals"),
+  /** The most recently active Conversations across all Projects, newest first. */
+  listRecentConversations: () => invoke<RecentConversation[]>("list_recent_conversations"),
 
   addReaction: (project_id: Uuid, message_id: Uuid, emoji: string) =>
     invoke<void>("add_reaction", { project_id, message_id, emoji }),
@@ -58,9 +97,42 @@ export const api = {
   importAssets: (project_id: Uuid) => invoke<AssetRef[]>("import_assets", { project_id }),
   listAssets: (project_id: Uuid, query: string) =>
     invoke<AssetRef[]>("list_assets", { project_id, query }),
+  /** Imports an image pasted into the composer, sent as raw bytes. */
+  importPastedImage: (project_id: Uuid, image: File) =>
+    image.arrayBuffer().then((bytes) =>
+      invoke<AssetRef>("import_pasted_image", new Uint8Array(bytes), {
+        headers: {
+          "project-id": project_id,
+          "media-type": image.type,
+          name: encodeURIComponent(image.name),
+        },
+      }),
+    ),
+  /** Imports files dropped on the window; the core accepts only the paths of the latest drop. */
+  importDropped: (project_id: Uuid, paths: string[]) =>
+    invoke<AssetRef[]>("import_dropped", { project_id, paths }),
+  /** The bytes of a PNG, JPEG, GIF or WebP Asset, for its thumbnail. */
+  readImageAsset: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<ArrayBuffer>("read_image_asset", { project_id, asset_id }),
+  getOverview: (project_id: Uuid) => invoke<Overview>("get_overview", { project_id }),
+  /** Features a chart or table on the Overview; `null` clears it. */
+  featureComponent: (project_id: Uuid, component_id: Uuid | null) =>
+    invoke<void>("feature_component", { project_id, component_id }),
+  /** Asks the model chosen in Settings for a new summary; resolves with the updated Overview. */
+  updateOverviewSummary: (project_id: Uuid) =>
+    invoke<Overview>("update_overview_summary", { project_id }),
+  /** Every Asset of the Project, newest first, with who added it and where it is used. */
+  listProjectFiles: (project_id: Uuid) => invoke<FileEntry[]>("list_project_files", { project_id }),
   openAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("open_asset", { project_id, asset_id }),
 
+  getRunningReplies: () => invoke<RunningReply[]>("get_running_replies"),
+  /** Calls `onChange` with the running replies, then with the whole list on every change. */
+  subscribeRunningReplies: (onChange: (running: RunningReply[]) => void) => {
+    const on_change = new Channel<RunningReply[]>();
+    on_change.onmessage = onChange;
+    return invoke<void>("subscribe_running_replies", { on_change });
+  },
   getSidecarStatus: () => invoke<SidecarStatus>("get_sidecar_status"),
   /** Calls `onStatus` with the current sidecar status, then with every change. */
   subscribeSidecarStatus: (onStatus: (status: SidecarStatus) => void) => {
@@ -72,6 +144,18 @@ export const api = {
   restartSidecar: () => invoke<void>("restart_sidecar"),
 
   listMiniMes: () => invoke<MiniMe[]>("list_mini_mes"),
+  listLibrary: () => invoke<LibraryView>("list_library"),
+  getMiniMe: (id: Uuid) => invoke<MiniMeDefinition>("get_mini_me", { id }),
+  /** Creates the Mini-Me when its `id` is nil, else replaces it. */
+  saveMiniMe: (miniMe: MiniMeDefinition) =>
+    invoke<SavedDefinition>("save_mini_me", { mini_me: miniMe }),
+  saveTrait: (draft: TraitDraft) => invoke<SavedDefinition>("save_trait", { draft }),
+  deleteMiniMe: (id: Uuid) => invoke<LibraryView>("delete_mini_me", { id }),
+  deleteTrait: (id: Uuid) => invoke<LibraryView>("delete_trait", { id }),
+
+  getUserProfile: () => invoke<UserProfile>("get_user_profile"),
+  /** Saves the trimmed name; an empty name clears it. */
+  saveUserName: (name: string) => invoke<UserProfile>("save_user_name", { name }),
 
   getAiSettings: () => invoke<AiSettings>("get_ai_settings"),
   setAiModel: (provider: ProviderId, model: string) =>
@@ -82,6 +166,8 @@ export const api = {
   removeApiKey: (provider: KeyAccount) => invoke<void>("remove_api_key", { provider }),
   setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
   setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
+  getHomeSettings: () => invoke<HomeSettings>("get_home_settings"),
+  setShowHomeMiniMes: (show: boolean) => invoke<void>("set_show_home_mini_mes", { show }),
 
   /** Opens Ai2's sign-in page; the status then turns `pending` and later `signed_in`. */
   ai2StartSignIn: () => invoke<void>("ai2_start_sign_in"),

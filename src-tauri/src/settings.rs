@@ -25,6 +25,16 @@ pub struct Settings {
     pub ai: AiSettings,
     #[serde(default)]
     pub routing: RoutingSettings,
+    #[serde(default)]
+    pub home: HomeSettings,
+}
+
+/// How Home looks.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HomeSettings {
+    /// Whether the Mini-Mes appear on Home on their own; a key sequence brings them anyway.
+    #[serde(default)]
+    pub show_mini_mes: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -109,6 +119,7 @@ impl Settings {
             recent_projects: HashMap::new(),
             ai: AiSettings::default(),
             routing: RoutingSettings::default(),
+            home: HomeSettings::default(),
         };
         settings.save(config_dir)?;
         Ok(settings)
@@ -164,6 +175,7 @@ mod tests {
         let settings = Settings::load_or_create(dir.path()).unwrap();
         assert_eq!(settings.ai, AiSettings::default());
         assert_eq!(settings.routing, RoutingSettings::default());
+        assert!(!settings.home.show_mini_mes);
         assert_eq!(settings.ai.model(), None);
     }
 

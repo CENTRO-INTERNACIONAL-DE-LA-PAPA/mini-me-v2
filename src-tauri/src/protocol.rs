@@ -52,6 +52,11 @@ pub enum EventKind {
         label: String,
         fraction: Option<f64>,
     },
+    /// A streaming reply now waits for the user to answer an approval.
+    #[serde(rename = "message.paused")]
+    MessagePaused { message_id: Uuid },
+    #[serde(rename = "message.resumed")]
+    MessageResumed { message_id: Uuid },
     #[serde(rename = "message.completed")]
     MessageCompleted { message_id: Uuid, content: String },
     #[serde(rename = "message.failed")]
@@ -64,6 +69,30 @@ pub enum EventKind {
     ComponentAdded {
         message_id: Uuid,
         component: Component,
+    },
+    #[serde(rename = "component.answered")]
+    ComponentAnswered {
+        message_id: Uuid,
+        component_id: Uuid,
+        answer: Value,
+    },
+    /// A Step of the reply's Workflow started. `name` is the Trait's name for a Trait Step,
+    /// otherwise the Step's label or its type.
+    #[serde(rename = "step.started")]
+    StepStarted {
+        message_id: Uuid,
+        step_id: String,
+        #[serde(rename = "type")]
+        step_type: String,
+        name: String,
+    },
+    /// The latest started run of `step_id` ended. `output` is a Trait Step's text, a
+    /// condition's chosen branch, a loop's `repeat` or `stop`, or `null`.
+    #[serde(rename = "step.completed")]
+    StepCompleted {
+        message_id: Uuid,
+        step_id: String,
+        output: Option<String>,
     },
     #[serde(rename = "reaction.added")]
     ReactionAdded {
@@ -131,6 +160,7 @@ pub struct Author {
 #[serde(rename_all = "snake_case")]
 pub enum MessageStatus {
     Streaming,
+    Paused,
     Complete,
     Failed,
     Cancelled,
@@ -140,6 +170,7 @@ impl MessageStatus {
     pub fn as_str(self) -> &'static str {
         match self {
             MessageStatus::Streaming => "streaming",
+            MessageStatus::Paused => "paused",
             MessageStatus::Complete => "complete",
             MessageStatus::Failed => "failed",
             MessageStatus::Cancelled => "cancelled",
@@ -149,6 +180,7 @@ impl MessageStatus {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "streaming" => Some(MessageStatus::Streaming),
+            "paused" => Some(MessageStatus::Paused),
             "complete" => Some(MessageStatus::Complete),
             "failed" => Some(MessageStatus::Failed),
             "cancelled" => Some(MessageStatus::Cancelled),
@@ -172,6 +204,19 @@ pub struct Message {
     /// Missing in `message.created` events stored before Interactive Components existed.
     #[serde(default)]
     pub components: Vec<Component>,
+    /// The Steps of the reply's Workflow that have started, in order.
+    #[serde(default)]
+    pub steps: Vec<MessageStep>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MessageStep {
+    pub step_id: String,
+    #[serde(rename = "type")]
+    pub step_type: String,
+    pub name: String,
+    pub output: Option<String>,
+    pub done: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -192,6 +237,13 @@ pub struct Component {
     pub version: u32,
     pub data: Value,
     pub text: String,
+    /// The user's answer, for kinds that ask for one; `null` until answered.
+    #[serde(default)]
+    pub answer: Value,
+    /// The position, from 0, in the reply's started Steps of the Step run whose Trait call
+    /// added it; absent when no Trait Step added it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_index: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -199,6 +251,8 @@ pub struct Component {
 pub enum TextComponentKind {
     Asset,
     MiniMe,
+    /// A `$` reference to a whole `table` or `chart` Interactive Component.
+    Component,
 }
 
 /// An inline reference inside a message. `start` and `end` are UTF-16 code unit offsets into
@@ -210,6 +264,53 @@ pub struct TextComponent {
     pub label: String,
     pub start: u32,
     pub end: u32,
+}
+
+/// A message as the UI shows it: what its Conversation's events give when folded in order.
+/// `src/protocol/eventStore.ts` builds the same shape from events; `src-tauri/fixtures/
+/// replay.json` keeps the two in agreement.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct MessageView {
+    #[serde(flatten)]
+    pub message: Message,
+    /// When the message was created: its `message.created` event's `ts`, in milliseconds.
+    pub created_at: i64,
+    pub reactions: Vec<Reaction>,
+    /// The latest progress of a streaming reply; `null` once it has ended or paused.
+    pub progress: Option<Progress>,
+    /// Jev's answers about the message, when the developer setting stored them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jev: Option<JevAnswers>,
+    /// Why the reply failed, once it has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure: Option<ErrorInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Reaction {
+    pub emoji: String,
+    pub by: Author,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Progress {
+    pub label: String,
+    pub fraction: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct JevAnswers {
+    pub answers: Value,
+    pub error: Option<ErrorInfo>,
+}
+
+/// A Conversation as it stands when the UI opens it. Events after `last_seq` reach the UI
+/// through the subscription `subscription_id`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct OpenedConversation {
+    pub subscription_id: Uuid,
+    pub last_seq: i64,
+    pub messages: Vec<MessageView>,
 }
 
 #[cfg(test)]
@@ -271,6 +372,16 @@ mod tests {
     }
 
     #[test]
+    fn a_component_reference_round_trips() {
+        let part = json!({
+            "kind": "component", "id": new_id(), "label": "$trial", "start": 0, "end": 6
+        });
+        let component: TextComponent = serde_json::from_value(part.clone()).unwrap();
+        assert_eq!(component.kind, TextComponentKind::Component);
+        assert_eq!(serde_json::to_value(&component).unwrap(), part);
+    }
+
+    #[test]
     fn ids_are_v7_and_ordered() {
         let first = new_id();
         let second = new_id();
@@ -298,10 +409,42 @@ mod tests {
             "message.cancelled",
             "attachment.added",
             "component.added",
+            "component.answered",
+            "message.paused",
+            "message.resumed",
+            "step.started",
+            "step.completed",
             "reaction.added",
             "reaction.removed",
         ] {
             assert!(types.iter().any(|t| t == expected), "fixture lacks {expected}");
         }
+    }
+
+    #[test]
+    fn a_message_view_is_the_message_with_its_shown_state() {
+        let view = MessageView {
+            message: Message {
+                id: new_id(),
+                author: Author { kind: AuthorKind::MiniMe, id: "scout".into() },
+                content: "Reading".into(),
+                status: MessageStatus::Streaming,
+                reply_to: None,
+                attachments: Vec::new(),
+                text_components: Vec::new(),
+                components: Vec::new(),
+                steps: Vec::new(),
+            },
+            created_at: 1_760_000_000_000,
+            reactions: Vec::new(),
+            progress: Some(Progress { label: "Reading trial.csv".into(), fraction: None }),
+            jev: None,
+            failure: None,
+        };
+        let value = serde_json::to_value(&view).unwrap();
+        assert_eq!(value["content"], json!("Reading"));
+        assert_eq!(value["progress"], json!({ "label": "Reading trial.csv", "fraction": null }));
+        assert_eq!(value["reactions"], json!([]));
+        assert!(value.get("jev").is_none() && value.get("failure").is_none());
     }
 }

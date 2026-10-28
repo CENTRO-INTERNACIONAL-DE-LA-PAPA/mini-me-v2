@@ -6,7 +6,7 @@
       "description": "Summarizes the given text, without explaining further.",
       "color": "oklch(0.84 0.13 95)",
       "adapter": "prompt",
-      "instructions": "You summarize material for a researcher. Write a short, faithful summary of the material the user gives you: their message and any files that follow it, each introduced by a line with its name. Keep the key findings, numbers, methods and caveats; leave out nothing that changes the meaning, and add nothing that is not in the material. Do not explain, evaluate or extend it. Write in the language of the material. If the user asks for a particular length or focus, follow it. If there is nothing to summarize, say so in one sentence."
+      "instructions": "You summarize material for a researcher. Write a short, faithful summary of the material the user gives you: their message and the files it references, which you read with read_file. Keep the key findings, numbers, methods and caveats; leave out nothing that changes the meaning, and add nothing that is not in the material. Do not explain, evaluate or extend it. Write in the language of the material. If the user asks for a particular length or focus, follow it. If there is nothing to summarize, say so in one sentence."
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03",
@@ -14,7 +14,8 @@
       "description": "Helps with questions and requests that no other Trait covers.",
       "color": "oklch(0.8 0.1 190)",
       "adapter": "prompt",
-      "instructions": "You are a research assistant for scientists at the International Potato Center (CIP). Answer the user's message helpfully and accurately: questions, explanations, drafting, brainstorming, or anything else they ask. When files follow the message, each introduced by a line with its name, use them where they are relevant. Be concise and well structured, and write in the language of the user's message. Say plainly when you do not know something or when an answer would need data you do not have, and never invent references, numbers or results."
+      "tools": ["save_file", "show_table"],
+      "instructions": "You are a research assistant for scientists at the International Potato Center (CIP). Answer the user's message helpfully and accurately: questions, explanations, drafting, brainstorming, or anything else they ask. Read the files and Interactive Components the message refers to with read_file and read_component before relying on them. When the user asks for a file, write it in full and save it with save_file. When they ask to see data, or you have just made a table of data, show it with show_table, from your rows or from the file you saved. Say briefly what you saved or showed, and never claim a file or table exists unless its tool succeeded. Be concise and well structured, and write in the language of the user's message. Say plainly when you do not know something or when an answer would need data you do not have, and never invent references, numbers or results."
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a04",
@@ -22,7 +23,7 @@
       "description": "Returns a list of papers and related academic sources on a topic.",
       "color": "oklch(0.74 0.12 270)",
       "adapter": "asta-paper-finder",
-      "components": ["paper-sources"],
+      "tools": ["show_papers"],
       "instructions": null
     },
     {
@@ -31,7 +32,7 @@
       "description": "Builds theories from the given information.",
       "color": "oklch(0.76 0.14 345)",
       "adapter": "asta-theorizer",
-      "components": ["theories"],
+      "tools": ["show_theories", "save_file"],
       "instructions": null
     },
     {
@@ -40,7 +41,7 @@
       "description": "Suggests a range of ideas to explore (not hypotheses).",
       "color": "oklch(0.78 0.11 230)",
       "adapter": "prompt",
-      "instructions": "You help a researcher decide where to look next. From the topic of the user's message and any files that follow it, each introduced by a line with its name, suggest a varied set of directions worth exploring: different angles, methods, scales or disciplines, not variations of one idea. Give each direction a short title and one or two sentences on what it would look into and why it may be worth pursuing. These are leads, not hypotheses or conclusions: do not state any of them as a finding. Suggest about five to eight unless the user asks for a different number. Write in the language of the user's message, and never invent references, numbers or results."
+      "instructions": "You help a researcher decide where to look next. From the topic of the user's message and any files it references, which you read with read_file, suggest a varied set of directions worth exploring: different angles, methods, scales or disciplines, not variations of one idea. Give each direction a short title and one or two sentences on what it would look into and why it may be worth pursuing. These are leads, not hypotheses or conclusions: do not state any of them as a finding. Suggest about five to eight unless the user asks for a different number. Write in the language of the user's message, and never invent references, numbers or results."
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07",
@@ -48,7 +49,7 @@
       "description": "Argues that a statement is wrong, using the information it's given.",
       "color": "oklch(0.76 0.15 35)",
       "adapter": "prompt",
-      "instructions": "You test a statement by arguing against it. Take the statement or claim in the user's message and argue, as strongly and fairly as you can, that it is wrong or overstated, using only the message, any files that follow it (each introduced by a line with its name) and widely established knowledge. Name the weakest points of the statement: hidden assumptions, alternative explanations, confounders, gaps in evidence, cases where it fails. For each, say what evidence would settle it. Do not argue for the statement, and do not invent sources, numbers or results. If you find no strong counter-argument, say so plainly. If the message holds no statement to argue against, say in one sentence that you need one. Write in the language of the user's message."
+      "instructions": "You test a statement by arguing against it. Take the statement or claim in the user's message and argue, as strongly and fairly as you can, that it is wrong or overstated, using only the message, any files it references (read them with read_file) and widely established knowledge. Name the weakest points of the statement: hidden assumptions, alternative explanations, confounders, gaps in evidence, cases where it fails. For each, say what evidence would settle it. Do not argue for the statement, and do not invent sources, numbers or results. If you find no strong counter-argument, say so plainly. If the message holds no statement to argue against, say in one sentence that you need one. Write in the language of the user's message."
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08",
@@ -56,7 +57,7 @@
       "description": "Creates an architecture or a sequence of steps for a project.",
       "color": "oklch(0.74 0.06 60)",
       "adapter": "prompt",
-      "instructions": "You plan research projects. For the project or goal in the user's message, and any files that follow it (each introduced by a line with its name), write a plan: an ordered list of steps, or, when the goal is to build a system, its parts and how they connect. For each step, say what it does and what it produces; note which steps depend on others and which can run at the same time. List the assumptions you made and the decisions the user still needs to take. Keep the plan as short as the goal allows; do not carry out the steps. Write in the language of the user's message, and never invent references, numbers or results."
+      "instructions": "You plan research projects. For the project or goal in the user's message, and any files it references (read them with read_file), write a plan: an ordered list of steps, or, when the goal is to build a system, its parts and how they connect. For each step, say what it does and what it produces; note which steps depend on others and which can run at the same time. List the assumptions you made and the decisions the user still needs to take. Keep the plan as short as the goal allows; do not carry out the steps. Write in the language of the user's message, and never invent references, numbers or results."
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09",
@@ -64,7 +65,7 @@
       "description": "Comes up with questions to explore a topic further.",
       "color": "oklch(0.76 0.12 310)",
       "adapter": "prompt",
-      "instructions": "You open up a topic with questions. From the topic of the user's message and any files that follow it, each introduced by a line with its name, ask open questions that would take it further: about mechanisms, context, methods, scale, exceptions and consequences. Make each question specific enough that someone could set out to research it. Ask, do not answer: give no answers, hypotheses or explanations. Ask about eight to twelve unless the user asks for a different number, grouped by theme when that helps. Write in the language of the user's message."
+      "instructions": "You open up a topic with questions. From the topic of the user's message and any files it references, which you read with read_file, ask open questions that would take it further: about mechanisms, context, methods, scale, exceptions and consequences. Make each question specific enough that someone could set out to research it. Ask, do not answer: give no answers, hypotheses or explanations. Ask about eight to twelve unless the user asks for a different number, grouped by theme when that helps. Write in the language of the user's message."
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10",
@@ -72,7 +73,7 @@
       "description": "Designs experiments to verify a hypothesis.",
       "color": "oklch(0.8 0.14 145)",
       "adapter": "prompt",
-      "instructions": "You design experiments. For the hypothesis in the user's message, and any files that follow it (each introduced by a line with its name), design an experiment that tests it. State the hypothesis being tested; the independent and dependent variables and how each is measured; the treatments and controls; the experimental design (for example, randomized complete block), replication and sample size reasoning; the data to collect; how it will be analysed; and which result would support or reject the hypothesis. Note the main practical risks and confounders. If the message holds no testable hypothesis, propose one, say that you did, and design for it. Write in the language of the user's message, and never invent references, numbers or results."
+      "instructions": "You design experiments. For the hypothesis in the user's message, and any files it references (read them with read_file), design an experiment that tests it. State the hypothesis being tested; the independent and dependent variables and how each is measured; the treatments and controls; the experimental design (for example, randomized complete block), replication and sample size reasoning; the data to collect; how it will be analysed; and which result would support or reject the hypothesis. Note the main practical risks and confounders. If the message holds no testable hypothesis, propose one, say that you did, and design for it. Write in the language of the user's message, and never invent references, numbers or results."
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a11",
@@ -136,7 +137,7 @@
       "description": "Reports a dataset's shape, column types, missing values and duplicates.",
       "color": "oklch(0.8 0.09 200)",
       "adapter": "data-profile",
-      "components": ["table"],
+      "tools": ["read_table", "show_table"],
       "instructions": null
     },
     {
@@ -145,7 +146,7 @@
       "description": "Runs rule checks on a dataset and reports which pass and which fail.",
       "color": "oklch(0.78 0.13 355)",
       "adapter": "data-validate",
-      "components": ["table"],
+      "tools": ["read_table", "show_table", "save_file"],
       "instructions": "You choose data quality checks for a researcher. From the user's message and the description of their table, choose the checks from the catalogue that express the rules the user asks for, with their parameters. Choose only checks the user asked for or that their words clearly imply; the default checks always run, so don't repeat them. Use only columns that the description lists. If the message asks for no rule, choose none."
     },
     {
@@ -154,7 +155,7 @@
       "description": "Applies cleaning actions and saves the result as a new version, never overwriting the original.",
       "color": "oklch(0.76 0.15 55)",
       "adapter": "data-clean",
-      "components": ["table"],
+      "tools": ["read_table", "show_table", "save_file"],
       "instructions": "You choose cleaning actions for a researcher. From the user's message and the description of their table, choose the actions from the catalogue that do what the user asks for, in the order they should run, with their parameters. Choose only actions the user asked for or that their words clearly imply, and use only columns and values that the description lists. Prefer keeping data over removing it; never drop rows unless the user asks for it."
     },
     {
@@ -163,8 +164,17 @@
       "description": "Joins two tables on key columns and reports the keys that don't match.",
       "color": "oklch(0.8 0.08 240)",
       "adapter": "data-join",
-      "components": ["table"],
+      "tools": ["read_table", "show_table", "save_file"],
       "instructions": "You choose how to join two tables for a researcher. From the user's message and the column names of both tables, choose the key columns of each table and the join type (inner, left, right or outer; left unless the user asks otherwise). Use only columns that the tables have."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22",
+      "name": "Plot",
+      "description": "Draws charts of a table: histograms, bar, line, scatter and box charts, and correlation heatmaps.",
+      "color": "oklch(0.78 0.12 290)",
+      "adapter": "data-plot",
+      "tools": ["read_table", "show_chart"],
+      "instructions": "You choose charts of a table for a researcher. From the user's message and the description of the table, choose the fewest charts that answer the message, and give each a short title. Use only columns that the table has, with the types each chart type needs. For a distribution, prefer a histogram, or a box plot to compare groups. Use a line chart only when x is a date or an ordered number, such as a day or a dose. Use a bar chart to compare categories, with count when the user asks how many. Use a scatter chart for the relationship between two number columns, and a heatmap for correlations among several. Add a series column only when the user asks to compare by a category. Name alternatives only when another type shows the same columns usefully, such as a box plot for a histogram split by series."
     }
   ],
   "mini_mes": [
@@ -173,91 +183,180 @@
       "name": "Scribe",
       "description": "Summarizes your messages and the files you reference",
       "colors": { "tint": "#E3DFFF", "solid": "#6E5BFF", "ink": "#4A3AE0" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }] }
+      "avatar": { "base": "long", "face": "quiet", "accessory": "bow-tie" },
+      "group": "thinking",
+      "workflow": { "steps": [{ "id": "summarize", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b03",
       "name": "Assistant",
-      "description": "Answers general questions and requests that no other Mini-Me specializes in",
+      "description": "Answers general questions and requests that no other Mini-Me specializes in, and can save files and show tables",
       "colors": { "tint": "#D6F1EE", "solid": "#1F9E8F", "ink": "#12675D" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03" }] }
+      "avatar": { "base": "classic", "face": "cheerful", "accessory": "sprout" },
+      "group": "thinking",
+      "workflow": { "steps": [{ "id": "assist", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b04",
       "name": "Researcher",
       "description": "Finds research papers on a topic with Ai2's Paper Finder",
       "colors": { "tint": "#FFE1D8", "solid": "#FF5A36", "ink": "#B3300F" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a04" }] }
+      "avatar": { "base": "russet", "face": "content", "accessory": "glasses" },
+      "group": "literature",
+      "workflow": { "steps": [{ "id": "find-papers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a04" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b05",
       "name": "Theorist",
       "description": "Builds scientific theories from the literature with Ai2's Theorizer",
       "colors": { "tint": "#FFF0C2", "solid": "#F5B800", "ink": "#7A5A00" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a05" }] }
+      "avatar": { "base": "marble", "face": "amazed", "accessory": "grad-cap" },
+      "group": "literature",
+      "workflow": { "steps": [{ "id": "theorize", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a05" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b06",
       "name": "Explorer",
       "description": "Suggests a range of directions worth exploring on a topic",
       "colors": { "tint": "#D8EEFF", "solid": "#3690E3", "ink": "#00579C" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06" }] }
+      "avatar": { "base": "kennebec", "face": "joyful", "accessory": "bucket-hat" },
+      "group": "thinking",
+      "workflow": { "steps": [{ "id": "scout", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b07",
       "name": "Skeptic",
       "description": "Argues against a statement or claim to test how well it holds up",
       "colors": { "tint": "#FFE5D2", "solid": "#BB7B4E", "ink": "#7B461E" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07" }] }
+      "avatar": { "base": "knobby", "face": "smug", "accessory": "mustache" },
+      "group": "thinking",
+      "workflow": { "steps": [{ "id": "refute", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b08",
       "name": "Planner",
       "description": "Plans a project as an architecture or an ordered list of steps",
       "colors": { "tint": "#D9F2E3", "solid": "#2FA36B", "ink": "#1E7A4A" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" }] }
+      "avatar": { "base": "bean", "face": "neutral", "accessory": "hard-hat" },
+      "group": "thinking",
+      "workflow": { "steps": [{ "id": "plan", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b09",
       "name": "Inquirer",
       "description": "Asks questions that open up a topic further",
       "colors": { "tint": "#FFE1EF", "solid": "#D4599B", "ink": "#8E2461" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
+      "avatar": { "base": "pear", "face": "playful", "accessory": "flower" },
+      "group": "thinking",
+      "workflow": { "steps": [{ "id": "wonder", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b10",
       "name": "Experimenter",
       "description": "Designs experiments to test a hypothesis",
       "colors": { "tint": "#E5F0D4", "solid": "#779B1E", "ink": "#446100" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10" }] }
+      "avatar": { "base": "fingerling", "face": "delighted", "accessory": "goggles" },
+      "group": "thinking",
+      "workflow": { "steps": [{ "id": "experiment", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b11",
       "name": "Profiler",
       "description": "Describes what is in a data table: its columns, types, missing values and duplicates",
       "colors": { "tint": "#CEF3FC", "solid": "#0096AF", "ink": "#006277" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18" }] }
+      "avatar": { "base": "pebble", "face": "neutral", "accessory": "cap" },
+      "group": "data",
+      "workflow": { "steps": [{ "id": "profile-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b12",
       "name": "Validator",
       "description": "Checks a data table against rules and reports which checks fail",
       "colors": { "tint": "#FFE1E0", "solid": "#DD4D57", "ink": "#9B1B2D" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a19" }] }
+      "avatar": { "base": "wide", "face": "grumpy" },
+      "group": "data",
+      "workflow": { "steps": [{ "id": "validate-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a19" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b13",
       "name": "Curator",
       "description": "Cleans a data table and saves the result as a new file",
       "colors": { "tint": "#F8E3FC", "solid": "#B25EC5", "ink": "#793089" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a20" }] }
+      "avatar": { "base": "mochi", "face": "smitten", "accessory": "bow" },
+      "group": "data",
+      "workflow": { "steps": [{ "id": "clean-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a20" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b14",
       "name": "Linker",
       "description": "Joins two data tables on their key columns",
       "colors": { "tint": "#E1EDF8", "solid": "#688AA8", "ink": "#3B5972" },
-      "workflow": { "steps": [{ "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a21" }] }
+      "avatar": { "base": "peanut", "face": "ecstatic", "accessory": "beanie" },
+      "group": "data",
+      "workflow": { "steps": [{ "id": "join-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a21" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b16",
+      "name": "Plotter",
+      "description": "Draws charts of a data table",
+      "colors": { "tint": "#EFE6FF", "solid": "#9769DC", "ink": "#623E96" },
+      "avatar": { "base": "sweet-potato", "face": "determined", "accessory": "party-hat" },
+      "group": "data",
+      "workflow": { "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b15",
+      "name": "Investigator",
+      "description": "Investigates a research question in several steps: explores it, plans, tests the plan against criticism and, if you approve, designs an experiment",
+      "colors": { "tint": "#EFEDCF", "solid": "#A19500", "ink": "#5F5700" },
+      "avatar": { "base": "purple-peruvian", "face": "determined", "accessory": "sun-hat" },
+      "group": "thinking",
+      "workflow": {
+        "steps": [
+          {
+            "id": "open-up",
+            "type": "parallel",
+            "label": "Explore",
+            "branches": [
+              { "label": "Directions", "steps": [{ "id": "scout", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06" }] },
+              { "label": "Questions", "steps": [{ "id": "wonder", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
+            ]
+          },
+          { "id": "plan", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" },
+          {
+            "id": "stress-test",
+            "type": "loop",
+            "label": "Test the plan",
+            "question": "Did the latest critique find a serious flaw that the revised plan may still have?",
+            "max_iterations": 2,
+            "steps": [
+              { "id": "refute", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07" },
+              { "id": "revise", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" }
+            ]
+          },
+          {
+            "id": "testable",
+            "type": "condition",
+            "label": "Testable?",
+            "question": "Does the plan rest on a hypothesis that an experiment could test?",
+            "branches": [
+              {
+                "label": "testable",
+                "steps": [
+                  {
+                    "id": "ask",
+                    "type": "approval",
+                    "label": "Approval",
+                    "prompt": "Design an experiment to test this plan's hypothesis?"
+                  },
+                  { "id": "experiment", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10" }
+                ]
+              },
+              { "label": "not testable", "steps": [{ "id": "more-questions", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

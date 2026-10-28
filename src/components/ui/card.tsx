@@ -1,22 +1,30 @@
 import * as React from "react"
+import { mergeProps } from "@base-ui/react/merge-props"
+import { useRender } from "@base-ui/react/use-render"
 import { cn } from "@/lib/utils"
 
+// `render` draws the card as another element, such as a button for a card that opens
+// something.
 function Card({
   className,
   size = "default",
+  render,
   ...props
-}: React.ComponentProps<"div"> & { size?: "default" | "sm" }) {
-  return (
-    <div
-      data-slot="card"
-      data-size={size}
-      className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl border border-border bg-card py-(--card-spacing) text-ui text-card-foreground [--card-spacing:--spacing(5)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
-        className
-      )}
-      {...props}
-    />
-  )
+}: useRender.ComponentProps<"div"> & { size?: "default" | "sm" }) {
+  return useRender({
+    defaultTagName: "div",
+    props: mergeProps<"div">(
+      {
+        className: cn(
+          "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-card border border-border bg-muted py-(--card-spacing) text-ui text-card-foreground [--card-spacing:--spacing(5)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+          className
+        ),
+      },
+      props
+    ),
+    render,
+    state: { slot: "card", size },
+  })
 }
 
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
@@ -37,7 +45,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "font-heading text-section font-semibold group-data-[size=sm]/card:text-ui",
+        "font-heading text-card-title font-medium group-data-[size=sm]/card:text-name",
         className
       )}
       {...props}

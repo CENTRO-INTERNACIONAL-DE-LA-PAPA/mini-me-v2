@@ -1,4 +1,12 @@
-from mini_me_sidecar.adapters.data.catalogue import CheckPlan, InRange, Matches, NotNull, problem
+from mini_me_sidecar.adapters.data.catalogue import (
+    Chart,
+    CheckPlan,
+    InRange,
+    Matches,
+    NotNull,
+    chart_problem,
+    problem,
+)
 
 COLUMNS = ["plot_id", "yield"]
 
@@ -17,3 +25,19 @@ def test_plan_parses_entries_by_kind():
     ]
     plan = CheckPlan.model_validate({"checks": checks})
     assert [c.kind for c in plan.checks] == ["unique", "not_null"]
+
+
+TYPES = {"yield": "number", "variety": "text", "date": "date"}
+
+
+def chart(type: str, **fields) -> Chart:
+    empty = {"x": None, "y": None, "columns": [], "series": None, "aggregate": None}
+    return Chart(type=type, title="", alternatives=[], **{**empty, **fields})
+
+
+def test_charts_need_columns_of_the_right_type():
+    assert "text column" in chart_problem(chart("histogram", x="variety"), TYPES)
+    assert chart_problem(chart("bar", x="variety", aggregate="count"), TYPES) is None
+    assert chart_problem(chart("bar", x="variety", aggregate="mean"), TYPES) == "no `y` column given"
+    assert "at least 2" in chart_problem(chart("heatmap", columns=["yield"]), TYPES)
+    assert chart_problem(chart("scatter", x="yield", y="heigth"), TYPES) == "no column `heigth`"

@@ -15,12 +15,19 @@ The Rust core SHALL hold a shared Trait library. Each Trait definition SHALL hav
   describes for Trait icons;
 - the `adapter` that runs it;
 - its `instructions` (text, or none for adapters that take none);
-- its `components`: the Interactive Component kinds its answers may include, possibly
-  empty. Only built-in Traits SHALL list any.
+- its `tools`: the tools it may use, possibly empty. A Trait whose adapter runs fixed code
+  lists the tools that code uses; a prompt-based Trait lists the tools its model is offered
+  besides the read tools, which every prompt-based Trait gets.
 
-The library is read-only in this version. It contains *Summarize*, *Assist*, *Find
-Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment*, *Profile Data*,
-*Validate Data*, *Clean Data* and *Join Data*, and the placeholder Traits.
+What a Trait can read, save or show comes only from its tools; a definition lists no
+Interactive Component kinds. The library SHALL refuse to load with a tool name it does not
+know, or with a prompt-based Trait listing a tool that has no form for models.
+
+The library holds built-in Traits, which are read-only, and user-made Traits, which the user
+creates, edits and deletes as the Library editors describe. The built-in Traits are
+*Summarize*, *Assist*, *Find Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*,
+*Experiment*, *Profile Data*, *Validate Data*, *Clean Data*, *Join Data* and *Plot*, and the
+placeholder Traits.
 
 #### Scenario: Built-in Traits
 - **WHEN** the app starts
@@ -28,36 +35,63 @@ Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment*, *Profile
   *Wonder* and *Experiment* (adapter `prompt`), *Find Papers* (adapter
   `asta-paper-finder`), *Theorize* (adapter `asta-theorizer`), *Profile Data* (adapter
   `data-profile`), *Validate Data* (adapter `data-validate`), *Clean Data* (adapter
-  `data-clean`), *Join Data* (adapter `data-join`), and the placeholder Traits (adapter
-  `echo`)
+  `data-clean`), *Join Data* (adapter `data-join`), *Plot* (adapter `data-plot`), and the
+  placeholder Traits (adapter `echo`)
 
 #### Scenario: Components of the built-in Traits
 - **WHEN** the app starts
-- **THEN** *Find Papers* lists `paper-sources`, *Theorize* lists `theories`, *Profile
-  Data*, *Validate Data*, *Clean Data* and *Join Data* list `table`, and every other Trait
-  lists none
+- **THEN** *Assist* lists `save_file` and `show_table`; *Find Papers* `show_papers`;
+  *Theorize* `show_theories` and `save_file`; *Profile Data* `read_table` and `show_table`;
+  *Validate Data*, *Clean Data* and *Join Data* `read_table`, `show_table` and `save_file`;
+  *Plot* `read_table` and `show_chart`; and every other Trait lists none
+
+#### Scenario: User-made Traits join the library
+- **WHEN** the app starts and `user-library.json` holds a valid Trait *Translate*
+- **THEN** the library contains *Translate* next to the built-in Traits, marked as
+  user-made
 
 ### Requirement: Mini-Me definitions
 Each Mini-Me SHALL have:
 - an `id` (UUID, stable across installations);
 - a `name` and a `description`;
 - colours `tint`, `solid` and `ink`;
-- exactly one Workflow.
+- an avatar: a `base`, a `face` and optionally an `accessory`, each the id of one of the UI's
+  avatar part files;
+- a `group`, one of `thinking`, `literature` and `data`, which the `@` list shows it under;
+- exactly one Workflow, a list of Steps as Workflows define them.
 
-In this version every Workflow has exactly one Trait Step, which references a Trait in the
-library by ID. Mini-Mes are read-only in this version.
+A Mini-Me's Traits are the Traits its Trait Steps reference. The predefined Mini-Mes are
+built-in and read-only. User-made Mini-Mes are created, edited and deleted as the Library
+editors describe. The list of Mini-Mes the UI gets SHALL say for each whether it is built-in.
 
 #### Scenario: One-Step Workflow
-- **WHEN** a Mini-Me answers a message
-- **THEN** its single Step's Trait is the one called
+- **WHEN** a Mini-Me whose Workflow has one Trait Step answers a message
+- **THEN** that Step's Trait is the one called
+
+#### Scenario: Multi-Step Workflow
+- **WHEN** Investigator answers a message
+- **THEN** its reply is produced by running each Step of its Workflow
+
+#### Scenario: Unknown group
+- **WHEN** the built-in library names a Mini-Me with a `group` other than `thinking`,
+  `literature` or `data`, or with none
+- **THEN** the library fails to load, naming that Mini-Me; a user-made Mini-Me with such a
+  group is skipped instead
+
+#### Scenario: User-made Mini-Me is listed
+- **WHEN** the user has saved "Field Translator"
+- **THEN** the UI's list of Mini-Mes includes it after the built-in ones, marked as not
+  built-in
 
 ### Requirement: Predefined Mini-Mes
-Mini-Me SHALL ship with thirteen Mini-Mes:
+Mini-Me SHALL ship with fifteen Mini-Mes:
 - **Scribe:** "Summarizes your messages and the files you reference"; one Step running
   *Summarize*.
 - **Assistant:** "Answers general questions and requests that no other Mini-Me specializes
-  in"; one Step running *Assist*, whose instructions make it a general research assistant
-  that uses referenced files when relevant and says when it does not know.
+  in, and can save files and show tables"; one Step running *Assist*, whose instructions
+  make it a general research assistant that uses its tools when the request needs them,
+  reads referenced files when relevant and says when it does not know. Assistant also
+  answers whenever routing has no confident choice.
 - **Researcher:** "Finds research papers on a topic with Ai2's Paper Finder"; one Step
   running *Find Papers*.
 - **Theorist:** "Builds scientific theories from the literature with Ai2's Theorizer"; one
@@ -78,13 +112,17 @@ Mini-Me SHALL ship with thirteen Mini-Mes:
 - **Curator:** "Cleans a data table and saves the result as a new file"; one Step running
   *Clean Data*.
 - **Linker:** "Joins two data tables on their key columns"; one Step running *Join Data*.
+- **Plotter:** "Draws charts of a data table"; one Step running *Plot*.
+- **Investigator:** "Investigates a research question in several steps: explores it, plans,
+  tests the plan against criticism and, if you approve, designs an experiment"; the
+  the Workflow described by the Investigator requirements below.
 
 Their colours follow DESIGN.md's Mini-Me colour family, and no two share a colour.
 
 #### Scenario: Mini-Mes available
 - **WHEN** the user types `@` in the composer
 - **THEN** Scribe, Assistant, Researcher, Theorist, Explorer, Skeptic, Planner, Inquirer,
-  Experimenter, Profiler, Validator, Curator and Linker are offered
+  Experimenter, Profiler, Validator, Curator, Linker, Plotter and Investigator are offered
 
 #### Scenario: General question
 - **WHEN** the user sends "@Assistant what is late blight?"
@@ -95,25 +133,51 @@ Their colours follow DESIGN.md's Mini-Me colour family, and no two share a colou
   blight" without a mention, and routing picks Experimenter
 - **THEN** Experimenter answers by running *Experiment*
 
-### Requirement: A Mini-Me is shown by name and colour
-The UI SHALL get the list of Mini-Mes (ID, name, description, colours) from the Rust core.
-It SHALL show each reply authored by a Mini-Me with that Mini-Me's name and a mark in its
-`solid` colour. It SHALL show each `@` mention as a chip in the Mini-Me's `tint` with
-`ink` text. A reply whose Mini-Me is unknown SHALL show "Mini-Me" with a neutral mark.
+#### Scenario: Routed to Plotter
+- **WHEN** the user sends "#field-trial.csv plot yield over the season" without a mention,
+  and routing picks Plotter
+- **THEN** Plotter answers by running *Plot*
+
+### Requirement: A Mini-Me is shown by name, avatar and colour
+The UI SHALL get the list of Mini-Mes (ID, name, description, colours, avatar, group) from the
+Rust core. It SHALL show each reply authored by a Mini-Me with that Mini-Me's name and its
+avatar, whose body is in its `solid` colour and whose freckles are in its `ink`. Wherever the
+UI names a Mini-Me inline (an `@` mention in the composer, a sent message or a reply, an entry
+in the `@` list, a name in a reaction tooltip), it SHALL show the Mini-Me's pill: its avatar
+and name on a rounded chip in its `tint` with `ink` text. A reply whose Mini-Me is unknown
+SHALL show "Mini-Me" with a neutral avatar, and an inline name of an unknown Mini-Me SHALL show
+a neutral pill.
 
 #### Scenario: Reply header
 - **WHEN** Scribe answers
-- **THEN** the reply's header reads "Scribe" next to a mark in Scribe's solid colour
+- **THEN** the reply's header reads "Scribe" next to Scribe's avatar in Scribe's solid
+  colour
 
 #### Scenario: Unknown Mini-Me
 - **WHEN** a Conversation holds a reply from a Mini-Me that no longer exists
-- **THEN** the reply is shown as "Mini-Me" with a neutral mark and its text intact
+- **THEN** the reply is shown as "Mini-Me" with a neutral avatar and its text intact
+
+#### Scenario: Mention in a sent message
+- **WHEN** the user sends a message mentioning @Skeptic
+- **THEN** "@Skeptic" is shown as Skeptic's pill
+
+#### Scenario: Mention in the composer
+- **WHEN** the user picks Skeptic from the `@` list
+- **THEN** the composer shows "@Skeptic" as Skeptic's pill, with Skeptic's avatar
+
+#### Scenario: Mention of a Mini-Me that no longer exists
+- **WHEN** a sent message mentions a Mini-Me that no longer exists
+- **THEN** its mention is shown as a neutral pill with the text it had
+
+#### Scenario: Reaction tooltip
+- **WHEN** the user points at a reaction Skeptic added
+- **THEN** a tooltip names Skeptic as its pill
 
 ### Requirement: Placeholder Traits
 The Trait library SHALL contain placeholder Traits for Traits that later changes will
 build: *Document*, *Explore Dataverse*, *Code*, *Collect Data*, *Model*, *Predict* and
-*Index Sources*. Each runs on the `echo` adapter, has no instructions and lists no
-components. No predefined Mini-Me's Workflow SHALL reference a placeholder Trait.
+*Index Sources*. Each runs on the `echo` adapter and has no instructions. No predefined
+Mini-Me's Workflow SHALL reference a placeholder Trait.
 
 #### Scenario: Placeholders are in the library
 - **WHEN** the app starts
@@ -131,3 +195,111 @@ replace its adapter, so anything that references the Trait keeps working.
 #### Scenario: Building a placeholder
 - **WHEN** a later change builds *Document*
 - **THEN** *Document* has the same ID as its placeholder and no longer uses `echo`
+
+### Requirement: Investigator explores, then plans
+Investigator's Workflow SHALL start with a parallel Step whose branches are "Directions",
+running *Scout*, and "Questions", running *Wonder*, followed by a *Plan* Step.
+
+#### Scenario: Opening a question
+- **WHEN** the user sends "@Investigator does early planting reduce late blight?"
+- **THEN** *Scout* and *Wonder* run at the same time, then *Plan* runs with both of their
+  outputs
+
+### Requirement: Investigator tests its plan against criticism
+After its first *Plan* Step, Investigator's Workflow SHALL run a loop of *Refute* then
+*Plan*, at most 2 times, whose question asks whether the latest critique found a serious
+flaw that the revised plan may still have.
+
+#### Scenario: Sound plan
+- **WHEN** the model answers `stop` after the first run of the loop
+- **THEN** *Refute* and *Plan* ran once each inside the loop
+
+### Requirement: Investigator designs an experiment only if approved
+Investigator's Workflow SHALL end with a condition asking whether the plan rests on a
+hypothesis that an experiment could test. Its "testable" branch runs an approval, "Design an
+experiment to test this plan's hypothesis?", then *Experiment*; its "not testable" branch
+runs *Wonder*.
+
+#### Scenario: Testable plan, approved
+- **WHEN** the model finds the plan testable and the user approves
+- **THEN** the reply's text is *Experiment*'s design, and its progress card lists every Step
+  that ran
+
+#### Scenario: Not testable
+- **WHEN** the model finds the plan not testable
+- **THEN** no approval is asked, and the reply's text is the questions *Wonder* wrote
+
+### Requirement: The @ list finds, describes and groups Mini-Mes
+While the user types an `@` query in the composer, the UI SHALL list the Mini-Mes whose name
+contains the query, ignoring case and accents. Each entry SHALL show the Mini-Me's pill and its
+description. Entries SHALL be grouped under the headings Thinking, Literature and Data, in
+that order, keeping the library's order within a group; a group with no matching Mini-Me SHALL
+be left out.
+
+#### Scenario: Narrowing the list
+- **WHEN** the user types "@pro"
+- **THEN** the list shows Profiler under Data, and no other Mini-Me
+
+#### Scenario: Groups
+- **WHEN** the user types "@" alone
+- **THEN** the list shows every Mini-Me under its group's heading, with its description
+
+### Requirement: Picking from the suggestion list with the keyboard
+In the `@`, `#` and `$` suggestion lists, the up and down arrow keys SHALL move a highlight
+through the entries, and Enter or Tab SHALL pick the highlighted entry. Escape SHALL close the
+list. The first entry SHALL be highlighted until the user moves the highlight, and again
+whenever the query changes.
+
+#### Scenario: Picking with the keyboard
+- **WHEN** the user types "@" and presses the down arrow, then Enter
+- **THEN** the second entry is inserted as a mention
+
+#### Scenario: No match
+- **WHEN** the user types "@zzz"
+- **THEN** no list is shown, and Enter sends the message as usual
+
+### Requirement: Picked references are pills in the composer
+After the user picks a Mini-Me, a file or a table or chart in the composer, or adds a table
+or chart with its reference button, the composer SHALL show that reference inline as it is
+shown in a sent message: a Mini-Me's pill, a file chip, or a table or chart chip with its
+icon. Typing, selecting, undo, paste and input methods SHALL work as in a plain text box, and
+the caret SHALL stay where the text it follows is drawn, however many references the text
+holds.
+
+#### Scenario: Picked mention
+- **WHEN** the user types "@Sk" and picks Skeptic
+- **THEN** "@Skeptic" is shown as Skeptic's pill in the composer before sending
+
+#### Scenario: Caret after several references
+- **WHEN** the composer holds an `@` mention, a `#` file and a long `$` reference, and the
+  user types after them
+- **THEN** the caret is drawn right after the last character typed
+
+### Requirement: Picked references act as one block
+In the composer, a picked reference SHALL act as one block: the caret SHALL step over it, a
+selection SHALL hold all of it or none of it, and Backspace or Delete next to it SHALL remove
+all of it. The message SHALL be sent with the reference's label as its text, and copying or
+cutting text with references SHALL put the text as it would be sent on the clipboard. A new
+line typed with Shift+Enter SHALL be sent as a line break.
+
+#### Scenario: Stepping over a picked mention
+- **WHEN** the caret is right after a picked "@Skeptic" and the user presses the left arrow
+- **THEN** the caret moves to just before "@"
+
+#### Scenario: Deleting a picked mention
+- **WHEN** the caret is right after a picked "@Skeptic" and the user presses Backspace
+- **THEN** the whole mention is removed
+
+#### Scenario: Sent text
+- **WHEN** the user sends "Ask " followed by a picked "@Skeptic" and " about this"
+- **THEN** the message's content is "Ask @Skeptic about this" and its `mini_me` Text
+  Component covers "@Skeptic"
+
+### Requirement: Predefined Mini-Mes have groups
+The predefined Mini-Mes SHALL have these groups: Thinking for Assistant, Scribe, Explorer,
+Skeptic, Planner, Inquirer, Experimenter and Investigator; Literature for Researcher and
+Theorist; Data for Profiler, Validator, Curator, Linker and Plotter.
+
+#### Scenario: Data Mini-Mes
+- **WHEN** the user types "@" alone
+- **THEN** Profiler, Validator, Curator, Linker and Plotter are listed under Data

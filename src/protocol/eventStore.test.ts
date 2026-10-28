@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../src-tauri/fixtures/events.json";
-import { applyEvent, emptyConversation, type ConversationState } from "./eventStore";
-import type { ProtocolEvent } from "./types";
+import replayFixture from "../../src-tauri/fixtures/replay.json";
+import {
+  applyEvent,
+  ConversationStore,
+  emptyConversation,
+  type ConversationState,
+} from "./eventStore";
+import type { Message, ProtocolEvent } from "./types";
 
 const events = fixture as ProtocolEvent[];
 
@@ -124,5 +130,91 @@ describe("forward compatibility", () => {
       payload: { ...(events[0].payload as object), future_field: true },
     };
     expect(applyEvent(emptyConversation, extra).messages).toHaveLength(1);
+  });
+});
+
+describe("Workflow replies", () => {
+  const reply = "0199d0a0-0000-7000-8000-000000000199";
+  const created = events.find(
+    (e) => e.type === "message.created" && (e.payload as { message: Message }).message.status === "streaming",
+  )!;
+  let seq = 0;
+  const event = (type: string, payload: object): ProtocolEvent => ({
+    ...events[0],
+    seq: ++seq,
+    type,
+    payload: { message_id: reply, ...payload },
+  });
+  const start = (): ProtocolEvent => {
+    seq = 1;
+    const message = { ...(created.payload as { message: Message }).message, id: reply };
+    return { ...created, seq: 1, payload: { message } };
+  };
+
+  it("completes the latest run of a Step that a loop repeats", () => {
+    const state = replay([
+      start(),
+      event("step.started", { step_id: "refute", type: "trait", name: "Refute" }),
+      event("step.completed", { step_id: "refute", output: "first" }),
+      event("step.started", { step_id: "refute", type: "trait", name: "Refute" }),
+      event("step.completed", { step_id: "refute", output: "second" }),
+    ]);
+    const steps = state.messages[0].steps;
+    expect(steps.map((s) => [s.output, s.done])).toEqual([
+      ["first", true],
+      ["second", true],
+    ]);
+  });
+
+  it("pauses and resumes a reply, keeping only the first answer to its approval", () => {
+    const approval = {
+      id: "0199d0a0-0000-7000-8000-000000000399",
+      kind: "approval",
+      version: 1,
+      data: { step_id: "ask", prompt: "Go on?" },
+      text: "Go on?",
+      answer: null,
+    };
+    const paused = replay([
+      start(),
+      event("component.added", { component: approval }),
+      event("message.paused", {}),
+    ]);
+    expect(paused.messages[0].status).toBe("paused");
+
+    const resumed = replay(
+      [
+        event("component.answered", { component_id: approval.id, answer: { approved: true } }),
+        event("component.answered", { component_id: approval.id, answer: { approved: false } }),
+        event("message.resumed", {}),
+      ],
+      paused,
+    );
+    expect(resumed.messages[0].status).toBe("streaming");
+    expect(resumed.messages[0].components[0].answer).toEqual({ approved: true });
+  });
+});
+
+describe("opening a Conversation", () => {
+  const opened = replayFixture.opened as unknown as ConversationState;
+  const openedEvents = replayFixture.events as ProtocolEvent[];
+
+  it("gives what folding all of its events gives", () => {
+    expect(replay(openedEvents)).toEqual(opened);
+  });
+
+  it("applies a batch with one notification and skips events the opened state holds", () => {
+    const store = new ConversationStore();
+    let notified = 0;
+    store.subscribe(() => notified++);
+    const half = openedEvents.length / 2;
+    const early = replay(openedEvents.slice(0, half));
+    store.load(
+      { subscription_id: "s", last_seq: early.lastSeq, messages: early.messages },
+      openedEvents.slice(half - 2, half + 1),
+    );
+    store.applyBatch(openedEvents.slice(half + 1));
+    expect(notified).toBe(2);
+    expect(store.getSnapshot()).toEqual(opened);
   });
 });

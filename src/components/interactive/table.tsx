@@ -1,15 +1,9 @@
-import {
-  type ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  type SortingState,
-  useReactTable,
-} from "@tanstack/react-table";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Renderers } from "./catalogue";
+import { ReferenceButton, useComponentName } from "./component-references";
+import { FeatureButton, useCanFeature } from "./featuring";
 
 type Cell = string | number | boolean | null;
 
@@ -31,94 +25,113 @@ function display(value: Cell): string {
   return String(value);
 }
 
+/** Which column the rows are sorted by, and in which direction. */
+export interface Sorting {
+  column: number;
+  desc: boolean;
+}
+
+// Natural order for text: "plot 2" before "plot 10", ignoring case and accents.
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/** The rows sorted by `sorting`; missing values stay last in both directions. */
+export function sortRows(rows: Cell[][], numeric: boolean, sorting: Sorting | null): Cell[][] {
+  if (!sorting) return rows;
+  const { column, desc } = sorting;
+  const compare = (a: Cell, b: Cell) =>
+    numeric ? Number(a) - Number(b) : collator.compare(String(a), String(b));
+  return [...rows].sort((left, right) => {
+    const [a, b] = [left[column] ?? null, right[column] ?? null];
+    if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
+    return desc ? compare(b, a) : compare(a, b);
+  });
+}
+
+/** The sort after clicking a column's header: numbers start descending and text ascending,
+ * then the direction flips, then the rows go back to their original order. */
+function nextSorting(current: Sorting | null, column: number, numeric: boolean): Sorting | null {
+  if (current?.column !== column) return { column, desc: numeric };
+  if (current.desc === numeric) return { column, desc: !numeric };
+  return null;
+}
+
 /** The table with an optional starting sort; the catalogue's renderer starts unsorted. */
 export function TableView({
   data,
-  initialSorting = [],
+  initialSorting = null,
+  componentId,
 }: {
   data: unknown;
-  initialSorting?: SortingState;
+  initialSorting?: Sorting | null;
+  componentId?: string;
 }) {
   const { columns, rows, title, total_rows, source } = data as TableData;
-  const [sorting, setSorting] = useState<SortingState>(initialSorting);
-  const definitions = useMemo<ColumnDef<Cell[]>[]>(
-    () =>
-      columns.map((column, index) => ({
-        id: String(index),
-        header: column.name,
-        // Missing values become `undefined` so `sortUndefined` keeps them last both ways.
-        accessorFn: (row) => row[index] ?? undefined,
-        sortUndefined: "last",
-        sortingFn: column.type === "number" ? "basic" : "alphanumeric",
-        cell: (info) => display(info.row.original[index] ?? null),
-        meta: { numeric: column.type === "number" },
-      })),
-    [columns],
+  const [sorting, setSorting] = useState<Sorting | null>(initialSorting);
+  const canFeature = useCanFeature(componentId);
+  const canReference = useComponentName(componentId) !== undefined;
+  const sorted = useMemo(
+    () => sortRows(rows, columns[sorting?.column ?? 0]?.type === "number", sorting),
+    [rows, columns, sorting],
   );
-  const table = useReactTable({
-    data: rows,
-    columns: definitions,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
 
   return (
     <section
       aria-label={title ?? "Table"}
-      className="w-full min-w-0 overflow-hidden rounded-[10px] border border-border bg-card"
+      className="w-full min-w-0 overflow-hidden rounded-xl bg-card border border-edge"
     >
-      {title && (
-        <h3 className="border-b border-border px-4 py-2.5 text-ui font-semibold">{title}</h3>
+      {(title || canFeature || canReference) && (
+        <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
+          <h3 className="mr-auto text-ui font-semibold">{title}</h3>
+          <ReferenceButton componentId={componentId} />
+          <FeatureButton componentId={componentId} />
+        </header>
       )}
       {/* Wide tables scroll sideways inside the card instead of widening the reply. */}
       <div className="max-h-[420px] w-full overflow-auto overscroll-contain">
         <table className="w-max min-w-full border-collapse text-ui tabular-nums">
           <thead className="sticky top-0 bg-muted">
-            {table.getHeaderGroups().map((group) => (
-              <tr key={group.id}>
-                {group.headers.map((header) => {
-                  const numeric = (header.column.columnDef.meta as { numeric: boolean }).numeric;
-                  const sorted = header.column.getIsSorted();
-                  const order = { asc: "ascending", desc: "descending" } as const;
-                  return (
-                    <th
-                      key={header.id}
-                      scope="col"
-                      aria-sort={sorted ? order[sorted] : "none"}
-                      className="border-b border-border p-0 text-meta font-medium whitespace-nowrap text-muted-foreground"
+            <tr>
+              {columns.map((column, index) => {
+                const numeric = column.type === "number";
+                const direction = sorting?.column === index ? sorting.desc : null;
+                return (
+                  <th
+                    key={index}
+                    scope="col"
+                    aria-sort={
+                      direction === null ? "none" : direction ? "descending" : "ascending"
+                    }
+                    className="border-b border-border p-0 text-meta font-medium whitespace-nowrap text-muted-foreground"
+                  >
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full cursor-pointer items-center gap-1 px-3 py-2 transition-colors duration-150 ease-out hover:text-foreground",
+                        numeric && "justify-end",
+                      )}
+                      onClick={() => setSorting((current) => nextSorting(current, index, numeric))}
                     >
-                      <button
-                        type="button"
-                        className={cn(
-                          "flex w-full cursor-pointer items-center gap-1 px-3 py-2 transition-colors duration-150 ease-out hover:text-foreground",
-                          numeric && "justify-end",
-                        )}
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        {sorted === "asc" && <ArrowUp aria-hidden className="size-3.5" />}
-                        {sorted === "desc" && <ArrowDown aria-hidden className="size-3.5" />}
-                      </button>
-                    </th>
-                  );
-                })}
-              </tr>
-            ))}
+                      {column.name}
+                      {direction === false && <ArrowUp aria-hidden className="size-3.5" />}
+                      {direction === true && <ArrowDown aria-hidden className="size-3.5" />}
+                    </button>
+                  </th>
+                );
+              })}
+            </tr>
           </thead>
           <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="border-b border-border last:border-b-0">
-                {row.getVisibleCells().map((cell) => (
+            {sorted.map((row, rowIndex) => (
+              <tr key={rowIndex} className="border-b border-border last:border-b-0">
+                {columns.map((column, index) => (
                   <td
-                    key={cell.id}
+                    key={index}
                     className={cn(
                       "px-3 py-1.5 whitespace-nowrap text-ink-2",
-                      (cell.column.columnDef.meta as { numeric: boolean }).numeric && "text-right",
+                      column.type === "number" && "text-right",
                     )}
                   >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    {display(row[index] ?? null)}
                   </td>
                 ))}
               </tr>
@@ -142,5 +155,5 @@ export function TableView({
 }
 
 export const renderers: Renderers = {
-  1: ({ data }) => <TableView data={data} />,
+  1: ({ data, componentId }) => <TableView data={data} componentId={componentId} />,
 };

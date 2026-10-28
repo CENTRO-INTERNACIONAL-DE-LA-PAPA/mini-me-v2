@@ -24,21 +24,34 @@ activity first.
 
 ### Requirement: Message model
 A message SHALL have an `id` (UUIDv7), an `author` (`kind` of `user`, `mini_me` or `system`,
-and an `id`), `content` (text), a `status` (`streaming`, `complete`, `failed` or
+and an `id`), `content` (text), a `status` (`streaming`, `paused`, `complete`, `failed` or
 `cancelled`), an optional `reply_to` message ID, a list of attachments (each an Asset
-reference: `id`, `name`, `media_type`, `size_bytes`), a list of Text Components and a list
-of Interactive Components (each `{ id, kind, version, data, text }`). A message's state
-SHALL be fully determined by the events of its Conversation.
+reference: `id`, `name`, `media_type`, `size_bytes`), a list of Text Components, a list
+of Interactive Components (each `{ id, kind, version, data, text, answer }`, with `answer`
+`null` until answered) and a list of Steps (each `{ step_id, type, name, output, done }`).
+A message's state SHALL be fully determined by the events of its Conversation. The UI SHALL
+show each message with the time it was created, its `message.created` event's `ts`: under a
+user message as "You · 10:42", and next to the name in a reply's header.
 
 #### Scenario: Rebuilding from events
 - **WHEN** the app replays a Conversation's events from sequence 1
 - **THEN** every message's content, status, attachments, Text Components, Interactive
-  Components and reactions match what the user saw before
+  Components, Steps and reactions match what the user saw before
+
+#### Scenario: Opening from stored messages matches a replay
+- **WHEN** the app opens a Conversation from its stored messages
+- **THEN** every message's creation time, content, status, attachments, Text Components,
+  Interactive Components, Steps, reactions, failure, Jev's answer and progress equal what
+  replaying the Conversation's events from sequence 1 gives
 
 #### Scenario: Message without components
 - **WHEN** a message is created
 - **THEN** its list of Interactive Components is empty until `component.added` events add
   to it
+
+#### Scenario: Steps of a reply
+- **WHEN** a reply receives `step.started` for *Scout*, then `step.completed` for it
+- **THEN** its Steps hold one entry for *Scout*, done, with *Scout*'s output
 
 ### Requirement: Message events
 Message changes SHALL use these event types and payloads:
@@ -46,6 +59,8 @@ Message changes SHALL use these event types and payloads:
 - `message.delta`: `{ message_id, text }`, appended to the message's content.
 - `message.progress`: `{ message_id, label, fraction }`, what the reply's producer is doing:
   `label` is short text and `fraction` a number from 0 to 1, or `null` when unknown.
+- `message.paused`: `{ message_id }`, a streaming reply now waits for an approval.
+- `message.resumed`: `{ message_id }`, a paused reply streams again.
 - `message.completed`: `{ message_id, content }`, the final full content.
 - `message.failed`: `{ message_id, error: { code, message } }`.
 - `message.cancelled`: `{ message_id }`.
@@ -61,6 +76,10 @@ Message changes SHALL use these event types and payloads:
 #### Scenario: Progress does not change content
 - **WHEN** a `streaming` message receives `message.progress`
 - **THEN** its content and status are unchanged
+
+#### Scenario: Pause and resume
+- **WHEN** a `streaming` reply receives `message.paused`, then `message.resumed`
+- **THEN** its status is `paused`, then `streaming`, and its content is unchanged
 
 ### Requirement: Send a message
 The user SHALL be able to send a message with non-empty text, optional attachments and
@@ -105,17 +124,21 @@ for the reply SHALL be added to that same message with `attachment.added`.
 - **THEN** no further `message.delta` or final event is persisted for it
 
 ### Requirement: One reply at a time
-While a reply in a Conversation is `streaming`, sending another message in that Conversation
-SHALL be rejected, and the UI SHALL offer to stop the reply instead.
+While a reply in a Conversation is `streaming` or `paused`, sending another message in
+that Conversation SHALL be rejected, and the UI SHALL offer to stop the reply instead.
 
 #### Scenario: Sending during a reply
 - **WHEN** a reply is streaming and the user tries to send another message
 - **THEN** the message is not sent and the user can stop the reply
 
+#### Scenario: Sending while a reply waits for approval
+- **WHEN** a reply is `paused` and the user tries to send another message
+- **THEN** the message is not sent, and the user can answer the approval or stop the reply
+
 ### Requirement: Stop a reply
-The user SHALL be able to stop a streaming reply. Stopping SHALL end the reply with a
-`message.cancelled` event, keeping the text received so far, and SHALL cancel the Trait call
-producing it.
+The user SHALL be able to stop a streaming or paused reply. Stopping SHALL end the reply
+with a `message.cancelled` event, keeping the text received so far, and SHALL cancel the
+Mini-Me run producing it, or delete the saved state of a paused run.
 
 #### Scenario: User stops a reply
 - **WHEN** the user stops a reply that has received "The main cause"
@@ -123,16 +146,28 @@ producing it.
   shows "The main cause" marked as stopped
 
 #### Scenario: Trait call is cancelled
-- **WHEN** the user stops a reply
-- **THEN** the core sends `call.cancel` for the reply's Trait call
+- **WHEN** the user stops a streaming reply
+- **THEN** the core sends `run.cancel` for the reply's Mini-Me run, which cancels its running
+  Trait calls
+
+#### Scenario: Stopping a paused reply
+- **WHEN** the user stops a paused reply
+- **THEN** the reply is cancelled, its approval can no longer be answered, and its saved run
+  state is deleted
 
 ### Requirement: Interrupted replies are marked failed
 When a Project is opened, any reply still `streaming` from a previous session SHALL be ended
-with a `message.failed` event whose error code is `interrupted`.
+with a `message.failed` event whose error code is `interrupted`. A `paused` reply SHALL stay
+paused.
 
 #### Scenario: App closed during a reply
 - **WHEN** the app is closed while a reply is streaming and the Project is opened again
 - **THEN** that reply shows as failed with the text received before closing
+
+#### Scenario: App closed while a reply is paused
+- **WHEN** the app is closed while a reply waits for an approval and the Project is opened
+  again
+- **THEN** the reply is still paused and its approval can be answered
 
 ### Requirement: Reactions
 Reactions SHALL use `reaction.added` and `reaction.removed` events with payload
@@ -160,10 +195,12 @@ overlaid on a corner of the message, taking no space in the layout.
 
 ### Requirement: Text Components reference Assets
 A message's Text Components SHALL each be `{ kind, id, label, start, end }`, where `kind` is
-`asset` or `mini_me`, `id` is an Asset ID in the same Project or a Mini-Me ID, `label` is the
-text shown and `start`/`end` are the positions of the reference within the message content.
-Messages with unknown `kind`s, unknown Asset or Mini-Me IDs, or positions outside the content
-SHALL be rejected.
+`asset`, `mini_me` or `component`, `id` is an Asset ID in the same Project, a Mini-Me ID or
+the ID of a `table` or `chart` Interactive Component in the same Conversation, `label` is
+the text shown and `start`/`end` are the positions of the reference within the message
+content. Messages with unknown `kind`s, unknown Asset, Mini-Me or component IDs, or positions
+outside the content SHALL be rejected. The `message.created` event carries these Text
+Components in its `message` payload.
 
 #### Scenario: Referencing an Asset with #
 - **WHEN** the user types `#`, picks an Asset from the Project and sends the message
@@ -183,11 +220,21 @@ SHALL be rejected.
 - **WHEN** a message is sent with a `mini_me` Text Component whose ID is not a known Mini-Me
 - **THEN** the message is rejected and nothing is persisted
 
+#### Scenario: Referencing a table with $
+- **WHEN** the user references the table `field-trial-cleaned` and sends the message
+- **THEN** the sent message carries a `component` Text Component with the table component's
+  ID
+
+#### Scenario: Component of another Conversation
+- **WHEN** a message is sent with a `component` Text Component whose ID is a table component
+  of another Conversation
+- **THEN** the message is rejected and nothing is persisted
+
 ### Requirement: Replies are produced by Trait calls
 For each sent user message, the Rust core SHALL pick the answering Mini-Me as routing
-defines, start one Trait call for the Trait of that Mini-Me's single Step, and create its
-reply with author `{ kind: "mini_me", id: <Mini-Me ID> }`. The call's input is `{ text }`,
-the message content with its Mini-Me mentions removed and surrounding whitespace trimmed.
+defines, start one Mini-Me run of that Mini-Me's Workflow, and create its reply with author
+`{ kind: "mini_me", id: <Mini-Me ID> }`. The run's input is `{ text }`, the message content
+with its Mini-Me mentions removed and surrounding whitespace trimmed.
 
 #### Scenario: Mentioned Mini-Me answers
 - **WHEN** the user sends "@Assistant what is late blight?"
@@ -195,16 +242,17 @@ the message content with its Mini-Me mentions removed and surrounding whitespace
 
 #### Scenario: Mention text is not part of the input
 - **WHEN** the user sends "@Assistant late blight spreads"
-- **THEN** the Assistant's Trait call has the input `{ "text": "late blight spreads" }`
+- **THEN** the Assistant's run has the input `{ "text": "late blight spreads" }`
 
 ### Requirement: Trait call outcomes map to message events
-The Rust core SHALL persist a reply's events from its Trait call's frames: `call.delta` as
-`message.delta`, `call.progress` as `message.progress`, `call.done` as `message.completed`,
-`call.error` as `message.failed` with the same `code` and `message`, and `call.cancelled` as
+The Rust core SHALL persist a reply's events from its run's frames: `run.delta` as
+`message.delta`, `run.progress` as `message.progress`, `step.started` and `step.completed`
+as the Step events, `run.paused` as `message.paused`, `run.done` as `message.completed`,
+`run.error` as `message.failed` with the same `code` and `message`, and `run.cancelled` as
 `message.cancelled` when the reply is still streaming.
 
 #### Scenario: Trait error
-- **WHEN** the reply's Trait call ends with `call.error` code `trait_error`
+- **WHEN** the reply's run ends with `run.error` code `trait_error`
 - **THEN** the reply ends with `message.failed` carrying code `trait_error` and the text
   received so far
 
@@ -219,10 +267,14 @@ of its latest `message.progress` event, and SHALL stop showing it once the reply
 
 ### Requirement: Replies fail when the sidecar stops
 When the sidecar stops while replies are streaming, the Rust core SHALL end each of them with
-`message.failed`, error code `sidecar_stopped`, keeping the text received so far. The calls
-SHALL NOT be retried automatically.
+`message.failed`, error code `sidecar_stopped`, keeping the text received so far. The runs
+SHALL NOT be retried automatically. Paused replies SHALL stay paused.
 
 #### Scenario: Sidecar crash during a reply
 - **WHEN** the sidecar process is killed while a reply is streaming
 - **THEN** the reply shows as failed with code `sidecar_stopped` and its text so far, and
   after the sidecar is ready again the user can send a new message
+
+#### Scenario: Sidecar restart while a reply is paused
+- **WHEN** the sidecar restarts while a reply waits for an approval
+- **THEN** the reply stays paused, and approving it once the sidecar is ready resumes the run

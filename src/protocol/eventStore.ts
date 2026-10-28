@@ -6,6 +6,7 @@ import type {
   Message,
   Progress,
   ProtocolEvent,
+  Uuid,
 } from "./types";
 
 export interface Reaction {
@@ -14,6 +15,8 @@ export interface Reaction {
 }
 
 export interface MessageView extends Message {
+  /** When the message was created: its `message.created` event's `ts`, in milliseconds. */
+  created_at: number;
   reactions: Reaction[];
   /** The latest progress of a streaming reply; null once it has ended. */
   progress: Progress | null;
@@ -29,6 +32,14 @@ export interface ConversationState {
 }
 
 export const emptyConversation: ConversationState = { lastSeq: 0, messages: [] };
+
+/** A Conversation as the core opens it: the state folding its events up to `last_seq`
+ * gives, and the subscription that delivers the events after it. */
+export interface OpenedConversation {
+  subscription_id: Uuid;
+  last_seq: number;
+  messages: MessageView[];
+}
 
 function updateMessage(
   state: ConversationState,
@@ -64,6 +75,8 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
             ...known.payload.message,
             // Events stored before Interactive Components existed have no `components`.
             components: known.payload.message.components ?? [],
+            steps: known.payload.message.steps ?? [],
+            created_at: known.ts,
             reactions: [],
             progress: null,
           },
@@ -107,6 +120,53 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
           failure: known.payload.error,
         })),
       };
+    case "message.paused":
+      return {
+        ...next,
+        messages: updateMessage(state, known.payload.message_id, (m) =>
+          m.status === "streaming" ? { ...m, status: "paused", progress: null } : m,
+        ),
+      };
+    case "message.resumed":
+      return {
+        ...next,
+        messages: updateMessage(state, known.payload.message_id, (m) =>
+          m.status === "paused" ? { ...m, status: "streaming" } : m,
+        ),
+      };
+    case "step.started": {
+      const { message_id, step_id, type, name } = known.payload;
+      const step = { step_id, type, name, output: null, done: false };
+      return {
+        ...next,
+        messages: updateMessage(state, message_id, (m) => ({ ...m, steps: [...m.steps, step] })),
+      };
+    }
+    case "step.completed": {
+      const { message_id, step_id, output } = known.payload;
+      return {
+        ...next,
+        messages: updateMessage(state, message_id, (m) => {
+          // A Step inside a loop starts once per iteration; the latest run is completed.
+          const index = m.steps.map((s) => s.step_id).lastIndexOf(step_id);
+          if (index < 0) return m;
+          const steps = m.steps.map((s, i) => (i === index ? { ...s, output, done: true } : s));
+          return { ...m, steps };
+        }),
+      };
+    }
+    case "component.answered": {
+      const { message_id, component_id, answer } = known.payload;
+      return {
+        ...next,
+        messages: updateMessage(state, message_id, (m) => ({
+          ...m,
+          components: m.components.map((c) =>
+            c.id === component_id && c.answer == null ? { ...c, answer } : c,
+          ),
+        })),
+      };
+    }
     case "message.cancelled":
       return {
         ...next,
@@ -174,13 +234,26 @@ export class ConversationStore {
   private state: ConversationState = emptyConversation;
   private listeners = new Set<() => void>();
 
-  apply = (event: ProtocolEvent): void => {
-    const next = applyEvent(this.state, event);
+  /** Replaces the state with an opened Conversation, then applies `pending`, the events
+   * delivered before it arrived; notifies once. */
+  load = (opened: OpenedConversation, pending: ProtocolEvent[] = []): void => {
+    const state = { lastSeq: opened.last_seq, messages: opened.messages };
+    this.state = pending.reduce(applyEvent, state);
+    this.notify();
+  };
+
+  /** Applies a batch of events in order; notifies once if any of them changed the state. */
+  applyBatch = (events: ProtocolEvent[]): void => {
+    const next = events.reduce(applyEvent, this.state);
     if (next !== this.state) {
       this.state = next;
-      this.listeners.forEach((listener) => listener());
+      this.notify();
     }
   };
+
+  private notify(): void {
+    this.listeners.forEach((listener) => listener());
+  }
 
   getSnapshot = (): ConversationState => this.state;
 

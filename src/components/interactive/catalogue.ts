@@ -1,11 +1,29 @@
 import type { ComponentType } from "react";
+import type { MessageStatus } from "../../protocol/types";
+import * as approval from "./approval";
+import * as chart from "./chart";
 import * as paperSources from "./paper-sources";
 import * as table from "./table";
 import * as theories from "./theories";
 
-/** Draws one version of a kind. `data` comes from the adapter of a built-in Trait that lists
- * the kind; renderers still treat optional fields as possibly missing. */
-export type Renderer = ComponentType<{ data: unknown }>;
+/** What a renderer gets. `data` comes from the adapter of a built-in Trait that lists the
+ * kind, or from the core for kinds it creates; renderers still treat optional fields as
+ * possibly missing. The other props say where the component is, for kinds that take an
+ * answer; renderers of other kinds ignore them. */
+export interface RendererProps {
+  data: unknown;
+  /** The user's answer; null until answered. */
+  answer?: unknown;
+  projectId?: string;
+  messageId?: string;
+  componentId?: string;
+  replyStatus?: MessageStatus;
+  /** The solid colour of the Mini-Me that wrote the reply, for kinds that draw in it. */
+  color?: string;
+}
+
+/** Draws one version of a kind. */
+export type Renderer = ComponentType<RendererProps>;
 
 /** What a kind's file exports: a renderer for each version its adapter has produced. Older
  * versions stay, so stored replies still render. */
@@ -16,6 +34,8 @@ export const catalogue = new Map<string, Renderers>([
   ["paper-sources", paperSources.renderers],
   ["theories", theories.renderers],
   ["table", table.renderers],
+  ["approval", approval.renderers],
+  ["chart", chart.renderers],
 ]);
 
 /** The renderer for a kind and version, or null when this version of the app has none. */
