@@ -32,7 +32,7 @@ say why the file could not be read.
   the file is unchanged
 
 ### Requirement: Editing the name in Settings
-Settings SHALL have a Profile page with a "Your name" field showing the saved name. Saving
+Settings' General page SHALL have a "Your name" field showing the saved name. Saving
 SHALL trim whitespace and store a name of 1 to 100 characters; saving an empty field SHALL
 clear the name. A name longer than 100 characters SHALL be refused with the reason shown.
 

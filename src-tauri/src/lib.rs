@@ -34,7 +34,20 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let state = ipc::AppState::init(app.handle())?;
+            let developer_mode = state.developer_mode();
             app.manage(state);
+            // The window is made here rather than from the config so the web inspector exists
+            // only in Developer mode; a change to it applies from the next launch.
+            let window = app
+                .config()
+                .app
+                .windows
+                .first()
+                .cloned()
+                .ok_or("the Tauri config defines no window")?;
+            tauri::WebviewWindowBuilder::from_config(app.handle(), &window)?
+                .devtools(developer_mode)
+                .build()?;
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -91,6 +104,8 @@ pub fn run() {
             ipc::remove_api_key,
             ipc::set_routing_threshold,
             ipc::set_show_jev_answers,
+            ipc::get_developer_mode,
+            ipc::set_developer_mode,
             ipc::get_home_settings,
             ipc::set_show_home_mini_mes,
             ipc::ai2_start_sign_in,

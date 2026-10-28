@@ -2,6 +2,8 @@
 //! only in memory and prints as `[redacted]`, so it cannot leak through `Debug` output, logs
 //! or error messages.
 
+use std::sync::OnceLock;
+
 use crate::error::{AppError, AppResult};
 use crate::link::REDACTED;
 
@@ -24,8 +26,20 @@ const KEY_ACCOUNTS: [(&str, &str); 6] = [
     ("ai2", "Ai2"),
 ];
 
-/// Keychain entries are stored under this service, one per key account.
-const KEYCHAIN_SERVICE: &str = "org.cipotato.mini-me";
+/// The keychain service Mini-Me's entries are stored under, one per key account, used until
+/// `use_keychain_service` names the running app's.
+const DEFAULT_KEYCHAIN_SERVICE: &str = "org.cipotato.mini-me";
+static KEYCHAIN_SERVICE: OnceLock<String> = OnceLock::new();
+
+/// Stores keychain entries under `service`, the running app's identifier, so Mini-Me Dev's
+/// keys stay apart from Mini-Me's. Only the first call takes effect.
+pub fn use_keychain_service(service: &str) {
+    let _ = KEYCHAIN_SERVICE.set(service.to_string());
+}
+
+fn keychain_service() -> &'static str {
+    KEYCHAIN_SERVICE.get().map_or(DEFAULT_KEYCHAIN_SERVICE, String::as_str)
+}
 
 pub fn provider_name(id: &str) -> &str {
     KEY_ACCOUNTS
@@ -94,7 +108,7 @@ impl KeychainSecrets {
         if !is_key_account(provider) {
             return Err(AppError::invalid_input(format!("Unknown provider {provider:?}.")));
         }
-        keyring::Entry::new(KEYCHAIN_SERVICE, provider).map_err(keychain_error)
+        keyring::Entry::new(keychain_service(), provider).map_err(keychain_error)
     }
 
     pub fn save(provider: &str, key: &str) -> AppResult<()> {
@@ -158,6 +172,12 @@ pub mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keys_use_mini_mes_service_until_the_app_names_its_own() {
+        // No test sets the service, which the running app does once at start-up.
+        assert_eq!(keychain_service(), "org.cipotato.mini-me");
+    }
 
     #[test]
     fn secrets_print_redacted() {

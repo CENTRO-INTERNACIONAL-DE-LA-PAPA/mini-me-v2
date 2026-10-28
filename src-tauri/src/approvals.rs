@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn approvals_from_every_project_are_listed_newest_first() {
         let dir = tempfile::tempdir().unwrap();
-        let root = projects::ensure_data_root(dir.path()).unwrap();
+        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
         paused(&root, "Late blight resistance", "Investigator", "Design an experiment?", 1);
         paused(&root, "Seed potato virus survey", "Planner", "Confirm the sites?", 2);
 
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn an_answered_approval_is_not_listed() {
         let dir = tempfile::tempdir().unwrap();
-        let root = projects::ensure_data_root(dir.path()).unwrap();
+        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
         let (project, run) = paused(&root, "Trials", "Investigator", "Go on?", 1);
         conversations::answer_approval(&project, run.message_id, run.component_id, false).unwrap();
         assert!(list(&root).unwrap().is_empty());
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn a_project_from_a_newer_app_is_skipped_and_unchanged() {
         let dir = tempfile::tempdir().unwrap();
-        let root = projects::ensure_data_root(dir.path()).unwrap();
+        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
         paused(&root, "Trials", "Investigator", "Go on?", 1);
         let (newer, _) = paused(&root, "Newer", "Planner", "Confirm?", 2);
         let database = newer.paths.database();

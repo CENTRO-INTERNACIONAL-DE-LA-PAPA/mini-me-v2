@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { CircleUserRoundIcon, KeyRoundIcon, PaletteIcon, UserRoundIcon } from "lucide-react";
+import { InfoIcon, KeyRoundIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -20,9 +20,14 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { getName, getVersion } from "@tauri-apps/api/app";
 import { api, errorMessage } from "../../api";
+import ai2Logo from "../../assets/logos/ai2-logo.png";
+import cipLogo from "../../assets/logos/cip-logo.png";
 import type { Ai2Status, AiSettings, KeyAccount, ProviderId } from "../../protocol/types";
+import { openLink } from "../interactive/links";
 import { SectionPage, type Section } from "../shell/SectionPage";
+import { refreshDeveloperMode, useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
 
 const PROVIDERS: { id: ProviderId; name: string }[] = [
@@ -35,17 +40,20 @@ const PROVIDERS: { id: ProviderId; name: string }[] = [
 const providerName = (id: KeyAccount) =>
   id === "typesafe" ? "Typesafe" : (PROVIDERS.find((p) => p.id === id)?.name ?? id);
 
-type Page = "profile" | "appearance" | "models" | "accounts";
+const REPOSITORY_URL = "https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2";
+
+type Page = "general" | "models" | "accounts" | "about";
 
 const PAGES: Section<Page>[] = [
-  { id: "profile", name: "Profile", icon: CircleUserRoundIcon },
-  { id: "appearance", name: "Appearance", icon: PaletteIcon },
+  { id: "general", name: "General", icon: SlidersHorizontalIcon },
   { id: "models", name: "Models & keys", icon: KeyRoundIcon },
   { id: "accounts", name: "Accounts", icon: UserRoundIcon },
+  { id: "about", name: "About", icon: InfoIcon },
 ];
 
-export function SettingsView() {
-  const [page, setPage] = useState<Page>("profile");
+/** `onOpenAvatars` opens the avatar parts page, a developer option. */
+export function SettingsView({ onOpenAvatars }: { onOpenAvatars: () => void }) {
+  const [page, setPage] = useState<Page>("general");
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,12 +78,14 @@ export function SettingsView() {
     >
       <div className="min-w-0">
         {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
-        {page === "profile" && <ProfilePage />}
-        {page === "appearance" && <AppearancePage />}
+        {page === "general" && (
+          <GeneralPage settings={settings} onChanged={refresh} onOpenAvatars={onOpenAvatars} />
+        )}
         {settings && page === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
         {settings && page === "accounts" && (
           <AccountsPage settings={settings} onChanged={refresh} />
         )}
+        {page === "about" && <AboutPage />}
       </div>
     </SectionPage>
   );
@@ -153,16 +163,46 @@ function StatusDot({ on, children }: { on: boolean; children: ReactNode }) {
   );
 }
 
-function ProfilePage() {
+function GeneralPage({
+  settings,
+  onChanged,
+  onOpenAvatars,
+}: {
+  /** Null until the AI settings, which hold Jev's developer options, have loaded. */
+  settings: AiSettings | null;
+  onChanged: () => void;
+  onOpenAvatars: () => void;
+}) {
+  const developer = useDeveloperMode();
   return (
     <>
-      <PageHeader
-        title="Profile"
-        lead="What Mini-Me knows about you. It stays on this computer and is not sent to AI models."
-      />
-      <Section title="You">
+      <PageHeader title="General" lead="About you, and how Home looks." />
+      <Section
+        title="You"
+        description="What Mini-Me knows about you. It stays on this computer and is not sent to AI models."
+      >
         <NameRow />
       </Section>
+      <Section title="Home">
+        <HomeMiniMesRow />
+      </Section>
+      {developer && (
+        <Section
+          title="Developer"
+          description="Options for developing and testing Mini-Me, shown in Developer mode (Settings → About)."
+        >
+          {settings && <ThresholdRow settings={settings} onChanged={onChanged} />}
+          {settings && <DeveloperRow settings={settings} onChanged={onChanged} />}
+          <SettingRow
+            label="[DEBUG] Avatars"
+            description="Every avatar base, face, accessory and colour, to try combinations."
+          >
+            <Button variant="outline" onClick={onOpenAvatars}>
+              Open
+            </Button>
+          </SettingRow>
+        </Section>
+      )}
     </>
   );
 }
@@ -230,14 +270,109 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
   );
 }
 
-function AppearancePage() {
+function AboutPage() {
   return (
     <>
-      <PageHeader title="Appearance" lead="How Mini-Me looks." />
-      <Section title="Home">
-        <HomeMiniMesRow />
-      </Section>
+      <PageHeader title="About" lead="What Mini-Me is, who makes it, and which version is running." />
+      <div className="grid gap-3 text-body text-foreground">
+        <p>
+          Mini-Me is a local-first research tool for scientists at the International Potato
+          Center. Instead of asking you to adopt a new way of working, it lets you build
+          Mini-Mes: small versions of yourself that carry out research the way you already
+          would, from ideas and hypothesis validation to experiments and results.
+        </p>
+      </div>
+      <div className="mt-6">
+        <AboutRow />
+        <DeveloperModeRow />
+        <SettingRow label="GitHub Repository">
+          <span className="text-ui text-muted-foreground tabular-nums">
+            {/* The webview opens no new windows; the link opens in the system's browser. */}
+            <a
+              href={REPOSITORY_URL}
+              onClick={(event) => {
+                event.preventDefault();
+                openLink(REPOSITORY_URL);
+              }}
+            >
+              CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2
+            </a>
+          </span>
+        </SettingRow>
+      </div>
+      <Collaboration />
     </>
+  );
+}
+
+function DeveloperModeRow() {
+  const developer = useDeveloperMode();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <SettingRow
+      label="Developer mode"
+      htmlFor="developer-mode"
+      description={
+        <>
+          Shows the [DEBUG] options under General, and the right-click menu with Inspect.
+          Inspect follows this switch from the next time Mini-Me starts.
+          {error && <span className="mt-1 block text-destructive">{error}</span>}
+        </>
+      }
+    >
+      <Switch
+        id="developer-mode"
+        checked={developer}
+        onCheckedChange={async (checked) => {
+          try {
+            setError(null);
+            await api.setDeveloperMode(checked);
+            refreshDeveloperMode(checked);
+          } catch (e) {
+            setError(errorMessage(e));
+          }
+        }}
+      />
+    </SettingRow>
+  );
+}
+
+/** The two institutions that make Mini-Me, as a lockup: both logos, one height, an × between. */
+function Collaboration() {
+  return (
+    <figure className="flex flex-col items-center gap-4 py-8">
+      <div className="flex items-center gap-6">
+        <img src={cipLogo} alt="International Potato Center (CIP) and CGIAR" className="h-10 w-auto" />
+        <span aria-hidden className="text-heading text-muted-foreground">
+          ×
+        </span>
+        <img src={ai2Logo} alt="Ai2" className="h-10 w-auto" />
+      </div>
+      <figcaption className="text-meta text-muted-foreground">
+        A collaboration between the International Potato Center (CIP) and The Allen Institute for Artificial Intelligence (Ai2).
+      </figcaption>
+    </figure>
+  );
+}
+
+/** Which app and version is running, such as "Mini-Me Dev 0.4.0". */
+function AboutRow() {
+  const [about, setAbout] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([getName(), getVersion()])
+      .then(([name, version]) => active && setAbout(`${name} ${version}`))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <SettingRow label="Version">
+      <span className="text-ui text-muted-foreground tabular-nums">{about ?? "…"}</span>
+    </SettingRow>
   );
 }
 
@@ -337,10 +472,6 @@ function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged
             onChanged={onChanged}
           />
         </ul>
-        <ThresholdRow settings={settings} onChanged={onChanged} />
-      </Section>
-      <Section title="Advanced">
-        <DeveloperRow settings={settings} onChanged={onChanged} />
       </Section>
     </>
   );
@@ -502,7 +633,7 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
   return (
     <form onSubmit={save}>
       <SettingRow
-        label="Confidence threshold"
+        label="[DEBUG] Jev's confidence threshold"
         htmlFor="threshold"
         description={
           <>

@@ -15,6 +15,8 @@ use crate::protocol::{Origin, new_id, now_ms};
 use crate::store::Project;
 
 pub const DATA_FOLDER_NAME: &str = "Mini-Me Data";
+/// Mini-Me Dev's Projects folder, kept apart from Mini-Me's.
+const DEV_DATA_FOLDER_NAME: &str = "Mini-Me Data (Dev)";
 const MAX_NAME_CHARS: usize = 100;
 /// How long a read-only read waits while the Project's own connection is writing.
 const READ_BUSY_TIMEOUT: Duration = Duration::from_millis(500);
@@ -32,9 +34,23 @@ pub struct ProjectSummary {
     pub folder: PathBuf,
 }
 
-/// Creates `<documents>/Mini-Me Data` if needed and returns it.
-pub fn ensure_data_root(documents: &Path) -> AppResult<PathBuf> {
-    let root = documents.join(DATA_FOLDER_NAME);
+/// Whether `identifier` is Mini-Me Dev's, the development app kept apart from Mini-Me.
+pub fn is_mini_me_dev(identifier: &str) -> bool {
+    identifier.ends_with(".dev")
+}
+
+/// The Projects folder's name for the app with this identifier.
+pub fn data_folder_name(identifier: &str) -> &'static str {
+    if is_mini_me_dev(identifier) {
+        DEV_DATA_FOLDER_NAME
+    } else {
+        DATA_FOLDER_NAME
+    }
+}
+
+/// Creates `<documents>/<folder>` if needed and returns it.
+pub fn ensure_data_root(documents: &Path, folder: &str) -> AppResult<PathBuf> {
+    let root = documents.join(folder);
     std::fs::create_dir_all(&root)?;
     Ok(root)
 }
@@ -194,7 +210,7 @@ pub mod test_support {
     /// A freshly created and opened Project inside a temporary Mini-Me Data folder.
     pub fn temp_project() -> (tempfile::TempDir, Project) {
         let dir = tempfile::tempdir().unwrap();
-        let root = ensure_data_root(dir.path()).unwrap();
+        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
         let summary = create(&root, "Test Project").unwrap();
         let project = open(&summary, origin()).unwrap();
         (dir, project)
@@ -205,6 +221,12 @@ pub mod test_support {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    #[test]
+    fn mini_me_dev_keeps_its_projects_in_its_own_folder() {
+        assert_eq!(data_folder_name("org.cipotato.mini-me"), "Mini-Me Data");
+        assert_eq!(data_folder_name("org.cipotato.mini-me.dev"), "Mini-Me Data (Dev)");
+    }
 
     #[test]
     fn rejects_invalid_names() {
@@ -228,7 +250,7 @@ mod tests {
     #[test]
     fn creates_project_folder_and_lists_it() {
         let dir = tempfile::tempdir().unwrap();
-        let root = ensure_data_root(dir.path()).unwrap();
+        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
         let summary = create(&root, "Late Blight Resistance").unwrap();
         assert!(summary.folder.join("project.sqlite").is_file());
         assert!(summary.folder.join("assets").is_dir());
@@ -241,7 +263,7 @@ mod tests {
     #[test]
     fn same_name_gets_separate_folders() {
         let dir = tempfile::tempdir().unwrap();
-        let root = ensure_data_root(dir.path()).unwrap();
+        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
         let first = create(&root, "Trials").unwrap();
         let second = create(&root, "Trials").unwrap();
         assert_ne!(first.folder, second.folder);
@@ -251,7 +273,7 @@ mod tests {
     #[test]
     fn unrelated_folders_are_ignored_and_untouched() {
         let dir = tempfile::tempdir().unwrap();
-        let root = ensure_data_root(dir.path()).unwrap();
+        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
         let unrelated = root.join("My notes");
         std::fs::create_dir(&unrelated).unwrap();
         std::fs::write(unrelated.join("notes.txt"), "hello").unwrap();
@@ -263,7 +285,7 @@ mod tests {
     #[test]
     fn recently_opened_projects_come_first() {
         let dir = tempfile::tempdir().unwrap();
-        let root = ensure_data_root(dir.path()).unwrap();
+        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
         let older = create(&root, "Older").unwrap();
         let _newer = create(&root, "Newer").unwrap();
         let recent = HashMap::from([(older.id, now_ms())]);

@@ -13,7 +13,3 @@ export type View =
   | { kind: "trait"; id?: string; from?: string };
 
 export type LibraryTab = "mini-mes" | "traits";
-
-/** Views that belong to the app rather than to the open Project. */
-export const isAppView = (view: View) =>
-  ["settings", "avatars", "library", "mini-me", "trait"].includes(view.kind);

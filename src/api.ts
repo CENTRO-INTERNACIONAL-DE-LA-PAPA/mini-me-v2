@@ -166,6 +166,9 @@ export const api = {
   removeApiKey: (provider: KeyAccount) => invoke<void>("remove_api_key", { provider }),
   setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
   setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
+  /** Whether developer options are shown: on in Mini-Me Dev and off in Mini-Me until set. */
+  getDeveloperMode: () => invoke<boolean>("get_developer_mode"),
+  setDeveloperMode: (on: boolean) => invoke<void>("set_developer_mode", { on }),
   getHomeSettings: () => invoke<HomeSettings>("get_home_settings"),
   setShowHomeMiniMes: (show: boolean) => invoke<void>("set_show_home_mini_mes", { show }),
 
