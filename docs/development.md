@@ -32,8 +32,8 @@ Release build, with the standalone Python and the sidecar bundled into the insta
 npm run tauri:release
 ```
 
-Local release builds produce no update files and need no signing key. This is also how to
-run Mini-Me on macOS, which has no published releases; a local build does not update itself.
+Local release builds produce no update files and need no signing key, and a local build
+does not update itself.
 
 ## Tests
 
@@ -56,8 +56,9 @@ from a version tag.
    `src-tauri/Cargo.toml`, then run `npm run check-version`.
 2. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 3. Wait for the workflow to finish. It creates a **draft** release with the Windows
-   installer, its `.sig` and `latest.json`.
-4. Try the installer from the draft, then click **Publish release**. Installed apps only
+   installer, the macOS `.dmg` and `.app.tar.gz`, the Linux AppImage and `.deb`, each update
+   file's `.sig`, and `latest.json` with an entry per platform.
+4. Try the installers from the draft, then click **Publish release**. Installed apps only
    see published releases.
 
 The update files are signed with the key in the `TAURI_SIGNING_PRIVATE_KEY` repository

@@ -114,18 +114,24 @@ Mini-Me Data/
 
 ## Installing
 
-Download `Mini-Me_<version>_x64-setup.exe` from the latest
-[release](https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2/releases/latest). It
-installs Mini-Me for your Windows user only, into `%LOCALAPPDATA%\Mini-Me`, and needs no
-administrator rights.
+Download the file for your system from the latest
+[release](https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2/releases/latest).
+The installers are not code-signed, so each system warns the first time:
 
-The installer is not code-signed, so Windows SmartScreen warns "Windows protected your PC"
-the first time: click **More info**, then **Run anyway**.
+- **Windows:** `Mini-Me_<version>_x64-setup.exe`. It installs Mini-Me for your Windows user
+  only, into `%LOCALAPPDATA%\Mini-Me`, and needs no administrator rights. When SmartScreen
+  warns "Windows protected your PC", click **More info**, then **Run anyway**.
+- **macOS** (Apple silicon): `Mini-Me_<version>_aarch64.dmg`. Open it and drag Mini-Me into
+  Applications. If macOS says Mini-Me "is damaged" or can't be verified, run
+  `xattr -dr com.apple.quarantine /Applications/Mini-Me.app` in Terminal once, then open it.
+- **Linux** (x86-64): `Mini-Me_<version>_amd64.AppImage` runs on most distributions; make it
+  executable (`chmod +x Mini-Me_*.AppImage`) and run it. On Ubuntu and Debian you can install
+  `Mini-Me_<version>_amd64.deb` instead.
 
 Mini-Me updates itself: it downloads new versions in the background, shows the progress in
 the sidebar and offers **Restart**, or installs the update when you close it. Your Projects
-and settings are kept. Releases are built for Windows only; on macOS, build the app yourself
-(see [docs/development.md](docs/development.md)).
+and settings are kept. The Linux `.deb` does not update itself; install the new `.deb` from
+each release.
 
 ## Getting started
 
