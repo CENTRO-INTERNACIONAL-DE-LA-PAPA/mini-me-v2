@@ -19,8 +19,11 @@ cd sidecar && uv sync --frozen && cd ..   # once, and after the sidecar's depend
 npm run tauri:dev
 ```
 
-`tauri:dev` runs the app with the development icon and the window title "Mini-Me (Dev)", so
-you can tell it apart from an installed copy.
+`tauri:dev` runs the app as **Mini-Me Dev** (`src-tauri/tauri.dev.conf.json`): the
+identifier `org.cipotato.mini-me.dev`, the development icon and its own data. Its Projects
+are in `Documents/Mini-Me Data (Dev)`, and its settings, logs and keychain entries are kept
+under its identifier, so development never touches the installed Mini-Me's Projects or keys.
+Set up its API keys and Ai2 sign-in once in Mini-Me Dev's Settings.
 
 In development the app starts the sidecar from `sidecar/` with `uv run`. Its log is
 `sidecar.log` in the app's log directory; set `MINI_ME_LOG_FRAMES=1` to also log every frame

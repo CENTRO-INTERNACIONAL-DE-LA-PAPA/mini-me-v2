@@ -27,6 +27,10 @@ pub struct Settings {
     pub routing: RoutingSettings,
     #[serde(default)]
     pub home: HomeSettings,
+    /// Shows developer options when set; until the user sets it, it follows the app (on in
+    /// Mini-Me Dev, off in Mini-Me).
+    #[serde(default)]
+    pub developer_mode: Option<bool>,
 }
 
 /// How Home looks.
@@ -120,6 +124,7 @@ impl Settings {
             ai: AiSettings::default(),
             routing: RoutingSettings::default(),
             home: HomeSettings::default(),
+            developer_mode: None,
         };
         settings.save(config_dir)?;
         Ok(settings)
@@ -132,6 +137,12 @@ impl Settings {
         std::fs::write(&tmp, serde_json::to_string_pretty(self)?)?;
         std::fs::rename(&tmp, config_dir.join(FILE_NAME))?;
         Ok(())
+    }
+
+    /// Whether developer options are shown, for an app that is (`dev_app`) or is not
+    /// Mini-Me Dev.
+    pub fn developer_mode(&self, dev_app: bool) -> bool {
+        self.developer_mode.unwrap_or(dev_app)
     }
 
     pub fn origin(&self) -> Origin {
@@ -176,6 +187,8 @@ mod tests {
         assert_eq!(settings.ai, AiSettings::default());
         assert_eq!(settings.routing, RoutingSettings::default());
         assert!(!settings.home.show_mini_mes);
+        assert!(!settings.developer_mode(false));
+        assert!(settings.developer_mode(true));
         assert_eq!(settings.ai.model(), None);
     }
 
