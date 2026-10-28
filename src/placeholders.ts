@@ -6,10 +6,10 @@ const sample = <T>(value: T): T | null => (import.meta.env.DEV ? value : null);
 
 /** The signed-in person; Mini-Me has no user profile yet. */
 export const PLACEHOLDER_USER = sample({
-  name: "María Ramírez",
-  firstName: "María",
-  initials: "MR",
-  detail: "CIP · Lima",
+  name: "John Doe",
+  firstName: "John",
+  initials: "JD",
+  detail: "International Potato Center (CIP)",
 });
 
 /** Tasks waiting for the user across Projects, for Home's "Needs you" list. Mini-Me names
