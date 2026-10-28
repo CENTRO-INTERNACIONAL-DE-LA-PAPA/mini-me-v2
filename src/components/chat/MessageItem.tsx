@@ -14,6 +14,7 @@ import { MiniMePill } from "../minime/MiniMePill";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { ReferenceChip } from "./ReferenceChip";
 import { TextComponentChip } from "./TextComponentChip";
+import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
 
@@ -57,6 +58,7 @@ export const MessageItem = memo(function MessageItem({
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const miniMes = useMiniMes();
+  const developer = useDeveloperMode();
   const { name, miniMe: authorMiniMe } = author(message, miniMes);
 
   const counts = new Map<string, number>();
@@ -159,7 +161,7 @@ export const MessageItem = memo(function MessageItem({
 
   const notes = (
     <>
-      {message.jev && (
+      {developer && message.jev && (
         <JevAnswersBlock jev={message.jev} label={(id) => miniMe(id)?.name ?? id} />
       )}
       {message.failure && (

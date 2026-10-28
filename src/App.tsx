@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
+import { useDeveloperMode } from "./hooks/useDeveloperMode";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/chat/ChatView";
 import { FilesView } from "./components/files/FilesView";
@@ -12,7 +13,7 @@ import { OverviewView } from "./components/overview/OverviewView";
 import { SettingsView } from "./components/settings/SettingsView";
 import { AppSidebar } from "./components/shell/AppSidebar";
 import { MainSheet } from "./components/shell/Sheet";
-import { isAppView, type View } from "./components/shell/view";
+import type { View } from "./components/shell/view";
 import { TraitEditor } from "./components/library/TraitEditor";
 import type { ConversationSummary, ProjectSummary, Uuid } from "./protocol/types";
 
@@ -22,11 +23,25 @@ export default function App() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [fileCount, setFileCount] = useState(0);
   const [view, setView] = useState<View>({ kind: "home" });
-  // The view to return to when an app view, such as Settings or the Library, is closed.
-  const [previous, setPrevious] = useState<View>({ kind: "home" });
   const [error, setError] = useState<string | null>(null);
 
   const fail = (e: unknown) => setError(errorMessage(e));
+  const developer = useDeveloperMode();
+
+  // Outside Developer mode the webview's own right-click menu (Reload, Back, …) is kept only
+  // in text fields, for cut, copy and paste.
+  useEffect(() => {
+    if (developer) return;
+    const block = (event: MouseEvent) => {
+      const target = event.target;
+      const editable =
+        target instanceof HTMLElement &&
+        (target.isContentEditable || target.closest("input, textarea"));
+      if (!editable) event.preventDefault();
+    };
+    window.addEventListener("contextmenu", block);
+    return () => window.removeEventListener("contextmenu", block);
+  }, [developer]);
 
   useEffect(() => {
     api.listProjects().then(setProjects).catch(fail);
@@ -51,11 +66,7 @@ export default function App() {
 
   function navigate(next: View) {
     setError(null);
-    if (isAppView(next)) {
-      if (!isAppView(view)) setPrevious(view);
-    } else if (next.kind === "home") {
-      setProject(null);
-    }
+    if (next.kind === "home") setProject(null);
     setView(next);
   }
 
@@ -138,7 +149,6 @@ export default function App() {
           onConversationActivity={refreshConversations}
           onNavigate={navigate}
           onOpenReply={openConversation}
-          onBack={() => setView(previous)}
         />
       </SidebarInset>
     </SidebarProvider>
@@ -155,7 +165,6 @@ function Main({
   onConversationActivity,
   onNavigate,
   onOpenReply,
-  onBack,
 }: {
   view: View;
   project: ProjectSummary | null;
@@ -166,7 +175,6 @@ function Main({
   onConversationActivity: () => void;
   onNavigate: (view: View) => void;
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
-  onBack: () => void;
 }) {
   // A Conversation and the Mini-Me editor lay out their own sheets; other views fill the main
   // sheet and scroll as a whole.
@@ -177,9 +185,10 @@ function Main({
   );
   switch (view.kind) {
     case "settings":
-      return scrolling(<SettingsView />);
+      return scrolling(<SettingsView onOpenAvatars={() => onNavigate({ kind: "avatars" })} />);
     case "avatars":
-      return scrolling(<AvatarDebugView onClose={onBack} />);
+      // Opened from Settings → General, so closing it goes back there.
+      return scrolling(<AvatarDebugView onClose={() => onNavigate({ kind: "settings" })} />);
     case "library":
       return scrolling(<LibraryView tab={view.tab ?? "mini-mes"} onOpen={onNavigate} />);
     case "mini-me":

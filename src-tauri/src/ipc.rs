@@ -25,7 +25,7 @@ use crate::user_profile::{ProfileStore, UserProfile};
 use crate::overview;
 use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{CANCEL_TIMEOUT, RunningReply, Runs};
-use crate::secrets::KeychainSecrets;
+use crate::secrets::{self, KeychainSecrets};
 use crate::settings::{AiSettings, HomeSettings, Settings};
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
@@ -40,6 +40,8 @@ const SUMMARY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120)
 
 pub struct AppState {
     config_dir: PathBuf,
+    /// Whether this app is Mini-Me Dev, which has Developer mode on until the user turns it off.
+    dev_app: bool,
     data_root: PathBuf,
     settings: Mutex<Settings>,
     open_projects: Mutex<HashMap<Uuid, Arc<Project>>>,
@@ -56,6 +58,10 @@ pub struct AppState {
 
 impl AppState {
     pub fn init(app: &AppHandle) -> AppResult<Self> {
+        // The identifier tells Mini-Me from Mini-Me Dev; Tauri already keeps each one's
+        // settings and logs apart by it, and the Projects folder and keychain follow it here.
+        let identifier = app.config().identifier.clone();
+        secrets::use_keychain_service(&identifier);
         let path = app.path();
         let config_dir = path
             .app_config_dir()
@@ -75,7 +81,8 @@ impl AppState {
             Launch::release(&resources)
         };
         let log = Arc::new(SidecarLog::new(&log_dir));
-        let data_root = projects::ensure_data_root(&documents)?;
+        let data_root =
+            projects::ensure_data_root(&documents, projects::data_folder_name(&identifier))?;
         let library = Arc::new(LibraryStore::open(&data_root));
         let profile = ProfileStore::open(&data_root);
         let ai2 = Ai2::system();
@@ -96,10 +103,12 @@ impl AppState {
         );
         sidecar.spawn();
         let updates = Updates::new(log);
-        if !cfg!(debug_assertions) {
+        // Mini-Me Dev has no update feed of its own, and must never install Mini-Me's.
+        if !cfg!(debug_assertions) && !projects::is_mini_me_dev(&identifier) {
             updates.spawn(app.clone());
         }
         Ok(Self {
+            dev_app: projects::is_mini_me_dev(&identifier),
             settings: Mutex::new(Settings::load_or_create(&config_dir)?),
             data_root,
             config_dir,
@@ -118,6 +127,11 @@ impl AppState {
     /// Remembers the paths of a drop on the window, replacing those of the previous drop.
     pub fn record_drop(&self, paths: Vec<PathBuf>) {
         *self.dropped.lock().unwrap_or_else(|p| p.into_inner()) = paths;
+    }
+
+    /// Whether developer options and the web inspector are available.
+    pub fn developer_mode(&self) -> bool {
+        self.settings().developer_mode(self.dev_app)
     }
 
     fn settings(&self) -> Settings {
@@ -264,7 +278,8 @@ pub async fn send_message(
         model: settings.ai.model(),
         threshold: settings.routing.threshold,
         timeout: ROUTE_TIMEOUT,
-        show_answers: settings.routing.show_answers,
+        // Jev's raw answers are a developer aid, kept only while Developer mode is on.
+        show_answers: settings.routing.show_answers && state.developer_mode(),
     };
     state.routing.send(
         Arc::clone(&state.runs),
@@ -287,6 +302,18 @@ pub async fn set_routing_threshold(state: State<'_, AppState>, threshold: f64) -
 pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> AppResult<()> {
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
     settings.routing.show_answers = show;
+    settings.save(&state.config_dir)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_developer_mode(state: State<'_, AppState>) -> AppResult<bool> {
+    Ok(state.developer_mode())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResult<()> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.developer_mode = Some(on);
     settings.save(&state.config_dir)
 }
 

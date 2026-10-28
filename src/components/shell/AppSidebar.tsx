@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
-  BugIcon,
   CheckIcon,
   ChevronDownIcon,
   FolderIcon,
@@ -232,18 +231,6 @@ export function AppSidebar({
             <AvatarStack />
             <span className="truncate">Mini-Mes</span>
           </Button>
-          {import.meta.env.DEV && (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="[DEBUG] Avatars"
-              title="[DEBUG] Avatars"
-              aria-pressed={view.kind === "avatars"}
-              onClick={() => onNavigate({ kind: "avatars" })}
-            >
-              <BugIcon />
-            </Button>
-          )}
           <Button
             size="icon"
             aria-label="Settings"

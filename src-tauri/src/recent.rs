@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn the_five_latest_conversations_across_projects_are_listed_newest_first() {
         let dir = tempfile::tempdir().unwrap();
-        let root = projects::ensure_data_root(dir.path()).unwrap();
+        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
         project(&root, "Trials", &[1, 6, 8]);
         project(&root, "Survey", &[2, 7]);
         project(&root, "Papers", &[3, 4, 5]);
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn a_project_from_a_newer_app_is_skipped_and_unchanged() {
         let dir = tempfile::tempdir().unwrap();
-        let root = projects::ensure_data_root(dir.path()).unwrap();
+        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
         project(&root, "Trials", &[1]);
         let newer = project(&root, "Newer", &[2]);
         let database = newer.paths.database();

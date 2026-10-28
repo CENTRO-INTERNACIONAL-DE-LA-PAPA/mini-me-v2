@@ -92,7 +92,7 @@ each other and with the sheet's edges.
   straight line
 
 ### Requirement: Showing Mini-Mes on Home is a setting
-Settings SHALL have an Appearance page with a "Show Mini-Mes on Home" switch, off by default
+Settings' General page SHALL have a "Show Mini-Mes on Home" switch, off by default
 and stored in the app's settings outside Mini-Me Data. While it is on, the Mini-Mes SHALL
 appear each time Home is shown; while it is off, they SHALL NOT appear on their own.
 
