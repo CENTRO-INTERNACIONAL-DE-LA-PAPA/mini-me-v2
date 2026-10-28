@@ -51,6 +51,16 @@ pub fn create(project: &Project) -> AppResult<ConversationSummary> {
 }
 
 /// Conversations ordered by most recent activity first.
+/// The title of Conversation `conversation_id`.
+pub fn title(project: &Project, conversation_id: Uuid) -> AppResult<String> {
+    let state = project.lock();
+    Ok(state.conn.query_row(
+        "SELECT title FROM conversations WHERE id = ?1",
+        params![conversation_id.to_string()],
+        |row| row.get(0),
+    )?)
+}
+
 pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
     let state = project.lock();
     let mut stmt = state.conn.prepare(

@@ -1,4 +1,5 @@
 mod ai2;
+mod approvals;
 mod assets;
 mod components;
 mod conversations;
@@ -20,6 +21,7 @@ mod sidecar;
 mod store;
 mod updates;
 mod user_library;
+mod user_profile;
 
 use tauri::{DragDropEvent, Manager, RunEvent, WindowEvent};
 
@@ -54,6 +56,9 @@ pub fn run() {
             ipc::send_message,
             ipc::stop_reply,
             ipc::answer_approval,
+            ipc::list_paused_approvals,
+            ipc::get_running_replies,
+            ipc::subscribe_running_replies,
             ipc::add_reaction,
             ipc::remove_reaction,
             ipc::import_assets,
@@ -76,6 +81,8 @@ pub fn run() {
             ipc::save_trait,
             ipc::delete_mini_me,
             ipc::delete_trait,
+            ipc::get_user_profile,
+            ipc::save_user_name,
             ipc::get_ai_settings,
             ipc::set_ai_model,
             ipc::save_api_key,

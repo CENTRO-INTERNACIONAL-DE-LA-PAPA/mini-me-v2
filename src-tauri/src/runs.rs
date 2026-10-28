@@ -132,6 +132,22 @@ enum CallKind {
     Decision,
 }
 
+/// A reply whose Mini-Me run is in flight.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RunningReply {
+    pub project_id: Uuid,
+    pub project_name: String,
+    pub conversation_id: Uuid,
+    pub conversation_title: String,
+    pub message_id: Uuid,
+    pub mini_me: RunMiniMe,
+    /// The name of the Step the run last started; none before its first Step.
+    pub step: Option<String>,
+}
+
+/// Receives the whole list of running replies; returns `false` when it is gone.
+pub type RunningSink = Box<dyn Fn(&[RunningReply]) -> bool + Send>;
+
 struct Run {
     project: Arc<Project>,
     conversation_id: Uuid,
@@ -144,6 +160,7 @@ struct Run {
     /// Calls that have started and whose Step has not completed, by call ID.
     calls: HashMap<Uuid, (String, CallKind)>,
     cancelling: bool,
+    step: Option<String>,
 }
 
 #[derive(Default)]
@@ -169,6 +186,9 @@ impl Inner {
 
 pub struct Runs {
     inner: Mutex<Inner>,
+    /// Held while a list is built and sent, so subscribers get lists in the order the runs
+    /// changed.
+    subscribers: Mutex<Vec<RunningSink>>,
     library: Arc<LibraryStore>,
     secrets: Box<dyn SecretSource>,
     log: Arc<SidecarLog>,
@@ -216,6 +236,7 @@ impl Runs {
     ) -> Self {
         Self {
             inner: Mutex::new(Inner::default()),
+            subscribers: Mutex::new(Vec::new()),
             library,
             secrets,
             log,
@@ -245,6 +266,7 @@ impl Runs {
             inner.summaries.clear();
             inner.runs.drain().map(|(_, run)| run).collect()
         };
+        self.notify();
         for run in runs {
             let _ = conversations::fail_reply(
                 &run.project,
@@ -398,10 +420,13 @@ impl Runs {
                 provider: model.as_ref().map(|m| m.provider.clone()),
                 calls: HashMap::new(),
                 cancelling: false,
+                step: None,
             },
         );
+        self.notify();
         if !sink.send(&CoreFrame::RunStart { run_id, plan, model, resume }) {
             self.lock().runs.remove(&run_id);
+            self.notify();
             let _ = conversations::fail_reply(
                 &project,
                 reply,
@@ -539,10 +564,65 @@ impl Runs {
         std::thread::spawn(move || {
             std::thread::sleep(this.cancel_timeout);
             if this.lock().runs.remove(&run_id).is_some() {
+                this.notify();
                 this.log
                     .line(&format!("run {run_id} did not end after cancel; closed it"));
             }
         });
+    }
+
+    /// Sends the running replies to `sink` and then every change to them.
+    pub fn subscribe(&self, sink: RunningSink) {
+        let mut subscribers = self.subscribers.lock().unwrap_or_else(|p| p.into_inner());
+        if sink(&self.running()) {
+            subscribers.push(sink);
+        }
+    }
+
+    /// Every reply whose run is in flight, oldest run first.
+    pub fn running(&self) -> Vec<RunningReply> {
+        let mut runs: Vec<_> = {
+            let inner = self.lock();
+            inner
+                .runs
+                .iter()
+                .map(|(run_id, run)| {
+                    (
+                        *run_id,
+                        Arc::clone(&run.project),
+                        run.conversation_id,
+                        run.message_id,
+                        run.spec.mini_me.clone(),
+                        run.step.clone(),
+                    )
+                })
+                .collect()
+        };
+        // Run IDs are UUIDv7, so they sort by start time.
+        runs.sort_by_key(|run| run.0);
+        // Titles are read after the runs lock is released, so no Project lock is taken
+        // while it is held.
+        runs.into_iter()
+            .map(|(_, project, conversation_id, message_id, mini_me, step)| RunningReply {
+                project_id: project.id,
+                project_name: project.name.clone(),
+                conversation_id,
+                conversation_title: conversations::title(&project, conversation_id)
+                    .unwrap_or_default(),
+                message_id,
+                mini_me,
+                step,
+            })
+            .collect()
+    }
+
+    fn notify(&self) {
+        let mut subscribers = self.subscribers.lock().unwrap_or_else(|p| p.into_inner());
+        if subscribers.is_empty() {
+            return;
+        }
+        let running = self.running();
+        subscribers.retain(|sink| sink(&running));
     }
 
     fn active(&self, run_id: Uuid) -> Option<(Arc<Project>, Uuid)> {
@@ -560,9 +640,11 @@ impl Runs {
 
     fn finish(&self, run_id: Uuid) -> Option<Run> {
         let run = self.lock().runs.remove(&run_id);
-        if run.is_none() {
-            self.log
-                .line(&format!("ignoring the end of run {run_id}, which is not open"));
+        match run {
+            Some(_) => self.notify(),
+            None => self
+                .log
+                .line(&format!("ignoring the end of run {run_id}, which is not open")),
         }
         run
     }
@@ -589,8 +671,10 @@ impl Runs {
                 };
                 run.calls.insert(call_id, (step_id.clone(), kind));
             }
+            run.step = Some(name.clone());
             (Arc::clone(&run.project), run.message_id, step.type_name(), name)
         };
+        self.notify();
         let (project, message_id, step_type, name) = started;
         let _ = conversations::append_step_started(&project, message_id, &step_id, step_type, &name);
     }
@@ -1233,6 +1317,48 @@ mod tests {
         assert_eq!(steps.len(), 1);
         assert_eq!((steps[0].name.as_str(), steps[0].step_type.as_str()), ("Test", "trait"));
         assert_eq!((steps[0].output.as_deref(), steps[0].done), (Some("late blight"), true));
+    }
+
+    /// Subscribes to the running replies; returns every list sent so far.
+    fn watch(f: &Fixture) -> Arc<Mutex<Vec<Vec<RunningReply>>>> {
+        let lists = Arc::new(Mutex::new(Vec::new()));
+        let sent = Arc::clone(&lists);
+        f.runs.subscribe(Box::new(move |running| {
+            sent.lock().unwrap().push(running.to_vec());
+            true
+        }));
+        lists
+    }
+
+    #[test]
+    fn running_replies_follow_their_runs_steps_and_ends() {
+        let f = quick();
+        let lists = watch(&f);
+        let (run_id, reply) = f.start("echo");
+        let last = |lists: &Arc<Mutex<Vec<Vec<RunningReply>>>>| {
+            lists.lock().unwrap().last().cloned().unwrap()
+        };
+        let running = last(&lists);
+        assert_eq!(running.len(), 1);
+        assert_eq!(running[0].message_id, reply);
+        assert_eq!(running[0].project_name, "Test Project");
+        assert_eq!(running[0].conversation_title, "New conversation");
+        assert_eq!(running[0].step, None);
+
+        f.step(run_id, STEP);
+        assert_eq!(last(&lists)[0].step.as_deref(), Some("Test"));
+
+        f.runs.handle(SidecarFrame::RunDone { run_id });
+        assert!(last(&lists).is_empty());
+    }
+
+    #[test]
+    fn a_paused_reply_is_not_running() {
+        let f = quick();
+        let lists = watch(&f);
+        paused(&f);
+        assert!(lists.lock().unwrap().last().unwrap().is_empty());
+        assert!(f.runs.running().is_empty());
     }
 
     #[test]

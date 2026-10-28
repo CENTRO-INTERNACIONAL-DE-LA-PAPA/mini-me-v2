@@ -320,6 +320,38 @@ export type ProviderId = "openai" | "anthropic" | "google" | "openrouter";
 export type KeyAccount = ProviderId | "typesafe";
 
 /** The AI and routing settings. Saved keys are only named, never sent to the UI. */
+/** A reply paused at an approval, in any Project. */
+export interface PausedApproval {
+  project_id: Uuid;
+  project_name: string;
+  conversation_id: Uuid;
+  conversation_title: string;
+  message_id: Uuid;
+  mini_me: { id: Uuid; name: string };
+  prompt: string;
+  /** Unix ms. */
+  paused_at: number;
+}
+
+/** A reply whose Mini-Me run is in flight, in any Project. */
+export interface RunningReply {
+  project_id: Uuid;
+  project_name: string;
+  conversation_id: Uuid;
+  conversation_title: string;
+  message_id: Uuid;
+  mini_me: { id: Uuid; name: string };
+  /** The Step the run last started; null before its first Step. */
+  step: string | null;
+}
+
+/** The app-wide profile in `user-profile.json`. */
+export interface UserProfile {
+  name: string | null;
+  /** Why the profile file could not be read; while set, saving is refused. */
+  unreadable: string | null;
+}
+
 export interface AiSettings {
   provider: ProviderId;
   model: string;

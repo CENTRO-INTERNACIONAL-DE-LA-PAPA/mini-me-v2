@@ -1,22 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { cn } from "@/lib/utils";
-import { ActivityIcon, ListTodoIcon, PaperclipIcon } from "lucide-react";
+import { ActivityIcon, ListTreeIcon, PaperclipIcon } from "lucide-react";
 import { api, errorMessage } from "../../api";
 import { ConversationStore } from "../../protocol/eventStore";
-import type { ProtocolEvent } from "../../protocol/types";
+import type { ProtocolEvent, Uuid } from "../../protocol/types";
 import { chatColumn, Composer, type ComposerHandle } from "./Composer";
 import { MessageItem } from "./MessageItem";
 import type { MessageView } from "../../protocol/eventStore";
-import { PLACEHOLDER_JOBS, PLACEHOLDER_TODOS } from "../../placeholders";
 import { MiniMePill } from "../minime/MiniMePill";
 import { MainSheet, SheetHeader, ToolSwitch, type ToolOption } from "../shell/Sheet";
 import { FeaturingProvider } from "../interactive/featuring";
 import { componentNames } from "../interactive/component-names";
 import { ComponentReferencesProvider } from "../interactive/component-references";
 import type { ReferenceTarget } from "../../protocol/references";
-import { JobsPanel, StepsPanel, TodoPanel, type Panel } from "./SidePanels";
+import { JobsPanel, OutlinePanel, StepsPanel, type Panel } from "./SidePanels";
+import { outline } from "./outline";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { useRunningReplies } from "../../hooks/useRunningReplies";
 
 interface Props {
   projectId: string;
@@ -25,6 +26,7 @@ interface Props {
   /** A message to scroll to once the Conversation has loaded, instead of the latest one. */
   messageId?: string;
   onActivity: () => void;
+  onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
 }
 
 function useConversation(projectId: string, conversationId: string) {
@@ -67,6 +69,7 @@ export function ChatView({
   title,
   messageId,
   onActivity,
+  onOpenReply,
 }: Props) {
   const { state, error } = useConversation(projectId, conversationId);
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -84,10 +87,21 @@ export function ChatView({
   );
   const stepsOf =
     panel?.kind === "steps" ? state.messages.find((m) => m.id === panel.messageId) : undefined;
-  const openTodos = PLACEHOLDER_TODOS?.filter((t) => !t.done).length ?? 0;
-  const tools: ToolOption<"todo" | "jobs">[] = [];
-  if (PLACEHOLDER_TODOS) tools.push({ id: "todo", label: "To-do", icon: ListTodoIcon, count: openTodos });
-  if (PLACEHOLDER_JOBS) tools.push({ id: "jobs", label: "Jobs", icon: ActivityIcon });
+  const running = useRunningReplies();
+  // The open Conversation's reply first, then the others in the order their runs started.
+  const jobs = [
+    ...running.filter((reply) => reply.conversation_id === conversationId),
+    ...running.filter((reply) => reply.conversation_id !== conversationId),
+  ];
+  const tools: ToolOption<"outline" | "jobs">[] = [
+    { id: "outline", label: "Outline", icon: ListTreeIcon },
+    {
+      id: "jobs",
+      label: "Jobs",
+      icon: ActivityIcon,
+      count: jobs.length > 0 ? jobs.length : undefined,
+    },
+  ];
   const bottom = useRef<HTMLDivElement>(null);
   // The message sent from this view, until Mini-Me decides who answers it. Kept in memory
   // only, so reopening a Conversation never shows a stale "Choosing" status.
@@ -97,6 +111,7 @@ export function ChatView({
   const replying = state.messages.some((m) => m.status === "streaming" || m.status === "paused");
   const composer = useRef<ComposerHandle>(null);
   const names = useMemo(() => componentNames(state.messages), [state.messages]);
+  const used = useMemo(() => outline(state.messages, names), [state.messages, names]);
   const newestFirst = useMemo(() => [...names.values()].reverse(), [names]);
   const appendReference = useCallback(
     (target: ReferenceTarget) => composer.current?.appendReference(target),
@@ -173,14 +188,12 @@ export function ChatView({
               title={title}
               compact={panel !== null}
               actions={
-                tools.length > 0 && (
-                  <ToolSwitch
-                    label="Tools"
-                    options={tools}
-                    value={panel?.kind === "steps" ? null : (panel?.kind ?? null)}
-                    onToggle={(kind) => toggle({ kind })}
-                  />
-                )
+                <ToolSwitch
+                  label="Tools"
+                  options={tools}
+                  value={panel?.kind === "steps" ? null : (panel?.kind ?? null)}
+                  onToggle={(kind) => toggle({ kind })}
+                />
               }
             >
               <Participants messages={state.messages} />
@@ -235,8 +248,25 @@ export function ChatView({
               }}
             />
           </MainSheet>
-          {panel?.kind === "todo" && <TodoPanel onClose={() => setPanel(null)} />}
-          {panel?.kind === "jobs" && <JobsPanel onClose={() => setPanel(null)} />}
+          {panel?.kind === "outline" && (
+            <OutlinePanel outline={used} onClose={() => setPanel(null)} />
+          )}
+          {panel?.kind === "jobs" && (
+            <JobsPanel
+              replies={jobs}
+              conversationId={conversationId}
+              onOpen={(reply) => {
+                if (reply.conversation_id === conversationId) {
+                  document
+                    .querySelector(`[data-message-id="${reply.message_id}"]`)
+                    ?.scrollIntoView({ block: "center", behavior: "smooth" });
+                } else {
+                  onOpenReply(reply.project_id, reply.conversation_id, reply.message_id);
+                }
+              }}
+              onClose={() => setPanel(null)}
+            />
+          )}
           {stepsOf && <StepsPanel message={stepsOf} onClose={() => setPanel(null)} />}
         </div>
       </ComponentReferencesProvider>

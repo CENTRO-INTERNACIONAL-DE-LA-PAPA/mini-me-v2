@@ -32,7 +32,8 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
-import { PLACEHOLDER_USER } from "../../placeholders";
+import { useUserProfile } from "../../hooks/useUserProfile";
+import { initials } from "../../lib/names";
 import type { ConversationSummary, ProjectSummary } from "../../protocol/types";
 import { formatRelative } from "../../lib/format";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
@@ -65,6 +66,7 @@ export function AppSidebar({
   onNewConversation,
 }: Props) {
   const sidecar = useSidecarStatus();
+  const name = useUserProfile()?.name;
 
   return (
     <Sidebar variant="floating">
@@ -196,12 +198,12 @@ export function AppSidebar({
           <Button
             size="icon"
             aria-label="Settings"
-            title={PLACEHOLDER_USER ? `${PLACEHOLDER_USER.name} · Settings` : "Settings"}
+            title={name ? `${name} · Settings` : "Settings"}
             aria-pressed={view.kind === "settings"}
             onClick={() => onNavigate({ kind: "settings" })}
             className="rounded-full text-[10px] font-semibold aria-pressed:ring-2 aria-pressed:ring-border-strong"
           >
-            {PLACEHOLDER_USER ? PLACEHOLDER_USER.initials : <SettingsIcon />}
+            {name ? initials(name) : <SettingsIcon />}
           </Button>
         </div>
       </SidebarFooter>

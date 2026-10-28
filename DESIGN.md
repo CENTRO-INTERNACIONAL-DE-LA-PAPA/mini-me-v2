@@ -162,7 +162,7 @@ Sheet padding: 32px left, 24–28px top. Tool sheets: 22px top, 18px right, 24px
 
 - **Navigation sheet, 256px.** Wordmark and collapse button; the project block (serif name under a "Project ▾" switcher) or a dashed "No project open" card; Overview and Files; Conversations (serif heading with a + button, then rows); status lines; a bottom card with the Mini-Mes stack (opens the Library) and your initials (open Settings). The selected item is an outlined white row.
 - **Main sheet, flexible.** Conversation, Overview, Files, libraries, editors, Settings and the full report.
-- **Tool sheet, 340–380px.** To-do, Background jobs, Workflow steps, Report picker, the Workflow step inspector. Only one at a time; a well-filled close button sits top-right.
+- **Tool sheet, 340–380px.** Outline, Jobs, Workflow steps, Report picker, the Workflow step inspector. Only one at a time; a well-filled close button sits top-right.
 - **Content widths:** the chat column is 820px, or 680px with a tool sheet open. The composer spans it; the messages sit 20px inside it on each side, centred on it. Settings: a 210px column and content up to 760px, centred together.
 - **Small windows (to build):** when a tool sheet opens below ~1280px, collapse the navigation sheet to avatars and icons so the conversation keeps ≥600px.
 
@@ -206,8 +206,8 @@ Input, Textarea and Select: `--well` fill, no visible border, radius 12, 13.5px;
 - **Message-list fade:** the only gradient: 56px from the sheet's white to transparent at the top of the list.
 
 ### Tool sheet rows
-- To-do: a card per task; a Mini-Me card when a Mini-Me handed it back, a neutral card when it's yours. Checkbox 20px, radius 6.
-- Jobs: the running job is a Mini-Me card with a 4px progress bar (`tint` track, `ink` fill); queued, scheduled and recent stay flat.
+- Outline: groups for Mini-Mes, Files and Tables and charts; each entry a flat row with a 22px avatar (Mini-Mes) or its `#` / `$` sign, the name (truncated), and the number of messages it appears in, right-aligned in meta. Rows fill `--muted` on hover.
+- Jobs: each running reply is a Mini-Me card: 26px avatar, name, "Running <Step>" in `ink`, then "This conversation", or the Conversation and Project, in meta. The open Conversation's reply comes first. The whole card shows the reply.
 - Workflow steps: vertical timeline with the same marks as the progress card; connector 1.5px, ink when done.
 
 ### Libraries

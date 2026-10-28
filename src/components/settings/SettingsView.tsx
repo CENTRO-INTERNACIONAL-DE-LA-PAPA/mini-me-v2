@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { KeyRoundIcon, UserRoundIcon } from "lucide-react";
+import { CircleUserRoundIcon, KeyRoundIcon, UserRoundIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -23,6 +23,7 @@ import {
 import { api, errorMessage } from "../../api";
 import type { Ai2Status, AiSettings, KeyAccount, ProviderId } from "../../protocol/types";
 import { SectionPage, type Section } from "../shell/SectionPage";
+import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
 
 const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "openai", name: "OpenAI" },
@@ -34,15 +35,16 @@ const PROVIDERS: { id: ProviderId; name: string }[] = [
 const providerName = (id: KeyAccount) =>
   id === "typesafe" ? "Typesafe" : (PROVIDERS.find((p) => p.id === id)?.name ?? id);
 
-type Page = "models" | "accounts";
+type Page = "profile" | "models" | "accounts";
 
 const PAGES: Section<Page>[] = [
+  { id: "profile", name: "Profile", icon: CircleUserRoundIcon },
   { id: "models", name: "Models & keys", icon: KeyRoundIcon },
   { id: "accounts", name: "Accounts", icon: UserRoundIcon },
 ];
 
 export function SettingsView() {
-  const [page, setPage] = useState<Page>("models");
+  const [page, setPage] = useState<Page>("profile");
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +69,7 @@ export function SettingsView() {
     >
       <div className="min-w-0">
         {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
+        {page === "profile" && <ProfilePage />}
         {settings && page === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
         {settings && page === "accounts" && (
           <AccountsPage settings={settings} onChanged={refresh} />
@@ -145,6 +148,83 @@ function StatusDot({ on, children }: { on: boolean; children: ReactNode }) {
       <span aria-hidden className={cn("size-[7px] rounded-full", on ? "bg-success" : "bg-off")} />
       {children}
     </span>
+  );
+}
+
+function ProfilePage() {
+  return (
+    <>
+      <PageHeader
+        title="Profile"
+        lead="What Mini-Me knows about you. It stays on this computer and is not sent to AI models."
+      />
+      <Section title="You">
+        <NameRow />
+      </Section>
+    </>
+  );
+}
+
+function NameRow() {
+  const profile = useUserProfile();
+  if (!profile) return null;
+  // Keyed by the saved name so the field starts from it again after each save.
+  return (
+    <NameForm
+      key={profile.name ?? ""}
+      saved={profile.name ?? ""}
+      unreadable={profile.unreadable}
+    />
+  );
+}
+
+function NameForm({ saved, unreadable }: { saved: string; unreadable: string | null }) {
+  const [name, setName] = useState(saved);
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    try {
+      refreshUserProfile(await api.saveUserName(name));
+    } catch (e) {
+      setStatus(errorMessage(e));
+    }
+  }
+
+  return (
+    <form onSubmit={save}>
+      <SettingRow
+        label="Your name"
+        htmlFor="user-name"
+        description={
+          <>
+            Shown in Home's greeting and on your files. Leave it empty to show no name.
+            {unreadable && (
+              <span className="mt-1 block text-destructive">
+                user-profile.json in Mini-Me Data could not be read ({unreadable}), so it is
+                left unchanged. Fix or remove it, then restart Mini-Me.
+              </span>
+            )}
+            {status && <span className="mt-1 block text-destructive">{status}</span>}
+          </>
+        }
+      >
+        <Input
+          id="user-name"
+          className="w-56"
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            setStatus(null);
+          }}
+          placeholder="Your name"
+          disabled={unreadable !== null}
+        />
+        <Button type="submit" disabled={unreadable !== null || name.trim() === saved}>
+          Save
+        </Button>
+      </SettingRow>
+    </form>
   );
 }
 
