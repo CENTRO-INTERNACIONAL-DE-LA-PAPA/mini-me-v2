@@ -333,6 +333,16 @@ export interface PausedApproval {
   paused_at: number;
 }
 
+/** One of the most recently active Conversations, in any Project. */
+export interface RecentConversation {
+  project_id: Uuid;
+  project_name: string;
+  conversation_id: Uuid;
+  title: string;
+  /** Unix ms. */
+  last_activity_at: number;
+}
+
 /** A reply whose Mini-Me run is in flight, in any Project. */
 export interface RunningReply {
   project_id: Uuid;
@@ -343,6 +353,12 @@ export interface RunningReply {
   mini_me: { id: Uuid; name: string };
   /** The Step the run last started; null before its first Step. */
   step: string | null;
+}
+
+/** How Home looks, from the app's settings. */
+export interface HomeSettings {
+  /** Whether the Mini-Mes appear on Home on their own. */
+  show_mini_mes: boolean;
 }
 
 /** The app-wide profile in `user-profile.json`. */

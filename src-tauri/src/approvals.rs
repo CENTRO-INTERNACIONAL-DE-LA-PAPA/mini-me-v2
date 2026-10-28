@@ -2,20 +2,15 @@
 //! database is only read, so listing never migrates a Project or changes its files.
 
 use std::path::Path;
-use std::time::Duration;
 
 use rusqlite::Connection;
 use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::db;
 use crate::error::AppResult;
 use crate::link::RunMiniMe;
 use crate::projects::{self, ProjectSummary};
-
-/// How long a read waits while the Project's own connection is writing.
-const BUSY_TIMEOUT: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PausedApproval {
@@ -33,25 +28,12 @@ pub struct PausedApproval {
 /// Every paused approval in the Projects of `data_root`, newest pause first. A Project that
 /// cannot be read, or whose schema is newer than this app's, is left out.
 pub fn list(data_root: &Path) -> AppResult<Vec<PausedApproval>> {
-    let mut approvals: Vec<PausedApproval> = projects::list(data_root, &Default::default())?
-        .iter()
-        .filter_map(|project| list_in(project).ok())
-        .flatten()
-        .collect();
+    let mut approvals = projects::read_each(data_root, rows)?;
     approvals.sort_by_key(|a| std::cmp::Reverse(a.paused_at));
     Ok(approvals)
 }
 
-fn list_in(project: &ProjectSummary) -> AppResult<Vec<PausedApproval>> {
-    let conn = db::open_read_only(&project.folder.join("project.sqlite"))?;
-    conn.busy_timeout(BUSY_TIMEOUT)?;
-    if db::is_newer(&conn)? {
-        return Ok(Vec::new());
-    }
-    rows(&conn, project)
-}
-
-fn rows(conn: &Connection, project: &ProjectSummary) -> AppResult<Vec<PausedApproval>> {
+fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<PausedApproval>> {
     let mut statement = conn.prepare(
         "SELECT p.message_id, p.run, p.created_at, m.conversation_id, c.title, k.data \
          FROM paused_runs p \
@@ -104,6 +86,7 @@ fn rows(conn: &Connection, project: &ProjectSummary) -> AppResult<Vec<PausedAppr
 mod tests {
     use super::*;
     use crate::conversations::{self, PausedRun, SendMessageInput};
+    use crate::db;
     use crate::projects::test_support::origin;
     use crate::protocol::{Author, AuthorKind, new_id};
     use crate::store::Project;

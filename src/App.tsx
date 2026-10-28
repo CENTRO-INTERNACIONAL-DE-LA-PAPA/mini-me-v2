@@ -5,6 +5,7 @@ import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/chat/ChatView";
 import { FilesView } from "./components/files/FilesView";
 import { HomeView } from "./components/home/HomeView";
+import { MiniMePlayground } from "./components/home/MiniMePlayground";
 import { LibraryView } from "./components/library/LibraryView";
 import { MiniMeEditor } from "./components/library/MiniMeEditor";
 import { OverviewView } from "./components/overview/OverviewView";
@@ -79,8 +80,9 @@ export default function App() {
     }
   }
 
-  /** Shows a reply in its Conversation, opening its Project first when another is open. */
-  async function openReply(projectId: Uuid, conversationId: Uuid, messageId: Uuid) {
+  /** Shows a Conversation, at `messageId` when given, opening its Project first when another
+   * is open. */
+  async function openConversation(projectId: Uuid, conversationId: Uuid, messageId?: Uuid) {
     const next: View = { kind: "conversation", id: conversationId, messageId };
     if (project?.id === projectId) {
       navigate(next);
@@ -113,6 +115,7 @@ export default function App() {
         onOpenProject={openProject}
         onNavigate={navigate}
         onNewConversation={newConversation}
+        onOpenConversation={openConversation}
       />
       {/* The desk: the open view's sheets float on it, 12px from the window and each other. */}
       <SidebarInset className="h-svh min-w-0 flex-row gap-3 overflow-hidden bg-transparent p-3">
@@ -134,7 +137,7 @@ export default function App() {
           onCreateProject={createProject}
           onConversationActivity={refreshConversations}
           onNavigate={navigate}
-          onOpenReply={openReply}
+          onOpenReply={openConversation}
           onBack={() => setView(previous)}
         />
       </SidebarInset>
@@ -240,14 +243,18 @@ function Main({
           <p className="m-auto text-muted-foreground">Select or create a conversation.</p>
         </MainSheet>
       ) : (
-        scrolling(
-          <HomeView
-            projects={projects}
-            onOpen={onOpenProject}
-            onCreate={onCreateProject}
-            onOpenReply={onOpenReply}
-          />,
-        )
+        // The Mini-Mes play behind Home's content; the content scrolls over them.
+        <MainSheet>
+          <MiniMePlayground />
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <HomeView
+              projects={projects}
+              onOpen={onOpenProject}
+              onCreate={onCreateProject}
+              onOpenReply={onOpenReply}
+            />
+          </div>
+        </MainSheet>
       );
   }
 }

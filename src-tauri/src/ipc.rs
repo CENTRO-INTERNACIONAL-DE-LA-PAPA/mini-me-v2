@@ -16,6 +16,7 @@ use crate::assets;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
 use crate::error::{AppError, AppResult};
 use crate::projects::{self, ProjectSummary};
+use crate::recent::{self, RecentConversation};
 use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, OpenedConversation, now_ms};
 use crate::history::HISTORY_BUDGET_CHARS;
 use crate::library::{MiniMe, MiniMeSummary, TraitSummary};
@@ -25,7 +26,7 @@ use crate::overview;
 use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{CANCEL_TIMEOUT, RunningReply, Runs};
 use crate::secrets::KeychainSecrets;
-use crate::settings::{AiSettings, Settings};
+use crate::settings::{AiSettings, HomeSettings, Settings};
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
 use crate::updates::{UpdateStatus, Updates};
@@ -290,6 +291,18 @@ pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> App
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub async fn get_home_settings(state: State<'_, AppState>) -> AppResult<HomeSettings> {
+    Ok(state.settings().home)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_show_home_mini_mes(state: State<'_, AppState>, show: bool) -> AppResult<()> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.home.show_mini_mes = show;
+    settings.save(&state.config_dir)
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn list_mini_mes(state: State<'_, AppState>) -> AppResult<Vec<MiniMeSummary>> {
     Ok(state.library.current().summaries())
 }
@@ -507,6 +520,14 @@ pub async fn answer_approval(
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_paused_approvals(state: State<'_, AppState>) -> AppResult<Vec<PausedApproval>> {
     approvals::list(&state.data_root)
+}
+
+/// The most recently active Conversations across all Projects, newest first.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn list_recent_conversations(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<RecentConversation>> {
+    recent::list(&state.data_root)
 }
 
 /// Every reply whose Mini-Me run is in flight, in any Project.
