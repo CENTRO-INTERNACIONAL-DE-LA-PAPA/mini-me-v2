@@ -12,6 +12,7 @@ mod link;
 mod overview;
 mod paths;
 mod projects;
+mod recent;
 mod protocol;
 mod routing;
 mod runs;
@@ -57,6 +58,7 @@ pub fn run() {
             ipc::stop_reply,
             ipc::answer_approval,
             ipc::list_paused_approvals,
+            ipc::list_recent_conversations,
             ipc::get_running_replies,
             ipc::subscribe_running_replies,
             ipc::add_reaction,
@@ -89,6 +91,8 @@ pub fn run() {
             ipc::remove_api_key,
             ipc::set_routing_threshold,
             ipc::set_show_jev_answers,
+            ipc::get_home_settings,
+            ipc::set_show_home_mini_mes,
             ipc::ai2_start_sign_in,
             ipc::subscribe_ai2_status,
             ipc::ai2_sign_out,

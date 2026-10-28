@@ -32,9 +32,16 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { api } from "../../api";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { initials } from "../../lib/names";
-import type { ConversationSummary, ProjectSummary } from "../../protocol/types";
+import type {
+  ConversationSummary,
+  ProjectSummary,
+  RecentConversation,
+  Uuid,
+} from "../../protocol/types";
 import { formatRelative } from "../../lib/format";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { SidecarStatusLine, useSidecarStatus } from "./SidecarStatusLine";
@@ -53,6 +60,7 @@ interface Props {
   onOpenProject: (project: ProjectSummary) => void;
   onNavigate: (view: View) => void;
   onNewConversation: () => void;
+  onOpenConversation: (projectId: Uuid, conversationId: Uuid) => void;
 }
 
 export function AppSidebar({
@@ -64,9 +72,25 @@ export function AppSidebar({
   onOpenProject,
   onNavigate,
   onNewConversation,
+  onOpenConversation,
 }: Props) {
   const sidecar = useSidecarStatus();
   const name = useUserProfile()?.name;
+  const onHome = !project && view.kind === "home";
+  const [recent, setRecent] = useState<RecentConversation[]>([]);
+
+  // Fetched each time Home is shown, so it follows activity in any Project.
+  useEffect(() => {
+    if (!onHome) return;
+    let active = true;
+    api
+      .listRecentConversations()
+      .then((list) => active && setRecent(list))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [onHome]);
 
   return (
     <Sidebar variant="floating">
@@ -122,6 +146,31 @@ export function AppSidebar({
                   {fileCount}
                 </SidebarMenuBadge>
               </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
+        )}
+        {!project && recent.length > 0 && (
+          <SidebarGroup className="py-0">
+            <SidebarGroupLabel className="h-auto px-2.5 pt-0 pb-1.5 font-serif text-subheading font-normal text-foreground">
+              Recent
+            </SidebarGroupLabel>
+            <SidebarMenu className="gap-1">
+              {recent.map((conversation) => (
+                <SidebarMenuItem key={conversation.conversation_id}>
+                  <SidebarMenuButton
+                    size="lg"
+                    className="h-auto flex-col items-start gap-0 py-[9px]"
+                    onClick={() =>
+                      onOpenConversation(conversation.project_id, conversation.conversation_id)
+                    }
+                  >
+                    <span className="w-full truncate text-foreground">{conversation.title}</span>
+                    <span className="w-full truncate text-meta font-normal text-muted-foreground">
+                      {conversation.project_name} · {formatRelative(conversation.last_activity_at)}
+                    </span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroup>
         )}

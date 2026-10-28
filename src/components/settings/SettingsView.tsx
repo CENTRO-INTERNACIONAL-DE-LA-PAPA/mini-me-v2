@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { CircleUserRoundIcon, KeyRoundIcon, UserRoundIcon } from "lucide-react";
+import { CircleUserRoundIcon, KeyRoundIcon, PaletteIcon, UserRoundIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -35,10 +35,11 @@ const PROVIDERS: { id: ProviderId; name: string }[] = [
 const providerName = (id: KeyAccount) =>
   id === "typesafe" ? "Typesafe" : (PROVIDERS.find((p) => p.id === id)?.name ?? id);
 
-type Page = "profile" | "models" | "accounts";
+type Page = "profile" | "appearance" | "models" | "accounts";
 
 const PAGES: Section<Page>[] = [
   { id: "profile", name: "Profile", icon: CircleUserRoundIcon },
+  { id: "appearance", name: "Appearance", icon: PaletteIcon },
   { id: "models", name: "Models & keys", icon: KeyRoundIcon },
   { id: "accounts", name: "Accounts", icon: UserRoundIcon },
 ];
@@ -70,6 +71,7 @@ export function SettingsView() {
       <div className="min-w-0">
         {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
         {page === "profile" && <ProfilePage />}
+        {page === "appearance" && <AppearancePage />}
         {settings && page === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
         {settings && page === "accounts" && (
           <AccountsPage settings={settings} onChanged={refresh} />
@@ -225,6 +227,61 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
         </Button>
       </SettingRow>
     </form>
+  );
+}
+
+function AppearancePage() {
+  return (
+    <>
+      <PageHeader title="Appearance" lead="How Mini-Me looks." />
+      <Section title="Home">
+        <HomeMiniMesRow />
+      </Section>
+    </>
+  );
+}
+
+function HomeMiniMesRow() {
+  const [show, setShow] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .getHomeSettings()
+      .then((home) => active && setShow(home.show_mini_mes))
+      .catch((e) => active && setError(errorMessage(e)));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <SettingRow
+      label="Show Mini-Mes on Home"
+      htmlFor="home-mini-mes"
+      description={
+        <>
+          Every Mini-Me drops onto Home when it opens, and you can grab and throw them.
+          {error && <span className="mt-1 block text-destructive">{error}</span>}
+        </>
+      }
+    >
+      <Switch
+        id="home-mini-mes"
+        checked={show ?? false}
+        disabled={show === null}
+        onCheckedChange={async (checked) => {
+          try {
+            setError(null);
+            await api.setShowHomeMiniMes(checked);
+            setShow(checked);
+          } catch (e) {
+            setError(errorMessage(e));
+          }
+        }}
+      />
+    </SettingRow>
   );
 }
 

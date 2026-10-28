@@ -1,8 +1,9 @@
 //! The Mini-Me Data folder and Project folders: creating, listing and opening Projects.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -15,6 +16,8 @@ use crate::store::Project;
 
 pub const DATA_FOLDER_NAME: &str = "Mini-Me Data";
 const MAX_NAME_CHARS: usize = 100;
+/// How long a read-only read waits while the Project's own connection is writing.
+const READ_BUSY_TIMEOUT: Duration = Duration::from_millis(500);
 const WINDOWS_RESERVED: &[&str] = &[
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
@@ -144,6 +147,28 @@ pub fn list(
         std::cmp::Reverse((recent.get(&p.id).copied().unwrap_or(0), p.created_at))
     });
     Ok(projects)
+}
+
+/// Reads every Project in `data_root` with `read`, merging what it returns. Each database is
+/// opened read-only, so nothing is migrated or written; a Project that cannot be read, or
+/// whose schema is newer than this app's, is left out.
+pub fn read_each<T>(
+    data_root: &Path,
+    read: impl Fn(&ProjectSummary, &Connection) -> AppResult<Vec<T>>,
+) -> AppResult<Vec<T>> {
+    let read_one = |project: &ProjectSummary| -> AppResult<Vec<T>> {
+        let conn = db::open_read_only(&project.folder.join("project.sqlite"))?;
+        conn.busy_timeout(READ_BUSY_TIMEOUT)?;
+        if db::is_newer(&conn)? {
+            return Ok(Vec::new());
+        }
+        read(project, &conn)
+    };
+    Ok(list(data_root, &Default::default())?
+        .iter()
+        .filter_map(|project| read_one(project).ok())
+        .flatten()
+        .collect())
 }
 
 /// Opens a Project for use: migrates its database and marks interrupted replies as failed.

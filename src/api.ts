@@ -9,6 +9,7 @@ import type {
   ConversationSummary,
   LibraryView,
   FileEntry,
+  HomeSettings,
   Message,
   MiniMe,
   MiniMeDefinition,
@@ -17,6 +18,7 @@ import type {
   ProjectSummary,
   ProtocolEvent,
   ProviderId,
+  RecentConversation,
   RunningReply,
   SavedDefinition,
   SendMessageInput,
@@ -83,6 +85,8 @@ export const api = {
     invoke<void>("answer_approval", { project_id, message_id, component_id, approved }),
   /** Every reply paused at an approval, across all Projects, newest first. */
   listPausedApprovals: () => invoke<PausedApproval[]>("list_paused_approvals"),
+  /** The most recently active Conversations across all Projects, newest first. */
+  listRecentConversations: () => invoke<RecentConversation[]>("list_recent_conversations"),
 
   addReaction: (project_id: Uuid, message_id: Uuid, emoji: string) =>
     invoke<void>("add_reaction", { project_id, message_id, emoji }),
@@ -162,6 +166,8 @@ export const api = {
   removeApiKey: (provider: KeyAccount) => invoke<void>("remove_api_key", { provider }),
   setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
   setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
+  getHomeSettings: () => invoke<HomeSettings>("get_home_settings"),
+  setShowHomeMiniMes: (show: boolean) => invoke<void>("set_show_home_mini_mes", { show }),
 
   /** Opens Ai2's sign-in page; the status then turns `pending` and later `signed_in`. */
   ai2StartSignIn: () => invoke<void>("ai2_start_sign_in"),

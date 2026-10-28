@@ -197,6 +197,11 @@ Input, Textarea and Select: `--well` fill, no visible border, radius 12, 13.5px;
 ### Sheets
 `MainSheet`, `ToolSheet` (serif title, meta line, close button), `SheetPage` (a page in the main sheet: serif title, description, actions on the right), `SheetHeader` (Conversation title block), `SheetSection` (serif section heading with optional meta and actions), `SectionPage` (Settings), `EditorHeader` (both editors).
 
+### Home
+- **Content:** the `text-greeting` greeting, then "Waiting on you" and the Projects grid, scrolling over the playground.
+- **Mini-Me playground:** every Mini-Me as a 64px avatar with physics (Matter.js), drawn on one canvas filling the main sheet behind the content. Off by default: they appear when Home opens only with Settings → Appearance → "Show Mini-Mes on Home", or whenever Up, Up, Down, Down, Left, Right, Left, Right is pressed on Home, which adds another batch on top of any already there. They drop in from random points across the width, pile along the bottom and can be grabbed where no card, button or field covers them; the cursor turns to a grab hand over one. A click shows the Mini-Me's name as a tag pill above it for three seconds. With reduced motion the pile appears already settled. No outline or fill on the layer: the Mini-Mes sit on the sheet's white.
+- **Sidebar:** with no Project open, a "Recent" group under Home lists the 5 most recently active Conversations across Projects, each with its Project's name and when it was last active, styled like the Conversations list.
+
 ### Conversation
 - **Reply:** a Mini-Me card, padding 16×18. Header: 28px avatar, serif name (`text-name`), time and status in `ink`. Body 15px. Tables, paper sources and the Workflow progress card sit on white with an `edge` outline. Action pills are `mini-me` buttons; an active one is solid ink.
 - **Your message:** right-aligned, max 520px, `--muted` fill with a `--border` outline, bubble radius. Mentioned Mini-Mes appear as tint chips; files as white chips with a hairline. Meta "You · 10:42" below.
