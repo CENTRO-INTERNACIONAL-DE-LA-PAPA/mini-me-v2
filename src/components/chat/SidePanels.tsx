@@ -17,7 +17,11 @@ import {
 } from "./WorkflowProgress";
 
 /** A panel docked to the right of a Conversation. */
-export type Panel = { kind: "outline" } | { kind: "jobs" } | { kind: "steps"; messageId: string };
+export type Panel =
+  | { kind: "outline" }
+  | { kind: "jobs" }
+  | { kind: "report" }
+  | { kind: "steps"; messageId: string };
 
 function SidePanel({
   title,

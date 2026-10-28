@@ -200,6 +200,8 @@ export interface FileEntry extends AssetRef {
   /** `upload` for a file the user imported, `generated` for one a Mini-Me saved. */
   source: "upload" | "generated";
   created_at: number;
+  /** When its file last changed (Unix ms); null when the file is missing. */
+  modified_at: number | null;
   /** The author of the first message the Asset is attached to, if any. */
   added_by: Author | null;
   /** The Conversations that attach or reference the Asset, in the order it first appeared. */
@@ -342,6 +344,12 @@ export interface RecentConversation {
   /** Unix ms. */
   last_activity_at: number;
 }
+
+/** What arrives while Scribe drafts a document: some text, or the draft's end. */
+export type DraftEvent =
+  | { type: "delta"; text: string }
+  | { type: "done" }
+  | { type: "error"; error: ErrorInfo };
 
 /** A reply whose Mini-Me run is in flight, in any Project. */
 export interface RunningReply {

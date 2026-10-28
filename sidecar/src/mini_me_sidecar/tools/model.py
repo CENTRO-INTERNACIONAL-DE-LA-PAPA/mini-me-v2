@@ -9,6 +9,7 @@ from typing import Any
 from mini_me_sidecar.context import CallContext
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import read_component
+from mini_me_sidecar.tools.documents import write_document
 from mini_me_sidecar.tools.files import read_file, save_text_file
 from mini_me_sidecar.tools.tables import show_table
 
@@ -124,6 +125,25 @@ MODEL_TOOLS: dict[str, ModelTool] = {
                 "required": ["name", "content"],
             },
             run=save_text_file,
+        ),
+        ModelTool(
+            name="write_document",
+            description=(
+                "Saves a document the user can open, edit and export as PDF in Mini-Me, and "
+                "shows it below your reply. Write the body in Quarto Markdown: headings, "
+                "paragraphs, lists, tables and code blocks, without a YAML header; it is at "
+                "most 2 MiB. Use it when the user asks for a report or a document. Returns "
+                "the new file's ID."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "The document's title."},
+                    "body": {"type": "string", "description": "The document's Markdown body."},
+                },
+                "required": ["title", "body"],
+            },
+            run=write_document,
         ),
         ModelTool(
             name="show_table",

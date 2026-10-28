@@ -264,6 +264,8 @@ pub struct FileEntry {
     pub source: String,
     /// When the Asset was registered, in milliseconds.
     pub created_at: i64,
+    /// When its file last changed, in milliseconds; none when the file is missing.
+    pub modified_at: Option<i64>,
     /// The author of the first message the Asset is attached to, if it is attached to one.
     pub added_by: Option<Author>,
     /// The Conversations whose messages attach or reference the Asset, in the order it first
@@ -284,7 +286,7 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     let mut entries = Vec::new();
     {
         let mut stmt = state.conn.prepare(
-            "SELECT id, name, media_type, size_bytes, source, created_at FROM assets \
+            "SELECT id, name, media_type, size_bytes, source, created_at, rel_path FROM assets \
              ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -295,10 +297,18 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
                 row.get::<_, i64>(3)?,
                 row.get::<_, String>(4)?,
                 row.get::<_, i64>(5)?,
+                row.get::<_, String>(6)?,
             ))
         })?;
         for row in rows {
-            let (id, name, media_type, size_bytes, source, created_at) = row?;
+            let (id, name, media_type, size_bytes, source, created_at, rel_path) = row?;
+            let modified_at = project
+                .paths
+                .resolve(&rel_path)
+                .ok()
+                .and_then(|path| std::fs::metadata(path).ok()?.modified().ok())
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|since| since.as_millis() as i64);
             entries.push(FileEntry {
                 asset: AssetRef {
                     id: Uuid::parse_str(&id).map_err(|_| corrupt())?,
@@ -308,6 +318,7 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
                 },
                 source,
                 created_at,
+                modified_at,
                 added_by: None,
                 used_in: Vec::new(),
             });

@@ -110,6 +110,28 @@
       "material": "## Huancayo 2025 trial data\nYou: plot yield by altitude"
     },
     {
+      "type": "draft.start",
+      "draft_id": "0199d0a0-0000-7000-8000-000000000601",
+      "model": { "provider": "anthropic", "model": "claude-sonnet-5-5" },
+      "title": "Huancayo 2025 trial data",
+      "material": "You: plot yield by altitude\nPlotter: Yield falls above 3,800 m."
+    },
+    {
+      "type": "draft.cancel",
+      "draft_id": "0199d0a0-0000-7000-8000-000000000601"
+    },
+    {
+      "type": "document.export",
+      "export_id": "0199d0a0-0000-7000-8000-000000000701",
+      "name": "Huancayo 2025 report.qmd",
+      "source": "---\ntitle: \"Huancayo 2025 report\"\n---\n\n# Summary\n"
+    },
+    {
+      "type": "document.preview",
+      "preview_id": "0199d0a0-0000-7000-8000-000000000801",
+      "source": "# Summary\n"
+    },
+    {
       "type": "core.response",
       "request_id": "5f1c2b7e9a0d4c3b8e6f1a2b3c4d5e6f",
       "result": { "data": "aGVsbG8=", "size_bytes": 5, "eof": true }
@@ -201,6 +223,40 @@
       "type": "summary.error",
       "summary_id": "0199d0a0-0000-7000-8000-000000000501",
       "error": { "code": "secret_unavailable", "message": "Add an Anthropic API key in Settings." }
+    },
+    {
+      "type": "draft.delta",
+      "draft_id": "0199d0a0-0000-7000-8000-000000000601",
+      "text": "# Summary\n\nYield falls"
+    },
+    {
+      "type": "draft.done",
+      "draft_id": "0199d0a0-0000-7000-8000-000000000601"
+    },
+    {
+      "type": "draft.error",
+      "draft_id": "0199d0a0-0000-7000-8000-000000000601",
+      "error": { "code": "provider_empty", "message": "Anthropic sent an empty draft." }
+    },
+    {
+      "type": "document.exported",
+      "export_id": "0199d0a0-0000-7000-8000-000000000701",
+      "data": "JVBERi0="
+    },
+    {
+      "type": "document.export_error",
+      "export_id": "0199d0a0-0000-7000-8000-000000000701",
+      "error": { "code": "export_failed", "message": "The PDF could not be made." }
+    },
+    {
+      "type": "document.previewed",
+      "preview_id": "0199d0a0-0000-7000-8000-000000000801",
+      "pages": ["<svg viewBox=\"0 0 595 842\"></svg>"]
+    },
+    {
+      "type": "document.preview_error",
+      "preview_id": "0199d0a0-0000-7000-8000-000000000801",
+      "error": { "code": "preview_failed", "message": "The preview could not be made." }
     }
   ]
 }

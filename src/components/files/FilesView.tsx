@@ -15,7 +15,7 @@ import { api, errorMessage } from "../../api";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { initials } from "../../lib/names";
 import type { FileEntry, ProjectSummary } from "../../protocol/types";
-import { fileKind, type FileKind } from "./files";
+import { fileKind, isDocument, type FileKind } from "./files";
 import { formatRelative, formatSize } from "../../lib/format";
 import { FileTile } from "./FileTile";
 import { surfaceStyle } from "../minime/miniMeColors";
@@ -42,12 +42,14 @@ const ICONS: Record<FileKind, typeof FileIcon> = {
 interface Props {
   project: ProjectSummary;
   onOpenConversation: (id: string) => void;
+  /** Opens a `.qmd` document in the document view. */
+  onOpenDocument: (assetId: string) => void;
   /** Called after files were added, so counts elsewhere can refresh. */
   onChanged: () => void;
 }
 
 /** The Project's files: every Asset, who added it, and the Conversations that use it. */
-export function FilesView({ project, onOpenConversation, onChanged }: Props) {
+export function FilesView({ project, onOpenConversation, onOpenDocument, onChanged }: Props) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [tab, setTab] = useState<Tab>("all");
   const [query, setQuery] = useState("");
@@ -152,7 +154,9 @@ export function FilesView({ project, onOpenConversation, onChanged }: Props) {
               <FileRow
                 key={entry.id}
                 entry={entry}
-                onOpen={() => open(entry.id)}
+                onOpen={() =>
+                  isDocument(entry.name) ? onOpenDocument(entry.id) : open(entry.id)
+                }
                 onOpenConversation={onOpenConversation}
               />
             ))}

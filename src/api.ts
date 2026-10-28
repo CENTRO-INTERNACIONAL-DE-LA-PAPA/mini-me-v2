@@ -7,6 +7,7 @@ import type {
   AssetRef,
   KeyAccount,
   ConversationSummary,
+  DraftEvent,
   LibraryView,
   FileEntry,
   HomeSettings,
@@ -125,6 +126,39 @@ export const api = {
   listProjectFiles: (project_id: Uuid) => invoke<FileEntry[]>("list_project_files", { project_id }),
   openAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("open_asset", { project_id, asset_id }),
+  /** Creates an empty `.qmd` document titled `title`, with the user's name as author. */
+  createDocument: (project_id: Uuid, title: string) =>
+    invoke<AssetRef>("create_document", { project_id, title }),
+  readDocument: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<string>("read_document", { project_id, asset_id }),
+  saveDocument: (project_id: Uuid, asset_id: Uuid, text: string) =>
+    invoke<void>("save_document", { project_id, asset_id, text }),
+  /** Drafts the new document `asset_id` from a Conversation, calling `onEvent` as text arrives.
+   * Resolves once the draft has ended and what was written is saved; rejects with why it
+   * stopped early. */
+  draftDocument: (
+    project_id: Uuid,
+    asset_id: Uuid,
+    conversation_id: Uuid,
+    draft_id: Uuid,
+    onEvent: (event: DraftEvent) => void,
+  ) => {
+    const on_event = new Channel<DraftEvent>();
+    on_event.onmessage = onEvent;
+    return invoke<void>("draft_document", {
+      project_id,
+      asset_id,
+      conversation_id,
+      draft_id,
+      on_event,
+    });
+  },
+  stopDraft: (draft_id: Uuid) => invoke<void>("stop_draft", { draft_id }),
+  /** The document text `source` as it would export, one SVG image per page. */
+  previewDocument: (source: string) => invoke<string[]>("preview_document", { source }),
+  /** Saves the document as a PDF Asset named after it, and returns that Asset. */
+  exportDocumentPdf: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<AssetRef>("export_document_pdf", { project_id, asset_id }),
 
   getRunningReplies: () => invoke<RunningReply[]>("get_running_replies"),
   /** Calls `onChange` with the running replies, then with the whole list on every change. */

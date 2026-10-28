@@ -4,6 +4,7 @@ mod assets;
 mod components;
 mod conversations;
 mod db;
+mod documents;
 mod error;
 mod history;
 mod ipc;
@@ -86,6 +87,13 @@ pub fn run() {
             ipc::feature_component,
             ipc::update_overview_summary,
             ipc::open_asset,
+            ipc::create_document,
+            ipc::read_document,
+            ipc::save_document,
+            ipc::draft_document,
+            ipc::stop_draft,
+            ipc::export_document_pdf,
+            ipc::preview_document,
             ipc::get_sidecar_status,
             ipc::subscribe_sidecar_status,
             ipc::restart_sidecar,

@@ -18,6 +18,11 @@ import type { View } from "../shell/view";
 const MODEL_TOOLS = [
   { id: "save_file", label: "Save files", hint: "Save what it writes as a file in the Project" },
   { id: "show_table", label: "Show tables", hint: "Show a table below its reply" },
+  {
+    id: "write_document",
+    label: "Write documents",
+    hint: "Write a report you can edit and export as PDF",
+  },
 ];
 
 const EMPTY: TraitDraft = { id: NIL_ID, name: "", description: "", instructions: "", tools: [] };

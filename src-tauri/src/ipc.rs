@@ -14,6 +14,7 @@ use crate::ai2::{Ai2, Ai2Status, AppSecrets};
 use crate::approvals::{self, PausedApproval};
 use crate::assets;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
+use crate::documents;
 use crate::error::{AppError, AppResult};
 use crate::projects::{self, ProjectSummary};
 use crate::recent::{self, RecentConversation};
@@ -24,7 +25,7 @@ use crate::user_library::{LibraryStore, Skipped, TraitDraft};
 use crate::user_profile::{ProfileStore, UserProfile};
 use crate::overview;
 use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
-use crate::runs::{CANCEL_TIMEOUT, RunningReply, Runs};
+use crate::runs::{CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
 use crate::settings::{AiSettings, HomeSettings, Settings};
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
@@ -37,6 +38,12 @@ const SUMMARY_BUDGET_CHARS: usize = HISTORY_BUDGET_CHARS * 4;
 
 /// How long a summary may take; long material can keep the model writing for a while.
 const SUMMARY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// How long a draft may go without new text before it is stopped.
+const DRAFT_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// How long making a PDF may take.
+const EXPORT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 pub struct AppState {
     config_dir: PathBuf,
@@ -773,6 +780,113 @@ pub async fn update_overview_summary(
     .map_err(|e| AppError::new("summary_failed", e.to_string()))??;
     overview::save_summary(&project, &text, now_ms())?;
     overview::overview(&project)
+}
+
+/// Creates an empty document titled `title`, with the user's name as author when they have one.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn create_document(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    title: String,
+) -> AppResult<AssetRef> {
+    let author = state.profile.current().name;
+    documents::create(&*state.project(project_id)?, &title, author.as_deref())
+}
+
+/// Drafts the document `asset_id`, just created, from the Conversation `conversation_id`,
+/// sending each piece of text to `on_event` as it arrives. Whatever was written is saved after
+/// the document's header when the draft ends, fails or is stopped with `stop_draft`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn draft_document(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+    conversation_id: Uuid,
+    draft_id: Uuid,
+    on_event: Channel<DraftEvent>,
+) -> AppResult<()> {
+    let model = state
+        .settings()
+        .ai
+        .model()
+        .ok_or_else(|| AppError::new("model_not_set", "Choose an AI model in Settings first."))?;
+    let project = state.project(project_id)?;
+    let title = conversations::title(&project, conversation_id)?;
+    let material = overview::conversation_material(
+        &project,
+        &state.library.current(),
+        conversation_id,
+        HISTORY_BUDGET_CHARS,
+    )?;
+    if material.is_empty() {
+        return Err(AppError::invalid_input("There are no messages to draft from yet."));
+    }
+    let header = documents::read(&project, asset_id)?;
+    let runs = Arc::clone(&state.runs);
+    let (body, ending) = tauri::async_runtime::spawn_blocking(move || {
+        runs.draft(draft_id, model, title, material, DRAFT_IDLE, |event| {
+            let _ = on_event.send(event.clone());
+        })
+    })
+    .await
+    .map_err(|e| AppError::new("draft_failed", e.to_string()))?;
+    documents::save_draft(&project, asset_id, &header, &body)?;
+    ending.map_or(Ok(()), Err)
+}
+
+/// Stops the draft `draft_id`; `draft_document` then saves what was written.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn stop_draft(state: State<'_, AppState>, draft_id: Uuid) -> AppResult<()> {
+    state.runs.cancel_draft(draft_id);
+    Ok(())
+}
+
+/// The document text `source` as it would export, one SVG image per page.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn preview_document(state: State<'_, AppState>, source: String) -> AppResult<Vec<String>> {
+    let runs = Arc::clone(&state.runs);
+    tauri::async_runtime::spawn_blocking(move || runs.preview(source, EXPORT_TIMEOUT))
+        .await
+        .map_err(|e| AppError::new("preview_failed", e.to_string()))?
+}
+
+/// Exports the document `asset_id` as a PDF Asset named after it, and returns that Asset.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn export_document_pdf(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<AssetRef> {
+    let project = state.project(project_id)?;
+    let name = assets::find(&project.lock(), asset_id)?.name;
+    let source = documents::read(&project, asset_id)?;
+    let runs = Arc::clone(&state.runs);
+    let export_name = name.clone();
+    let pdf = tauri::async_runtime::spawn_blocking(move || {
+        runs.export_pdf(export_name, source, EXPORT_TIMEOUT)
+    })
+    .await
+    .map_err(|e| AppError::new("export_failed", e.to_string()))??;
+    documents::store_pdf(&project, &name, &pdf)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn read_document(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<String> {
+    documents::read(&*state.project(project_id)?, asset_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn save_document(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+    text: String,
+) -> AppResult<()> {
+    documents::save(&*state.project(project_id)?, asset_id, &text)
 }
 
 #[tauri::command(rename_all = "snake_case")]
