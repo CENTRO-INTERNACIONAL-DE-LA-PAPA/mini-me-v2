@@ -3,9 +3,9 @@ import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markd
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
-import { markdownSource } from "../protocol/references";
-import type { MiniMe, TextComponent } from "../protocol/types";
-import { openLink, webUrl } from "./interactive/links";
+import { markdownSource } from "../../protocol/references";
+import type { MiniMe, TextComponent } from "../../protocol/types";
+import { openLink, webUrl } from "../interactive/links";
 import { TextComponentChip } from "./TextComponentChip";
 
 interface Props {

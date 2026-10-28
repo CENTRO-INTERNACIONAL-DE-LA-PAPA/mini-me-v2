@@ -7,7 +7,7 @@ import { Placeholder, UndoRedo } from "@tiptap/extensions";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import type { SuggestionOptions } from "@tiptap/suggestion";
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
-import { api, errorCode, errorMessage } from "../api";
+import { api, errorCode, errorMessage } from "../../api";
 import {
   assetTarget,
   componentTarget,
@@ -17,15 +17,15 @@ import {
   miniMeTarget,
   type ReferenceKind,
   type ReferenceTarget,
-} from "../protocol/references";
-import type { AssetRef, Message, MiniMe } from "../protocol/types";
+} from "../../protocol/references";
+import type { AssetRef, Message, MiniMe } from "../../protocol/types";
 import { AttachmentTray } from "./AttachmentTray";
-import type { ComponentName } from "./interactive/component-names";
-import { surfaceStyle } from "./miniMeColors";
-import { MiniMePill } from "./MiniMePill";
+import type { ComponentName } from "../interactive/component-names";
+import { surfaceStyle } from "../minime/miniMeColors";
+import { MiniMePill } from "../minime/MiniMePill";
 import { ReferenceNode } from "./ReferenceNode";
-import { sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
-import { useMiniMes } from "./useMiniMes";
+import { sidecarReady, useSidecarStatus } from "../shell/SidecarStatusLine";
+import { useMiniMes } from "../../hooks/useMiniMes";
 import { Button } from "@/components/ui/button";
 import {
   ArrowUpIcon,

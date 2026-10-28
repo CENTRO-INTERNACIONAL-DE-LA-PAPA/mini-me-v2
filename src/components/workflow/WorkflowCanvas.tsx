@@ -33,8 +33,8 @@ import {
   type ReactNode,
 } from "react";
 import type { MiniMe, TraitSummary, WorkflowStep } from "../../protocol/types";
-import { surfaceStyle } from "../miniMeColors";
-import { MiniMeAvatar } from "../MiniMeAvatar";
+import { surfaceStyle } from "../minime/miniMeColors";
+import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { toolCount } from "./tools";
 import { useStepDrag, type DragPayload, type DragState } from "./useStepDrag";
 import {

@@ -20,9 +20,9 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { api, errorMessage } from "../api";
-import type { Ai2Status, AiSettings, KeyAccount, ProviderId } from "../protocol/types";
-import { SectionPage, type Section } from "./shell/SectionPage";
+import { api, errorMessage } from "../../api";
+import type { Ai2Status, AiSettings, KeyAccount, ProviderId } from "../../protocol/types";
+import { SectionPage, type Section } from "../shell/SectionPage";
 
 const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "openai", name: "OpenAI" },

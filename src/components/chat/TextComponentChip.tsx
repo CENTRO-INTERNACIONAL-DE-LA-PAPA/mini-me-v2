@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { ChartColumnIcon, Table2Icon } from "lucide-react";
-import type { MiniMe, TextComponent } from "../protocol/types";
-import { useComponentName } from "./interactive/component-references";
-import { MiniMePill } from "./MiniMePill";
+import type { MiniMe, TextComponent } from "../../protocol/types";
+import { useComponentName } from "../interactive/component-references";
+import { MiniMePill } from "../minime/MiniMePill";
 import { ReferenceChip } from "./ReferenceChip";
 
 /** A Text Component: a Mini-Me's pill, a `$` table or chart chip, or a file chip that opens

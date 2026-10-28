@@ -77,7 +77,7 @@ Each Mini-Me stores three colours; the UI derives two more.
 | `wash` | derived | Very light background of its cards: replies, tasks, jobs, library cards |
 | `edge` | derived | The 1px outline of its cards, and of white buttons and tables inside them |
 
-`wash` and `edge` are computed in `src/components/miniMeColors.ts` from the hue of `solid`, in OKLCH: **wash** L 0.985 C 0.015, **edge** L 0.86 C 0.07. New colour families pick a hue; tint L≈0.94 C≈0.04, solid L≈0.6–0.68 C≈0.1–0.19, ink L≈0.42–0.48. Check ink on wash and on tint before shipping.
+`wash` and `edge` are computed in `src/components/minime/miniMeColors.ts` from the hue of `solid`, in OKLCH: **wash** L 0.985 C 0.015, **edge** L 0.86 C 0.07. New colour families pick a hue; tint L≈0.94 C≈0.04, solid L≈0.6–0.68 C≈0.1–0.19, ink L≈0.42–0.48. Check ink on wash and on tint before shipping.
 
 **Using them in code.** `surfaceStyle(colors)` sets `--mm-tint`, `--mm-solid`, `--mm-ink`, `--mm-wash` and `--mm-edge` on an element. Inside it, use the theme classes `bg-wash`, `bg-tint`, `border-edge` and `text-mm-ink`; outside any Mini-Me they fall back to the neutral values, so the same component works in both places.
 

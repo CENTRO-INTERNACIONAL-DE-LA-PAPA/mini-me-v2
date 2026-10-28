@@ -5,10 +5,10 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon, PuzzleIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import type { MiniMe } from "../protocol/types";
-import { surfaceStyle } from "./miniMeColors";
-import { MiniMeAvatar } from "./MiniMeAvatar";
-import { MiniMeSurface } from "./MiniMeSurface";
+import type { MiniMe } from "../../protocol/types";
+import { surfaceStyle } from "../minime/miniMeColors";
+import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { MiniMeSurface } from "../minime/MiniMeSurface";
 
 interface HeaderProps {
   title: string;

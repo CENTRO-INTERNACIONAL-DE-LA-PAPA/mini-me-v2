@@ -34,11 +34,11 @@ import {
 } from "lucide-react";
 import { PLACEHOLDER_USER } from "../../placeholders";
 import type { ConversationSummary, ProjectSummary } from "../../protocol/types";
-import { formatRelative } from "../format";
-import { MiniMeAvatar } from "../MiniMeAvatar";
-import { SidecarStatusLine, useSidecarStatus } from "../SidecarStatusLine";
-import { UpdateStatusLine } from "../UpdateStatusLine";
-import { useMiniMes } from "../useMiniMes";
+import { formatRelative } from "../../lib/format";
+import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { SidecarStatusLine, useSidecarStatus } from "./SidecarStatusLine";
+import { UpdateStatusLine } from "./UpdateStatusLine";
+import { useMiniMes } from "../../hooks/useMiniMes";
 import type { View } from "./view";
 import { Wordmark } from "./Wordmark";
 

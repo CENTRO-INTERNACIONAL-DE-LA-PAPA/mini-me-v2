@@ -11,16 +11,16 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileIcon, FileTextIcon, ImageIcon, SearchIcon, Table2Icon, UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { api, errorMessage } from "../api";
-import { PLACEHOLDER_USER } from "../placeholders";
-import type { FileEntry, ProjectSummary } from "../protocol/types";
+import { api, errorMessage } from "../../api";
+import { PLACEHOLDER_USER } from "../../placeholders";
+import type { FileEntry, ProjectSummary } from "../../protocol/types";
 import { fileKind, type FileKind } from "./files";
-import { formatRelative, formatSize } from "./format";
+import { formatRelative, formatSize } from "../../lib/format";
 import { FileTile } from "./FileTile";
-import { surfaceStyle } from "./miniMeColors";
-import { MiniMeAvatar } from "./MiniMeAvatar";
-import { SheetPage } from "./shell/Sheet";
-import { useMiniMes } from "./useMiniMes";
+import { surfaceStyle } from "../minime/miniMeColors";
+import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { SheetPage } from "../shell/Sheet";
+import { useMiniMes } from "../../hooks/useMiniMes";
 
 type Tab = "all" | "data" | "document" | "outputs";
 

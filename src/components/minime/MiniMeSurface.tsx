@@ -1,7 +1,7 @@
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cn } from "@/lib/utils";
-import type { MiniMe } from "../protocol/types";
+import type { MiniMe } from "../../protocol/types";
 import { surfaceStyle } from "./miniMeColors";
 
 /**

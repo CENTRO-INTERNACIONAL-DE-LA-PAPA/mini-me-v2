@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { MiniMe, TraitSummary, WorkflowBranch, WorkflowStep } from "../../protocol/types";
-import { MiniMeSurface } from "../MiniMeSurface";
+import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { ToolSheet } from "../shell/Sheet";
 import type { View } from "../shell/view";
 import { toolLabel } from "./tools";

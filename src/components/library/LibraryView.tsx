@@ -5,13 +5,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PlusIcon, SearchIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { api, errorMessage } from "../api";
-import { MINI_ME_GROUPS } from "../protocol/references";
-import type { LibraryView as Library, MiniMe, TraitSummary } from "../protocol/types";
+import { api, errorMessage } from "../../api";
+import { MINI_ME_GROUPS } from "../../protocol/references";
+import type { LibraryView as Library, MiniMe, TraitSummary } from "../../protocol/types";
 import { List, MiniMeCard, Row, TraitIcon } from "./LibraryParts";
-import { MiniMeAvatar } from "./MiniMeAvatar";
-import { SheetPage } from "./shell/Sheet";
-import type { LibraryTab, View } from "./shell/view";
+import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { SheetPage } from "../shell/Sheet";
+import type { LibraryTab, View } from "../shell/view";
 
 /** A group's heading as the `@` list shows it, or the group itself for one it doesn't know. */
 const groupLabel = (group: string) => MINI_ME_GROUPS.find((g) => g.group === group)?.label ?? group;

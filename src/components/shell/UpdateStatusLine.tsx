@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, errorMessage } from "../api";
-import type { UpdateStatus } from "../protocol/types";
+import { api, errorMessage } from "../../api";
+import type { UpdateStatus } from "../../protocol/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { updateLabel } from "./updateLabel";

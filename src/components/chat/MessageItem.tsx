@@ -1,20 +1,20 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { memo, useCallback, useState } from "react";
-import { api, errorMessage } from "../api";
-import type { MessageView } from "../protocol/eventStore";
-import { segments } from "../protocol/references";
-import type { JevAnswers, MiniMe } from "../protocol/types";
-import { formatClock, formatSize } from "./format";
-import { approvalState } from "./interactive/approval";
-import { InteractiveComponent } from "./interactive/InteractiveComponent";
+import { api, errorMessage } from "../../api";
+import type { MessageView } from "../../protocol/eventStore";
+import { segments } from "../../protocol/references";
+import type { JevAnswers, MiniMe } from "../../protocol/types";
+import { formatClock, formatSize } from "../../lib/format";
+import { approvalState } from "../interactive/approval";
+import { InteractiveComponent } from "../interactive/InteractiveComponent";
 import { Markdown } from "./Markdown";
-import { MiniMeAvatar } from "./MiniMeAvatar";
-import { MiniMePill } from "./MiniMePill";
-import { MiniMeSurface } from "./MiniMeSurface";
+import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { MiniMePill } from "../minime/MiniMePill";
+import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { ReferenceChip } from "./ReferenceChip";
 import { TextComponentChip } from "./TextComponentChip";
-import { useMiniMes } from "./useMiniMes";
+import { useMiniMes } from "../../hooks/useMiniMes";
 import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
 
 const STATUS_LABEL: Record<string, string | undefined> = {

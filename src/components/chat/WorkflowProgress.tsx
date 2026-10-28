@@ -2,9 +2,9 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CheckIcon } from "lucide-react";
 import { useState } from "react";
-import type { Component, MessageStatus, MessageStep } from "../protocol/types";
-import { approvalState } from "./interactive/approval";
-import { InteractiveComponent } from "./interactive/InteractiveComponent";
+import type { Component, MessageStatus, MessageStep } from "../../protocol/types";
+import { approvalState } from "../interactive/approval";
+import { InteractiveComponent } from "../interactive/InteractiveComponent";
 import { Markdown } from "./Markdown";
 
 export type StepState = "done" | "running" | "waiting" | "pending";

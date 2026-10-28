@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { MiniMe } from "../protocol/types";
+import type { MiniMe } from "../../protocol/types";
 import { surfaceStyle } from "./miniMeColors";
 import { MiniMeAvatar } from "./MiniMeAvatar";
 

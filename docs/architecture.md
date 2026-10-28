@@ -264,7 +264,7 @@ gets `call_not_active`.
 ## How messages and Mini-Mes are shown
 
 - **Reply text** from a Mini-Me, and an opened Trait Step's output in the progress card, go
-  through `src/components/Markdown.tsx`: `react-markdown` with `remark-gfm` (tables,
+  through `src/components/chat/Markdown.tsx`: `react-markdown` with `remark-gfm` (tables,
   strikethrough, task lists) and `remark-breaks` (a single newline is a line break). A small
   plugin there shows raw HTML as text, images are drawn as links and never loaded, and links
   open in the default browser through `openLink`; only `http`, `https` and `mailto` links are
