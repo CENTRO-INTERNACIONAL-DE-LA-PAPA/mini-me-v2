@@ -34,8 +34,8 @@
 
 ## 6. Docs and checks
 
-- [ ] 6.1 Update README, `docs/using.md` and DESIGN.md's document view notes as built; verify they match the app
-- [ ] 6.2 Run `cd src-tauri && cargo test`, `npm test` and `cd sidecar && uv run pytest`; verify all pass
+- [x] 6.1 Update README, `docs/using.md` and DESIGN.md's document view notes as built; verify they match the app
+- [x] 6.2 Run `cd src-tauri && cargo test`, `npm test` and `cd sidecar && uv run pytest`; verify all pass
 
 ## Workflow follow-up
 

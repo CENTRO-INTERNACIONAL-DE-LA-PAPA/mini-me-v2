@@ -162,7 +162,7 @@ Sheet padding: 32px left, 24–28px top. Tool sheets: 22px top, 18px right, 24px
 
 - **Navigation sheet, 256px.** Wordmark and collapse button; the project block (serif name under a "Project ▾" switcher) or a dashed "No project open" card; Overview and Files; Conversations (serif heading with a + button, then rows); status lines; a bottom card with the Mini-Mes stack (opens the Library) and your initials (open Settings). The selected item is an outlined white row.
 - **Main sheet, flexible.** Conversation, Overview, Files, libraries, editors, Settings and the full report.
-- **Tool sheet, 340–380px.** Outline, Jobs, Workflow steps, Report picker, the Workflow step inspector. Only one at a time; a well-filled close button sits top-right.
+- **Tool sheet, 340–380px.** Outline, Jobs, Workflow steps, Report picker, the Workflow step inspector, a document's Comments. Only one at a time; a well-filled close button sits top-right.
 - **Content widths:** the chat column is 820px, or 680px with a tool sheet open. The composer spans it; the messages sit 20px inside it on each side, centred on it. Settings: a 210px column and content up to 760px, centred together.
 - **Small windows (to build):** when a tool sheet opens below ~1280px, collapse the navigation sheet to avatars and icons so the conversation keeps ≥600px.
 
@@ -229,17 +229,19 @@ Flat table rows with hairlines. The icon tile (`FileTile`) is the maker's `tint`
 - **Trait editor:** form on the left (fields on wells, labels 13/500 `ink-2`), "Used by" on the right with a Mini-Me card per Mini-Me and a note on what saving changes.
 
 ### Popovers, tooltips, menus
-White, 1px `--border`, radius 12, no shadow. Items radius 7; the highlighted item is `--accent`, never black.
+White, 1px `--border`, radius 12, no shadow. Items radius 7; the highlighted item is `--accent`, never black. A confirmation is a popover under its button, aligned to its right edge: the question, then a ghost Keep holding the focus and a destructive Delete. A popover that reports a result, such as Export PDF's, holds one solid button to act on it.
 
 ### Documents
 - **Report panel** (tool sheet, from the Conversation's Report option): "Report · Choose how to start". **Draft from this conversation** is an outlined `Card` with the avatars of the Mini-Mes it draws from and a solid "Draft report" button (not the design file's ink ring, which breaks the one-outline rule for cards); **Start blank** is an outlined `Card` row with a 34px `--muted` icon tile, its border darkening on hover; **Open from Files** lists documents, most recently edited first, each with a `FileTile` in the colours of the Mini-Me whose reply it is attached to.
-- **Document view** (main sheet, full width, no tool sheet): the editors' `EditorHeader` without an identity tile (back link naming where it was opened from, the serif title from the YAML header, the status line "Draft · Project · edited …"), with a secondary Outline menu, Render and Export PDF on the right. Below a hairline, the source and the preview, always side by side.
+- **Document view** (main sheet, full width): the editors' `EditorHeader` without an identity tile (back link naming where it was opened from, the serif title from the YAML header, the status line "Draft · Project · edited …"), with Comments (solid while its sheet is shown), Render and Export PDF on the right. Below a hairline, the source and the preview, always side by side. Export PDF says where the PDF went in a popover under it, with an Open button.
 - **Source:** ghost formatting buttons (bold, italic, heading 1, heading 2, quote, bulleted list) in the bar; below it, on `--muted`, the CodeMirror editor as a white outlined page filling the pane's width inside 24px margins, growing with its text while the pane scrolls: monospace `text-ui`, `--document-ink`, Markdown highlighted in theme colours (headings in ink and semibold, marks and code muted).
 - **Bar:** one white bar (44px) across both panes, with no divider: the formatting buttons on the left and, on the right, the preview's error when rendering fails. The divider between the panes starts below it.
 - **Preview:** on `--muted`, the pages as white outlined sheets, at most 640px wide.
+- **Comments** (tool sheet beside the main sheet, "N open · M resolved" under its title): Open / Resolved tabs with counts, then rows like the Outline's: a number badge (5px radius, ink outline, semibold meta), the section in meta, the passage on one line and the time; detached threads last under a "Detached" heading. A thread replaces the list: "‹ All comments" with "N of M open" and up/down buttons; the badge with the section as a serif heading; "Opened by you · time" with `mini-me` Resolve or Reopen and Delete; the messages in their compact form; and the one-line composer pinned to the bottom.
+- **Passages in the source:** an open thread's passage has a `--border-strong` underline and the same number badge right after it; the selected thread's passage fills with `--accent`. A pending suggestion strikes the passage through and follows it with the suggested text in the Mini-Me's `ink`, underlined 2px in its `solid`.
+- **Suggestion component:** in the Mini-Me's reply, a white outlined card with "Suggested edit" in meta and the text; while it waits, small solid "Accept and resolve", outline "Try again" and ghost "Discard" buttons, with a conflict in `--destructive` meta above them. Once answered, the meta reads "Suggested edit · Accepted", "Discarded" or "Dismissed" and the buttons go.
 - **Drafting:** above the source page, a white outlined status card with Scribe's avatar, "Scribe is drafting…" and an outline Stop button; the source fills as text arrives and can be edited once the draft ends.
 - **Document component:** in a reply, an outlined card with a tint icon tile, the title, "Document · Quarto" and a `mini-me` Open button.
-- **To build (Roadmap #21):** a comments column (280px on `--muted`), Mini-Me text highlighted in its `tint`, and comment threads anchored to passages.
 
 ---
 
