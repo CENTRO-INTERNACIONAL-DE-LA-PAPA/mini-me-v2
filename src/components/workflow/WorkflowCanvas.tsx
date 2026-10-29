@@ -323,9 +323,10 @@ function StepCard({
       data-selected={selectedId === step.id || undefined}
     >
       <Ends />
-      <span className="grid size-8 shrink-0 place-items-center rounded-control bg-muted text-foreground group-data-selected/step:bg-tint group-data-selected/step:text-(--mm-ink,var(--foreground))">
-        <Icon className="size-4" />
-      </span>
+      <Icon
+        aria-hidden
+        className="size-4 shrink-0 text-foreground group-data-selected/step:text-(--mm-ink,var(--foreground))"
+      />
       <span className="grid min-w-0 gap-px">
         <span className="truncate text-ui font-semibold">{name}</span>
         <span className="truncate text-meta text-muted-foreground">{meta}</span>

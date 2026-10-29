@@ -3,9 +3,9 @@ import { cn } from "@/lib/utils";
 import type { MiniMe } from "../../protocol/types";
 import { surfaceStyle } from "../minime/miniMeColors";
 
-/** A file's or output's icon tile: in the tint of the Mini-Me that made it, with its ink
- * icon, or neutral for your own. */
-export function FileTile({
+/** A file's or output's icon: in the ink of the Mini-Me that made it, or neutral for your
+ * own. */
+export function FileMark({
   miniMe,
   icon: Icon,
   size = "sm",
@@ -16,15 +16,10 @@ export function FileTile({
   size?: "sm" | "lg";
 }) {
   return (
-    <span
+    <Icon
       aria-hidden
       style={surfaceStyle(miniMe?.colors)}
-      className={cn(
-        "flex shrink-0 items-center justify-center bg-tint text-(--mm-ink,var(--ink-2))",
-        size === "sm" ? "size-8 rounded-lg" : "size-[42px] rounded-well",
-      )}
-    >
-      <Icon className={size === "sm" ? "size-4" : "size-5"} />
-    </span>
+      className={cn("shrink-0 text-(--mm-ink,var(--ink-2))", size === "sm" ? "size-4" : "size-5")}
+    />
   );
 }

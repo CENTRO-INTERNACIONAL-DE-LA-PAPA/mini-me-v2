@@ -17,7 +17,7 @@ import { initials } from "../../lib/names";
 import type { FileEntry, ProjectSummary } from "../../protocol/types";
 import { fileKind, isDocument, type FileKind } from "./files";
 import { formatRelative, formatSize } from "../../lib/format";
-import { FileTile } from "./FileTile";
+import { FileMark } from "./FileMark";
 import { surfaceStyle } from "../minime/miniMeColors";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { SheetPage } from "../shell/Sheet";
@@ -200,7 +200,7 @@ function FileRow({
     <TableRow className="cursor-pointer" onClick={onOpen}>
       <TableCell className="max-w-80">
         <span className="flex items-center gap-3">
-          <FileTile miniMe={miniMe} icon={Icon} />
+          <FileMark miniMe={miniMe} icon={Icon} />
           <span className="truncate font-medium">{entry.name}</span>
         </span>
       </TableCell>

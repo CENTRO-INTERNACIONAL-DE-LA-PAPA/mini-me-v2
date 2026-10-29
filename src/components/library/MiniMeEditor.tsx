@@ -138,7 +138,6 @@ export function MiniMeEditor({
         <EditorHeader
           title={draft.name || "New Mini-Me"}
           icon={<Avatar {...draft.avatar} color={draft.colors} size={48} />}
-          miniMe={draft}
           subtitle={draft.description}
           back="Mini-Mes"
           tabs={

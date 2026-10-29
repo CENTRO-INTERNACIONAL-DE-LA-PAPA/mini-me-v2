@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "../../api";
 import type { MiniMe, Overview, OverviewOutput, ProjectSummary } from "../../protocol/types";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
-import { FileTile } from "../files/FileTile";
+import { FileMark } from "../files/FileMark";
 import { MiniMePill } from "../minime/MiniMePill";
 import { SheetPage, SheetSection } from "../shell/Sheet";
 import { headerLine, relativeInSentence, shownOutputs } from "./overview";
@@ -205,7 +205,7 @@ function OutputRow({
       onClick={onOpen}
       className="h-auto w-full justify-start gap-2.5 rounded-xl px-1.5 py-2 text-left font-normal text-foreground"
     >
-      <FileTile miniMe={miniMe} icon={Icon} />
+      <FileMark miniMe={miniMe} icon={Icon} />
       <span className="grid min-w-0 flex-1">
         <span className="truncate text-ui">{output.title}</span>
         <span className="truncate text-meta text-muted-foreground">

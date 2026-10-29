@@ -49,7 +49,7 @@ pointing a new token at the palette, never by adding a value.
 |---|---|---|
 | `--white` | `#FFFFFF` | `--background`, `--card`, `--popover`: sheets, tool sheets, popovers, composer, selected tab pill and sidebar row |
 | `--fill-soft` | `#FAFAF8` | `--bubble`: your message bubble |
-| `--fill` | `#F4F4F1` | `--muted`, `--well`, `--accent`, `--secondary`, `--sidebar`: neutral cards, icon tiles, the Workflow board, tab-switch tracks, inputs, secondary buttons, hover on white, the navigation sheet |
+| `--fill` | `#F4F4F1` | `--muted`, `--well`, `--accent`, `--secondary`, `--sidebar`: neutral cards, the Workflow board, tab-switch tracks, inputs, secondary buttons, hover on white, the navigation sheet |
 | `--fill-strong` | `#ECECE8` | `--well-hover`, `--sidebar-accent`: hover on a fill |
 | `--desk` | `#E9E9E5` | Window background behind all sheets |
 | `--line` | `#E7E7E4` | `--border`, `--input`: every outline, on white things on white |
@@ -69,7 +69,7 @@ Each Mini-Me stores three colours; the UI derives two more.
 
 | Role | Stored? | Use |
 |---|---|---|
-| `tint` | stored | Avatar background, chips and name tags, icon tiles for files it made, report highlights |
+| `tint` | stored | Avatar background, chips and name tags, report highlights |
 | `solid` | stored | Avatar body, chart series, spinners |
 | `ink` | stored | Text and icons on its surfaces, progress fill, send button when addressed (≥4.5:1 on wash and tint) |
 | `wash` | derived | Very light background of its cards: replies, tasks, jobs, library cards |
@@ -131,11 +131,11 @@ Use the theme's text tokens, never arbitrary pixel sizes. New tokens must also b
 | Token | Value | Use |
 |---|---|---|
 | desk gap | 12px | Around and between sheets |
-| `rounded-sheet` | 18px | Sheets, library cards, identity tiles |
+| `rounded-sheet` | 18px | Sheets, library cards |
 | `rounded-card` | 16px | Cards: replies, tasks, jobs, project cards, the Workflow board |
 | `rounded-2xl` | 14px | Provider rows, Workflow nodes, inspector cards |
-| `rounded-well` | 12px | Tab-switch track, inputs, search fields, popovers, 42px icon tiles |
-| `rounded-control` | 9px | Tab-switch pill, icon buttons, small icon tiles |
+| `rounded-well` | 12px | Tab-switch track, inputs, search fields, popovers |
+| `rounded-control` | 9px | Tab-switch pill, icon buttons |
 | `rounded-full` | 999px | Buttons, chips, name tags, Workflow start/end and marker pills |
 | `rounded-composer` | 20px | Floating composer |
 | bubble | `14 14 4 14` | Your messages |
@@ -215,14 +215,14 @@ Input, Textarea and Select: `--well` fill, no visible border, radius 12, 13.5px;
 
 ### Libraries
 - Mini-Mes: cards (`MiniMeCard`) in a grid, `rounded-sheet`, 56px avatar, "Built-in"/"Yours" tag, serif `text-card-title` name, description, "N Traits · Open →" in `ink`. Built-in cards are Mini-Me cards; yours are neutral.
-- Traits: flat rows divided by hairlines; 42px `--muted` icon tile, name, description, overlapping avatars of the Mini-Mes that use it.
+- Traits: flat rows divided by hairlines; the puzzle icon in `ink-2`, name, description, overlapping avatars of the Mini-Mes that use it.
 - Header: title and description on the left; the Mini-Mes / Traits tab switch and the New button on the right. Group filter and search below.
 
 ### Files
-Flat table rows with hairlines. The icon tile (`FileTile`) is the maker's `tint` with an `ink` icon, or neutral for your files. "Added by" shows avatar + name in `ink`. Filter tab switch, search on the right.
+Flat table rows with hairlines. The icon (`FileMark`) is in the maker's `ink`, or `ink-2` for your files, with no tile. "Added by" shows avatar + name in `ink`. Filter tab switch, search on the right.
 
 ### Editors
-- **Identity header** (`EditorHeader`): a back link, a 64px tile (the Mini-Me's tint, or neutral for a Trait), the serif `text-identity` name and a line under it, then the tab switch and actions on the right.
+- **Identity header** (`EditorHeader`): a back link, the Mini-Me's 48px avatar or a Trait's puzzle icon with no tile, the serif `text-identity` name and a line under it, then the tab switch and actions on the right.
 - **Mini-Me editor:** Workflow / Traits / Appearance tabs. The Workflow board is a neutral card with the dot grid; the step palette floats top-left as a white card; the inspector is a tool sheet that opens when a Step is selected.
 - **Trait editor:** form on the left (fields on wells, labels 13/500 `ink-2`), "Used by" on the right with a Mini-Me card per Mini-Me and a note on what saving changes.
 
@@ -230,8 +230,8 @@ Flat table rows with hairlines. The icon tile (`FileTile`) is the maker's `tint`
 White, 1px `--border`, radius 12, no shadow. Items radius 7; the highlighted item is `--accent`, never black. A confirmation is a popover under its button, aligned to its right edge: the question, then a ghost Keep holding the focus and a destructive Delete. A popover that reports a result, such as Export PDF's, holds one solid button to act on it.
 
 ### Documents
-- **Report panel** (tool sheet, from the Conversation's Report option): "Report · Choose how to start". **Draft from this conversation** is a `Card` with the avatars of the Mini-Mes it draws from and a solid "Draft report" button (not the design file's ink ring, which breaks the one-outline rule for cards); **Start blank** is an outlined `Card` row with a 34px `--muted` icon tile, its border darkening on hover; **Open from Files** lists documents, most recently edited first, each with a `FileTile` in the colours of the Mini-Me whose reply it is attached to.
-- **Document view** (main sheet, full width): the editors' `EditorHeader` without an identity tile (back link naming where it was opened from, the serif title from the YAML header, the status line "Draft · Project · edited …"), with Comments (solid while its sheet is shown), Render and Export PDF on the right. Below a hairline, the source and the preview, always side by side. Export PDF says where the PDF went in a popover under it, with an Open button.
+- **Report panel** (tool sheet, from the Conversation's Report option): "Report · Choose how to start". **Draft from this conversation** is a `Card` with the avatars of the Mini-Mes it draws from and a solid "Draft report" button (not the design file's ink ring, which breaks the one-outline rule for cards); **Start blank** is a `Card` row with a plain icon, its fill darkening on hover; **Open from Files** lists documents, most recently edited first, each with a `FileTile` in the colours of the Mini-Me whose reply it is attached to.
+- **Document view** (main sheet, full width): the editors' `EditorHeader` without an avatar or icon (back link naming where it was opened from, the serif title from the YAML header, the status line "Draft · Project · edited …"), with Comments (solid while its sheet is shown), Render and Export PDF on the right. Below a hairline, the source and the preview, always side by side. Export PDF says where the PDF went in a popover under it, with an Open button.
 - **Source:** ghost formatting buttons (bold, italic, heading 1, heading 2, quote, bulleted list) in the bar; below it, on `--muted`, the CodeMirror editor as a white page filling the pane's width inside 24px margins, growing with its text while the pane scrolls: monospace `text-ui`, `--document-ink`, Markdown highlighted in theme colours (headings in ink and semibold, marks and code muted).
 - **Bar:** one white bar (44px) across both panes, with no divider: the formatting buttons on the left and, on the right, the preview's error when rendering fails. The divider between the panes starts below it.
 - **Preview:** on `--muted`, the pages as white sheets, at most 640px wide.
@@ -239,7 +239,7 @@ White, 1px `--border`, radius 12, no shadow. Items radius 7; the highlighted ite
 - **Passages in the source:** an open thread's passage has a `--border-strong` underline and the same number badge right after it; the selected thread's passage fills with `--accent`. A pending suggestion strikes the passage through and follows it with the suggested text in the Mini-Me's `ink`, underlined 2px in its `solid`.
 - **Suggestion component:** in the Mini-Me's reply, a white outlined card with "Suggested edit" in meta and the text; while it waits, small solid "Accept and resolve" and ghost "Discard" buttons, with a conflict in `--destructive` meta above them. Once answered, the meta reads "Suggested edit · Accepted", "Discarded" or "Dismissed" and the buttons go.
 - **Drafting:** above the source page, a white status card with Scribe's avatar, "Scribe is drafting…" and an outline Stop button; the source fills as text arrives and can be edited once the draft ends.
-- **Document component:** in a reply, a white card with a tint icon tile, the title, "Document · Quarto" and a `mini-me` Open button.
+- **Document component:** in a reply, a white card with the document icon in the Mini-Me's `ink`, the title, "Document · Quarto" and a `mini-me` Open button.
 - **Document edits component:** the document component's card, with "2 of 3 suggested edits waiting" (or "All 3 suggested edits answered") in place of "Document · Quarto"; Open shows the document with its Comments.
 
 ---
@@ -255,10 +255,10 @@ Lucide, outlined, stroke 1.4 (set globally), 15–18px. Colour `--muted-foregrou
 ### Mini-Me avatars (solid style)
 A flat potato in the Mini-Me's **solid** colour. No outline, no background disc. Features are near-black; freckles use the Mini-Me's **ink**. Built from base, face and accessory parts plus a colour family. Never redraw avatars by hand.
 
-Sizes: 16 (inline chip), 18–22 (stacks, Workflow start/end, Files), 24 (name tags), 28 (reply header), 40 (Waiting on you), 48–56 (editor tile, library card). Stacks overlap by about a third.
+Sizes: 16 (inline chip), 18–22 (stacks, Workflow start/end, Files), 24 (name tags), 28 (reply header), 40 (Waiting on you), 48 (editor header), 56 (library card). Stacks overlap by about a third.
 
 ### Trait icons
-Plain line icons in ink, no fill, no colour, no potato silhouette (a potato always means a Mini-Me), on a neutral tile.
+Plain line icons in ink, no fill, no colour, no potato silhouette (a potato always means a Mini-Me). Icons stand on their own: never on a filled or tinted tile.
 
 No emoji in the UI chrome. Emoji are allowed only as user reactions.
 
