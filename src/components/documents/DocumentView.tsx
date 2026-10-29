@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -93,8 +94,10 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
   const [drafting, setDrafting] = useState(Boolean(draftFrom));
   const [exported, setExported] = useState<AssetRef | null>(null);
   const [exporting, setExporting] = useState(false);
+  // Whether the saved PDF's popover is open, apart from `exported`, so the PDF's name stays
+  // while the popover fades out.
+  const [showExported, setShowExported] = useState(false);
   const [pages, setPages] = useState<string[]>([]);
-  const [rendered, setRendered] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [showComments, setShowComments] = useState(false);
@@ -156,7 +159,6 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
     setRendering(true);
     try {
       setPages(await api.previewDocument(source));
-      setRendered(source);
       setPreviewError(null);
     } catch (e) {
       setPreviewError(errorMessage(e));
@@ -400,6 +402,7 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
     setExported(null);
     try {
       setExported(await api.exportDocumentPdf(projectId, assetId));
+      setShowExported(true);
       setError(null);
     } catch (e) {
       setError(`The PDF was not made: ${errorMessage(e)}`);
@@ -416,7 +419,6 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
   };
 
   const title = headerField(text, "title") || "Untitled document";
-  const stale = rendered !== null && rendered !== text;
   const subtitle = [
     "Draft",
     projectName,
@@ -452,28 +454,37 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
                   <RefreshCwIcon />
                   {rendering ? "Rendering…" : "Render"}
                 </Button>
-                <Button variant="secondary" onClick={exportPdf} disabled={drafting || exporting}>
-                  <FileDownIcon />
-                  {exporting ? "Exporting…" : "Export PDF"}
-                </Button>
+                {/* Says where the PDF went once it is made; clicking outside closes it. */}
+                <Popover
+                  open={showExported}
+                  onOpenChange={(open) => !open && setShowExported(false)}
+                >
+                  <PopoverTrigger
+                    render={<Button variant="secondary" disabled={drafting || exporting} />}
+                    onClick={exportPdf}
+                  >
+                    <FileDownIcon />
+                    {exporting ? "Exporting…" : "Export PDF"}
+                  </PopoverTrigger>
+                  <PopoverContent align="end">
+                    <p>Saved {exported?.name} to Files.</p>
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={() => {
+                          setShowExported(false);
+                          if (exported) void api.openAsset(projectId, exported.id).catch(() => {});
+                        }}
+                      >
+                        Open
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </>
             }
             problems={error}
             onBack={onClose}
           />
-          {exported && (
-            <p className="flex items-center gap-2 px-8 pt-3 text-meta text-muted-foreground">
-              Saved {exported.name} to Files.
-              <Button
-                variant="link"
-                size="sm"
-                className="text-meta"
-                onClick={() => void api.openAsset(projectId, exported.id).catch(() => {})}
-              >
-                Open
-              </Button>
-            </p>
-          )}
           <div className={BAR}>
             <SourceButton
               label="Bold"
@@ -525,9 +536,9 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
             >
               <MessageSquarePlusIcon />
             </SourceButton>
-            <span className="ml-auto text-meta text-muted-foreground">
-              {previewError ?? (stale ? "The preview is out of date: Render to update it." : "")}
-            </span>
+            {previewError && (
+              <span className="ml-auto text-meta text-muted-foreground">{previewError}</span>
+            )}
           </div>
           <div className="grid min-h-0 flex-1 grid-cols-2">
             <section
