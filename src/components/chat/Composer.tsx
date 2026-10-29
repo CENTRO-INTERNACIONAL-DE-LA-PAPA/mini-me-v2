@@ -50,6 +50,9 @@ interface Props {
   components: ComponentName[];
   /** A tool sheet is open beside the Conversation, so the chat column is narrower. */
   narrow?: boolean;
+  /** In a comment thread's card: placed in the card instead of floating over the sheet, and a
+   * comment without an @-mention is a note. */
+  thread?: boolean;
   ref?: Ref<ComposerHandle>;
 }
 
@@ -112,6 +115,7 @@ export function Composer({
   onSent,
   components,
   narrow = false,
+  thread = false,
   ref,
 }: Props) {
   const [attachments, setAttachments] = useState<AssetRef[]>([]);
@@ -134,7 +138,11 @@ export function Composer({
       Text,
       HardBreak,
       UndoRedo,
-      Placeholder.configure({ placeholder: "Ask a Mini-Me, or type @ to choose one…" }),
+      Placeholder.configure({
+        placeholder: thread
+          ? "Comment, or type @ to ask a Mini-Me…"
+          : "Ask a Mini-Me, or type @ to choose one…",
+      }),
       ReferenceNode.configure({
         suggestions: SIGNS.map(([char, kind]) => suggestion(char, kind)),
       }),
@@ -334,9 +342,13 @@ export function Composer({
   }
 
   return (
-    // Floats over the bottom of the Conversation sheet, centred on the chat column.
+    // In a Conversation it floats over the bottom of the sheet, centred on the chat column; in a
+    // comment thread's card it sits in place.
     <div
-      className={cn("absolute inset-x-0 bottom-[22px] z-20", chatColumn(narrow, "composer"))}
+      className={cn(
+        thread ? "relative" : "absolute inset-x-0 bottom-[22px] z-20",
+        !thread && chatColumn(narrow, "composer"),
+      )}
     >
       {suggestions.length > 0 && (
         <div
@@ -423,7 +435,7 @@ export function Composer({
                 Asking <MiniMePill miniMe={asked}>{asked.name}</MiniMePill>
               </span>
             ) : (
-              "Auto-pick Mini-Me"
+              thread ? "Note" : "Auto-pick Mini-Me"
             )}
           </span>
           {replying ? (
