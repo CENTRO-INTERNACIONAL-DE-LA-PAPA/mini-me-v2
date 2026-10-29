@@ -175,7 +175,7 @@ export function JobsPanel({
 }
 
 const REPLY_STATE: Record<string, string> = {
-  streaming: "Running",
+  streaming: "Running…",
   paused: "Waiting for your approval",
   complete: "Done",
   failed: "Failed",

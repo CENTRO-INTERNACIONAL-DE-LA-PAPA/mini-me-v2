@@ -401,22 +401,14 @@ function EndPill({ text }: { text: string }) {
   );
 }
 
-function MarkerNode({ data }: NodeProps<LayoutNode>) {
+/** A control Step's pill: a loop, or the start of a condition's or parallel Step's branches. */
+function ControlNode({ data }: NodeProps<LayoutNode>) {
   const step = data.step!;
-  const Icon = step.type === "parallel" ? SplitIcon : GitForkIcon;
+  const Icon =
+    step.type === "loop" ? RepeatIcon : step.type === "parallel" ? SplitIcon : GitForkIcon;
   return (
     <Pill step={step}>
       <Icon className="size-3.5 shrink-0" strokeWidth={1.4} />
-      <span className="truncate">{pillText(step)}</span>
-    </Pill>
-  );
-}
-
-function LoopNode({ data }: NodeProps<LayoutNode>) {
-  const step = data.step!;
-  return (
-    <Pill step={step}>
-      <RepeatIcon className="size-3.5 shrink-0" strokeWidth={1.4} />
       <span className="truncate">{pillText(step)}</span>
     </Pill>
   );
@@ -464,8 +456,8 @@ const NODE_TYPES = {
   end: () => <EndPill text="Reply in conversation" />,
   trait: TraitNode,
   approval: ApprovalNode,
-  marker: MarkerNode,
-  loop: LoopNode,
+  marker: ControlNode,
+  loop: ControlNode,
   frame: FrameNode,
   join: JoinNode,
   slot: SlotNode,

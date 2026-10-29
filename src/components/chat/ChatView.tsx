@@ -305,7 +305,7 @@ export function ChatView({
 }
 
 const TAG_STATUS: Record<string, string | undefined> = {
-  streaming: "Replying",
+  streaming: "Replying…",
   paused: "Waiting for you",
 };
 
