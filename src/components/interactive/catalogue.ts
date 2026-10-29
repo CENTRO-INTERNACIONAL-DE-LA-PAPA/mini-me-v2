@@ -4,6 +4,7 @@ import * as approval from "./approval";
 import * as chart from "./chart";
 import * as document from "./document";
 import * as paperSources from "./paper-sources";
+import * as suggestion from "./suggestion";
 import * as table from "./table";
 import * as theories from "./theories";
 
@@ -38,6 +39,7 @@ export const catalogue = new Map<string, Renderers>([
   ["approval", approval.renderers],
   ["chart", chart.renderers],
   ["document", document.renderers],
+  ["suggestion", suggestion.renderers],
 ]);
 
 /** The renderer for a kind and version, or null when this version of the app has none. */

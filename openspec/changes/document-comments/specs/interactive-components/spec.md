@@ -29,8 +29,8 @@ database.
 ### Requirement: Suggestion component
 A `suggestion` component (version 1) SHALL hold `{ document_id, base, text }`: the document, the
 passage text the suggestion is based on, and the suggested text. In a thread's messages it SHALL
-show the suggested text and, once answered, its decision: accepted, rejected or dismissed. A
-pending one SHALL be shown first in the thread view instead, as the comment threads describe.
+show the suggested text with "Accept and resolve", "Try again" and Discard while it waits, as
+the comment threads describe, and once answered its decision: accepted, discarded or dismissed.
 Its `text` for history SHALL be the suggested text.
 
 #### Scenario: Answered suggestion

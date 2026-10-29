@@ -214,7 +214,7 @@ pub fn accept_suggestion(
     let merged = merge(base, &ours, theirs).ok_or_else(|| {
         AppError::new(
             "suggestion_conflict",
-            "You've changed the same words since this was suggested. Ask again, or dismiss it.",
+            "You've changed the same words since this was suggested. Try again, or discard it.",
         )
     })?;
 

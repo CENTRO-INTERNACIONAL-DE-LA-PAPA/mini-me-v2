@@ -67,7 +67,7 @@ Clicking a row SHALL open the thread view.
 The thread view SHALL replace the list in the Comments sheet, with "All comments" to go back,
 "N of M open" with buttons for the previous and next thread, the thread's number and where its
 passage is ("Hypothesis, bullet 3"), who opened it and when with Resolve (Reopen once resolved)
-and Delete, its pending suggestion first, its comments and replies, and for an
+and Delete, its comments and replies, and for an
 open thread a one-line field to comment with the @ list of Mini-Mes. The field SHALL start
 empty, so a comment is a note unless the user @-mentions a Mini-Me.
 
@@ -122,18 +122,18 @@ read-a-file tool during the run. Nothing outside the Project SHALL be read.
 A Mini-Me answering a comment SHALL be able to suggest replacement text for the thread's
 passage with the suggest-an-edit tool. While a suggestion waits, the source SHALL show the
 passage struck through with the suggested text after it, underlined in the Mini-Me's colour, and
-the thread view SHALL show it first, in the Mini-Me's colour, with "Accept and resolve", "Try
-again" and Discard. Once answered, its text SHALL look like any other text, and the thread's
+the Mini-Me's reply in the thread view SHALL show it with "Accept and resolve", "Try again" and
+Discard. Once answered, its text SHALL look like any other text, and the thread's
 messages SHALL show it with its decision.
 
 #### Scenario: A pending suggestion
 - **WHEN** Scribe suggests "Yield fell above 3,800 m."
 - **THEN** the source shows the passage struck through and "Yield fell above 3,800 m." after it in
-  Scribe's colour, and the thread view shows the suggestion first with its three buttons
+  Scribe's colour, and Scribe's reply in the thread shows the suggestion with its three buttons
 
 #### Scenario: Discarding
 - **WHEN** the user clicks Discard
-- **THEN** the source is unchanged, the marks disappear, and the suggestion shows as rejected
+- **THEN** the source is unchanged, the marks disappear, and the suggestion shows as discarded
 
 ### Requirement: Accepting a suggestion
 "Accept and resolve" SHALL save the document with the suggestion applied, record the suggestion

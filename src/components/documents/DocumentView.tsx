@@ -33,7 +33,7 @@ import {
   type Placement,
 } from "./anchors";
 import { CommentsSheet, threadsInOrder } from "./CommentsSheet";
-import { setHighlighted, threadAt, threadHighlights } from "./highlights";
+import { setHighlighted, threadAt, threadHighlights, type Suggested } from "./highlights";
 import { headerField } from "./qmd";
 import { blockPrefix, wrapSelection } from "./sourceEdits";
 
@@ -83,9 +83,9 @@ const theme = EditorView.theme({
 });
 
 /** A document across the whole main sheet: its Quarto source, edited and saved as the user
- * types, beside either a preview rendered by the same engine as the PDF export or the comment
- * threads on its passages. A document being drafted fills as Scribe writes and can be edited
- * once the draft ends. */
+ * types, beside a preview rendered by the same engine as the PDF export, with the comment
+ * threads on its passages in a sheet of their own. A document being drafted fills as Scribe
+ * writes and can be edited once the draft ends. */
 export function DocumentView({ projectId, projectName, assetId, back, draftFrom, onClose }: Props) {
   const [text, setText] = useState("");
   const [editedAt, setEditedAt] = useState<number | null>(null);
@@ -102,7 +102,8 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
   const [placements, setPlacementsShown] = useState<ReadonlyMap<Uuid, Placement>>(new Map());
   const [selected, setSelected] = useState<Uuid | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
-  const scribe = useMiniMes().find((m) => m.name === "Scribe");
+  const miniMes = useMiniMes();
+  const scribe = miniMes.find((m) => m.name === "Scribe");
 
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -134,11 +135,16 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
   const saveRef = useRef(save);
   saveRef.current = save;
 
-  const replace = (next: string) => {
+  /** Shows `next` as the source without saving it, with the threads' `placements` in it when
+   * given. */
+  const replace = (next: string, placements?: Map<Uuid, Placement>) => {
     const editor = view.current;
     if (!editor) return;
     loading.current = true;
-    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: next } });
+    editor.dispatch({
+      changes: { from: 0, to: editor.state.doc.length, insert: next },
+      effects: placements ? setPlacements.of(placements) : [],
+    });
     loading.current = false;
     setText(next);
   };
@@ -274,14 +280,22 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
     };
   }, [projectId, assetId, draftFrom, render]);
 
-  // The source shows the open threads with their numbers, and the selected one's passage
-  // highlighted.
+  // The source shows the open threads with their numbers and pending suggestions, and the
+  // selected one's passage highlighted.
   useEffect(() => {
     const open = threadsInOrder(threads, placements, false);
     const visible = new Set(open.map((t) => t.conversation_id));
     const numbers = new Map(open.map((t, index) => [t.conversation_id, index + 1]));
-    view.current?.dispatch({ effects: setHighlighted.of({ visible, selected, numbers }) });
-  }, [threads, placements, selected]);
+    const suggestions = new Map<Uuid, Suggested>();
+    for (const { conversation_id, pending } of open) {
+      if (!pending) continue;
+      const colors = miniMes.find((m) => m.id === pending.author.id)?.colors;
+      suggestions.set(conversation_id, { text: pending.text, colors });
+    }
+    view.current?.dispatch({
+      effects: setHighlighted.of({ visible, selected, numbers, suggestions }),
+    });
+  }, [threads, placements, selected, miniMes]);
 
   // A thread left before its first comment was never used, so it goes.
   const previous = useRef<Uuid | null>(null);
@@ -329,6 +343,17 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
     } catch (e) {
       setError(errorMessage(e));
     }
+  }
+
+  /** Accepts the suggestion `componentId` of `messageId` into the saved document, shows the
+   * merged text with every thread moved to fit, and resolves the thread `id`. */
+  async function accept(id: Uuid, messageId: Uuid, componentId: Uuid) {
+    // Saved first, so the merge starts from the text the user sees.
+    if (!(await save())) throw new Error("The document could not be saved.");
+    const accepted = await api.acceptSuggestion(projectId, messageId, componentId);
+    replace(accepted.text, placeThreads(accepted.text, accepted.threads));
+    setThreads(accepted.threads);
+    await resolve(id, true);
   }
 
   async function remove(id: Uuid) {
@@ -554,6 +579,7 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
           onResolve={(id, resolved) => void resolve(id, resolved)}
           // Cleared after the delete, so the thread is no longer there to be left empty.
           onDelete={(id) => void remove(id).then(() => setSelected(null))}
+          onAccept={accept}
         />
       )}
     </>

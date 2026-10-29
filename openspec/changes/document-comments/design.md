@@ -128,7 +128,8 @@ the Conversation's tool panels do. Its list draws rows from what `list_threads` 
 and pending suggestion), so it holds no subscription per thread; a thread left with no comments
 is deleted. Opening a thread swaps the list
 for the thread view, the only place that subscribes to a thread's events: it lists the messages
-with `MessageItem`, pins the pending suggestion first, and takes comments with the one-line
+with `MessageItem`, whose `suggestion` renderer takes the answers through a context the thread
+view provides (accepting needs the open editor), and takes comments with the one-line
 `Composer`. Where a passage sits ("Hypothesis, bullet 3") is worked out in the UI from the
 headings and list items above it in the source. The number badges are CodeMirror widgets right
 after each passage, numbered as the Open list orders the threads; a pending suggestion is a

@@ -11,11 +11,12 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "../../api";
 import { formatClock } from "../../lib/format";
-import type { CommentThread, Uuid } from "../../protocol/types";
+import type { CommentThread, Component, Message, Uuid } from "../../protocol/types";
 import { Composer } from "../chat/Composer";
 import { MessageItem } from "../chat/MessageItem";
 import { useConversation } from "../chat/useConversation";
 import { componentNames } from "../interactive/component-names";
+import { ThreadSuggestionsProvider } from "../interactive/suggestion";
 import { DeleteButton } from "../library/LibraryParts";
 import { ToolSheet } from "../shell/Sheet";
 import type { Placement } from "./anchors";
@@ -37,6 +38,9 @@ interface Props {
   onActivity: () => void;
   onResolve: (id: Uuid, resolved: boolean) => void;
   onDelete: (id: Uuid) => void;
+  /** Accepts a thread's suggestion into the document and resolves the thread; rejects with
+   * why it could not. */
+  onAccept: (id: Uuid, messageId: Uuid, componentId: Uuid) => Promise<void>;
 }
 
 /** The document's comment threads beside it, as a tool sheet: a list under Open and Resolved
@@ -52,6 +56,7 @@ export function CommentsSheet({
   onActivity,
   onResolve,
   onDelete,
+  onAccept,
 }: Props) {
   const [tab, setTab] = useState<Tab>("open");
   const lists: Record<Tab, CommentThread[]> = {
@@ -87,6 +92,9 @@ export function CommentsSheet({
           onActivity={onActivity}
           onResolve={(resolved) => onResolve(thread.conversation_id, resolved)}
           onDelete={() => onDelete(thread.conversation_id)}
+          onAccept={(messageId, componentId) =>
+            onAccept(thread.conversation_id, messageId, componentId)
+          }
         />
       </ToolSheet>
     );
@@ -174,8 +182,8 @@ function NumberBadge({ number }: { number: number }) {
   );
 }
 
-/** One thread in full: where it is, its messages, and a field to reply, with ways to move to the
- * previous or next thread and back to the list. */
+/** One thread in full: where it is, its messages with any suggestions, and a field to reply,
+ * with ways to move to the previous or next thread and back to the list. */
 function ThreadView({
   projectId,
   thread,
@@ -189,6 +197,7 @@ function ThreadView({
   onActivity,
   onResolve,
   onDelete,
+  onAccept,
 }: {
   projectId: Uuid;
   thread: CommentThread;
@@ -202,26 +211,32 @@ function ThreadView({
   onActivity: () => void;
   onResolve: (resolved: boolean) => void;
   onDelete: () => void;
+  onAccept: (messageId: Uuid, componentId: Uuid) => Promise<void>;
 }) {
   const { state, error } = useConversation(projectId, thread.conversation_id);
   const names = useMemo(() => componentNames(state.messages), [state.messages]);
   const newestFirst = useMemo(() => [...names.values()].reverse(), [names]);
   const replying = state.messages.some((m) => m.status === "streaming" || m.status === "paused");
   const [failure, setFailure] = useState<string | null>(null);
+  const pending = newestPending(state.messages);
 
+  // The list's counts and the source's suggestion marks follow new messages, finished replies,
+  // and suggestions as they arrive and are answered.
   const activity = useRef(onActivity);
   activity.current = onActivity;
+  const changes = state.messages
+    .map((m) => m.status + m.components.map((c) => (c.answer == null ? "?" : "!")).join(""))
+    .join();
   useEffect(() => {
     if (state.messages.length > 0) activity.current();
-  }, [state.messages.length]);
+  }, [changes]);
 
   /** Resolves the thread, dismissing a suggestion still waiting in it. */
   async function resolve() {
     try {
-      const pending = thread.pending;
       if (pending) {
-        const { message_id, component_id } = pending;
-        await api.answerSuggestion(projectId, message_id, component_id, "dismissed");
+        const { message, component } = pending;
+        await api.answerSuggestion(projectId, message.id, component.id, "dismissed");
       }
       onResolve(true);
     } catch (e) {
@@ -229,8 +244,10 @@ function ThreadView({
     }
   }
 
+  // `grid-cols-1` keeps the columns at the sheet's width, so a long passage truncates instead
+  // of widening the sheet.
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <nav className="-mx-2 flex items-center gap-1">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ChevronLeftIcon />
@@ -256,7 +273,7 @@ function ThreadView({
           <ChevronDownIcon />
         </Button>
       </nav>
-      <div className="grid gap-1.5">
+      <div className="grid grid-cols-1 gap-1.5">
         <h3 className="flex items-center gap-2 font-serif text-subheading text-foreground">
           <NumberBadge number={number} />
           <span className="min-w-0 truncate">{location ?? `“${thread.quote}”`}</span>
@@ -290,11 +307,13 @@ function ThreadView({
         </div>
       </div>
       {state.messages.length > 0 && (
-        <div className="grid gap-3">
-          {state.messages.map((message) => (
-            <MessageItem key={message.id} projectId={projectId} message={message} compact />
-          ))}
-        </div>
+        <ThreadSuggestionsProvider value={{ accept: onAccept, detached }}>
+          <div className="grid grid-cols-1 gap-3">
+            {state.messages.map((message) => (
+              <MessageItem key={message.id} projectId={projectId} message={message} compact />
+            ))}
+          </div>
+        </ThreadSuggestionsProvider>
       )}
       {(error || failure) && <p className="text-meta text-destructive">{error ?? failure}</p>}
       {!detached && !thread.resolved && (
@@ -312,4 +331,17 @@ function ThreadView({
       )}
     </div>
   );
+}
+
+/** The newest suggestion in `messages` still waiting for an answer, with its message. */
+function newestPending(messages: Message[]) {
+  let newest: { message: Message; component: Component } | undefined;
+  for (const message of messages) {
+    for (const component of message.components) {
+      if (component.kind === "suggestion" && component.answer == null) {
+        newest = { message, component };
+      }
+    }
+  }
+  return newest;
 }

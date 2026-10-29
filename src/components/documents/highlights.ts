@@ -1,20 +1,32 @@
 import { StateEffect, StateField, type EditorState, type Range } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
-import type { Uuid } from "../../protocol/types";
+import type { MiniMeColors, Uuid } from "../../protocol/types";
 import { threadPlacements } from "./anchors";
 
-/** Which threads the source shows (the open ones), which one is selected, and each one's
- * number in the document. */
+/** Which threads the source shows (the open ones), which one is selected, each one's number in
+ * the document, and the suggestions waiting in them. */
 export interface Highlighted {
   visible: ReadonlySet<Uuid>;
   selected: Uuid | null;
   numbers: ReadonlyMap<Uuid, number>;
+  suggestions: ReadonlyMap<Uuid, Suggested>;
+}
+
+/** A pending suggestion's text, in the colours of the Mini-Me that suggested it. */
+export interface Suggested {
+  text: string;
+  colors?: MiniMeColors;
 }
 
 export const setHighlighted = StateEffect.define<Highlighted>();
 
 const highlighted = StateField.define<Highlighted>({
-  create: () => ({ visible: new Set(), selected: null, numbers: new Map() }),
+  create: () => ({
+    visible: new Set(),
+    selected: null,
+    numbers: new Map(),
+    suggestions: new Map(),
+  }),
   update(value, transaction) {
     for (const effect of transaction.effects) {
       if (effect.is(setHighlighted)) return effect.value;
@@ -52,17 +64,49 @@ class NumberBadge extends WidgetType {
   }
 }
 
-const passage = Decoration.mark({ class: "cm-comment" });
-const selectedPassage = Decoration.mark({ class: "cm-comment cm-comment-selected" });
+/** A pending suggestion's text right after the passage it would replace, underlined in its
+ * Mini-Me's colour. */
+class SuggestedText extends WidgetType {
+  constructor(readonly suggested: Suggested) {
+    super();
+  }
+
+  eq(other: SuggestedText) {
+    return (
+      other.suggested.text === this.suggested.text &&
+      other.suggested.colors?.solid === this.suggested.colors?.solid
+    );
+  }
+
+  toDOM() {
+    const text = document.createElement("span");
+    text.className = "cm-suggested";
+    text.textContent = this.suggested.text;
+    const { colors } = this.suggested;
+    if (colors) {
+      text.style.color = colors.ink;
+      text.style.textDecorationColor = colors.solid;
+    }
+    return text;
+  }
+}
 
 function decorations(state: EditorState): DecorationSet {
-  const { visible, selected, numbers } = state.field(highlighted);
+  const { visible, selected, numbers, suggestions } = state.field(highlighted);
   const marks: Range<Decoration>[] = [];
   for (const [id, placement] of state.field(threadPlacements)) {
     if (!placement || !visible.has(id)) continue;
-    marks.push((id === selected ? selectedPassage : passage).range(placement.from, placement.to));
+    const suggested = suggestions.get(id);
+    const classes = ["cm-comment"];
+    if (id === selected) classes.push("cm-comment-selected");
+    if (suggested) classes.push("cm-comment-replaced");
+    marks.push(Decoration.mark({ class: classes.join(" ") }).range(placement.from, placement.to));
+    if (suggested) {
+      const widget = new SuggestedText(suggested);
+      marks.push(Decoration.widget({ widget, side: 1 }).range(placement.to));
+    }
     const badge = new NumberBadge(id, numbers.get(id) ?? 0);
-    marks.push(Decoration.widget({ widget: badge, side: 1 }).range(placement.to));
+    marks.push(Decoration.widget({ widget: badge, side: 2 }).range(placement.to));
   }
   return Decoration.set(marks, true);
 }
@@ -84,6 +128,13 @@ export const threadHighlights = [
   EditorView.theme({
     ".cm-comment": { borderBottom: "1px solid var(--border-strong)" },
     ".cm-comment-selected": { backgroundColor: "var(--accent)" },
+    ".cm-comment-replaced": { textDecoration: "line-through" },
+    ".cm-suggested": {
+      marginLeft: "4px",
+      textDecoration: "underline",
+      textDecorationThickness: "2px",
+      textUnderlineOffset: "3px",
+    },
     // The same badge as the thread's row in the comments sheet.
     ".cm-comment-bubble": {
       display: "inline-grid",
