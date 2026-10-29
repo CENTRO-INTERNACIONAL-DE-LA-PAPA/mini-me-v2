@@ -8,6 +8,7 @@ use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::comments;
 use crate::error::AppResult;
 use crate::link::RunMiniMe;
 use crate::projects::{self, ProjectSummary};
@@ -34,13 +35,14 @@ pub fn list(data_root: &Path) -> AppResult<Vec<PausedApproval>> {
 }
 
 fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<PausedApproval>> {
-    let mut statement = conn.prepare(
+    let mut statement = conn.prepare(&format!(
         "SELECT p.message_id, p.run, p.created_at, m.conversation_id, c.title, k.data \
          FROM paused_runs p \
          JOIN messages m ON m.id = p.message_id \
          JOIN conversations c ON c.id = m.conversation_id \
-         JOIN components k ON k.id = p.component_id",
-    )?;
+         JOIN components k ON k.id = p.component_id WHERE {}",
+        comments::not_a_thread(conn, "c.id")?
+    ))?;
     let rows = statement.query_map([], |row| {
         Ok((
             row.get::<_, String>(0)?,
@@ -86,6 +88,7 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<PausedAppr
 mod tests {
     use super::*;
     use crate::conversations::{self, PausedRun, SendMessageInput};
+    use crate::comments::test_support::into_thread;
     use crate::db;
     use crate::projects::test_support::origin;
     use crate::protocol::{Author, AuthorKind, new_id};
@@ -169,5 +172,15 @@ mod tests {
         assert_eq!(approvals.len(), 1);
         assert_eq!(approvals[0].project_name, "Trials");
         assert_eq!(std::fs::read(&database).unwrap(), before);
+    }
+
+    #[test]
+    fn an_approval_in_a_thread_is_not_listed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
+        let (project, run) = paused(&root, "Trial", "Investigator", "Go ahead?", 1);
+        let (conversation, _) = project.lock().message_place(run.message_id).unwrap().unwrap();
+        into_thread(&project, conversation);
+        assert!(list(&root).unwrap().is_empty());
     }
 }

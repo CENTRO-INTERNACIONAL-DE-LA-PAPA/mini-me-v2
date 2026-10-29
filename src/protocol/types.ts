@@ -209,6 +209,13 @@ export interface FileEntry extends AssetRef {
   used_in: ConversationRef[];
 }
 
+/** Where a comment thread's passage is now: UTF-16 offsets in the document's source. */
+export interface Anchor {
+  thread_id: Uuid;
+  start: number;
+  end: number;
+}
+
 /** A document as the document view opens it. */
 export interface OpenedDocument {
   text: string;

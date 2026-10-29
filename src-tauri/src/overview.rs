@@ -8,6 +8,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::comments;
 use crate::error::{AppError, AppResult};
 use crate::library::Library;
 use crate::protocol::{AssetRef, Author, AuthorKind, Component};
@@ -79,8 +80,11 @@ fn component_title(kind: &str, title: Option<String>, count: Option<i64>, text: 
 pub fn overview(project: &Project) -> AppResult<Overview> {
     let state = project.lock();
     let conn = &state.conn;
+    let conversations_only = comments::not_a_thread(conn, "id")?;
     let (conversations, last_activity_at): (i64, Option<i64>) = conn.query_row(
-        "SELECT COUNT(*), MAX(last_activity_at) FROM conversations",
+        &format!(
+            "SELECT COUNT(*), MAX(last_activity_at) FROM conversations WHERE {conversations_only}"
+        ),
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
@@ -140,13 +144,15 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
 
     let mut outputs = Vec::new();
     // Only the title and the list lengths are read from `data`, which can be large.
-    let mut stmt = conn.prepare(
+    let in_conversations = comments::not_a_thread(conn, "v.id")?;
+    let mut stmt = conn.prepare(&format!(
         "SELECT c.kind, c.id, json_extract(c.data, '$.title'), \
          COALESCE(json_array_length(c.data, '$.papers'), json_array_length(c.data, '$.theories')), \
          c.text, m.author_kind, m.author_id, m.conversation_id, v.title, m.id, c.created_at \
          FROM components c JOIN messages m ON m.id = c.message_id \
-         JOIN conversations v ON v.id = m.conversation_id WHERE c.kind != 'approval'",
-    )?;
+         JOIN conversations v ON v.id = m.conversation_id \
+         WHERE c.kind != 'approval' AND {in_conversations}",
+    ))?;
     let rows = stmt.query_map([], |row| {
         Ok((
             row.get::<_, String>(0)?,
@@ -191,11 +197,11 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
         generated
     };
     if !generated.is_empty() {
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare(&format!(
             "SELECT m.id, m.author_kind, m.author_id, m.conversation_id, v.title, m.attachments \
              FROM messages m JOIN conversations v ON v.id = m.conversation_id \
-             WHERE m.attachments != '[]' ORDER BY m.rowid",
-        )?;
+             WHERE m.attachments != '[]' AND {in_conversations} ORDER BY m.rowid",
+        ))?;
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -286,10 +292,11 @@ pub fn save_summary(project: &Project, summary: &str, at: i64) -> AppResult<()> 
 pub fn summary_material(project: &Project, library: &Library, budget: usize) -> AppResult<String> {
     let state = project.lock();
     let conversations: Vec<(String, String)> = {
-        let mut stmt =
-            state.conn.prepare(
-                "SELECT id, title FROM conversations ORDER BY last_activity_at DESC, rowid DESC",
-            )?;
+        let mut stmt = state.conn.prepare(&format!(
+            "SELECT id, title FROM conversations WHERE {} \
+             ORDER BY last_activity_at DESC, rowid DESC",
+            comments::not_a_thread(&state.conn, "id")?
+        ))?;
         stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<_, _>>()?
     };
@@ -368,6 +375,7 @@ fn message_lines(
 mod tests {
     use super::*;
     use crate::assets;
+    use crate::comments::test_support::into_thread;
     use crate::conversations::{self, SendMessageInput};
     use crate::projects::test_support::{temp_project, user};
     use crate::protocol::{EventKind, new_id};
@@ -519,5 +527,24 @@ mod tests {
         assert_eq!(material, "You: add a control plot");
         let cut = conversation_material(&project, &library, id, 10).unwrap();
         assert_eq!(cut, "You: add a");
+    }
+
+    #[test]
+    fn a_thread_is_left_out_of_the_overview() {
+        let (_dir, project) = temp_project();
+        let library = Library::builtin();
+        let kept = conversations::create(&project).unwrap().id;
+        ask(&project, kept, "clean the trial data");
+        let thread = conversations::create(&project).unwrap().id;
+        into_thread(&project, thread);
+        let question = ask(&project, thread, "a comment on the report");
+        let answer = reply(&project, thread, question, "scribe");
+        add(&project, thread, answer, "table", json!({ "title": "Hidden" }));
+
+        let overview = overview(&project).unwrap();
+        assert_eq!(overview.conversations, 1);
+        assert!(overview.outputs.is_empty());
+        let material = summary_material(&project, &library, 100_000).unwrap();
+        assert!(!material.contains("a comment on the report"), "{material}");
     }
 }

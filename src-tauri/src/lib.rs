@@ -1,6 +1,7 @@
 mod ai2;
 mod approvals;
 mod assets;
+mod comments;
 mod components;
 mod conversations;
 mod db;

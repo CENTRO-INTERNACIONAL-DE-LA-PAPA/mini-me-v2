@@ -7,6 +7,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::assets;
+use crate::comments::{self, Anchor};
 use crate::error::{AppError, AppResult};
 use crate::library::SCRIBE;
 use crate::projects;
@@ -82,14 +83,20 @@ pub fn read(project: &Project, id: Uuid) -> AppResult<String> {
 }
 
 /// Replaces the text of the document `id`, through a temporary file so a failed write leaves
-/// the previous version whole.
-pub fn save(project: &Project, id: Uuid, text: &str) -> AppResult<()> {
-    write(project, id, text, None)
+/// the previous version whole, and moves its comment threads to `anchors`.
+pub fn save(project: &Project, id: Uuid, text: &str, anchors: &[Anchor]) -> AppResult<()> {
+    write(project, id, text, None, anchors)
 }
 
 /// Replaces the text of the document `id` as `save` does, and records `added_by` with the new
 /// size when given.
-fn write(project: &Project, id: Uuid, text: &str, added_by: Option<&Author>) -> AppResult<()> {
+fn write(
+    project: &Project,
+    id: Uuid,
+    text: &str,
+    added_by: Option<&Author>,
+    anchors: &[Anchor],
+) -> AppResult<()> {
     if text.len() > MAX_BYTES {
         return Err(AppError::invalid_input("A document can be at most 2 MiB."));
     }
@@ -110,7 +117,7 @@ fn write(project: &Project, id: Uuid, text: &str, added_by: Option<&Author>) -> 
             id.to_string()
         ],
     )?;
-    Ok(())
+    comments::move_anchors(&state.conn, id, text, anchors)
 }
 
 /// Writes a drafted `body` after the document's current text, its header, keeping the header
@@ -123,7 +130,8 @@ pub fn save_draft(project: &Project, id: Uuid, header: &str, body: &str) -> AppR
     }
     let scribe = Author { kind: AuthorKind::MiniMe, id: SCRIBE.to_string() };
     let added_by = only_header(header).then_some(&scribe);
-    write(project, id, &format!("{}\n\n{body}\n", header.trim_end_matches('\n')), added_by)
+    let text = format!("{}\n\n{body}\n", header.trim_end_matches('\n'));
+    write(project, id, &text, added_by, &[])
 }
 
 /// Whether `text` is a YAML header with nothing after it.
@@ -187,7 +195,7 @@ mod tests {
         let (_dir, project) = temp_project();
         let asset = create(&project, "Report", None, &user()).unwrap();
         let text = "---\ntitle: Report\n---\n\n# Summary\n";
-        save(&project, asset.id, text).unwrap();
+        save(&project, asset.id, text, &[]).unwrap();
         assert_eq!(read(&project, asset.id).unwrap(), text);
         let size = assets::find(&project.lock(), asset.id).unwrap().size_bytes;
         assert_eq!(size, text.len() as i64);
@@ -197,7 +205,7 @@ mod tests {
     fn only_documents_are_saved() {
         let (_dir, project) = temp_project();
         let csv = assets::import_bytes(&project, "field-trial.csv", "text/csv", b"a,b\n", &user()).unwrap();
-        let error = save(&project, csv.id, "# Not a table").unwrap_err();
+        let error = save(&project, csv.id, "# Not a table", &[]).unwrap_err();
         assert_eq!(error.code, "invalid_input");
         let path = assets::file_path(&project, csv.id).unwrap();
         assert_eq!(std::fs::read(path).unwrap(), b"a,b\n");
@@ -232,7 +240,7 @@ mod tests {
         let pdf = store_pdf(&project, drafted.id, &drafted.name, b"%PDF-1.7", &user()).unwrap();
         assert_eq!(added_by(pdf.id), scribe);
         // Drafting after text the user wrote keeps the document theirs.
-        save(&project, notes.id, "---\ntitle: Notes\n---\n\nMine.\n").unwrap();
+        save(&project, notes.id, "---\ntitle: Notes\n---\n\nMine.\n", &[]).unwrap();
         let text = read(&project, notes.id).unwrap();
         save_draft(&project, notes.id, &text, "# More").unwrap();
         assert_eq!(added_by(notes.id), Some(user()));
@@ -254,7 +262,7 @@ mod tests {
         let path = assets::file_path(&project, asset.id).unwrap();
         // A directory where the temporary file would go makes the write fail.
         std::fs::create_dir(path.with_extension("qmd.tmp")).unwrap();
-        assert!(save(&project, asset.id, "# New").is_err());
+        assert!(save(&project, asset.id, "# New", &[]).is_err());
         assert_eq!(read(&project, asset.id).unwrap(), "---\ntitle: \"Report\"\n---\n\n");
     }
 }

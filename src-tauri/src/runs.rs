@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::assets;
+use crate::comments;
 use crate::components;
 use crate::conversations::{self, PausedRun};
 use crate::error::{AppError, AppResult};
@@ -745,6 +746,9 @@ impl Runs {
         // Titles are read after the runs lock is released, so no Project lock is taken
         // while it is held.
         runs.into_iter()
+            .filter(|(_, project, conversation_id, ..)| {
+                !comments::is_thread(&project.lock(), *conversation_id).unwrap_or(false)
+            })
             .map(|(_, project, conversation_id, message_id, mini_me, step)| RunningReply {
                 project_id: project.id,
                 project_name: project.name.clone(),
@@ -1246,6 +1250,7 @@ pub mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::comments::test_support::into_thread;
     use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
     use crate::library::Step;
     use crate::projects::test_support::{temp_project, user};
@@ -2308,5 +2313,14 @@ mod tests {
         assert_eq!(f.status(reply), MessageStatus::Streaming);
         let response = f.runs.respond("r".into(), call, "secret.get", json!({ "provider": "ai2" }));
         assert_eq!(result(response)["value"], json!("ai2-token"));
+    }
+
+    #[test]
+    fn a_reply_in_a_thread_is_not_listed_as_running() {
+        let f = quick();
+        let (_, reply) = f.start("echo");
+        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
+        into_thread(&f.project, conversation);
+        assert!(f.runs.running().is_empty());
     }
 }

@@ -1,11 +1,12 @@
 //! Conversations and the message lifecycle. Every message change goes through
 //! `ProjectState::persist`, so it is stored as an event before anyone sees it.
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::assets;
+use crate::comments;
 use crate::components;
 use crate::error::{AppError, AppResult};
 use crate::protocol::{
@@ -35,6 +36,11 @@ pub struct SendMessageInput {
 }
 
 pub fn create(project: &Project) -> AppResult<ConversationSummary> {
+    insert(&project.lock().conn)
+}
+
+/// Stores a new, empty Conversation through `conn`, which may be inside a transaction.
+pub fn insert(conn: &Connection) -> AppResult<ConversationSummary> {
     let now = now_ms();
     let summary = ConversationSummary {
         id: new_id(),
@@ -42,7 +48,7 @@ pub fn create(project: &Project) -> AppResult<ConversationSummary> {
         created_at: now,
         last_activity_at: now,
     };
-    project.lock().conn.execute(
+    conn.execute(
         "INSERT INTO conversations (id, title, created_at, last_activity_at) \
          VALUES (?1, ?2, ?3, ?4)",
         params![summary.id.to_string(), summary.title, now, now],
@@ -63,10 +69,11 @@ pub fn title(project: &Project, conversation_id: Uuid) -> AppResult<String> {
 /// Conversations ordered by most recent activity first.
 pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
     let state = project.lock();
-    let mut stmt = state.conn.prepare(
-        "SELECT id, title, created_at, last_activity_at FROM conversations \
+    let mut stmt = state.conn.prepare(&format!(
+        "SELECT id, title, created_at, last_activity_at FROM conversations WHERE {} \
          ORDER BY last_activity_at DESC, created_at DESC",
-    )?;
+        comments::not_a_thread(&state.conn, "id")?
+    ))?;
     let rows = stmt.query_map([], |row| {
         Ok((
             row.get::<_, String>(0)?,
@@ -604,7 +611,8 @@ pub fn add_reaction(project: &Project, message_id: Uuid, emoji: &str, by: Author
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::test_support::{self, temp_project};
+    use crate::comments::test_support;
+    use crate::projects::test_support::{self as project_support, temp_project};
     use crate::store::test_support::Collector;
 
     fn text(content: &str) -> SendMessageInput {
@@ -687,7 +695,7 @@ mod tests {
         let conversation = create(&project).unwrap().id;
         let source = dir.path().join("trial.csv");
         std::fs::write(&source, "a,b").unwrap();
-        let asset = assets::import(&project, &source, &test_support::user()).unwrap();
+        let asset = assets::import(&project, &source, &project_support::user()).unwrap();
 
         // "é" is one UTF-16 code unit, so this content is 6 units long.
         let mut input = text("é #x y");
@@ -877,5 +885,15 @@ mod tests {
         add_reaction(&project, message.id, "👍", user(user_id)).unwrap();
         add_reaction(&project, message.id, "👍", user(user_id)).unwrap();
         assert_eq!(collector.settled(1).len(), 1);
+    }
+
+    #[test]
+    fn a_thread_is_not_listed_as_a_conversation() {
+        let (_dir, project) = temp_project();
+        let kept = create(&project).unwrap().id;
+        let thread = create(&project).unwrap().id;
+        test_support::into_thread(&project, thread);
+        let listed: Vec<Uuid> = list(&project).unwrap().iter().map(|c| c.id).collect();
+        assert_eq!(listed, [kept]);
     }
 }

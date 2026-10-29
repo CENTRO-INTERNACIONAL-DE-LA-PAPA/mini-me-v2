@@ -4,6 +4,7 @@ import type {
   AppError,
   Ai2Status,
   AiSettings,
+  Anchor,
   AssetRef,
   KeyAccount,
   ConversationSummary,
@@ -111,8 +112,9 @@ export const api = {
     invoke<AssetRef>("create_document", { project_id, title }),
   readDocument: (project_id: Uuid, asset_id: Uuid) =>
     invoke<OpenedDocument>("read_document", { project_id, asset_id }),
-  saveDocument: (project_id: Uuid, asset_id: Uuid, text: string) =>
-    invoke<void>("save_document", { project_id, asset_id, text }),
+  /** Saves the document's text, and moves its comment threads to `anchors`. */
+  saveDocument: (project_id: Uuid, asset_id: Uuid, text: string, anchors: Anchor[] = []) =>
+    invoke<void>("save_document", { project_id, asset_id, text, anchors }),
   /** Drafts the new document `asset_id` from a Conversation, calling `onEvent` as text arrives.
    * Resolves once the draft has ended and what was written is saved; rejects with why it
    * stopped early. */

@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::ai2::{Ai2, Ai2Status, AppSecrets};
 use crate::approvals::{self, PausedApproval};
 use crate::assets;
+use crate::comments;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
 use crate::documents;
 use crate::error::{AppError, AppResult};
@@ -835,8 +836,9 @@ pub async fn save_document(
     project_id: Uuid,
     asset_id: Uuid,
     text: String,
+    anchors: Vec<comments::Anchor>,
 ) -> AppResult<()> {
-    documents::save(&*state.project(project_id)?, asset_id, &text)
+    documents::save(&*state.project(project_id)?, asset_id, &text, &anchors)
 }
 
 #[tauri::command(rename_all = "snake_case")]
