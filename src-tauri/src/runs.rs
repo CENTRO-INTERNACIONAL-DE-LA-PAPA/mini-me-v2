@@ -1106,15 +1106,15 @@ impl Runs {
         };
         let Some(place) = place else {
             if is_route {
-                return self.answer_route(method, params);
+                return self.answer_key("routing request", Some(ROUTING_KEY), method, params);
             }
             if let Some(provider) = summary_provider {
-                return self.answer_summary(&provider, method, params);
+                return self.answer_key("summary request", Some(&provider), method, params);
             }
             return Err(AppError::new("call_not_active", "This Trait call has ended."));
         };
         let Some(adapter) = place.call else {
-            return self.answer_decision(place.provider.as_deref(), method, params);
+            return self.answer_key("Workflow decision", place.provider.as_deref(), method, params);
         };
         let project = place.project;
         let reply = place.reply;
@@ -1163,55 +1163,26 @@ impl Runs {
         }
     }
 
-    /// A routing request may only get the Typesafe key.
-    fn answer_route(&self, method: &str, params: Value) -> AppResult<Value> {
+    /// A request that may only get the `allowed` API key, such as a routing request, which
+    /// may only get Typesafe's. `what` names the request in errors.
+    fn answer_key(
+        &self,
+        what: &str,
+        allowed: Option<&str>,
+        method: &str,
+        params: Value,
+    ) -> AppResult<Value> {
         if method != "secret.get" {
             return Err(AppError::new(
                 "unknown_method",
-                format!("A routing request cannot use '{method}'."),
+                format!("A {what} cannot use '{method}'."),
             ));
         }
         let params: SecretGetParams = parse_params(params)?;
-        if params.provider != ROUTING_KEY {
+        if allowed != Some(params.provider.as_str()) {
             return Err(AppError::new(
                 "secret_not_allowed",
-                format!("Routing cannot use the {} API key.", provider_name(&params.provider)),
-            ));
-        }
-        self.secret_value(ROUTING_KEY)
-    }
-
-    /// A summary request may only get the key of the provider whose model writes it.
-    fn answer_summary(&self, provider: &str, method: &str, params: Value) -> AppResult<Value> {
-        if method != "secret.get" {
-            return Err(AppError::new(
-                "unknown_method",
-                format!("A summary request cannot use '{method}'."),
-            ));
-        }
-        let params: SecretGetParams = parse_params(params)?;
-        if params.provider != provider {
-            return Err(AppError::new(
-                "secret_not_allowed",
-                format!("This summary cannot use the {} API key.", provider_name(&params.provider)),
-            ));
-        }
-        self.secret_value(provider)
-    }
-
-    /// A model decision may only get the key of its run's AI provider.
-    fn answer_decision(&self, provider: Option<&str>, method: &str, params: Value) -> AppResult<Value> {
-        if method != "secret.get" {
-            return Err(AppError::new(
-                "unknown_method",
-                format!("A Workflow decision cannot use '{method}'."),
-            ));
-        }
-        let params: SecretGetParams = parse_params(params)?;
-        if provider != Some(params.provider.as_str()) {
-            return Err(AppError::new(
-                "secret_not_allowed",
-                format!("This decision cannot use the {} API key.", provider_name(&params.provider)),
+                format!("This {what} cannot use the {} API key.", provider_name(&params.provider)),
             ));
         }
         self.secret_value(&params.provider)
