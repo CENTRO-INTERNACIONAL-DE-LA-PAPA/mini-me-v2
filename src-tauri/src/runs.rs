@@ -2,7 +2,7 @@
 //! events, pausing them at approvals, cancelling them, and answering the requests their
 //! Trait calls and model decisions make to the core.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -188,6 +188,8 @@ struct Inner {
     summaries: HashMap<Uuid, (String, mpsc::Sender<SummaryOutcome>)>,
     /// Drafts being written, with the provider whose key each may get.
     drafts: HashMap<Uuid, (String, mpsc::Sender<DraftEvent>)>,
+    /// Drafts stopped before they were sent to the sidecar; `draft` ends them at once.
+    stopped_drafts: HashSet<Uuid>,
     /// PDF exports waiting for their `document.exported` or `document.export_error`.
     exports: HashMap<Uuid, mpsc::Sender<ExportOutcome>>,
     /// Previews waiting for their `document.previewed` or `document.preview_error`.
@@ -559,6 +561,9 @@ impl Runs {
         let (tx, rx) = mpsc::channel();
         let sink = {
             let mut inner = self.lock();
+            if inner.stopped_drafts.remove(&draft_id) {
+                return (String::new(), None);
+            }
             let Some(sink) = inner.sink.clone() else {
                 let error = AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime is not ready.");
                 return (String::new(), Some(error));
@@ -606,11 +611,17 @@ impl Runs {
         (text, ending)
     }
 
-    /// Asks the sidecar to stop the draft `draft_id`; it then ends as `Done`.
+    /// Asks the sidecar to stop the draft `draft_id`; it then ends as `Done`. A draft not yet
+    /// sent to the sidecar, because the core is still gathering its material, ends empty when
+    /// it would start.
     pub fn cancel_draft(&self, draft_id: Uuid) {
         let sink = {
-            let inner = self.lock();
-            inner.drafts.contains_key(&draft_id).then(|| inner.sink.clone()).flatten()
+            let mut inner = self.lock();
+            if !inner.drafts.contains_key(&draft_id) {
+                inner.stopped_drafts.insert(draft_id);
+                return;
+            }
+            inner.sink.clone()
         };
         if let Some(sink) = sink {
             sink.send(&CoreFrame::DraftCancel { draft_id });
@@ -2230,6 +2241,18 @@ mod tests {
         assert!(ending.is_none());
         assert_eq!(events.len(), 3);
         assert_eq!(events[2], DraftEvent::Done);
+    }
+
+    #[test]
+    fn a_draft_stopped_before_it_starts_writes_nothing() {
+        let f = quick();
+        let draft_id = new_id();
+        f.runs.cancel_draft(draft_id);
+        let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
+        let (text, ending) =
+            f.runs.draft(draft_id, model, "Trial".into(), "You: hi".into(), CANCEL_TIMEOUT, |_| {});
+        assert!(text.is_empty() && ending.is_none());
+        assert!(!f.sink.frames().iter().any(|frame| matches!(frame, CoreFrame::DraftStart { .. })));
     }
 
     #[test]

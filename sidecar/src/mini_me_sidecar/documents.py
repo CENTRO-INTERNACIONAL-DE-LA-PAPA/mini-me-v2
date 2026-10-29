@@ -54,7 +54,15 @@ class Documents:
             return
         task = self._spawn(self._draft(draft_id, frame))
         self._drafts[draft_id] = task
-        task.add_done_callback(lambda _: self._drafts.pop(draft_id, None))
+
+        def ended(task: asyncio.Task[None]) -> None:
+            self._drafts.pop(draft_id, None)
+            # A draft cancelled before it started never ran `_draft`, which sends the ending
+            # once it has; one cancelled while running ends there normally.
+            if task.cancelled():
+                self._link.send({"type": "draft.done", "draft_id": draft_id})
+
+        task.add_done_callback(ended)
 
     def cancel_draft(self, draft_id: Any) -> None:
         task = self._drafts.get(draft_id) if isinstance(draft_id, str) else None

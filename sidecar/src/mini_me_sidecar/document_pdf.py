@@ -4,6 +4,7 @@ function call, never as markup, so nothing a document says can change the layout
 Typst code. Code cells are printed, never run."""
 
 import re
+from datetime import date
 from typing import Any
 
 import typst
@@ -130,24 +131,45 @@ def _table(node: SyntaxTreeNode) -> str:
 def typst_source(source: str) -> str:
     """The whole document as Typst: page settings, the title and author from its header, and
     its body."""
-    header, body = split_header(source)
+    # A file saved on Windows has CRLF line endings, which the header pattern does not match.
+    header, body = split_header(source.replace("\r\n", "\n"))
     body = _SHORTCODE.sub("", _DIV_FENCE.sub("", body))
-    title = header.get("title")
+    title = _scalar(header.get("title"))
     author = header.get("author")
     authors = author if isinstance(author, list) else [author] if author else []
+    names = ", ".join(name for name in map(_person, authors) if name)
     lines = [_PREAMBLE]
-    if isinstance(title, str) and title.strip():
+    if title:
         lines.append(f"#set document(title: {string(title)})\n")
         lines.append(
             f"#align(center, text(size: 20pt, weight: \"bold\", {string(title)}))\n"
         )
-    if authors:
-        names = ", ".join(str(a) for a in authors)
+    if names:
         lines.append(f"#align(center, text(size: 12pt, {string(names)}))\n")
     if len(lines) > 1:
         lines.append("#v(1.5em)\n")
     lines.append(_blocks(SyntaxTreeNode(_PARSER.parse(body))))
     return "".join(lines)
+
+
+def _scalar(value: Any) -> str:
+    """A header value YAML read as text, a number or a date, as text; "" for anything else."""
+    if isinstance(value, bool) or not isinstance(value, (str, int, float, date)):
+        return ""
+    return str(value).strip()
+
+
+def _person(value: Any) -> str:
+    """An author's name: Quarto writes one as text, as `{name: …}`, or with the name split
+    into `{given: …, family: …}` or given whole as `literal`."""
+    if isinstance(value, dict):
+        name = value.get("name")
+        if isinstance(name, dict):
+            literal = _scalar(name.get("literal"))
+            parts = (_scalar(name.get("given")), _scalar(name.get("family")))
+            return literal or " ".join(part for part in parts if part)
+        return _scalar(name)
+    return _scalar(value)
 
 
 def export_pdf(source: str) -> bytes:

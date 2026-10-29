@@ -3,6 +3,7 @@
 //! tools see it like any other file; this module only creates, reads and rewrites them.
 
 use rusqlite::params;
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::assets;
@@ -57,6 +58,24 @@ pub fn create(
     Ok(asset)
 }
 
+/// A document's text and when its file last changed (Unix ms), as the document view opens it.
+#[derive(Debug, Serialize)]
+pub struct OpenedDocument {
+    pub text: String,
+    pub modified_at: Option<i64>,
+}
+
+/// The document `id` as the document view opens it.
+pub fn open(project: &Project, id: Uuid) -> AppResult<OpenedDocument> {
+    let text = read(project, id)?;
+    let modified_at = std::fs::metadata(document_path(project, id)?)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|since| since.as_millis() as i64);
+    Ok(OpenedDocument { text, modified_at })
+}
+
 /// The text of the document `id`.
 pub fn read(project: &Project, id: Uuid) -> AppResult<String> {
     let path = document_path(project, id)?;
@@ -78,9 +97,12 @@ fn write(project: &Project, id: Uuid, text: &str, added_by: Option<&Author>) -> 
     }
     let path = document_path(project, id)?;
     let tmp = path.with_extension("qmd.tmp");
+    // Held until the size is recorded, so saves that overlap (typing, closing, exporting, a
+    // draft ending) take turns with the temporary file instead of writing it at once.
+    let state = project.lock();
     std::fs::write(&tmp, text)?;
     std::fs::rename(&tmp, &path)?;
-    project.lock().conn.execute(
+    state.conn.execute(
         "UPDATE assets SET size_bytes = ?1, added_by_kind = COALESCE(?2, added_by_kind), \
          added_by_id = COALESCE(?3, added_by_id) WHERE id = ?4",
         params![

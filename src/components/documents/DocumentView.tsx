@@ -104,19 +104,22 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
   // Set while the source is replaced by code, so the change is not saved as an edit.
   const loading = useRef(false);
 
+  /** Saves the source; resolves false when the save failed, which the view then reports. */
   const save = useCallback(async () => {
     if (pending.current !== null) {
       window.clearTimeout(pending.current);
       pending.current = null;
     }
     const editor = view.current;
-    if (!editor || !editor.state.facet(EditorView.editable)) return;
+    if (!editor || !editor.state.facet(EditorView.editable)) return true;
     try {
       await api.saveDocument(projectId, assetId, editor.state.doc.toString());
       setEditedAt(Date.now());
       setError(null);
+      return true;
     } catch (e) {
       setError(`Not saved: ${errorMessage(e)}`);
+      return false;
     }
   }, [projectId, assetId]);
   const saveRef = useRef(save);
@@ -182,17 +185,11 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
 
   useEffect(() => {
     let active = true;
-    api
-      .listProjectFiles(projectId)
-      .then((files) => {
-        const entry = files.find((f) => f.id === assetId);
-        if (active && entry?.modified_at) setEditedAt(entry.modified_at);
-      })
-      .catch(() => {});
     const load = async () => {
-      const source = await api.readDocument(projectId, assetId);
+      const { text: source, modified_at } = await api.readDocument(projectId, assetId);
       if (!active) return;
       replace(source);
+      if (modified_at !== null) setEditedAt(modified_at);
       setEditable(true);
       void render(source);
     };
@@ -208,7 +205,7 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
     let shown = "";
     api
       .readDocument(projectId, assetId)
-      .then((source) => {
+      .then(({ text: source }) => {
         header = source;
         if (active) replace(source);
       })
@@ -242,7 +239,8 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
   }, [projectId, assetId, draftFrom, render]);
 
   async function exportPdf() {
-    await save();
+    // A PDF made after a failed save would hold the older text; the save's error stays shown.
+    if (!(await save())) return;
     setExporting(true);
     setExported(null);
     try {

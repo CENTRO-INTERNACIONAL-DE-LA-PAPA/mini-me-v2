@@ -24,7 +24,7 @@ export interface Heading {
 
 /** The document's `#` headings in order, outside its YAML header and code blocks. */
 export function headings(text: string): Heading[] {
-  const lines = text.split("\n");
+  const lines = text.split(/\r?\n/);
   const found: Heading[] = [];
   let start = 0;
   const header = HEADER.exec(text);
@@ -41,7 +41,8 @@ export function headings(text: string): Heading[] {
       fence = code[1];
       continue;
     }
-    const heading = /^ {0,3}(#{1,6})[ \t]+(.+?)[ \t#]*$/.exec(line);
+    // A closing run of # counts only after a space, as in CommonMark: "## C#" keeps its #.
+    const heading = /^ {0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/.exec(line);
     if (heading) found.push({ level: heading[1].length, text: heading[2], line: i + 1 });
   }
   return found;

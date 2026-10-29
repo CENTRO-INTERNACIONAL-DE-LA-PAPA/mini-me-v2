@@ -60,10 +60,15 @@ def run_draft(chat: FakeChat, monkeypatch, cancel_after: float | None = None) ->
         documents = Documents(link, FakeRequests())  # type: ignore[arg-type]
         documents.start_draft(START)
         if cancel_after is not None:
-            await asyncio.sleep(cancel_after)
+            if cancel_after:
+                await asyncio.sleep(cancel_after)
             documents.cancel_draft("d1")
-        while not any(f["type"] in ("draft.done", "draft.error") for f in link.sent):
-            await asyncio.sleep(0.01)
+
+        async def ended() -> None:
+            while not any(f["type"] in ("draft.done", "draft.error") for f in link.sent):
+                await asyncio.sleep(0.01)
+
+        await asyncio.wait_for(ended(), timeout=2)
 
     asyncio.run(main())
     return link.sent
@@ -88,6 +93,11 @@ def test_a_cancelled_draft_ends_as_done(monkeypatch):
     sent = run_draft(chat, monkeypatch, cancel_after=0.08)
     assert sent[-1] == {"type": "draft.done", "draft_id": "d1"}
     assert "three" not in "".join(f.get("text", "") for f in sent)
+
+
+def test_a_draft_cancelled_before_it_starts_ends_as_done(monkeypatch):
+    sent = run_draft(FakeChat(["one"]), monkeypatch, cancel_after=0)
+    assert sent == [{"type": "draft.done", "draft_id": "d1"}]
 
 
 def test_an_empty_draft_is_an_error(monkeypatch):

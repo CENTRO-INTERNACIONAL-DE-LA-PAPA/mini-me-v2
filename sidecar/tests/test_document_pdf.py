@@ -69,6 +69,17 @@ def test_the_title_and_author_open_the_document():
     assert '"Ana, Luis"' in typst
 
 
+def test_quarto_authors_numbers_and_windows_line_endings_are_read():
+    source = (
+        "---\r\ntitle: 2025\r\nauthor:\r\n  - name: Ana Pérez\r\n    affiliation: CIP\r\n"
+        "  - name: {given: Luis, family: Quispe}\r\n---\r\n\r\n# Yield\r\n"
+    )
+    typst = typst_source(source)
+    assert '#set document(title: "2025")' in typst
+    assert '"Ana Pérez, Luis Quispe"' in typst
+    assert "title: 2025" not in typst and "affiliation" not in typst
+
+
 def test_a_document_exports_to_pdf_without_running_code(tmp_path):
     marker = tmp_path / "ran"
     source = (

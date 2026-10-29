@@ -14,6 +14,7 @@ import type {
   Message,
   MiniMe,
   MiniMeDefinition,
+  OpenedDocument,
   Overview,
   PausedApproval,
   ProjectSummary,
@@ -130,7 +131,7 @@ export const api = {
   createDocument: (project_id: Uuid, title: string) =>
     invoke<AssetRef>("create_document", { project_id, title }),
   readDocument: (project_id: Uuid, asset_id: Uuid) =>
-    invoke<string>("read_document", { project_id, asset_id }),
+    invoke<OpenedDocument>("read_document", { project_id, asset_id }),
   saveDocument: (project_id: Uuid, asset_id: Uuid, text: string) =>
     invoke<void>("save_document", { project_id, asset_id, text }),
   /** Drafts the new document `asset_id` from a Conversation, calling `onEvent` as text arrives.

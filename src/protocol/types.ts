@@ -209,6 +209,13 @@ export interface FileEntry extends AssetRef {
   used_in: ConversationRef[];
 }
 
+/** A document as the document view opens it. */
+export interface OpenedDocument {
+  text: string;
+  /** When its file last changed (Unix ms); null when that cannot be read. */
+  modified_at: number | null;
+}
+
 export interface ProjectSummary {
   id: Uuid;
   name: string;

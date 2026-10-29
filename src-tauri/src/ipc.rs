@@ -875,8 +875,8 @@ pub async fn read_document(
     state: State<'_, AppState>,
     project_id: Uuid,
     asset_id: Uuid,
-) -> AppResult<String> {
-    documents::read(&*state.project(project_id)?, asset_id)
+) -> AppResult<documents::OpenedDocument> {
+    documents::open(&*state.project(project_id)?, asset_id)
 }
 
 #[tauri::command(rename_all = "snake_case")]

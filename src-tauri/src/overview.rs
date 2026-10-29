@@ -310,7 +310,8 @@ pub fn summary_material(project: &Project, library: &Library, budget: usize) -> 
 }
 
 /// The text a document is drafted from: one Conversation's messages, oldest first, each as
-/// "<speaker>: <text>". When they exceed `budget` characters the oldest are left out.
+/// "<speaker>: <text>". When they exceed `budget` characters the oldest are left out, and a
+/// newest message longer than `budget` is cut to its first `budget` characters.
 pub fn conversation_material(
     project: &Project,
     library: &Library,
@@ -323,6 +324,9 @@ pub fn conversation_material(
     for line in lines.iter().rev() {
         used += line.chars().count() + 1;
         if used > budget {
+            if kept.is_empty() {
+                return Ok(line.chars().take(budget).collect());
+            }
             break;
         }
         kept.push(line.as_str());
@@ -502,5 +506,18 @@ mod tests {
 
         let small = summary_material(&project, &library, 60).unwrap();
         assert!(small.contains("clean the trial data") && !small.contains("planting"), "{small}");
+    }
+
+    #[test]
+    fn draft_material_keeps_the_newest_messages_and_cuts_one_too_long() {
+        let (_dir, project) = temp_project();
+        let library = Library::builtin();
+        let id = conversations::create(&project).unwrap().id;
+        ask(&project, id, "plan the trial");
+        ask(&project, id, "add a control plot");
+        let material = conversation_material(&project, &library, id, 30).unwrap();
+        assert_eq!(material, "You: add a control plot");
+        let cut = conversation_material(&project, &library, id, 10).unwrap();
+        assert_eq!(cut, "You: add a");
     }
 }

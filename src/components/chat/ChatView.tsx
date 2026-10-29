@@ -123,6 +123,11 @@ export function ChatView({
     (target: ReferenceTarget) => composer.current?.appendReference(target),
     [],
   );
+  // Stable across renders, so the memoized messages that read it do not re-render with every
+  // streamed event.
+  const openDocumentRef = useRef(onOpenDocument);
+  openDocumentRef.current = onOpenDocument;
+  const openDocument = useCallback((assetId: Uuid) => openDocumentRef.current(assetId), []);
   /** Files are being dragged over the window. */
   const [dragging, setDragging] = useState(false);
 
@@ -174,7 +179,7 @@ export function ChatView({
 
   return (
     <FeaturingProvider projectId={projectId}>
-      <OpenDocumentProvider open={(assetId) => onOpenDocument(assetId)}>
+      <OpenDocumentProvider open={openDocument}>
         <ComponentReferencesProvider names={names} append={appendReference}>
           <div className="flex min-h-0 min-w-0 flex-1 gap-3">
             <MainSheet>

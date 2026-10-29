@@ -50,8 +50,8 @@ function DocumentV1({ data, projectId }: RendererProps) {
     if (!projectId || !assetId) return;
     let active = true;
     api
-      .listProjectFiles(projectId)
-      .then((files) => active && setRemoved(!files.some((f) => f.id === assetId)))
+      .listAssets(projectId, "")
+      .then((assets) => active && setRemoved(!assets.some((a) => a.id === assetId)))
       .catch(() => {});
     return () => {
       active = false;
