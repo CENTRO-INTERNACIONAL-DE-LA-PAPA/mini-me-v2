@@ -48,10 +48,6 @@ const ROUTING_KEY: &str = "typesafe";
 /// Jev's answers to a routing request, by question ID.
 pub type RouteAnswers = BTreeMap<String, ChoiceAnswer>;
 
-type RouteOutcome = Result<RouteAnswers, ErrorInfo>;
-
-type SummaryOutcome = Result<String, ErrorInfo>;
-
 /// What the sidecar sends about a draft: some text, or its end.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -61,9 +57,18 @@ pub enum DraftEvent {
     Error { error: ErrorInfo },
 }
 
-type ExportOutcome = Result<Vec<u8>, ErrorInfo>;
+/// The sender each request waiting for the sidecar's answer is listed under, by its ID.
+type Pending<T> = HashMap<Uuid, mpsc::Sender<Result<T, ErrorInfo>>>;
 
-type PreviewOutcome = Result<Vec<String>, ErrorInfo>;
+/// What a request to the sidecar fails with when no answer comes.
+struct NoAnswer {
+    /// The sidecar is not running.
+    not_ready: &'static str,
+    /// The code and message when the answer takes longer than the request's timeout.
+    timeout: (&'static str, &'static str),
+    /// The sidecar stopped before it answered.
+    stopped: &'static str,
+}
 
 /// The writing end of the link to a running sidecar. Returns `false` when the sidecar can
 /// no longer be reached.
@@ -182,18 +187,19 @@ struct Inner {
     adapters: HashMap<String, AdapterInfo>,
     runs: HashMap<Uuid, Run>,
     /// Routing requests waiting for their `route.done` or `route.error`.
-    routes: HashMap<Uuid, mpsc::Sender<RouteOutcome>>,
-    /// Summary requests waiting for their `summary.done` or `summary.error`, with the
-    /// provider whose key each may get.
-    summaries: HashMap<Uuid, (String, mpsc::Sender<SummaryOutcome>)>,
-    /// Drafts being written, with the provider whose key each may get.
-    drafts: HashMap<Uuid, (String, mpsc::Sender<DraftEvent>)>,
+    routes: Pending<RouteAnswers>,
+    /// Summary requests waiting for their `summary.done` or `summary.error`.
+    summaries: Pending<String>,
+    /// Drafts being written.
+    drafts: HashMap<Uuid, mpsc::Sender<DraftEvent>>,
+    /// The provider whose key each summary and draft may get, by its ID.
+    key_providers: HashMap<Uuid, String>,
     /// Drafts stopped before they were sent to the sidecar; `draft` ends them at once.
     stopped_drafts: HashSet<Uuid>,
     /// PDF exports waiting for their `document.exported` or `document.export_error`.
-    exports: HashMap<Uuid, mpsc::Sender<ExportOutcome>>,
+    exports: Pending<Vec<u8>>,
     /// Previews waiting for their `document.previewed` or `document.preview_error`.
-    previews: HashMap<Uuid, mpsc::Sender<PreviewOutcome>>,
+    previews: Pending<Vec<String>>,
 }
 
 impl Inner {
@@ -289,6 +295,7 @@ impl Runs {
             inner.drafts.clear();
             inner.exports.clear();
             inner.previews.clear();
+            inner.key_providers.clear();
             inner.runs.drain().map(|(_, run)| run).collect()
         };
         self.notify();
@@ -471,39 +478,13 @@ impl Runs {
         timeout: Duration,
     ) -> AppResult<RouteAnswers> {
         let route_id = new_id();
-        let (tx, rx) = mpsc::channel();
-        let sink = {
-            let mut inner = self.lock();
-            let Some(sink) = inner.sink.clone() else {
-                return Err(AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime is not ready."));
-            };
-            inner.routes.insert(route_id, tx);
-            sink
+        let frame = CoreFrame::RouteStart { route_id, state, mini_mes, ask };
+        let no_answer = NoAnswer {
+            not_ready: "Mini-Me's runtime is not ready.",
+            timeout: ("jev_timeout", "Typesafe did not answer in time."),
+            stopped: "Mini-Me's runtime stopped before choosing a Mini-Me.",
         };
-        let sent = sink.send(&CoreFrame::RouteStart {
-            route_id,
-            state,
-            mini_mes,
-            ask,
-        });
-        let outcome = if sent {
-            rx.recv_timeout(timeout)
-        } else {
-            Err(RecvTimeoutError::Disconnected)
-        };
-        self.lock().routes.remove(&route_id);
-        match outcome {
-            Ok(Ok(answers)) => Ok(answers),
-            Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
-            Err(RecvTimeoutError::Timeout) => Err(AppError::new(
-                "jev_timeout",
-                "Typesafe did not answer in time.",
-            )),
-            Err(RecvTimeoutError::Disconnected) => Err(AppError::new(
-                SIDECAR_STOPPED,
-                "Mini-Me's runtime stopped before choosing a Mini-Me.",
-            )),
-        }
+        self.request(|inner| &mut inner.routes, route_id, frame, timeout, no_answer)
     }
 
     /// Asks the sidecar to summarise `material` with `model`, waiting at most `timeout`.
@@ -515,34 +496,16 @@ impl Runs {
         timeout: Duration,
     ) -> AppResult<String> {
         let summary_id = new_id();
-        let (tx, rx) = mpsc::channel();
-        let sink = {
-            let mut inner = self.lock();
-            let Some(sink) = inner.sink.clone() else {
-                return Err(AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime is not ready."));
-            };
-            inner.summaries.insert(summary_id, (model.provider.clone(), tx));
-            sink
+        self.lock().key_providers.insert(summary_id, model.provider.clone());
+        let frame = CoreFrame::SummaryStart { summary_id, model, material };
+        let no_answer = NoAnswer {
+            not_ready: "Mini-Me's runtime is not ready.",
+            timeout: ("summary_timeout", "The AI model did not finish the summary in time. Try again."),
+            stopped: "Mini-Me's runtime stopped before the summary was written.",
         };
-        let sent = sink.send(&CoreFrame::SummaryStart { summary_id, model, material });
-        let outcome = if sent {
-            rx.recv_timeout(timeout)
-        } else {
-            Err(RecvTimeoutError::Disconnected)
-        };
-        self.lock().summaries.remove(&summary_id);
-        match outcome {
-            Ok(Ok(text)) => Ok(text),
-            Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
-            Err(RecvTimeoutError::Timeout) => Err(AppError::new(
-                "summary_timeout",
-                "The AI model did not finish the summary in time. Try again.",
-            )),
-            Err(RecvTimeoutError::Disconnected) => Err(AppError::new(
-                SIDECAR_STOPPED,
-                "Mini-Me's runtime stopped before the summary was written.",
-            )),
-        }
+        let summary = self.request(|inner| &mut inner.summaries, summary_id, frame, timeout, no_answer);
+        self.lock().key_providers.remove(&summary_id);
+        summary
     }
 
     /// Drafts a report titled `title` from `material` with `model`, passing each piece of text
@@ -568,7 +531,8 @@ impl Runs {
                 let error = AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime is not ready.");
                 return (String::new(), Some(error));
             };
-            inner.drafts.insert(draft_id, (model.provider.clone(), tx));
+            inner.drafts.insert(draft_id, tx);
+            inner.key_providers.insert(draft_id, model.provider.clone());
             sink
         };
         let mut text = String::new();
@@ -607,7 +571,10 @@ impl Runs {
         } else {
             ending = Some(AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime could not be reached."));
         }
-        self.lock().drafts.remove(&draft_id);
+        let mut inner = self.lock();
+        inner.drafts.remove(&draft_id);
+        inner.key_providers.remove(&draft_id);
+        drop(inner);
         (text, ending)
     }
 
@@ -629,7 +596,7 @@ impl Runs {
     }
 
     fn draft_event(&self, draft_id: Uuid, event: DraftEvent) {
-        let tx = self.lock().drafts.get(&draft_id).map(|(_, tx)| tx.clone());
+        let tx = self.lock().drafts.get(&draft_id).cloned();
         match tx {
             Some(tx) => {
                 let _ = tx.send(event);
@@ -643,116 +610,77 @@ impl Runs {
     /// The document `source`, named `name`, as PDF, within `timeout`.
     pub fn export_pdf(&self, name: String, source: String, timeout: Duration) -> AppResult<Vec<u8>> {
         let export_id = new_id();
-        let (tx, rx) = mpsc::channel();
-        let sink = {
-            let mut inner = self.lock();
-            let Some(sink) = inner.sink.clone() else {
-                return Err(AppError::new(
-                    SIDECAR_STOPPED,
-                    "Mini-Me is not ready yet. Try again when it is.",
-                ));
-            };
-            inner.exports.insert(export_id, tx);
-            sink
+        let frame = CoreFrame::DocumentExport { export_id, name, source };
+        let no_answer = NoAnswer {
+            not_ready: "Mini-Me is not ready yet. Try again when it is.",
+            timeout: ("export_timeout", "The PDF took too long to make. Try again."),
+            stopped: "Mini-Me's runtime stopped before the PDF was made.",
         };
-        let sent = sink.send(&CoreFrame::DocumentExport { export_id, name, source });
-        let outcome = if sent {
-            rx.recv_timeout(timeout)
-        } else {
-            Err(RecvTimeoutError::Disconnected)
-        };
-        self.lock().exports.remove(&export_id);
-        match outcome {
-            Ok(Ok(pdf)) => Ok(pdf),
-            Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
-            Err(RecvTimeoutError::Timeout) => Err(AppError::new(
-                "export_timeout",
-                "The PDF took too long to make. Try again.",
-            )),
-            Err(RecvTimeoutError::Disconnected) => Err(AppError::new(
-                SIDECAR_STOPPED,
-                "Mini-Me's runtime stopped before the PDF was made.",
-            )),
-        }
+        self.request(|inner| &mut inner.exports, export_id, frame, timeout, no_answer)
     }
 
     /// The document `source` as SVG images, one per page, within `timeout`.
     pub fn preview(&self, source: String, timeout: Duration) -> AppResult<Vec<String>> {
         let preview_id = new_id();
+        let frame = CoreFrame::DocumentPreview { preview_id, source };
+        let no_answer = NoAnswer {
+            not_ready: "Mini-Me is not ready yet. Try again when it is.",
+            timeout: ("preview_timeout", "The preview took too long to make. Try again."),
+            stopped: "Mini-Me's runtime stopped before the preview was made.",
+        };
+        self.request(|inner| &mut inner.previews, preview_id, frame, timeout, no_answer)
+    }
+
+    /// Sends `frame` for the request `id`, listed in `pending` until it ends, and waits at most
+    /// `timeout` for the sidecar's answer, which `answered` passes on.
+    fn request<T>(
+        &self,
+        pending: fn(&mut Inner) -> &mut Pending<T>,
+        id: Uuid,
+        frame: CoreFrame,
+        timeout: Duration,
+        no_answer: NoAnswer,
+    ) -> AppResult<T> {
         let (tx, rx) = mpsc::channel();
         let sink = {
             let mut inner = self.lock();
             let Some(sink) = inner.sink.clone() else {
-                return Err(AppError::new(
-                    SIDECAR_STOPPED,
-                    "Mini-Me is not ready yet. Try again when it is.",
-                ));
+                return Err(AppError::new(SIDECAR_STOPPED, no_answer.not_ready));
             };
-            inner.previews.insert(preview_id, tx);
+            pending(&mut inner).insert(id, tx);
             sink
         };
-        let sent = sink.send(&CoreFrame::DocumentPreview { preview_id, source });
-        let outcome = if sent {
+        let outcome = if sink.send(&frame) {
             rx.recv_timeout(timeout)
         } else {
             Err(RecvTimeoutError::Disconnected)
         };
-        self.lock().previews.remove(&preview_id);
+        pending(&mut self.lock()).remove(&id);
         match outcome {
-            Ok(Ok(pages)) => Ok(pages),
+            Ok(Ok(answer)) => Ok(answer),
             Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
-            Err(RecvTimeoutError::Timeout) => Err(AppError::new(
-                "preview_timeout",
-                "The preview took too long to make. Try again.",
-            )),
-            Err(RecvTimeoutError::Disconnected) => Err(AppError::new(
-                SIDECAR_STOPPED,
-                "Mini-Me's runtime stopped before the preview was made.",
-            )),
+            Err(RecvTimeoutError::Timeout) => {
+                Err(AppError::new(no_answer.timeout.0, no_answer.timeout.1))
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                Err(AppError::new(SIDECAR_STOPPED, no_answer.stopped))
+            }
         }
     }
 
-    fn finish_preview(&self, preview_id: Uuid, outcome: PreviewOutcome) {
-        match self.lock().previews.remove(&preview_id) {
+    /// Passes the sidecar's answer to the request `id` of `pending`, named `what` in the log.
+    fn answered<T>(
+        &self,
+        pending: fn(&mut Inner) -> &mut Pending<T>,
+        what: &str,
+        id: Uuid,
+        outcome: Result<T, ErrorInfo>,
+    ) {
+        match pending(&mut self.lock()).remove(&id) {
             Some(tx) => {
                 let _ = tx.send(outcome);
             }
-            None => self
-                .log
-                .line(&format!("ignoring the end of preview {preview_id}, which is not open")),
-        }
-    }
-
-    fn finish_export(&self, export_id: Uuid, outcome: ExportOutcome) {
-        match self.lock().exports.remove(&export_id) {
-            Some(tx) => {
-                let _ = tx.send(outcome);
-            }
-            None => self
-                .log
-                .line(&format!("ignoring the end of export {export_id}, which is not open")),
-        }
-    }
-
-    fn finish_summary(&self, summary_id: Uuid, outcome: SummaryOutcome) {
-        match self.lock().summaries.remove(&summary_id) {
-            Some((_, tx)) => {
-                let _ = tx.send(outcome);
-            }
-            None => self
-                .log
-                .line(&format!("ignoring the end of summary {summary_id}, which is not open")),
-        }
-    }
-
-    fn finish_route(&self, route_id: Uuid, outcome: RouteOutcome) {
-        match self.lock().routes.remove(&route_id) {
-            Some(tx) => {
-                let _ = tx.send(outcome);
-            }
-            None => self
-                .log
-                .line(&format!("ignoring the end of route {route_id}, which is not open")),
+            None => self.log.line(&format!("ignoring the end of {what} {id}, which is not open")),
         }
     }
 
@@ -995,16 +923,16 @@ impl Runs {
                 }
             }
             SidecarFrame::RouteDone { route_id, answers } => {
-                self.finish_route(route_id, Ok(answers));
+                self.answered(|inner| &mut inner.routes, "route", route_id, Ok(answers));
             }
             SidecarFrame::RouteError { route_id, error } => {
-                self.finish_route(route_id, Err(error));
+                self.answered(|inner| &mut inner.routes, "route", route_id, Err(error));
             }
             SidecarFrame::SummaryDone { summary_id, text } => {
-                self.finish_summary(summary_id, Ok(text));
+                self.answered(|inner| &mut inner.summaries, "summary", summary_id, Ok(text));
             }
             SidecarFrame::SummaryError { summary_id, error } => {
-                self.finish_summary(summary_id, Err(error));
+                self.answered(|inner| &mut inner.summaries, "summary", summary_id, Err(error));
             }
             SidecarFrame::DraftDelta { draft_id, text } => {
                 self.draft_event(draft_id, DraftEvent::Delta { text });
@@ -1018,16 +946,16 @@ impl Runs {
                     code: "export_failed".into(),
                     message: "The PDF arrived damaged. Try again.".into(),
                 });
-                self.finish_export(export_id, outcome);
+                self.answered(|inner| &mut inner.exports, "export", export_id, outcome);
             }
             SidecarFrame::DocumentExportError { export_id, error } => {
-                self.finish_export(export_id, Err(error));
+                self.answered(|inner| &mut inner.exports, "export", export_id, Err(error));
             }
             SidecarFrame::DocumentPreviewed { preview_id, pages } => {
-                self.finish_preview(preview_id, Ok(pages));
+                self.answered(|inner| &mut inner.previews, "preview", preview_id, Ok(pages));
             }
             SidecarFrame::DocumentPreviewError { preview_id, error } => {
-                self.finish_preview(preview_id, Err(error));
+                self.answered(|inner| &mut inner.previews, "preview", preview_id, Err(error));
             }
             SidecarFrame::CoreRequest {
                 request_id,
@@ -1097,11 +1025,7 @@ impl Runs {
                 },
             });
             // A summary or a draft may only get its own model's key.
-            let summary_provider = inner
-                .summaries
-                .get(&call_id)
-                .map(|(p, _)| p.clone())
-                .or_else(|| inner.drafts.get(&call_id).map(|(p, _)| p.clone()));
+            let summary_provider = inner.key_providers.get(&call_id).cloned();
             (place, inner.routes.contains_key(&call_id), summary_provider)
         };
         let Some(place) = place else {
