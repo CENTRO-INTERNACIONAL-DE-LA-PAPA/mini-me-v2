@@ -1,40 +1,10 @@
-import { useEffect, useState } from "react";
 import { api } from "../api";
+import { sharedValue } from "./sharedValue";
 
-// Every component shares one request; Settings calls `refreshDeveloperMode` after a change.
-let loading: Promise<boolean> | null = null;
-const listeners = new Set<(on: boolean) => void>();
-
-function load(): Promise<boolean> {
-  loading ??= api.getDeveloperMode().catch((error) => {
-    loading = null;
-    throw error;
-  });
-  return loading;
-}
+const developerMode = sharedValue(() => api.getDeveloperMode(), false);
 
 /** Whether developer options are shown; false until it has loaded. */
-export function useDeveloperMode(): boolean {
-  const [on, setOn] = useState(false);
+export const useDeveloperMode = developerMode.use;
 
-  useEffect(() => {
-    let active = true;
-    const update = (next: boolean) => active && setOn(next);
-    listeners.add(update);
-    load()
-      .then(update)
-      .catch(() => {});
-    return () => {
-      active = false;
-      listeners.delete(update);
-    };
-  }, []);
-
-  return on;
-}
-
-/** Shows `on` wherever `useDeveloperMode` is used. */
-export function refreshDeveloperMode(on: boolean): void {
-  loading = Promise.resolve(on);
-  listeners.forEach((update) => update(on));
-}
+/** Shows `on` wherever `useDeveloperMode` is used; Settings calls it after a change. */
+export const refreshDeveloperMode = developerMode.show;
