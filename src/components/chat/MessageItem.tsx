@@ -198,7 +198,7 @@ export const MessageItem = memo(function MessageItem({
   if (fromUser) {
     return (
       <article data-message-id={message.id} className="flex max-w-[520px] flex-col items-end gap-1.5 self-end">
-        <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] bg-muted [--card-edge:transparent] px-[15px] py-[11px] text-foreground">
+        <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] bg-bubble [--card-edge:transparent] px-[15px] py-[11px] text-foreground">
           {text}
           {attachments}
           {reactionPills}
@@ -241,13 +241,16 @@ export const MessageItem = memo(function MessageItem({
           stepsShown={stepsShown}
         />
       )}
+      {/* A reply with no text yet, or none at all, leaves no empty block to space around. */}
       {message.author.kind === "mini_me" ? (
-        <Markdown
-          content={message.content}
-          textComponents={message.text_components}
-          miniMes={miniMes}
-          onOpenAsset={open}
-        />
+        message.content.trim() !== "" && (
+          <Markdown
+            content={message.content}
+            textComponents={message.text_components}
+            miniMes={miniMes}
+            onOpenAsset={open}
+          />
+        )
       ) : (
         text
       )}
