@@ -47,8 +47,8 @@ first.
   message that references it
 
 ### Requirement: The Outline replaces the To-do panel
-A Conversation SHALL offer the Outline, Jobs and Steps panels, and no To-do panel.
+A Conversation SHALL offer the Outline, Jobs, Report and Steps panels, and no To-do panel.
 
 #### Scenario: Side panel buttons
 - **WHEN** the user opens a Conversation
-- **THEN** it offers Outline and Jobs, and no To-do
+- **THEN** it offers Outline, Jobs and Report, and no To-do

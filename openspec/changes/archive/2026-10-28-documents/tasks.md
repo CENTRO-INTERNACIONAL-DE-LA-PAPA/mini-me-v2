@@ -22,12 +22,12 @@
 
 - [x] 4.1 Add CodeMirror 6 and `yaml`; add `qmd.ts` (the title from the YAML header, the headings outside the header and code blocks) and `sourceEdits.ts` (marks around the selection, line markers); verify with `*.test.ts` for each
 - [x] 4.2 Add `document.preview` / `document.previewed` / `document.preview_error`, the sidecar's SVG pages, and `preview_document` in the core; verify with pytest and an inline Rust test
-- [ ] 4.3 Add the `document` View and `DocumentView` (EditorHeader with back link, title, status line, Outline menu and Export PDF; source and preview always side by side; the CodeMirror source with formatting buttons, saved one second after typing and on close; the preview with Render and its out-of-date note) and open it from Files' `.qmd` rows; verify in the app that a document opens from Files, edits survive closing and reopening, the Outline jumps to headings, Render shows the pages, and Export PDF saves a PDF that opens
+- [x] 4.3 Add the `document` View and `DocumentView` (EditorHeader with back link, title, status line, Outline menu and Export PDF; source and preview always side by side; the CodeMirror source with formatting buttons, saved one second after typing and on close; the preview with Render and its out-of-date note) and open it from Files' `.qmd` rows; verify in the app that a document opens from Files, edits survive closing and reopening, the Outline jumps to headings, Render shows the pages, and Export PDF saves a PDF that opens
 
 ## 5. The Report panel and the document component
 
 - [x] 5.1 Add the `document` component renderer (title, icon, Open, removed state) to the catalogue; verify with a renderer test for both states
-- [ ] 5.2 Add the Report panel (Draft from this conversation with the Mini-Mes drawn from and Draft report, Start blank, Open from Files) to the Conversation's tool switch, and the drafting state of the document view ("Scribe is drafting…", Stop, read-only source filled as text arrives, then the preview rendered); verify in the app that Draft report opens a new document that fills as Scribe writes, Stop keeps what was written, nothing is added to the Conversation, Start blank opens a new document, and close returns to the Conversation
+- [x] 5.2 Add the Report panel (Draft from this conversation with the Mini-Mes drawn from and Draft report, Start blank, Open from Files) to the Conversation's tool switch, and the drafting state of the document view ("Scribe is drafting…", Stop, read-only source filled as text arrives, then the preview rendered); verify in the app that Draft report opens a new document that fills as Scribe writes, Stop keeps what was written, nothing is added to the Conversation, Start blank opens a new document, and close returns to the Conversation
 
 ## 6. Docs and checks
 

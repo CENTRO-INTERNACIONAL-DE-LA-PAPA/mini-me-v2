@@ -40,7 +40,8 @@ placeholder Traits.
 
 #### Scenario: Components of the built-in Traits
 - **WHEN** the app starts
-- **THEN** *Assist* lists `save_file` and `show_table`; *Find Papers* `show_papers`;
+- **THEN** *Assist* lists `save_file`, `show_table` and `write_document`; *Summarize*
+  `write_document`; *Find Papers* `show_papers`;
   *Theorize* `show_theories` and `save_file`; *Profile Data* `read_table` and `show_table`;
   *Validate Data*, *Clean Data* and *Join Data* `read_table`, `show_table` and `save_file`;
   *Plot* `read_table` and `show_chart`; and every other Trait lists none
@@ -175,14 +176,14 @@ a neutral pill.
 
 ### Requirement: Placeholder Traits
 The Trait library SHALL contain placeholder Traits for Traits that later changes will
-build: *Document*, *Explore Dataverse*, *Code*, *Collect Data*, *Model*, *Predict* and
-*Index Sources*. Each runs on the `echo` adapter and has no instructions. No predefined
+build: *Explore Dataverse*, *Code*, *Collect Data*, *Model*, *Predict* and *Index Sources*.
+Documents are written with the write-a-document tool, so there is no *Document* Trait. Each runs on the `echo` adapter and has no instructions. No predefined
 Mini-Me's Workflow SHALL reference a placeholder Trait.
 
 #### Scenario: Placeholders are in the library
 - **WHEN** the app starts
-- **THEN** the library contains *Document*, *Explore Dataverse*, *Code*, *Collect Data*,
-  *Model*, *Predict* and *Index Sources*, each with adapter `echo`
+- **THEN** the library contains *Explore Dataverse*, *Code*, *Collect Data*, *Model*,
+  *Predict* and *Index Sources*, each with adapter `echo`, and no *Document*
 
 #### Scenario: Placeholders can't be invoked
 - **WHEN** the user types `@` in the composer, or sends a message without a mention
@@ -193,8 +194,8 @@ When a change builds a Trait that is a placeholder, it SHALL keep the placeholde
 replace its adapter, so anything that references the Trait keeps working.
 
 #### Scenario: Building a placeholder
-- **WHEN** a later change builds *Document*
-- **THEN** *Document* has the same ID as its placeholder and no longer uses `echo`
+- **WHEN** a later change builds *Code*
+- **THEN** *Code* has the same ID as its placeholder and no longer uses `echo`
 
 ### Requirement: Investigator explores, then plans
 Investigator's Workflow SHALL start with a parallel Step whose branches are "Directions",
