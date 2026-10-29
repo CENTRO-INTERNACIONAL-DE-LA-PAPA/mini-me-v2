@@ -197,7 +197,8 @@ export interface ConversationRef {
 
 /** An Asset as the Project's Files screen lists it. */
 export interface FileEntry extends AssetRef {
-  /** `upload` for a file the user imported, `generated` for one a Mini-Me saved. */
+  /** `upload` for a file the user imported or started, `generated` for one the app made,
+   * such as a Mini-Me's output or an exported PDF. */
   source: "upload" | "generated";
   created_at: number;
   /** When its file last changed (Unix ms); null when the file is missing. */

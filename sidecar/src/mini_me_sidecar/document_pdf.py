@@ -153,7 +153,7 @@ def typst_source(source: str) -> str:
 
 
 def _scalar(value: Any) -> str:
-    """A header value YAML read as text, a number or a date, as text; "" for anything else."""
+    """A header value that YAML read as text, a number or a date, as text; "" otherwise."""
     if isinstance(value, bool) or not isinstance(value, (str, int, float, date)):
         return ""
     return str(value).strip()

@@ -260,7 +260,8 @@ pub fn list(project: &Project, query: Option<&str>) -> AppResult<Vec<AssetRef>> 
 pub struct FileEntry {
     #[serde(flatten)]
     pub asset: AssetRef,
-    /// `upload` for a file the user imported, `generated` for one a Mini-Me saved.
+    /// `upload` for a file the user imported or started, `generated` for one the app made,
+    /// such as a Mini-Me's output or an exported PDF.
     pub source: String,
     /// When the Asset was registered, in milliseconds.
     pub created_at: i64,

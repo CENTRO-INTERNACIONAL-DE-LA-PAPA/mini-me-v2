@@ -120,8 +120,8 @@ INSERT INTO overview (id) VALUES (1);
 ALTER TABLE components ADD COLUMN step_index INTEGER;
 "#,
     r#"
--- Who added an Asset, recorded when it is created, such as for a drafted document; null when
--- no author was recorded with it.
+-- Who added an Asset, when the core records it rather than leaving it to the first message
+-- that attaches it, such as Scribe for a document it drafted; null when nothing was recorded.
 ALTER TABLE assets ADD COLUMN added_by_kind TEXT;
 ALTER TABLE assets ADD COLUMN added_by_id TEXT;
 "#,

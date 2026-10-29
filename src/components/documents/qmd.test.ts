@@ -37,7 +37,7 @@ describe("qmd", () => {
   });
 
   it("reads Windows line endings and keeps a # that is part of the text", () => {
-    const text = DOCUMENT.replaceAll("\n", "\r\n").replace("# Summary", "# Using C#");
+    const text = DOCUMENT.replace(/\n/g, "\r\n").replace("# Summary", "# Using C#");
     expect(headings(text)).toEqual([
       { level: 1, text: "Using C#", line: 7 },
       { level: 2, text: "Next steps", line: 15 },
