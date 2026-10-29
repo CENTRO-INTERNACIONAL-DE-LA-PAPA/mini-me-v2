@@ -25,7 +25,7 @@
 
 ## 5. The document view
 
-- [ ] 5.1 Add anchor logic in the UI: map thread ranges through editor changes, check them against their quotes on open, re-anchor a passage found once, and detach the rest; verify with `*.test.ts` for mapping, re-anchoring and detaching
+- [x] 5.1 Add anchor logic in the UI: map thread ranges through editor changes, check them against their quotes on open, re-anchor a passage found once, and detach the rest; verify with `*.test.ts` for mapping, re-anchoring and detaching
 - [ ] 5.2 Move ChatView's `useConversation` into its own file, and give `MessageItem` and `Composer` a compact layout for the panel's width; verify `npx tsc --noEmit` and `npm test` pass and the Conversation view looks unchanged
 - [ ] 5.3 Add the Preview / Comments switch over the right pane and the comments panel: threads in passage order, each a card titled with its passage that lists its messages with `MessageItem` and takes comments with `Composer` (its @ list, Send and Stop), plus "Show resolved", "Detached", Resolve, Reopen and Delete with confirmation; verify in the app that comments, notes and an @-mentioned reply appear, and that resolving, reopening and deleting work
 - [ ] 5.4 Add commenting from a selection in the source, the passage highlights, and selecting a card from its highlight and the other way round; verify in the app that a new thread highlights its passage and that clicking either side selects the other
