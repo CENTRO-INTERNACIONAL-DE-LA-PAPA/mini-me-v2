@@ -215,6 +215,19 @@ class CallContext:
         self._results = None
         return str(result["component_id"])
 
+    async def edit_document(
+        self, asset_id: str, edits: list[dict[str, str]]
+    ) -> dict[str, Any]:
+        """Suggests `edits`, each `{ find, replace, reason }`, to the document `asset_id`: the
+        core opens a comment thread on each quoted passage and adds a card for them below the
+        reply; the document itself is unchanged. Returns `{ component_id, threads }`. Raises
+        `CoreRequestError` when the core refuses them, changing nothing."""
+        result = await self._requests.send(
+            self.call_id, "document.edit", {"asset_id": asset_id, "edits": edits}
+        )
+        self._results = None
+        return result
+
     async def write_asset(self, name: str, media_type: str, data: bytes) -> dict[str, Any]:
         """Saves `data` (at most 32 MiB) in the Project as the file `name`, attaches it to the
         reply, and returns the Asset `{ id, name, media_type, size_bytes }`."""

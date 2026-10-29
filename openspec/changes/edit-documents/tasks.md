@@ -12,7 +12,7 @@
 
 ## 3. The tool (sidecar)
 
-- [ ] 3.1 Add `edit_document` (tool, model form, `TOOL_NAMES`, `MODEL_TOOL_NAMES`, the 64 KiB limit), offered by the prompt adapter only when `document` is none, and raise the protocol version to 11 on both sides; verify with pytest for the size limit and that the tool is offered outside a thread and not inside one
+- [x] 3.1 Add `edit_document` (tool, model form, `TOOL_NAMES`, `MODEL_TOOL_NAMES`, the 64 KiB limit), offered by the prompt adapter only when `document` is none, and raise the protocol version to 11 on both sides; verify with pytest for the size limit and that the tool is offered outside a thread and not inside one
 
 ## 4. The UI
 

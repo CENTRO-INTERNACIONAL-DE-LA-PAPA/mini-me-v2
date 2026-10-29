@@ -1,11 +1,11 @@
 """Writing documents: Quarto Markdown (`.qmd`) files the user opens and edits in the app's
-document view, and suggesting edits to a passage of one from a comment thread."""
+document view, and suggesting edits to them, to a thread's passage or from a Conversation."""
 
 import json
 import re
 from typing import Any
 
-from mini_me_sidecar.context import CallContext
+from mini_me_sidecar.context import CallContext, CoreRequestError
 from mini_me_sidecar.tools.base import ToolError, add_component
 from mini_me_sidecar.tools.files import MAX_TEXT_FILE_BYTES, save_file
 
@@ -64,3 +64,23 @@ async def suggest_edit(ctx: CallContext, text: str) -> dict[str, Any]:
     shown = text if text.strip() else "Remove this passage."
     component_id = await add_component(ctx, "suggestion", {"text": text}, shown)
     return {"component_id": component_id}
+
+
+async def edit_document(
+    ctx: CallContext, document_id: str, edits: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Suggests `edits`, each `{ find, replace, reason }`, to the document `document_id`, for the
+    user to accept or reject in the document view; returns `{ component_id, threads }`. The
+    document itself is unchanged."""
+    if ctx.document is not None:
+        raise ToolError("In a comment thread, suggest an edit to its passage instead.", "in_thread")
+    cleaned = []
+    for number, edit in enumerate(edits, start=1):
+        find, replace, reason = (str(edit.get(key, "")) for key in ("find", "replace", "reason"))
+        if len(replace.encode("utf-8")) > MAX_SUGGESTION_BYTES:
+            raise ToolError(f"Edit {number}'s new text is larger than 64 KiB; split it up.")
+        cleaned.append({"find": find, "replace": replace, "reason": reason})
+    try:
+        return await ctx.edit_document(document_id, cleaned)
+    except CoreRequestError as error:
+        raise ToolError(f"No edit was suggested: {error}", error.code) from None

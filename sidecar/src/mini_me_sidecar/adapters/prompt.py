@@ -21,7 +21,7 @@ from langchain_core.messages import (
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, chat_model, provider_error
 from mini_me_sidecar.context import CallContext, Model, TraitError
-from mini_me_sidecar.tools import READ_TOOLS, THREAD_TOOLS
+from mini_me_sidecar.tools import CONVERSATION_TOOLS, READ_TOOLS, THREAD_TOOLS
 
 MAX_MATERIAL_CHARS = 400_000
 
@@ -186,9 +186,11 @@ async def _converse(
 
 def _offered(listed: tuple[str, ...], in_thread: bool) -> list[str]:
     """The names of the tools offered to the model: the read tools, then those its Trait
-    lists, leaving out the tools that act on a comment thread outside one."""
+    lists, leaving out the tools that act on a comment thread outside one and those that act
+    from a Conversation inside one."""
     names = [*READ_TOOLS, *(t for t in listed if t not in READ_TOOLS)]
-    return [n for n in names if in_thread or n not in THREAD_TOOLS]
+    left_out = CONVERSATION_TOOLS if in_thread else THREAD_TOOLS
+    return [n for n in names if n not in left_out]
 
 
 def _over_budget(size: int, left: int) -> str:
