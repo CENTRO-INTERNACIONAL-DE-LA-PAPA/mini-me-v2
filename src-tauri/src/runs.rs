@@ -1004,6 +1004,8 @@ impl Runs {
             conversation_id: Uuid,
             answers: Uuid,
             reply: Uuid,
+            /// The reply's author, the Mini-Me that adds what the call saves.
+            author: Author,
             provider: Option<String>,
             /// The Step the call runs.
             step_id: String,
@@ -1017,6 +1019,7 @@ impl Runs {
                 conversation_id: run.conversation_id,
                 answers: run.answers,
                 reply: run.message_id,
+                author: run.spec.author.clone(),
                 provider: run.provider.clone(),
                 step_id: step_id.to_string(),
                 call: match kind {
@@ -1054,9 +1057,9 @@ impl Runs {
             "asset.write" => {
                 let p: AssetWriteParams = parse_params(params)?;
                 let bytes = decode_asset(&p.data)?;
-                let asset =
-                    conversations::attach_generated(&project, reply, &p.name, &p.media_type, &bytes)
-                        .map_err(reply_ended)?;
+                let file = (p.name.as_str(), p.media_type.as_str(), bytes.as_slice());
+                let asset = conversations::attach_generated(&project, reply, &place.author, file)
+                    .map_err(reply_ended)?;
                 Ok(json!({ "asset": asset }))
             }
             "conversation.results" => {
@@ -1245,7 +1248,7 @@ mod tests {
     use super::*;
     use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
     use crate::library::Step;
-    use crate::projects::test_support::temp_project;
+    use crate::projects::test_support::{temp_project, user};
     use crate::protocol::{EventKind, MessageStatus};
     use crate::secrets::NoSecrets;
     use crate::secrets::test_support::MemorySecrets;
@@ -1735,7 +1738,7 @@ mod tests {
         let source = source_dir.path().join("trial.bin");
         let content: Vec<u8> = (0..(ASSET_CHUNK_BYTES * 5 / 2)).map(|i| (i % 251) as u8).collect();
         std::fs::write(&source, &content).unwrap();
-        let asset = assets::import(&f.project, &source).unwrap();
+        let asset = assets::import(&f.project, &source, &user()).unwrap();
 
         let mut read = Vec::new();
         let mut responses = 0;
@@ -1756,7 +1759,7 @@ mod tests {
         assert_eq!(read, content);
 
         let (_other_dir, other) = temp_project();
-        let foreign = assets::import(&other, &source).unwrap();
+        let foreign = assets::import(&other, &source, &user()).unwrap();
         let response = f.runs.respond(
             "r".into(),
             call_id,

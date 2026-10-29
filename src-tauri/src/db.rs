@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 6;
+pub const SCHEMA_VERSION: i32 = 7;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -124,6 +124,17 @@ ALTER TABLE components ADD COLUMN step_index INTEGER;
 -- that attaches it, such as Scribe for a document it drafted; null when nothing was recorded.
 ALTER TABLE assets ADD COLUMN added_by_kind TEXT;
 ALTER TABLE assets ADD COLUMN added_by_id TEXT;
+"#,
+    r#"
+-- Every Asset records its author when it is created. Those stored before then get the author
+-- of the first message that attaches them, else, for one the user imported, the user.
+UPDATE assets SET (added_by_kind, added_by_id) = (
+    SELECT m.author_kind, m.author_id FROM messages m, json_each(m.attachments) a
+    WHERE json_extract(a.value, '$.id') = assets.id ORDER BY m.rowid LIMIT 1
+) WHERE added_by_kind IS NULL;
+UPDATE assets SET added_by_kind = 'user', added_by_id = COALESCE(
+    (SELECT author_id FROM messages WHERE author_kind = 'user' LIMIT 1), ''
+) WHERE added_by_kind IS NULL AND source = 'upload';
 "#,
 ];
 
@@ -262,6 +273,45 @@ mod tests {
             })
             .unwrap();
         assert_eq!((summary, featured), (None, None));
+    }
+
+    #[test]
+    fn a_version_6_database_fills_in_who_added_each_asset() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..6] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 6).unwrap();
+            conn.execute_batch(
+                "INSERT INTO conversations (id, title, created_at, last_activity_at) \
+                 VALUES ('c', 'Trial', 1, 1); \
+                 INSERT INTO messages (id, conversation_id, author_kind, author_id, content, \
+                 status, attachments, text_components, created_at) VALUES \
+                 ('m1', 'c', 'user', 'u', 'plot it', 'complete', '[]', '[]', 1), \
+                 ('m2', 'c', 'mini_me', 'plotter', 'done', 'complete', \
+                 '[{\"id\":\"saved\",\"name\":\"plot.csv\",\"media_type\":\"text/csv\",\
+                 \"size_bytes\":1}]', '[]', 2); \
+                 INSERT INTO assets (id, name, media_type, size_bytes, source, rel_path, \
+                 created_at) VALUES \
+                 ('saved', 'plot.csv', 'text/csv', 1, 'generated', 'assets/saved/plot.csv', 2), \
+                 ('upload', 'trial.csv', 'text/csv', 1, 'upload', 'assets/upload/trial.csv', 1);",
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        let added_by = |id: &str| -> (String, String) {
+            conn.query_row(
+                "SELECT added_by_kind, added_by_id FROM assets WHERE id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap()
+        };
+        assert_eq!(added_by("saved"), ("mini_me".into(), "plotter".into()));
+        assert_eq!(added_by("upload"), ("user".into(), "u".into()));
     }
 
     #[test]

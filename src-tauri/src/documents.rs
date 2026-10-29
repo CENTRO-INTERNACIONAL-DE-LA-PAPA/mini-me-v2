@@ -53,9 +53,7 @@ pub fn create(
         return Err(AppError::invalid_input("A document needs a title."));
     }
     let header = header(title, author);
-    let asset = assets::import_bytes(project, &file_name(title), MEDIA_TYPE, header.as_bytes())?;
-    assets::set_added_by(project, asset.id, user)?;
-    Ok(asset)
+    assets::import_bytes(project, &file_name(title), MEDIA_TYPE, header.as_bytes(), user)
 }
 
 /// A document's text and when its file last changed (Unix ms), as the document view opens it.
@@ -143,14 +141,16 @@ pub fn pdf_name(name: &str) -> String {
 }
 
 /// Stores the PDF exported from the document `id`, named `name`, as a generated Asset of the
-/// Project, added by whoever added the document.
-pub fn store_pdf(project: &Project, id: Uuid, name: &str, pdf: &[u8]) -> AppResult<AssetRef> {
-    let added_by = assets::added_by(project, id)?;
-    let asset = assets::write_generated(project, &pdf_name(name), "application/pdf", pdf)?;
-    if let Some(author) = added_by {
-        assets::set_added_by(project, asset.id, &author)?;
-    }
-    Ok(asset)
+/// Project, added by whoever added the document, else by `user`, who exported it.
+pub fn store_pdf(
+    project: &Project,
+    id: Uuid,
+    name: &str,
+    pdf: &[u8],
+    user: &Author,
+) -> AppResult<AssetRef> {
+    let author = assets::added_by(project, id)?.unwrap_or_else(|| user.clone());
+    assets::write_generated(project, &pdf_name(name), "application/pdf", pdf, &author)
 }
 
 /// The file of the Asset `id`, which must be a document of this Project.
@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn only_documents_are_saved() {
         let (_dir, project) = temp_project();
-        let csv = assets::import_bytes(&project, "field-trial.csv", "text/csv", b"a,b\n").unwrap();
+        let csv = assets::import_bytes(&project, "field-trial.csv", "text/csv", b"a,b\n", &user()).unwrap();
         let error = save(&project, csv.id, "# Not a table").unwrap_err();
         assert_eq!(error.code, "invalid_input");
         let path = assets::file_path(&project, csv.id).unwrap();
@@ -223,13 +223,13 @@ mod tests {
         let added_by = |id: Uuid| assets::added_by(&project, id).unwrap();
         let scribe = Some(Author { kind: AuthorKind::MiniMe, id: SCRIBE.to_string() });
         let notes = create(&project, "Notes", None, &user()).unwrap();
-        let pdf = store_pdf(&project, notes.id, &notes.name, b"%PDF-1.7").unwrap();
+        let pdf = store_pdf(&project, notes.id, &notes.name, b"%PDF-1.7", &user()).unwrap();
         assert_eq!(added_by(pdf.id), Some(user()));
         let drafted = create(&project, "Trial design", None, &user()).unwrap();
         let header = read(&project, drafted.id).unwrap();
         save_draft(&project, drafted.id, &header, "# Summary").unwrap();
         assert_eq!(added_by(drafted.id), scribe);
-        let pdf = store_pdf(&project, drafted.id, &drafted.name, b"%PDF-1.7").unwrap();
+        let pdf = store_pdf(&project, drafted.id, &drafted.name, b"%PDF-1.7", &user()).unwrap();
         assert_eq!(added_by(pdf.id), scribe);
         // Drafting after text the user wrote keeps the document theirs.
         save(&project, notes.id, "---\ntitle: Notes\n---\n\nMine.\n").unwrap();
@@ -243,7 +243,7 @@ mod tests {
         let (_dir, project) = temp_project();
         assert_eq!(pdf_name("Huancayo 2025 report.qmd"), "Huancayo 2025 report.pdf");
         let report = create(&project, "Report", None, &user()).unwrap();
-        let pdf = store_pdf(&project, report.id, &report.name, b"%PDF-1.7").unwrap();
+        let pdf = store_pdf(&project, report.id, &report.name, b"%PDF-1.7", &user()).unwrap();
         assert_eq!((pdf.name.as_str(), pdf.media_type.as_str()), ("Report.pdf", "application/pdf"));
     }
 

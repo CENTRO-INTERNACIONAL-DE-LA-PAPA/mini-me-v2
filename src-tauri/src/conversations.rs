@@ -267,17 +267,17 @@ pub fn add_component(
     Ok(id)
 }
 
-/// Stores a file a Trait produced as a generated Asset and attaches it to its streaming
-/// reply. If the reply ends before the attachment is persisted, the Asset is removed again.
+/// Stores a file a Trait produced as a generated Asset added by `author`, the reply's Mini-Me,
+/// and attaches it to its streaming reply. If the reply ends before the attachment is
+/// persisted, the Asset is removed again.
 pub fn attach_generated(
     project: &Project,
     message_id: Uuid,
-    name: &str,
-    media_type: &str,
-    bytes: &[u8],
+    author: &Author,
+    (name, media_type, bytes): (&str, &str, &[u8]),
 ) -> AppResult<AssetRef> {
     streaming_reply(&project.lock(), message_id)?;
-    let asset = assets::write_generated(project, name, media_type, bytes)?;
+    let asset = assets::write_generated(project, name, media_type, bytes, author)?;
     let attached = {
         let mut state = project.lock();
         streaming_reply(&state, message_id).and_then(|conversation| {
@@ -604,7 +604,7 @@ pub fn add_reaction(project: &Project, message_id: Uuid, emoji: &str, by: Author
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::test_support::temp_project;
+    use crate::projects::test_support::{self, temp_project};
     use crate::store::test_support::Collector;
 
     fn text(content: &str) -> SendMessageInput {
@@ -687,7 +687,7 @@ mod tests {
         let conversation = create(&project).unwrap().id;
         let source = dir.path().join("trial.csv");
         std::fs::write(&source, "a,b").unwrap();
-        let asset = assets::import(&project, &source).unwrap();
+        let asset = assets::import(&project, &source, &test_support::user()).unwrap();
 
         // "é" is one UTF-16 code unit, so this content is 6 units long.
         let mut input = text("é #x y");

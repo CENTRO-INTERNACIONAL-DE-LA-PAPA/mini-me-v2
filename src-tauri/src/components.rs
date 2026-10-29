@@ -68,7 +68,7 @@ pub fn read(state: &ProjectState, conversation_id: Uuid, component_id: Uuid) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::test_support::temp_project;
+    use crate::projects::test_support::{temp_project, user};
     use serde_json::json;
 
     #[test]
@@ -97,7 +97,7 @@ mod tests {
         let (dir, project) = temp_project();
         let source = dir.path().join("trial.csv");
         std::fs::write(&source, "yield\n1").unwrap();
-        let asset = assets::import(&project, &source).unwrap();
+        let asset = assets::import(&project, &source, &user()).unwrap();
         let state = project.lock();
 
         let preview = json!({ "source": "trial.csv", "source_id": asset.id });
@@ -115,7 +115,7 @@ mod tests {
         let (dir, project) = temp_project();
         let source = dir.path().join("trial.csv");
         std::fs::write(&source, "yield\n1").unwrap();
-        let asset = assets::import(&project, &source).unwrap();
+        let asset = assets::import(&project, &source, &user()).unwrap();
         let conversation = create(&project).unwrap().id;
         let input = serde_json::from_value(json!({ "content": "profile" })).unwrap();
         let question = send_message(&project, conversation, input, new_id()).unwrap();

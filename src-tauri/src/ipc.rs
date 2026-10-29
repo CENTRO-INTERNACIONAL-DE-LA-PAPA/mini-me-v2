@@ -619,7 +619,7 @@ pub async fn import_assets(
         let path = file
             .into_path()
             .map_err(|e| AppError::invalid_input(e.to_string()))?;
-        imported.push(assets::import(&project, &path)?);
+        imported.push(assets::import(&project, &path, &state.user())?);
     }
     Ok(imported)
 }
@@ -642,7 +642,8 @@ pub async fn import_pasted_image(
     let name = percent_encoding::percent_decode_str(header("name")).decode_utf8_lossy();
     let media_type = header("media-type");
     let project = state.project(project_id)?;
-    assets::import_bytes(&project, &assets::pasted_name(&name, media_type), media_type, bytes)
+    let name = assets::pasted_name(&name, media_type);
+    assets::import_bytes(&project, &name, media_type, bytes, &state.user())
 }
 
 /// Imports files dropped on the window; only paths of the latest drop are accepted.
@@ -653,7 +654,7 @@ pub async fn import_dropped(
     paths: Vec<PathBuf>,
 ) -> AppResult<Vec<AssetRef>> {
     let dropped = state.dropped.lock().unwrap_or_else(|p| p.into_inner()).clone();
-    assets::import_dropped(&*state.project(project_id)?, &paths, &dropped)
+    assets::import_dropped(&*state.project(project_id)?, &paths, &dropped, &state.user())
 }
 
 /// The bytes of an image Asset, for its thumbnail in the composer.
@@ -816,7 +817,7 @@ pub async fn export_document_pdf(
     })
     .await
     .map_err(|e| AppError::new("export_failed", e.to_string()))??;
-    documents::store_pdf(&project, asset_id, &name, &pdf)
+    documents::store_pdf(&project, asset_id, &name, &pdf, &state.user())
 }
 
 #[tauri::command(rename_all = "snake_case")]

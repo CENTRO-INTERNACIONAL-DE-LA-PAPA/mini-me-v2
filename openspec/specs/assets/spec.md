@@ -106,9 +106,9 @@ one when typing `#` in the composer.
 ### Requirement: The Files screen lists a Project's Assets
 The app SHALL show every Asset of the open Project on its Files screen, newest first, with
 its name, who added it, the Conversations that use it, when it was added and its size. "Who
-added it" SHALL be the author recorded with the Asset when there is one, else the author of
-the first message the Asset is attached to: Scribe for a document it drafted, and for a PDF
-exported from a document, whoever added that document. An Asset
+added it" SHALL be the author recorded with the Asset when it is created: the user for a file
+they upload, paste, drop or start, the Mini-Me whose reply saves a file, Scribe for a document
+it drafted, and for a PDF exported from a document, whoever added that document. An Asset
 SHALL count as used in a Conversation when one of its messages attaches it or references it
 with `#`. The Files screen SHALL filter Assets by name and by kind (data, documents, or files a Mini-Me
 saved), import files with Upload, and open an Asset when its row is clicked.
