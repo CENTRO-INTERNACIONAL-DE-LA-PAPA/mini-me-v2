@@ -7,6 +7,8 @@ use uuid::Uuid;
 
 /// Assistant, who answers when routing has no mentioned or confident choice.
 pub const FALLBACK_MINI_ME: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8e1f0d7b03);
+/// Scribe, who drafts reports from a Conversation.
+pub const SCRIBE: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8e1f0d7b01);
 
 /// Every tool a Trait may list; the sidecar's `tools` package knows the same names.
 pub const TOOLS: [&str; 9] = [
@@ -656,6 +658,7 @@ mod tests {
     fn the_fallback_is_assistant_and_must_exist() {
         let mut library = Library::builtin();
         assert_eq!(library.mini_me(FALLBACK_MINI_ME).unwrap().name, "Assistant");
+        assert_eq!(library.mini_me(SCRIBE).unwrap().name, "Scribe");
         library.mini_mes.retain(|m| m.id != FALLBACK_MINI_ME);
         assert!(library.problems().iter().any(|p| p.contains("fallback Mini-Me is missing")));
     }

@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 5;
+pub const SCHEMA_VERSION: i32 = 6;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -118,6 +118,12 @@ INSERT INTO overview (id) VALUES (1);
     r#"
 -- The position in its reply's message_steps (minus 1) of the Step run that added it.
 ALTER TABLE components ADD COLUMN step_index INTEGER;
+"#,
+    r#"
+-- Who added an Asset, recorded when it is created, such as for a drafted document; null when
+-- no author was recorded with it.
+ALTER TABLE assets ADD COLUMN added_by_kind TEXT;
+ALTER TABLE assets ADD COLUMN added_by_id TEXT;
 "#,
 ];
 

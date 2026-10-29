@@ -790,7 +790,7 @@ pub async fn create_document(
     title: String,
 ) -> AppResult<AssetRef> {
     let author = state.profile.current().name;
-    documents::create(&*state.project(project_id)?, &title, author.as_deref())
+    documents::create(&*state.project(project_id)?, &title, author.as_deref(), &state.user())
 }
 
 /// Drafts the document `asset_id`, just created, from the Conversation `conversation_id`,
@@ -867,7 +867,7 @@ pub async fn export_document_pdf(
     })
     .await
     .map_err(|e| AppError::new("export_failed", e.to_string()))??;
-    documents::store_pdf(&project, &name, &pdf)
+    documents::store_pdf(&project, asset_id, &name, &pdf)
 }
 
 #[tauri::command(rename_all = "snake_case")]

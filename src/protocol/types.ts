@@ -202,7 +202,8 @@ export interface FileEntry extends AssetRef {
   created_at: number;
   /** When its file last changed (Unix ms); null when the file is missing. */
   modified_at: number | null;
-  /** The author of the first message the Asset is attached to, if any. */
+  /** Who added the Asset: the author stored with it, else the author of the first message it
+   * is attached to; null when neither says. */
   added_by: Author | null;
   /** The Conversations that attach or reference the Asset, in the order it first appeared. */
   used_in: ConversationRef[];

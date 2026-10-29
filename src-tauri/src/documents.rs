@@ -7,8 +7,9 @@ use uuid::Uuid;
 
 use crate::assets;
 use crate::error::{AppError, AppResult};
+use crate::library::SCRIBE;
 use crate::projects;
-use crate::protocol::AssetRef;
+use crate::protocol::{AssetRef, Author, AuthorKind};
 use crate::store::Project;
 
 pub const EXTENSION: &str = ".qmd";
@@ -38,13 +39,22 @@ pub fn header(title: &str, author: Option<&str>) -> String {
     header
 }
 
-/// Creates an empty document titled `title` and returns its Asset.
-pub fn create(project: &Project, title: &str, author: Option<&str>) -> AppResult<AssetRef> {
+/// Creates an empty document titled `title`, added by `user` and with `author` in its header,
+/// and returns its Asset.
+pub fn create(
+    project: &Project,
+    title: &str,
+    author: Option<&str>,
+    user: &Author,
+) -> AppResult<AssetRef> {
     let title = title.trim();
     if title.is_empty() {
         return Err(AppError::invalid_input("A document needs a title."));
     }
-    assets::import_bytes(project, &file_name(title), MEDIA_TYPE, header(title, author).as_bytes())
+    let header = header(title, author);
+    let asset = assets::import_bytes(project, &file_name(title), MEDIA_TYPE, header.as_bytes())?;
+    assets::set_added_by(project, asset.id, user)?;
+    Ok(asset)
 }
 
 /// The text of the document `id`.
@@ -57,6 +67,12 @@ pub fn read(project: &Project, id: Uuid) -> AppResult<String> {
 /// Replaces the text of the document `id`, through a temporary file so a failed write leaves
 /// the previous version whole.
 pub fn save(project: &Project, id: Uuid, text: &str) -> AppResult<()> {
+    write(project, id, text, None)
+}
+
+/// Replaces the text of the document `id` as `save` does, and records `added_by` with the new
+/// size when given.
+fn write(project: &Project, id: Uuid, text: &str, added_by: Option<&Author>) -> AppResult<()> {
     if text.len() > MAX_BYTES {
         return Err(AppError::invalid_input("A document can be at most 2 MiB."));
     }
@@ -65,20 +81,37 @@ pub fn save(project: &Project, id: Uuid, text: &str) -> AppResult<()> {
     std::fs::write(&tmp, text)?;
     std::fs::rename(&tmp, &path)?;
     project.lock().conn.execute(
-        "UPDATE assets SET size_bytes = ?1 WHERE id = ?2",
-        params![text.len() as i64, id.to_string()],
+        "UPDATE assets SET size_bytes = ?1, added_by_kind = COALESCE(?2, added_by_kind), \
+         added_by_id = COALESCE(?3, added_by_id) WHERE id = ?4",
+        params![
+            text.len() as i64,
+            added_by.map(|a| a.kind.as_str()),
+            added_by.map(|a| a.id.as_str()),
+            id.to_string()
+        ],
     )?;
     Ok(())
 }
 
 /// Writes a drafted `body` after the document's current text, its header, keeping the header
-/// unchanged. An empty draft leaves the document as it is.
+/// unchanged. A document that held only its YAML header becomes Scribe's, so Files lists
+/// Scribe as who added it. An empty draft leaves the document as it is.
 pub fn save_draft(project: &Project, id: Uuid, header: &str, body: &str) -> AppResult<()> {
     let body = body.trim();
     if body.is_empty() {
         return Ok(());
     }
-    save(project, id, &format!("{}\n\n{body}\n", header.trim_end_matches('\n')))
+    let scribe = Author { kind: AuthorKind::MiniMe, id: SCRIBE.to_string() };
+    let added_by = only_header(header).then_some(&scribe);
+    write(project, id, &format!("{}\n\n{body}\n", header.trim_end_matches('\n')), added_by)
+}
+
+/// Whether `text` is a YAML header with nothing after it.
+fn only_header(text: &str) -> bool {
+    let Some(rest) = text.trim_start().strip_prefix("---\n") else {
+        return false;
+    };
+    rest.split_once("\n---").is_some_and(|(_, after)| after.trim().is_empty())
 }
 
 /// The name of the PDF exported from the document `name`: `report.qmd` gives `report.pdf`.
@@ -87,9 +120,15 @@ pub fn pdf_name(name: &str) -> String {
     format!("{stem}.pdf")
 }
 
-/// Stores the PDF exported from the document `name` as a generated Asset of the Project.
-pub fn store_pdf(project: &Project, name: &str, pdf: &[u8]) -> AppResult<AssetRef> {
-    assets::write_generated(project, &pdf_name(name), "application/pdf", pdf)
+/// Stores the PDF exported from the document `id`, named `name`, as a generated Asset of the
+/// Project, added by whoever added the document.
+pub fn store_pdf(project: &Project, id: Uuid, name: &str, pdf: &[u8]) -> AppResult<AssetRef> {
+    let added_by = assets::added_by(project, id)?;
+    let asset = assets::write_generated(project, &pdf_name(name), "application/pdf", pdf)?;
+    if let Some(author) = added_by {
+        assets::set_added_by(project, asset.id, &author)?;
+    }
+    Ok(asset)
 }
 
 /// The file of the Asset `id`, which must be a document of this Project.
@@ -106,10 +145,14 @@ mod tests {
     use super::*;
     use crate::projects::test_support::temp_project;
 
+    fn user() -> Author {
+        Author { kind: AuthorKind::User, id: "u".into() }
+    }
+
     #[test]
     fn a_new_document_has_a_header_with_its_title_and_author() {
         let (_dir, project) = temp_project();
-        let asset = create(&project, "Trials: 2026/27", Some("Ana Pérez")).unwrap();
+        let asset = create(&project, "Trials: 2026/27", Some("Ana Pérez"), &user()).unwrap();
         assert_eq!(asset.name, "Trials- 2026-27.qmd");
         assert_eq!(
             read(&project, asset.id).unwrap(),
@@ -120,7 +163,7 @@ mod tests {
     #[test]
     fn saving_replaces_the_text_and_its_size() {
         let (_dir, project) = temp_project();
-        let asset = create(&project, "Report", None).unwrap();
+        let asset = create(&project, "Report", None, &user()).unwrap();
         let text = "---\ntitle: Report\n---\n\n# Summary\n";
         save(&project, asset.id, text).unwrap();
         assert_eq!(read(&project, asset.id).unwrap(), text);
@@ -141,7 +184,7 @@ mod tests {
     #[test]
     fn a_draft_follows_the_header() {
         let (_dir, project) = temp_project();
-        let asset = create(&project, "Trial design", None).unwrap();
+        let asset = create(&project, "Trial design", None, &user()).unwrap();
         let header = read(&project, asset.id).unwrap();
         save_draft(&project, asset.id, &header, "\n# Summary\n\nYield fell.\n\n").unwrap();
         assert_eq!(
@@ -153,17 +196,39 @@ mod tests {
     }
 
     #[test]
+    fn a_draft_makes_a_blank_document_scribes_and_its_pdf_follows() {
+        let (_dir, project) = temp_project();
+        let added_by = |id: Uuid| assets::added_by(&project, id).unwrap();
+        let scribe = Some(Author { kind: AuthorKind::MiniMe, id: SCRIBE.to_string() });
+        let notes = create(&project, "Notes", None, &user()).unwrap();
+        let pdf = store_pdf(&project, notes.id, &notes.name, b"%PDF-1.7").unwrap();
+        assert_eq!(added_by(pdf.id), Some(user()));
+        let drafted = create(&project, "Trial design", None, &user()).unwrap();
+        let header = read(&project, drafted.id).unwrap();
+        save_draft(&project, drafted.id, &header, "# Summary").unwrap();
+        assert_eq!(added_by(drafted.id), scribe);
+        let pdf = store_pdf(&project, drafted.id, &drafted.name, b"%PDF-1.7").unwrap();
+        assert_eq!(added_by(pdf.id), scribe);
+        // Drafting after text the user wrote keeps the document theirs.
+        save(&project, notes.id, "---\ntitle: Notes\n---\n\nMine.\n").unwrap();
+        let text = read(&project, notes.id).unwrap();
+        save_draft(&project, notes.id, &text, "# More").unwrap();
+        assert_eq!(added_by(notes.id), Some(user()));
+    }
+
+    #[test]
     fn a_pdf_is_named_after_its_document() {
         let (_dir, project) = temp_project();
         assert_eq!(pdf_name("Huancayo 2025 report.qmd"), "Huancayo 2025 report.pdf");
-        let pdf = store_pdf(&project, "Report.qmd", b"%PDF-1.7").unwrap();
+        let report = create(&project, "Report", None, &user()).unwrap();
+        let pdf = store_pdf(&project, report.id, &report.name, b"%PDF-1.7").unwrap();
         assert_eq!((pdf.name.as_str(), pdf.media_type.as_str()), ("Report.pdf", "application/pdf"));
     }
 
     #[test]
     fn a_failed_save_leaves_the_document_whole() {
         let (_dir, project) = temp_project();
-        let asset = create(&project, "Report", None).unwrap();
+        let asset = create(&project, "Report", None, &user()).unwrap();
         let path = assets::file_path(&project, asset.id).unwrap();
         // A directory where the temporary file would go makes the write fail.
         std::fs::create_dir(path.with_extension("qmd.tmp")).unwrap();
