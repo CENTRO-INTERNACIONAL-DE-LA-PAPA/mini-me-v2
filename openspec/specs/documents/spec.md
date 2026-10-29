@@ -98,22 +98,19 @@ attached to, or neutral otherwise. Clicking one SHALL open it in the document vi
 ### Requirement: The document view
 A document SHALL open across the whole main sheet under an editor header: a back link to the
 view it was opened from, its title from the YAML header, a status line "Draft · <Project> ·
-edited <time>", an Outline menu, Export PDF, and below them the source and the preview, always
-side by side. The back link SHALL return to that view.
+edited <time>", a Comments button, Export PDF, and below them the source and the preview side by
+side. The Comments button SHALL show or hide the Comments sheet beside the main sheet.
+The back link SHALL return to the view the document was opened from.
 
 #### Scenario: Opening from a Conversation
 - **WHEN** the user opens a document from the Report panel of "Trial design" and clicks the
   "Trial design" back link
 - **THEN** "Trial design" is shown again
 
-### Requirement: The outline
-The Outline menu SHALL list the document's `#` headings in order, indented by level, leaving
-out lines in its YAML header and code blocks. Picking a heading SHALL move the source to its
-line.
-
-#### Scenario: Jumping to a section
-- **WHEN** the user picks "Next steps" in the Outline menu
-- **THEN** the source scrolls to the line "## Next steps" and puts the cursor there
+#### Scenario: Showing the comments
+- **WHEN** the user clicks Comments
+- **THEN** the Comments sheet appears beside the main sheet, and clicking Comments again hides
+  it
 
 ### Requirement: Editing the source
 The document SHALL be edited as its Quarto source, the whole file including its YAML header,
