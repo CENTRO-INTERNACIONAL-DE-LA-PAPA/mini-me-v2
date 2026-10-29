@@ -43,8 +43,8 @@ pub struct HomeSettings {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RoutingSettings {
-    /// Below this confidence in Jev's choice of Mini-Me, the user is asked to mention one;
-    /// from 0 to 1.
+    /// Below this confidence in its choice, Jev's Mini-Me is replaced by the fallback Mini-Me
+    /// and its reaction is left out; from 0 to 1.
     pub threshold: f64,
     /// A developer aid: store and show Jev's raw answers under each message.
     #[serde(default)]

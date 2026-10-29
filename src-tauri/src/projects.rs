@@ -207,6 +207,11 @@ pub mod test_support {
         }
     }
 
+    /// The user, as the author of the files tests import.
+    pub fn user() -> crate::protocol::Author {
+        crate::protocol::Author { kind: crate::protocol::AuthorKind::User, id: "u".into() }
+    }
+
     /// A freshly created and opened Project inside a temporary Mini-Me Data folder.
     pub fn temp_project() -> (tempfile::TempDir, Project) {
         let dir = tempfile::tempdir().unwrap();

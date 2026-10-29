@@ -50,7 +50,6 @@ pub fn create(project: &Project) -> AppResult<ConversationSummary> {
     Ok(summary)
 }
 
-/// Conversations ordered by most recent activity first.
 /// The title of Conversation `conversation_id`.
 pub fn title(project: &Project, conversation_id: Uuid) -> AppResult<String> {
     let state = project.lock();
@@ -61,6 +60,7 @@ pub fn title(project: &Project, conversation_id: Uuid) -> AppResult<String> {
     )?)
 }
 
+/// Conversations ordered by most recent activity first.
 pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
     let state = project.lock();
     let mut stmt = state.conn.prepare(
@@ -159,19 +159,11 @@ pub fn send_message(
         .collect::<AppResult<Vec<_>>>()?;
     validate_text_components(&state, conversation_id, &input.content, &input.text_components)?;
 
+    let author = Author { kind: AuthorKind::User, id: user_id.to_string() };
     let message = Message {
-        id: new_id(),
-        author: Author {
-            kind: AuthorKind::User,
-            id: user_id.to_string(),
-        },
-        content: input.content,
-        status: MessageStatus::Complete,
-        reply_to: None,
         attachments,
         text_components: input.text_components,
-        components: Vec::new(),
-        steps: Vec::new(),
+        ..Message::new(author, input.content, MessageStatus::Complete, None)
     };
     state.persist(
         conversation_id,
@@ -180,6 +172,14 @@ pub fn send_message(
         },
     )?;
     Ok(message)
+}
+
+/// Stores `kind` as an event of the reply `message_id`, which must still be streaming.
+fn reply_event(project: &Project, message_id: Uuid, kind: EventKind) -> AppResult<()> {
+    let mut state = project.lock();
+    let conversation = streaming_reply(&state, message_id)?;
+    state.persist(conversation, kind)?;
+    Ok(())
 }
 
 /// Loads a message and checks it is a reply that is still streaming.
@@ -198,17 +198,7 @@ pub fn start_reply(
     reply_to: Uuid,
     author: Author,
 ) -> AppResult<Uuid> {
-    let message = Message {
-        id: new_id(),
-        author,
-        content: String::new(),
-        status: MessageStatus::Streaming,
-        reply_to: Some(reply_to),
-        attachments: Vec::new(),
-        text_components: Vec::new(),
-        components: Vec::new(),
-        steps: Vec::new(),
-    };
+    let message = Message::new(author, String::new(), MessageStatus::Streaming, Some(reply_to));
     let id = message.id;
     project
         .lock()
@@ -217,16 +207,7 @@ pub fn start_reply(
 }
 
 pub fn append_delta(project: &Project, message_id: Uuid, text: &str) -> AppResult<()> {
-    let mut state = project.lock();
-    let conversation = streaming_reply(&state, message_id)?;
-    state.persist(
-        conversation,
-        EventKind::MessageDelta {
-            message_id,
-            text: text.to_string(),
-        },
-    )?;
-    Ok(())
+    reply_event(project, message_id, EventKind::MessageDelta { message_id, text: text.to_string() })
 }
 
 /// Records that a Step of a streaming reply's Workflow started.
@@ -237,16 +218,13 @@ pub fn append_step_started(
     step_type: &str,
     name: &str,
 ) -> AppResult<()> {
-    let mut state = project.lock();
-    let conversation = streaming_reply(&state, message_id)?;
     let kind = EventKind::StepStarted {
         message_id,
         step_id: step_id.to_string(),
         step_type: step_type.to_string(),
         name: name.to_string(),
     };
-    state.persist(conversation, kind)?;
-    Ok(())
+    reply_event(project, message_id, kind)
 }
 
 pub fn append_step_completed(
@@ -255,11 +233,8 @@ pub fn append_step_completed(
     step_id: &str,
     output: Option<String>,
 ) -> AppResult<()> {
-    let mut state = project.lock();
-    let conversation = streaming_reply(&state, message_id)?;
     let kind = EventKind::StepCompleted { message_id, step_id: step_id.to_string(), output };
-    state.persist(conversation, kind)?;
-    Ok(())
+    reply_event(project, message_id, kind)
 }
 
 /// Adds an Interactive Component `(kind, version, data, text)` from a Trait to a streaming
@@ -292,17 +267,17 @@ pub fn add_component(
     Ok(id)
 }
 
-/// Stores a file a Trait produced as a generated Asset and attaches it to its streaming
-/// reply. If the reply ends before the attachment is persisted, the Asset is removed again.
+/// Stores a file a Trait produced as a generated Asset added by `author`, the reply's Mini-Me,
+/// and attaches it to its streaming reply. If the reply ends before the attachment is
+/// persisted, the Asset is removed again.
 pub fn attach_generated(
     project: &Project,
     message_id: Uuid,
-    name: &str,
-    media_type: &str,
-    bytes: &[u8],
+    author: &Author,
+    (name, media_type, bytes): (&str, &str, &[u8]),
 ) -> AppResult<AssetRef> {
     streaming_reply(&project.lock(), message_id)?;
-    let asset = assets::write_generated(project, name, media_type, bytes)?;
+    let asset = assets::write_generated(project, name, media_type, bytes, author)?;
     let attached = {
         let mut state = project.lock();
         streaming_reply(&state, message_id).and_then(|conversation| {
@@ -354,25 +329,17 @@ pub fn append_progress(
     label: &str,
     fraction: Option<f64>,
 ) -> AppResult<()> {
-    let mut state = project.lock();
-    let conversation = streaming_reply(&state, message_id)?;
-    state.persist(
-        conversation,
-        EventKind::MessageProgress {
-            message_id,
-            label: label.to_string(),
-            fraction: fraction.map(|f| f.clamp(0.0, 1.0)),
-        },
-    )?;
-    Ok(())
+    let kind = EventKind::MessageProgress {
+        message_id,
+        label: label.to_string(),
+        fraction: fraction.map(|f| f.clamp(0.0, 1.0)),
+    };
+    reply_event(project, message_id, kind)
 }
 
 /// Ends a streaming reply as cancelled; a reply that has already ended is left as it is.
 pub fn cancel_reply(project: &Project, message_id: Uuid) -> AppResult<()> {
-    let mut state = project.lock();
-    let conversation = streaming_reply(&state, message_id)?;
-    state.persist(conversation, EventKind::MessageCancelled { message_id })?;
-    Ok(())
+    reply_event(project, message_id, EventKind::MessageCancelled { message_id })
 }
 
 /// Stops the reply streaming or paused in a Conversation, if any, and returns the stopped
@@ -537,7 +504,6 @@ pub fn answer_approval(
     Ok(paused)
 }
 
-/// Marks replies left streaming by a previous session as failed with code `interrupted`.
 /// The names of a message's attached and referenced files, without duplicates.
 pub fn file_names(message: &Message) -> Vec<String> {
     let mut names: Vec<String> = message.attachments.iter().map(|a| a.name.clone()).collect();
@@ -581,20 +547,8 @@ pub fn system_reply(
     id: &str,
     content: &str,
 ) -> AppResult<Message> {
-    let message = Message {
-        id: new_id(),
-        author: Author {
-            kind: AuthorKind::System,
-            id: id.to_string(),
-        },
-        content: content.to_string(),
-        status: MessageStatus::Complete,
-        reply_to: Some(reply_to),
-        attachments: Vec::new(),
-        text_components: Vec::new(),
-        components: Vec::new(),
-        steps: Vec::new(),
-    };
+    let author = Author { kind: AuthorKind::System, id: id.to_string() };
+    let message = Message::new(author, content.to_string(), MessageStatus::Complete, Some(reply_to));
     project.lock().persist(
         conversation_id,
         EventKind::MessageCreated {
@@ -604,6 +558,7 @@ pub fn system_reply(
     Ok(message)
 }
 
+/// Marks replies left streaming by a previous session as failed with code `interrupted`.
 pub fn recover_interrupted(project: &Project) -> AppResult<()> {
     let mut state = project.lock();
     for (_, message_id) in state.streaming_messages(None)? {
@@ -646,35 +601,10 @@ pub fn add_reaction(project: &Project, message_id: Uuid, emoji: &str, by: Author
     Ok(())
 }
 
-/// Removes a reaction; does nothing if it does not exist.
-pub fn remove_reaction(
-    project: &Project,
-    message_id: Uuid,
-    emoji: &str,
-    by: Author,
-) -> AppResult<()> {
-    let mut state = project.lock();
-    let (conversation, _) = state
-        .message_place(message_id)?
-        .ok_or_else(|| AppError::not_found("Message not found"))?;
-    if !state.has_reaction(message_id, emoji, &by)? {
-        return Ok(());
-    }
-    state.persist(
-        conversation,
-        EventKind::ReactionRemoved {
-            message_id,
-            emoji: emoji.to_string(),
-            by,
-        },
-    )?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::test_support::temp_project;
+    use crate::projects::test_support::{self, temp_project};
     use crate::store::test_support::Collector;
 
     fn text(content: &str) -> SendMessageInput {
@@ -757,7 +687,7 @@ mod tests {
         let conversation = create(&project).unwrap().id;
         let source = dir.path().join("trial.csv");
         std::fs::write(&source, "a,b").unwrap();
-        let asset = assets::import(&project, &source).unwrap();
+        let asset = assets::import(&project, &source, &test_support::user()).unwrap();
 
         // "é" is one UTF-16 code unit, so this content is 6 units long.
         let mut input = text("é #x y");
@@ -947,9 +877,5 @@ mod tests {
         add_reaction(&project, message.id, "👍", user(user_id)).unwrap();
         add_reaction(&project, message.id, "👍", user(user_id)).unwrap();
         assert_eq!(collector.settled(1).len(), 1);
-
-        remove_reaction(&project, message.id, "👍", user(user_id)).unwrap();
-        remove_reaction(&project, message.id, "👍", user(user_id)).unwrap();
-        assert_eq!(collector.settled(2).len(), 2);
     }
 }

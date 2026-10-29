@@ -637,8 +637,8 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
         htmlFor="threshold"
         description={
           <>
-            From 0 to 1. When Jev is less sure than this, Mini-Me asks you to mention a Mini-Me
-            with @ instead of guessing.
+            From 0 to 1. When Jev is less sure than this of its choice, Assistant answers
+            instead, and Jev adds no reaction.
             {status && <span className="mt-1 block text-ink-2">{status}</span>}
           </>
         }

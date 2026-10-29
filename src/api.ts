@@ -56,23 +56,6 @@ export const api = {
       on_events,
     });
   },
-  /** Streams every event after `after_seq`, then new events as they are persisted, in
-   * batches; resolves with the subscription's ID. */
-  subscribeConversation: (
-    project_id: Uuid,
-    conversation_id: Uuid,
-    after_seq: number,
-    onEvents: (events: ProtocolEvent[]) => void,
-  ) => {
-    const on_events = new Channel<ProtocolEvent[]>();
-    on_events.onmessage = onEvents;
-    return invoke<Uuid>("subscribe_conversation", {
-      project_id,
-      conversation_id,
-      after_seq,
-      on_events,
-    });
-  },
   unsubscribeConversation: (project_id: Uuid, subscription_id: Uuid) =>
     invoke<void>("unsubscribe_conversation", { project_id, subscription_id }),
   /** Ends every Conversation subscription, including those of a view before a reload. */
@@ -90,10 +73,6 @@ export const api = {
   /** The most recently active Conversations across all Projects, newest first. */
   listRecentConversations: () => invoke<RecentConversation[]>("list_recent_conversations"),
 
-  addReaction: (project_id: Uuid, message_id: Uuid, emoji: string) =>
-    invoke<void>("add_reaction", { project_id, message_id, emoji }),
-  removeReaction: (project_id: Uuid, message_id: Uuid, emoji: string) =>
-    invoke<void>("remove_reaction", { project_id, message_id, emoji }),
 
   /** Opens the native file picker; resolves with the imported Assets (empty if cancelled). */
   importAssets: (project_id: Uuid) => invoke<AssetRef[]>("import_assets", { project_id }),
@@ -161,14 +140,12 @@ export const api = {
   exportDocumentPdf: (project_id: Uuid, asset_id: Uuid) =>
     invoke<AssetRef>("export_document_pdf", { project_id, asset_id }),
 
-  getRunningReplies: () => invoke<RunningReply[]>("get_running_replies"),
   /** Calls `onChange` with the running replies, then with the whole list on every change. */
   subscribeRunningReplies: (onChange: (running: RunningReply[]) => void) => {
     const on_change = new Channel<RunningReply[]>();
     on_change.onmessage = onChange;
     return invoke<void>("subscribe_running_replies", { on_change });
   },
-  getSidecarStatus: () => invoke<SidecarStatus>("get_sidecar_status"),
   /** Calls `onStatus` with the current sidecar status, then with every change. */
   subscribeSidecarStatus: (onStatus: (status: SidecarStatus) => void) => {
     const on_status = new Channel<SidecarStatus>();
@@ -218,7 +195,6 @@ export const api = {
   ai2SignOut: () => invoke<void>("ai2_sign_out"),
 
 
-  getUpdateStatus: () => invoke<UpdateStatus>("get_update_status"),
   /** Calls `onStatus` with the current update status, then with every change. */
   subscribeUpdateStatus: (onStatus: (status: UpdateStatus) => void) => {
     const on_status = new Channel<UpdateStatus>();

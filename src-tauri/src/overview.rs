@@ -369,7 +369,7 @@ mod tests {
     use super::*;
     use crate::assets;
     use crate::conversations::{self, SendMessageInput};
-    use crate::projects::test_support::temp_project;
+    use crate::projects::test_support::{temp_project, user};
     use crate::protocol::{EventKind, new_id};
     use serde_json::json;
 
@@ -425,8 +425,8 @@ mod tests {
             add(&project, second, researcher, "paper-sources", json!({ "papers": [{}, {}] }));
         let source = dir.path().join("upload.csv");
         std::fs::write(&source, "a\n1\n").unwrap();
-        assets::import(&project, &source).unwrap();
-        let saved = assets::write_generated(&project, "clean.csv", "", b"a\n1\n").unwrap();
+        assets::import(&project, &source, &user()).unwrap();
+        let saved = assets::write_generated(&project, "clean.csv", "", b"a\n1\n", &user()).unwrap();
         let event = EventKind::AttachmentAdded { message_id: researcher, asset: saved.clone() };
         project.lock().persist(second, event).unwrap();
 

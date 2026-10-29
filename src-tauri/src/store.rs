@@ -100,7 +100,8 @@ impl Project {
 
     /// Delivers every stored event after `after_seq`, then every new event, and returns the
     /// subscription's ID. Both are queued under the Project lock, so no event is missed or
-    /// duplicated.
+    /// duplicated. The app opens Conversations with `open`; tests subscribe from a sequence.
+    #[cfg(test)]
     pub fn subscribe(
         &self,
         conversation_id: Uuid,
@@ -200,6 +201,7 @@ impl ProjectState {
         )?)
     }
 
+    #[cfg(test)]
     pub fn events_after(&self, conversation_id: Uuid, after_seq: i64) -> AppResult<Vec<Event>> {
         let mut stmt = self.conn.prepare(
             "SELECT body FROM events WHERE conversation_id = ?1 AND seq > ?2 ORDER BY seq",

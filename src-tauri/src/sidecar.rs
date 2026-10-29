@@ -171,6 +171,7 @@ impl SidecarLog {
         }
     }
 
+    #[cfg(test)]
     pub fn disabled() -> Self {
         Self {
             path: None,
