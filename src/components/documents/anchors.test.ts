@@ -11,6 +11,8 @@ const thread = (id: string, start: number, end: number, quote: string): CommentT
   quote,
   resolved: false,
   created_at: 0,
+  comments: 0,
+  pending: null,
 });
 
 const TEXT = "Yield fell above 3,800 m. Next steps.";

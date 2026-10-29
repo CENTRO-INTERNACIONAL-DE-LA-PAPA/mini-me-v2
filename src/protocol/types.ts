@@ -220,6 +220,18 @@ export interface CommentThread {
   quote: string;
   resolved: boolean;
   created_at: number;
+  /** How many comments and replies the thread holds. */
+  comments: number;
+  /** Its newest suggestion still waiting for an answer. */
+  pending: PendingSuggestion | null;
+}
+
+/** A suggestion waiting for the user's answer. */
+export interface PendingSuggestion {
+  message_id: Uuid;
+  component_id: Uuid;
+  author: Author;
+  text: string;
 }
 
 /** What the user decided about a suggestion. */

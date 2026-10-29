@@ -3,7 +3,7 @@
 //! resolved are stored beside it in `comment_threads`. Threads are listed only here, never as
 //! Conversations.
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -13,7 +13,7 @@ use crate::conversations;
 use crate::documents;
 use crate::error::{AppError, AppResult};
 use crate::link::RunDocument;
-use crate::protocol::{AssetRef, EventKind, now_ms};
+use crate::protocol::{AssetRef, Author, AuthorKind, EventKind, now_ms};
 use crate::store::{Project, ProjectState};
 
 /// A thread as the document view shows it. `start` and `end` are UTF-16 offsets in the
@@ -27,6 +27,19 @@ pub struct CommentThread {
     pub quote: String,
     pub resolved: bool,
     pub created_at: i64,
+    /// How many comments and replies the thread holds.
+    pub comments: u32,
+    /// Its newest suggestion still waiting for an answer.
+    pub pending: Option<PendingSuggestion>,
+}
+
+/// A suggestion waiting for the user's answer, as the thread view and the source show it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PendingSuggestion {
+    pub message_id: Uuid,
+    pub component_id: Uuid,
+    pub author: Author,
+    pub text: String,
 }
 
 /// Where a thread's passage is now, as the document view tracks it while the user edits.
@@ -317,6 +330,8 @@ pub fn create(
         quote: quote.to_string(),
         resolved: false,
         created_at: now_ms(),
+        comments: 0,
+        pending: None,
     };
     tx.execute(
         "INSERT INTO comment_threads (conversation_id, asset_id, passage_start, passage_end, \
@@ -383,9 +398,11 @@ pub fn list(project: &Project, asset_id: Uuid) -> AppResult<Vec<CommentThread>> 
 
 /// The threads matching `condition` on the ID `id`, in the order of their passages.
 fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<Vec<CommentThread>> {
+    let count = "(SELECT COUNT(*) FROM messages m WHERE m.conversation_id = t.conversation_id)";
     let mut stmt = state.conn.prepare(&format!(
         "SELECT conversation_id, asset_id, passage_start, passage_end, quote, resolved, \
-         created_at FROM comment_threads WHERE {condition} ORDER BY passage_start, created_at"
+         created_at, {count} FROM comment_threads t WHERE {condition} \
+         ORDER BY passage_start, created_at"
     ))?;
     let rows = stmt.query_map(params![id.to_string()], |row| {
         Ok((
@@ -396,12 +413,13 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
             row.get::<_, String>(4)?,
             row.get::<_, bool>(5)?,
             row.get::<_, i64>(6)?,
+            row.get::<_, u32>(7)?,
         ))
     })?;
     let corrupt = || AppError::storage("stored ID is not readable");
     let mut threads = Vec::new();
     for row in rows {
-        let (conversation_id, asset_id, start, end, quote, resolved, created_at) = row?;
+        let (conversation_id, asset_id, start, end, quote, resolved, created_at, comments) = row?;
         threads.push(CommentThread {
             conversation_id: Uuid::parse_str(&conversation_id).map_err(|_| corrupt())?,
             asset_id: Uuid::parse_str(&asset_id).map_err(|_| corrupt())?,
@@ -410,9 +428,47 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
             quote,
             resolved,
             created_at,
+            comments,
+            pending: None,
         });
     }
+    for thread in &mut threads {
+        thread.pending = pending(state, thread.conversation_id)?;
+    }
     Ok(threads)
+}
+
+/// The newest suggestion in the thread `conversation_id` still waiting for an answer.
+fn pending(state: &ProjectState, conversation_id: Uuid) -> AppResult<Option<PendingSuggestion>> {
+    let row = state
+        .conn
+        .query_row(
+            "SELECT c.id, c.message_id, c.data, m.author_kind, m.author_id FROM components c \
+             JOIN messages m ON m.id = c.message_id WHERE m.conversation_id = ?1 \
+             AND c.kind = 'suggestion' AND c.answer IS NULL ORDER BY c.rowid DESC LIMIT 1",
+            params![conversation_id.to_string()],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((component_id, message_id, data, kind, author_id)) = row else {
+        return Ok(None);
+    };
+    let corrupt = || AppError::storage("stored suggestion is not readable");
+    let data: Value = serde_json::from_str(&data)?;
+    Ok(Some(PendingSuggestion {
+        message_id: Uuid::parse_str(&message_id).map_err(|_| corrupt())?,
+        component_id: Uuid::parse_str(&component_id).map_err(|_| corrupt())?,
+        author: Author { kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?, id: author_id },
+        text: data["text"].as_str().unwrap_or_default().to_string(),
+    }))
 }
 
 #[cfg(test)]
@@ -440,7 +496,7 @@ pub mod test_support {
 mod tests {
     use super::*;
     use crate::projects::test_support::{temp_project, user};
-    use crate::protocol::{Author, AuthorKind, new_id};
+    use crate::protocol::new_id;
 
     #[test]
     fn a_thread_is_created_on_a_passage_of_a_document_and_listed_in_order() {
@@ -628,6 +684,19 @@ mod tests {
         assert!(assets::find(&state, saved.id).is_ok());
         drop(state);
         assert_eq!(delete(&project, thread.conversation_id).unwrap_err().code, "not_found");
+    }
+
+    #[test]
+    fn a_listed_thread_shows_its_count_and_pending_suggestion() {
+        let (_dir, project) = temp_project();
+        let (document, _, answer) = suggested(&project, SENTENCE, "Huancayo", "Junín");
+        let thread = list(&project, document).unwrap().remove(0);
+        assert_eq!(thread.comments, 2);
+        let pending = thread.pending.unwrap();
+        assert_eq!((pending.component_id, pending.text.as_str()), (answer.1, "Junín"));
+
+        answer_suggestion(&project, answer.0, answer.1, Decision::Rejected).unwrap();
+        assert!(list(&project, document).unwrap()[0].pending.is_none());
     }
 
     #[test]

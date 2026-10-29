@@ -130,12 +130,19 @@ export function Field({
   );
 }
 
-/** A Delete button that asks once more before calling `onDelete`. */
-export function DeleteButton({ onDelete }: { onDelete: () => void }) {
+/** A Delete button that asks once more before calling `onDelete`. `variant` styles the first
+ * button, such as `mini-me` to stand out on a grey background. */
+export function DeleteButton({
+  onDelete,
+  variant = "outline",
+}: {
+  onDelete: () => void;
+  variant?: "outline" | "mini-me";
+}) {
   const [asking, setAsking] = useState(false);
   if (!asking) {
     return (
-      <Button variant="outline" onClick={() => setAsking(true)}>
+      <Button variant={variant} onClick={() => setAsking(true)}>
         Delete
       </Button>
     );

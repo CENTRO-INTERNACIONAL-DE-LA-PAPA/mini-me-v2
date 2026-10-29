@@ -114,14 +114,25 @@ with the next save. Suggestions appear as CodeMirror decorations: the passage in
 `tint` and a widget below it with the suggested text and Accept and Reject.
 
 ### Thread UI reuses the Conversation's components
-Each open thread uses ChatView's `useConversation` hook (moved to its own file so both views
+The open thread uses ChatView's `useConversation` hook (moved to its own file so both views
 import it), so its comments and replies stream through `open_conversation` and
-`ConversationStore`. A thread card lists its messages with `MessageItem`, which already shows
+`ConversationStore`. The thread view lists its messages with `MessageItem`, which already shows
 authors, Markdown, approvals and Interactive Components, including the new `suggestion`
 renderer. Its comment field is the existing `Composer`, given the thread's Conversation, which
-brings the @ list, mention pills, Send and Stop. `MessageItem` and `Composer` gain only a
-compact layout for the panel's width. Opening the comments panel opens the subscriptions;
-closing it ends them.
+brings the @ list, mention pills, Send and Stop; `MessageItem` gains a compact layout and
+`Composer` a minimal one-line form.
+
+### The Comments sheet, the thread view and number badges
+The Comments button, in the Outline menu's place, shows a `ToolSheet` beside the main sheet, as
+the Conversation's tool panels do. Its list draws rows from what `list_threads` returns (count
+and pending suggestion), so it holds no subscription per thread; a thread left with no comments
+is deleted. Opening a thread swaps the list
+for the thread view, the only place that subscribes to a thread's events: it lists the messages
+with `MessageItem`, pins the pending suggestion first, and takes comments with the one-line
+`Composer`. Where a passage sits ("Hypothesis, bullet 3") is worked out in the UI from the
+headings and list items above it in the source. The number badges are CodeMirror widgets right
+after each passage, numbered as the Open list orders the threads; a pending suggestion is a
+line-through mark on the passage with a widget after it holding the suggested text.
 
 ### Resolving and deleting
 `set_thread_resolved` updates `comment_threads.resolved`. `delete_thread` removes the thread's

@@ -15,9 +15,9 @@ text.
   in the Project's database; the `.qmd` file stays plain Quarto. A thread whose passage can no
   longer be found, for example after the file was edited outside Mini-Me, is listed as
   detached with the text it quoted.
-- **The comments panel:** in the document view, the right pane switches between Preview and
-  Comments. Comments lists the document's threads, each titled with its passage, and opening a
-  thread's highlight in the source selects its card.
+- **The Comments sheet:** the Comments button, which replaces the Outline menu, shows a sheet
+  beside the document listing its threads, under Open and Resolved tabs. In the source, a
+  thread's passage is followed by a badge with the thread's number, which opens the thread.
 - **Asking a Mini-Me:** a comment that @-mentions a Mini-Me runs that Mini-Me's Workflow, as a
   reply in a Conversation does, with the thread and its passage as material. Its text reply
   goes into the thread. A comment without an @-mention is a note and starts no run.
