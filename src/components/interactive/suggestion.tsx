@@ -112,7 +112,7 @@ export function SuggestionCard({
   onDiscard?: () => void;
 }) {
   return (
-    <div className="grid gap-2 rounded-xl border border-edge bg-card px-4 py-3">
+    <div className="grid gap-2 rounded-xl border border-card-edge bg-card px-4 py-3">
       <span className="text-meta text-muted-foreground">
         Suggested edit{decision && ` · ${DECISIONS[decision]}`}
       </span>

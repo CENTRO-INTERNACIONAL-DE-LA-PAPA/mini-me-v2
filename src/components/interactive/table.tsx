@@ -77,7 +77,7 @@ export function TableView({
   return (
     <section
       aria-label={title ?? "Table"}
-      className="w-full min-w-0 overflow-hidden rounded-xl bg-card border border-edge"
+      className="w-full min-w-0 overflow-hidden rounded-xl border border-card-edge bg-card"
     >
       {(title || canFeature || canReference) && (
         <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">

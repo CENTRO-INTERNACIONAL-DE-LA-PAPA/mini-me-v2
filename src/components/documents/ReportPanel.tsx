@@ -7,7 +7,7 @@ import { useMiniMes } from "../../hooks/useMiniMes";
 import { formatRelative } from "../../lib/format";
 import type { FileEntry, MiniMe } from "../../protocol/types";
 import type { MessageView } from "../../protocol/eventStore";
-import { FileTile } from "../files/FileTile";
+import { FileMark } from "../files/FileMark";
 import { isDocument } from "../files/files";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { ToolSheet } from "../shell/Sheet";
@@ -114,11 +114,9 @@ export function ReportPanel({
         </Card>
         <Card
           render={<button type="button" disabled={busy} onClick={() => run(onStartBlank)} />}
-          className="flex-row items-center gap-3 p-4 text-left transition-colors duration-150 ease-out hover:border-border-strong focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+          className="flex-row items-center gap-3 p-4 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
         >
-          <span className="flex size-[34px] items-center justify-center rounded-control bg-muted">
-            <FilePlusIcon className="size-4" />
-          </span>
+          <FilePlusIcon aria-hidden className="size-4 shrink-0" />
           <span className="grid">
             <span className="font-serif text-name text-foreground">Start blank</span>
             <span className="text-meta text-muted-foreground">An empty document in Files</span>
@@ -143,7 +141,7 @@ export function ReportPanel({
                   onClick={() => onOpen(file.id)}
                   className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left transition-colors duration-150 ease-out hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                 >
-                  <FileTile miniMe={maker} icon={FileTextIcon} />
+                  <FileMark miniMe={maker} icon={FileTextIcon} />
                   <span className="grid min-w-0 flex-1">
                     <span className="truncate text-ui font-medium text-foreground">
                       {file.name.replace(/\.qmd$/i, "")}

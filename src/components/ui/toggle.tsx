@@ -12,7 +12,7 @@ const toggleVariants = cva(
         // An option of the tab switch (see ToggleGroup's `switch` variant): the pressed one is
         // an outlined white pill on the grey well.
         switch:
-          "rounded-control border border-transparent bg-transparent text-control text-ink-2 hover:bg-transparent aria-pressed:border-border aria-pressed:bg-card aria-pressed:text-foreground [&_svg:not([class*='size-'])]:size-[15px]",
+          "rounded-control border border-transparent bg-transparent text-control text-ink-2 hover:bg-transparent aria-pressed:bg-card aria-pressed:text-foreground [&_svg:not([class*='size-'])]:size-[15px]",
       },
       size: {
         default:

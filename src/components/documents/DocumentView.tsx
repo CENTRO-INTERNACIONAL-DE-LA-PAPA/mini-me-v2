@@ -560,7 +560,7 @@ export function DocumentView({
               {drafting && (
                 <div
                   role="status"
-                  className="mx-6 mt-4 flex items-center gap-3 rounded-card border border-border bg-card px-4 py-2.5"
+                  className="mx-6 mt-4 flex items-center gap-3 rounded-card bg-card px-4 py-2.5"
                 >
                   <MiniMeAvatar miniMe={scribe} size={26} />
                   <span className="flex-1 text-ui text-foreground">Scribe is drafting…</span>
@@ -579,7 +579,7 @@ export function DocumentView({
                 <div
                   ref={host}
                   onClick={() => view.current?.focus()}
-                  className="flex min-h-full flex-col rounded-control border border-border bg-card"
+                  className="flex min-h-full flex-col rounded-control bg-card"
                 />
               </div>
             </section>
@@ -628,7 +628,7 @@ function PreviewPages({ pages }: { pages: string[] }) {
             key={url}
             src={url}
             alt={`Page ${index + 1}`}
-            className="w-full rounded-control border border-border bg-card"
+            className="w-full rounded-control bg-card"
           />
         ))}
       </div>

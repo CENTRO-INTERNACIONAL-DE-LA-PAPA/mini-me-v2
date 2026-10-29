@@ -22,7 +22,7 @@ export function MiniMeSurface({
     props: mergeProps<"div">(
       {
         style: { ...surfaceStyle(miniMe?.colors), ...style },
-        className: cn("rounded-card border border-edge bg-wash", className),
+        className: cn("rounded-card bg-wash [--card-edge:transparent]", className),
       },
       props,
     ),
