@@ -114,9 +114,9 @@ export function ReportPanel({
         </Card>
         <Card
           render={<button type="button" disabled={busy} onClick={() => run(onStartBlank)} />}
-          className="flex-row items-center gap-3 p-4 text-left transition-colors duration-150 ease-out hover:bg-well focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+          className="flex-row items-center gap-3 p-4 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
         >
-          <span className="flex size-[34px] items-center justify-center rounded-control bg-muted">
+          <span className="flex size-[34px] items-center justify-center rounded-control bg-card">
             <FilePlusIcon className="size-4" />
           </span>
           <span className="grid">

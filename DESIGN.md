@@ -39,32 +39,30 @@ Design files are a reference, not the source of names: the app's own names win (
 
 ## 2. Colour
 
-All UI colours come from the tokens in `src/index.css`. No other palette.
+All UI colours come from one palette at the top of `:root` in `src/index.css`: eleven neutrals
+and two status colours. Every other token names a role and points at a palette entry, so a theme
+only redefines the palette (and the Mini-Me colours derive from each Mini-Me). Add a role by
+pointing a new token at the palette, never by adding a value.
 
-### Desk and surfaces
-| Token | Hex | Use |
+### Palette
+| Entry | Hex | Roles |
 |---|---|---|
+| `--white` | `#FFFFFF` | `--background`, `--card`, `--popover`: sheets, tool sheets, popovers, composer, selected tab pill and sidebar row |
+| `--fill-soft` | `#FAFAF8` | `--bubble`: your message bubble |
+| `--fill` | `#F4F4F1` | `--muted`, `--well`, `--accent`, `--secondary`, `--sidebar`: neutral cards, icon tiles, the Workflow board, tab-switch tracks, inputs, secondary buttons, hover on white, the navigation sheet |
+| `--fill-strong` | `#ECECE8` | `--well-hover`, `--sidebar-accent`: hover on a fill |
 | `--desk` | `#E9E9E5` | Window background behind all sheets |
-| `--background` / `--card` | `#FFFFFF` | Sheets, tool sheets, popovers, composer, selected tab pill |
-| `--sidebar` | `#F7F7F4` | Navigation sheet |
-| `--muted` | `#F7F7F4` | Neutral cards inside a sheet, your message bubble, icon tiles, the Workflow board |
-| `--well` | `#F4F4F1` | Tab-switch track, inputs and selects, secondary and close buttons |
-| `--well-hover` | `#ECECE8` | Hover on well-filled buttons |
-| `--canvas-dot` | `#D0D0CA` | 18px grid of 3px dots on the Workflow board |
-
-### Ink and lines
-| Token | Hex | Use |
-|---|---|---|
-| `--foreground` | `#191B1E` | Titles, primary text, primary buttons, checked boxes, avatar initials |
-| `--document-ink` | `#2B2E32` | Long-form body text |
-| `--ink-2` | `#3A3E44` | Icons, unselected tab labels, secondary copy |
-| `--muted-foreground` | `#6A6E74` | Meta text, timestamps, placeholders (≥4.5:1 on white and on `--well`) |
-| `--border` | `#E7E7E4` | Every outline: white cards, fields and popovers on white |
-| `--dash` / `--border-strong` | `#D3D3CE` | Dashed "new" tiles, empty states |
-| `--chev` | `#B8B8B3` | Row chevrons |
-| `--connector` | `#B8B8B3` | Workflow connectors |
+| `--line` | `#E7E7E4` | `--border`, `--input`: every outline, on white things on white |
+| `--line-strong` | `#D3D3CE` | `--border-strong`, `--dash`, `--canvas-dot`, `--off`: dashed "new" tiles, empty states, the Workflow board's dots, switches when off |
+| `--ink` | `#191B1E` | `--foreground`, `--primary`: titles, primary text, primary buttons, checked boxes |
+| `--ink-2` | `#3A3E44` | `--document-ink`: icons, unselected tab labels, secondary copy, long-form text |
+| `--ink-muted` | `#6A6E74` | `--muted-foreground`: meta text, timestamps, placeholders (≥4.5:1 on white and on `--fill`) |
+| `--ink-faint` | `#B8B8B3` | `--chev`, `--connector`: row chevrons, Workflow connectors |
 | `--destructive` | `#B3300F` | Destructive text only ("Remove step") |
 | `--success` | `#2FA36B` | Connected / running status dots only |
+
+The chart palette's neutral fallbacks also point at these; its categorical series stay their own
+colours.
 
 ### Mini-Me colours
 Each Mini-Me stores three colours; the UI derives two more.
@@ -204,7 +202,7 @@ Input, Textarea and Select: `--well` fill, no visible border, radius 12, 13.5px;
 
 ### Conversation
 - **Reply:** a Mini-Me card, padding 16×18. Header: 28px avatar, serif name (`text-name`), time and status in `ink`. Body 15px. Tables, paper sources and the Workflow progress card are white, with no outline on the wash. Action pills are `mini-me` buttons; an active one is solid ink.
-- **Your message:** right-aligned, max 520px, `--muted` fill without an outline, bubble radius. Mentioned Mini-Mes appear as tint chips; files as white chips with a hairline. Meta "You · 10:42" below.
+- **Your message:** right-aligned, max 520px, `--bubble` fill without an outline, bubble radius. Mentioned Mini-Mes appear as tint chips; files as white chips with a hairline. Meta "You · 10:42" below.
 - **Reactions:** a small white outlined pill over the bubble's bottom-left corner: avatar + emoji.
 - **Composer:** floats 22px above the bottom of the sheet, in the chat column. White, 1px outline (the addressed Mini-Me's `edge`, else `--border`), radius 20. Text row, then @ / # / attach icons and a 34px round send button (the Mini-Me's `ink`, else ink). The message list keeps 150px bottom padding so the last reply clears it.
 - **Workflow progress:** a white card with the Steps in a row: done = ink circle with a check; running = spinner in the Mini-Me's solid; pending = white circle with a grey ring. An earlier Step opens to show its output and the components it added.

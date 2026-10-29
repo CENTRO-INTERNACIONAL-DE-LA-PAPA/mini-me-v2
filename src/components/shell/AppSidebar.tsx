@@ -288,7 +288,7 @@ function ProjectSwitcher({
               "focus-visible:outline-2 focus-visible:outline-ring",
               project
                 ? "px-2 [&:hover_.switcher-label]:text-foreground"
-                : "border border-dashed border-dash px-3 py-3 transition-colors duration-150 hover:bg-accent",
+                : "border border-dashed border-dash px-3 py-3 transition-colors duration-150 hover:bg-sidebar-accent",
             )}
           />
         }

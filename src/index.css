@@ -57,6 +57,7 @@
     --color-connector: var(--connector);
     --color-desk: var(--desk);
     --color-well: var(--well);
+    --color-bubble: var(--bubble);
     --color-well-hover: var(--well-hover);
     /* A Mini-Me's surface colours inside an element that `surfaceStyle` sets them on, and the
        neutral ones elsewhere: `bg-wash`, `bg-tint`, `border-edge`, `text-mm-ink`. */
@@ -146,56 +147,70 @@
 :root {
     color-scheme: light;
 
-    /* The desk is the window behind the sheets; `--background` is a sheet. */
+    /* The palette: every neutral the app draws with, from the sheet's white to ink, and the
+       two status colours. A theme redefines these; the tokens below only name their roles. */
+    --white: #ffffff;
+    --fill-soft: #fafaf8;
+    --fill: #f4f4f1;
+    --fill-strong: #ecece8;
     --desk: #e9e9e5;
-    --background: #ffffff;
-    --foreground: #191b1e;
-    --card: #ffffff;
-    --card-foreground: #191b1e;
-    --popover: #ffffff;
-    --popover-foreground: #191b1e;
-    --primary: #191b1e;
-    --primary-foreground: #ffffff;
-    --secondary: #f4f4f1;
-    --secondary-foreground: #191b1e;
-    /* Neutral cards inside a sheet. */
-    --muted: #f7f7f4;
-    --muted-foreground: #6a6e74;
-    /* Hover. */
-    --accent: #f4f4f1;
-    --accent-foreground: #191b1e;
+    --line: #e7e7e4;
+    --line-strong: #d3d3ce;
+    --ink: #191b1e;
+    --ink-2: #3a3e44;
+    --ink-muted: #6a6e74;
+    --ink-faint: #b8b8b3;
+    --success: #2fa36b;
     --destructive: #b3300f;
-    --border: #e7e7e4;
-    --input: #e7e7e4;
-    --ring: #191b1e;
+
+    /* The desk is the window behind the sheets; `--background` is a sheet. */
+    --background: var(--white);
+    --foreground: var(--ink);
+    --card: var(--white);
+    --card-foreground: var(--ink);
+    --popover: var(--white);
+    --popover-foreground: var(--ink);
+    --primary: var(--ink);
+    --primary-foreground: var(--white);
+    --secondary: var(--fill);
+    --secondary-foreground: var(--ink);
+    /* Neutral cards inside a sheet. */
+    --muted: var(--fill);
+    /* Your messages in a Conversation. */
+    --bubble: var(--fill-soft);
+    --muted-foreground: var(--ink-muted);
+    /* Hover. */
+    --accent: var(--fill);
+    --accent-foreground: var(--ink);
+    --border: var(--line);
+    --input: var(--line);
+    --ring: var(--ink);
     --radius: 8px;
 
     /* Tab-switch tracks, inputs, your messages, secondary and close buttons. */
-    --well: #f4f4f1;
-    --well-hover: #ecece8;
-    --dash: #d3d3ce;
-    --chev: #b8b8b3;
-    --ink-2: #3a3e44;
-    --document-ink: #2b2e32;
-    --muted-on-ink: #b8b8b3;
-    --border-strong: #d3d3ce;
-    --border-composer: #e7e7e4;
-    --surface-1: #f7f7f4;
-    --surface-3: #e9e9e5;
-    --success: #2fa36b;
-    --off: #d3d3ce;
+    --well: var(--fill);
+    --well-hover: var(--fill-strong);
+    --dash: var(--line-strong);
+    --chev: var(--ink-faint);
+    --document-ink: var(--ink-2);
+    --muted-on-ink: var(--ink-faint);
+    --border-strong: var(--line-strong);
+    --border-composer: var(--line);
+    --surface-1: var(--fill);
+    --surface-3: var(--desk);
+    --off: var(--line-strong);
     /* The Workflow board (on `--muted`): its dot grid and its connectors. */
-    --canvas-dot: #d0d0ca;
-    --connector: #b8b8b3;
+    --canvas-dot: var(--line-strong);
+    --connector: var(--ink-faint);
 
     /* Neutral fallbacks; a chart series made by a Mini-Me uses that Mini-Me's colour. */
-    --chart-1: #191b1e;
-    --chart-2: #3a3e44;
-    --chart-3: #6a6e74;
-    --chart-4: #b8b8b8;
-    --chart-5: #d7d6d0;
+    --chart-1: var(--ink);
+    --chart-2: var(--ink-2);
+    --chart-3: var(--ink-muted);
+    --chart-4: var(--ink-faint);
+    --chart-5: var(--line-strong);
     /* Chart gridlines and faint separators. */
-    --line-soft: #f1f0eb;
+    --line-soft: var(--fill);
     /* Chart series after the first, which takes the colour of the Mini-Me that drew it. The
        order passes the categorical palette checks for adjacent series on white. */
     --chart-series-2: #eb6834;
@@ -207,14 +222,14 @@
     --chart-series-8: #e34948;
 
     /* The navigation sheet. Its selected item is a raised white pill. */
-    --sidebar: #f7f7f4;
-    --sidebar-foreground: #191b1e;
-    --sidebar-primary: #ffffff;
-    --sidebar-primary-foreground: #191b1e;
-    --sidebar-accent: #efefeb;
-    --sidebar-accent-foreground: #191b1e;
-    --sidebar-border: #e7e7e4;
-    --sidebar-ring: #191b1e;
+    --sidebar: var(--fill);
+    --sidebar-foreground: var(--ink);
+    --sidebar-primary: var(--white);
+    --sidebar-primary-foreground: var(--ink);
+    --sidebar-accent: var(--fill-strong);
+    --sidebar-accent-foreground: var(--ink);
+    --sidebar-border: var(--line);
+    --sidebar-ring: var(--ink);
 }
 
 @layer base {

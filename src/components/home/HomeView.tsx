@@ -76,7 +76,7 @@ function ProjectCard({ project, onOpen }: { project: ProjectSummary; onOpen: () 
   return (
     <Card
       render={<button type="button" onClick={onOpen} />}
-      className="h-full w-full cursor-pointer justify-between gap-7 p-5 text-left transition-colors duration-150 ease-out hover:bg-well focus-visible:outline-2 focus-visible:outline-ring"
+      className="h-full w-full cursor-pointer justify-between gap-7 p-5 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring"
     >
       <span className="self-end text-meta text-muted-foreground">
         {formatRelative(project.created_at)}
