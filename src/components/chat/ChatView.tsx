@@ -29,8 +29,9 @@ interface Props {
   messageId?: string;
   onActivity: () => void;
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
-  /** Opens a document, to be drafted from this Conversation when `draft` is set. */
-  onOpenDocument: (assetId: Uuid, draft?: boolean) => void;
+  /** Opens a document: to be drafted from this Conversation, with its Comments sheet showing,
+   * or as it is. */
+  onOpenDocument: (assetId: Uuid, how?: "draft" | "comments") => void;
 }
 
 export function ChatView({
@@ -93,7 +94,11 @@ export function ChatView({
   // streamed event.
   const openDocumentRef = useRef(onOpenDocument);
   openDocumentRef.current = onOpenDocument;
-  const openDocument = useCallback((assetId: Uuid) => openDocumentRef.current(assetId), []);
+  const openDocument = useCallback(
+    (assetId: Uuid, comments?: boolean) =>
+      openDocumentRef.current(assetId, comments ? "comments" : undefined),
+    [],
+  );
   /** Files are being dragged over the window. */
   const [dragging, setDragging] = useState(false);
 
@@ -252,7 +257,7 @@ export function ChatView({
                 replying={replying || choosing}
                 onDraft={async () => {
                   const asset = await api.createDocument(projectId, title);
-                  onOpenDocument(asset.id, true);
+                  onOpenDocument(asset.id, "draft");
                 }}
                 onStartBlank={async () => {
                   const asset = await api.createDocument(projectId, "Untitled document");

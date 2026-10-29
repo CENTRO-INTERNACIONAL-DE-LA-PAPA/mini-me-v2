@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "../../api";
+import { useMiniMes } from "../../hooks/useMiniMes";
 import { formatClock } from "../../lib/format";
 import type { CommentThread, Component, Message, Uuid } from "../../protocol/types";
 import { Composer } from "../chat/Composer";
@@ -41,6 +42,7 @@ interface Props {
   /** Accepts a thread's suggestion into the document and resolves the thread; rejects with
    * why it could not. */
   onAccept: (id: Uuid, messageId: Uuid, componentId: Uuid) => Promise<void>;
+  onOpenConversation: (id: Uuid) => void;
 }
 
 /** The document's comment threads beside it, as a tool sheet: a list under Open and Resolved
@@ -57,6 +59,7 @@ export function CommentsSheet({
   onResolve,
   onDelete,
   onAccept,
+  onOpenConversation,
 }: Props) {
   const [tab, setTab] = useState<Tab>("open");
   const lists: Record<Tab, CommentThread[]> = {
@@ -95,6 +98,7 @@ export function CommentsSheet({
           onAccept={(messageId, componentId) =>
             onAccept(thread.conversation_id, messageId, componentId)
           }
+          onOpenConversation={onOpenConversation}
         />
       </ToolSheet>
     );
@@ -198,6 +202,7 @@ function ThreadView({
   onResolve,
   onDelete,
   onAccept,
+  onOpenConversation,
 }: {
   projectId: Uuid;
   thread: CommentThread;
@@ -212,12 +217,16 @@ function ThreadView({
   onResolve: (resolved: boolean) => void;
   onDelete: () => void;
   onAccept: (messageId: Uuid, componentId: Uuid) => Promise<void>;
+  onOpenConversation: (id: Uuid) => void;
 }) {
   const { state, error } = useConversation(projectId, thread.conversation_id);
   const names = useMemo(() => componentNames(state.messages), [state.messages]);
   const newestFirst = useMemo(() => [...names.values()].reverse(), [names]);
   const replying = state.messages.some((m) => m.status === "streaming" || m.status === "paused");
   const [failure, setFailure] = useState<string | null>(null);
+  const miniMes = useMiniMes();
+  const from = thread.opened_from;
+  const opener = from ? (miniMes.find((m) => m.id === from.by.id)?.name ?? "a Mini-Me") : "you";
   const pending = newestPending(state.messages);
 
   // The list's counts and the source's suggestion marks follow new messages, finished replies,
@@ -280,7 +289,20 @@ function ThreadView({
         </h3>
         <div className="flex items-center gap-2 text-meta text-muted-foreground">
           <span className="flex-1">
-            Opened by you · {formatClock(thread.created_at)}
+            Opened by {opener}
+            {from?.title && (
+              <>
+                {" · from "}
+                <Button
+                  variant="link"
+                  className="text-meta"
+                  onClick={() => onOpenConversation(from.conversation_id)}
+                >
+                  {from.title}
+                </Button>
+              </>
+            )}
+            {` · ${formatClock(thread.created_at)}`}
             {detached && " · passage not found"}
           </span>
           {thread.resolved ? (

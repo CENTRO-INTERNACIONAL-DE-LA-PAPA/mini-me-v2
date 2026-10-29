@@ -16,8 +16,8 @@
 
 ## 4. The UI
 
-- [ ] 4.1 Add the `document-edits` renderer (title, "N of M suggested edits waiting" or "All M suggested edits answered", Open, removed document) and let `useOpenDocument` open a document with its Comments sheet showing; verify with a renderer test for the counts and the removed state
-- [ ] 4.2 Show "Opened by you", "Opened by Scribe · from Trial design" (the title opening the Conversation) or "Opened by Scribe" in the thread view, and offer "Edit documents" in the Trait editor and the Workflow's tool labels; verify `npx tsc --noEmit` and in the app that asking "@Scribe tighten #Trial report" adds a card, Open shows the threads, accepting counts down, and the link returns to the Conversation
+- [x] 4.1 Add the `document-edits` renderer (title, "N of M suggested edits waiting" or "All M suggested edits answered", Open, removed document) and let `useOpenDocument` open a document with its Comments sheet showing; verify with a renderer test for the counts and the removed state
+- [x] 4.2 Show "Opened by you", "Opened by Scribe · from Trial design" (the title opening the Conversation) or "Opened by Scribe" in the thread view, and offer "Edit documents" in the Trait editor and the Workflow's tool labels; verify `npx tsc --noEmit` and in the app that asking "@Scribe tighten #Trial report" adds a card, Open shows the threads, accepting counts down, and the link returns to the Conversation
 
 ## 5. Docs and checks
 
