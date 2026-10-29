@@ -37,7 +37,7 @@ export function ChartView({
   return (
     <section
       aria-label={chart.title || "Chart"}
-      className="w-full min-w-0 overflow-hidden rounded-xl bg-card border border-edge"
+      className="w-full min-w-0 overflow-hidden rounded-xl border border-card-edge bg-card"
     >
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-2.5">
         <h3 className="mr-auto text-ui font-semibold">{chart.title}</h3>

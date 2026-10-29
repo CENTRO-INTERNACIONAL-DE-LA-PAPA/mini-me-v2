@@ -209,6 +209,23 @@ pub struct Message {
     pub steps: Vec<MessageStep>,
 }
 
+impl Message {
+    /// A new message without attachments, references, components or Steps.
+    pub fn new(author: Author, content: String, status: MessageStatus, reply_to: Option<Uuid>) -> Self {
+        Self {
+            id: new_id(),
+            author,
+            content,
+            status,
+            reply_to,
+            attachments: Vec::new(),
+            text_components: Vec::new(),
+            components: Vec::new(),
+            steps: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MessageStep {
     pub step_id: String,

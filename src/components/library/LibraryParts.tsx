@@ -2,20 +2,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon, PuzzleIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { MiniMe } from "../../protocol/types";
-import { surfaceStyle } from "../minime/miniMeColors";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 
 interface HeaderProps {
   title: string;
-  /** What the identity tile shows: a Mini-Me's avatar or a Trait's mark. */
+  /** What the header shows before the name: a Mini-Me's avatar or a Trait's mark. */
   icon?: ReactNode;
-  /** The Mini-Me whose tint fills the identity tile; neutral without one. */
-  miniMe?: MiniMe;
   /** A line under the title, such as a Mini-Me's description. */
   subtitle?: string;
   /** Where the back link returns to, such as "Mini-Mes". */
@@ -28,14 +26,13 @@ interface HeaderProps {
   onBack: () => void;
 }
 
-/** An editor's identity header: a back link, the identity tile with the serif name and a line
+/** An editor's identity header: a back link, the avatar or mark with the serif name and a line
  * under it, and the tab switch and actions on the right; then the problems with the last
  * save. The problems scroll within a fixed height, so a long list never pushes the rest of
  * the editor out of view. */
 export function EditorHeader({
   title,
   icon,
-  miniMe,
   subtitle,
   back,
   tabs,
@@ -56,14 +53,7 @@ export function EditorHeader({
             {back}
           </Button>
           <div className="flex min-w-0 items-center gap-4">
-            {icon && (
-              <span
-                style={surfaceStyle(miniMe?.colors)}
-                className="flex size-16 shrink-0 items-center justify-center rounded-sheet bg-tint text-foreground"
-              >
-                {icon}
-              </span>
-            )}
+            {icon && <span className="flex shrink-0 text-foreground">{icon}</span>}
             <div className="grid min-w-0 gap-1">
               <h1 className="truncate font-serif text-identity font-medium text-foreground">
                 {title}
@@ -130,31 +120,41 @@ export function Field({
   );
 }
 
-/** A Delete button that asks once more before calling `onDelete`. */
-export function DeleteButton({ onDelete }: { onDelete: () => void }) {
+/** A Delete button that asks `question` in a popover below it before calling `onDelete`. Keep,
+ * Escape and clicking outside all close it, and Keep has the focus. `variant` styles the button,
+ * such as `mini-me` to stand out on a grey background. */
+export function DeleteButton({
+  question,
+  onDelete,
+  variant = "outline",
+}: {
+  question: string;
+  onDelete: () => void;
+  variant?: "outline" | "mini-me";
+}) {
   const [asking, setAsking] = useState(false);
-  if (!asking) {
-    return (
-      <Button variant="outline" onClick={() => setAsking(true)}>
-        Delete
-      </Button>
-    );
-  }
+  const keep = useRef<HTMLButtonElement>(null);
   return (
-    <>
-      <Button variant="ghost" onClick={() => setAsking(false)}>
-        Keep
-      </Button>
-      <Button
-        variant="destructive"
-        onClick={() => {
-          setAsking(false);
-          onDelete();
-        }}
-      >
-        Delete for good
-      </Button>
-    </>
+    <Popover open={asking} onOpenChange={setAsking}>
+      <PopoverTrigger render={<Button variant={variant} />}>Delete</PopoverTrigger>
+      <PopoverContent align="end" initialFocus={keep}>
+        <p>{question}</p>
+        <div className="flex justify-end gap-2">
+          <Button ref={keep} variant="ghost" onClick={() => setAsking(false)}>
+            Keep
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setAsking(false);
+              onDelete();
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -163,17 +163,9 @@ export function List({ children }: { children: ReactNode }) {
   return <ul className="divide-y divide-border">{children}</ul>;
 }
 
-/** A Trait's mark: a puzzle piece on a tile, the same piece a Trait Step shows. */
-export function TraitIcon({ size = 42 }: { size?: number }) {
-  return (
-    <span
-      aria-hidden
-      className="flex shrink-0 items-center justify-center rounded-well border border-border bg-muted"
-      style={{ width: size, height: size }}
-    >
-      <PuzzleIcon className="size-[18px]" strokeWidth={1.6} />
-    </span>
-  );
+/** A Trait's mark: a puzzle piece, the same piece a Trait Step shows. */
+export function TraitIcon() {
+  return <PuzzleIcon aria-hidden className="size-5 shrink-0 text-ink-2" strokeWidth={1.6} />;
 }
 
 /** One Mini-Me or Trait in a list, opening its editor. */
@@ -237,7 +229,7 @@ export function MiniMeCard({
           <MiniMeAvatar miniMe={miniMe} size={56} />
           <Badge
             variant="outline"
-            className="h-auto border-transparent bg-card px-2.5 py-[3px] text-meta text-(--mm-ink,var(--ink-2)) border border-edge"
+            className="h-auto border border-card-edge bg-card px-2.5 py-[3px] text-meta text-(--mm-ink,var(--ink-2))"
           >
             {miniMe.built_in ? "Built-in" : "Yours"}
           </Badge>

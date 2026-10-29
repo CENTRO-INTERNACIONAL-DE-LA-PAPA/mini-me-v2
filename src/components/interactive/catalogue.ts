@@ -2,7 +2,10 @@ import type { ComponentType } from "react";
 import type { MessageStatus } from "../../protocol/types";
 import * as approval from "./approval";
 import * as chart from "./chart";
+import * as document from "./document";
+import * as documentEdits from "./document-edits";
 import * as paperSources from "./paper-sources";
+import * as suggestion from "./suggestion";
 import * as table from "./table";
 import * as theories from "./theories";
 
@@ -36,6 +39,9 @@ export const catalogue = new Map<string, Renderers>([
   ["table", table.renderers],
   ["approval", approval.renderers],
   ["chart", chart.renderers],
+  ["document", document.renderers],
+  ["document-edits", documentEdits.renderers],
+  ["suggestion", suggestion.renderers],
 ]);
 
 /** The renderer for a kind and version, or null when this version of the app has none. */

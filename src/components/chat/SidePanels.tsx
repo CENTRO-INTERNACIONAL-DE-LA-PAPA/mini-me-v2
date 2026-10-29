@@ -17,7 +17,11 @@ import {
 } from "./WorkflowProgress";
 
 /** A panel docked to the right of a Conversation. */
-export type Panel = { kind: "outline" } | { kind: "jobs" } | { kind: "steps"; messageId: string };
+export type Panel =
+  | { kind: "outline" }
+  | { kind: "jobs" }
+  | { kind: "report" }
+  | { kind: "steps"; messageId: string };
 
 function SidePanel({
   title,
@@ -171,7 +175,7 @@ export function JobsPanel({
 }
 
 const REPLY_STATE: Record<string, string> = {
-  streaming: "Running",
+  streaming: "Running…",
   paused: "Waiting for your approval",
   complete: "Done",
   failed: "Failed",

@@ -3,16 +3,21 @@ import type { OpenedConversation } from "./protocol/eventStore";
 import type {
   AppError,
   Ai2Status,
+  AcceptedSuggestion,
   AiSettings,
+  Anchor,
+  CommentThread,
   AssetRef,
   KeyAccount,
   ConversationSummary,
+  DraftEvent,
   LibraryView,
   FileEntry,
   HomeSettings,
   Message,
   MiniMe,
   MiniMeDefinition,
+  OpenedDocument,
   Overview,
   PausedApproval,
   ProjectSummary,
@@ -23,6 +28,7 @@ import type {
   SavedDefinition,
   SendMessageInput,
   SidecarStatus,
+  SuggestionDecision,
   TraitDraft,
   UpdateStatus,
   UserProfile,
@@ -54,23 +60,6 @@ export const api = {
       on_events,
     });
   },
-  /** Streams every event after `after_seq`, then new events as they are persisted, in
-   * batches; resolves with the subscription's ID. */
-  subscribeConversation: (
-    project_id: Uuid,
-    conversation_id: Uuid,
-    after_seq: number,
-    onEvents: (events: ProtocolEvent[]) => void,
-  ) => {
-    const on_events = new Channel<ProtocolEvent[]>();
-    on_events.onmessage = onEvents;
-    return invoke<Uuid>("subscribe_conversation", {
-      project_id,
-      conversation_id,
-      after_seq,
-      on_events,
-    });
-  },
   unsubscribeConversation: (project_id: Uuid, subscription_id: Uuid) =>
     invoke<void>("unsubscribe_conversation", { project_id, subscription_id }),
   /** Ends every Conversation subscription, including those of a view before a reload. */
@@ -88,10 +77,6 @@ export const api = {
   /** The most recently active Conversations across all Projects, newest first. */
   listRecentConversations: () => invoke<RecentConversation[]>("list_recent_conversations"),
 
-  addReaction: (project_id: Uuid, message_id: Uuid, emoji: string) =>
-    invoke<void>("add_reaction", { project_id, message_id, emoji }),
-  removeReaction: (project_id: Uuid, message_id: Uuid, emoji: string) =>
-    invoke<void>("remove_reaction", { project_id, message_id, emoji }),
 
   /** Opens the native file picker; resolves with the imported Assets (empty if cancelled). */
   importAssets: (project_id: Uuid) => invoke<AssetRef[]>("import_assets", { project_id }),
@@ -125,15 +110,68 @@ export const api = {
   listProjectFiles: (project_id: Uuid) => invoke<FileEntry[]>("list_project_files", { project_id }),
   openAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("open_asset", { project_id, asset_id }),
+  /** Creates an empty `.qmd` document titled `title`, with the user's name as author. */
+  createDocument: (project_id: Uuid, title: string) =>
+    invoke<AssetRef>("create_document", { project_id, title }),
+  readDocument: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<OpenedDocument>("read_document", { project_id, asset_id }),
+  /** Saves the document's text, and moves its comment threads to `anchors`. */
+  saveDocument: (project_id: Uuid, asset_id: Uuid, text: string, anchors: Anchor[] = []) =>
+    invoke<void>("save_document", { project_id, asset_id, text, anchors }),
+  /** Starts a comment thread on `start..end` of a document's source, which reads `quote`. Its
+   * comments go through `sendMessage` on the thread's `conversation_id`. */
+  createThread: (project_id: Uuid, asset_id: Uuid, start: number, end: number, quote: string) =>
+    invoke<CommentThread>("create_thread", { project_id, asset_id, start, end, quote }),
+  listThreads: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<CommentThread[]>("list_threads", { project_id, asset_id }),
+  setThreadResolved: (project_id: Uuid, thread_id: Uuid, resolved: boolean) =>
+    invoke<void>("set_thread_resolved", { project_id, thread_id, resolved }),
+  /** Stops the thread's running reply, if any, then deletes the thread. */
+  deleteThread: (project_id: Uuid, thread_id: Uuid) =>
+    invoke<void>("delete_thread", { project_id, thread_id }),
+  /** Applies a suggestion to the saved document; fails with `suggestion_conflict` when the
+   * user's edits and the suggestion change the same words. */
+  acceptSuggestion: (project_id: Uuid, message_id: Uuid, component_id: Uuid) =>
+    invoke<AcceptedSuggestion>("accept_suggestion", { project_id, message_id, component_id }),
+  answerSuggestion: (
+    project_id: Uuid,
+    message_id: Uuid,
+    component_id: Uuid,
+    decision: Exclude<SuggestionDecision, "accepted">,
+  ) => invoke<void>("answer_suggestion", { project_id, message_id, component_id, decision }),
+  /** Drafts the new document `asset_id` from a Conversation, calling `onEvent` as text arrives.
+   * Resolves once the draft has ended and what was written is saved; rejects with why it
+   * stopped early. */
+  draftDocument: (
+    project_id: Uuid,
+    asset_id: Uuid,
+    conversation_id: Uuid,
+    draft_id: Uuid,
+    onEvent: (event: DraftEvent) => void,
+  ) => {
+    const on_event = new Channel<DraftEvent>();
+    on_event.onmessage = onEvent;
+    return invoke<void>("draft_document", {
+      project_id,
+      asset_id,
+      conversation_id,
+      draft_id,
+      on_event,
+    });
+  },
+  stopDraft: (draft_id: Uuid) => invoke<void>("stop_draft", { draft_id }),
+  /** The document text `source` as it would export, one SVG image per page. */
+  previewDocument: (source: string) => invoke<string[]>("preview_document", { source }),
+  /** Saves the document as a PDF Asset named after it, and returns that Asset. */
+  exportDocumentPdf: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<AssetRef>("export_document_pdf", { project_id, asset_id }),
 
-  getRunningReplies: () => invoke<RunningReply[]>("get_running_replies"),
   /** Calls `onChange` with the running replies, then with the whole list on every change. */
   subscribeRunningReplies: (onChange: (running: RunningReply[]) => void) => {
     const on_change = new Channel<RunningReply[]>();
     on_change.onmessage = onChange;
     return invoke<void>("subscribe_running_replies", { on_change });
   },
-  getSidecarStatus: () => invoke<SidecarStatus>("get_sidecar_status"),
   /** Calls `onStatus` with the current sidecar status, then with every change. */
   subscribeSidecarStatus: (onStatus: (status: SidecarStatus) => void) => {
     const on_status = new Channel<SidecarStatus>();
@@ -183,7 +221,6 @@ export const api = {
   ai2SignOut: () => invoke<void>("ai2_sign_out"),
 
 
-  getUpdateStatus: () => invoke<UpdateStatus>("get_update_status"),
   /** Calls `onStatus` with the current update status, then with every change. */
   subscribeUpdateStatus: (onStatus: (status: UpdateStatus) => void) => {
     const on_status = new Channel<UpdateStatus>();

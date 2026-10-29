@@ -8,10 +8,11 @@ use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::comments;
 use crate::error::{AppError, AppResult};
 use crate::library::Library;
 use crate::protocol::{AssetRef, Author, AuthorKind, Component};
-use crate::store::Project;
+use crate::store::{Project, ProjectState};
 
 /// Component kinds that can be featured on the Overview.
 const FEATURABLE: [&str; 2] = ["chart", "table"];
@@ -79,8 +80,11 @@ fn component_title(kind: &str, title: Option<String>, count: Option<i64>, text: 
 pub fn overview(project: &Project) -> AppResult<Overview> {
     let state = project.lock();
     let conn = &state.conn;
+    let conversations_only = comments::not_a_thread(conn, "id")?;
     let (conversations, last_activity_at): (i64, Option<i64>) = conn.query_row(
-        "SELECT COUNT(*), MAX(last_activity_at) FROM conversations",
+        &format!(
+            "SELECT COUNT(*), MAX(last_activity_at) FROM conversations WHERE {conversations_only}"
+        ),
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
@@ -140,13 +144,15 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
 
     let mut outputs = Vec::new();
     // Only the title and the list lengths are read from `data`, which can be large.
-    let mut stmt = conn.prepare(
+    let in_conversations = comments::not_a_thread(conn, "v.id")?;
+    let mut stmt = conn.prepare(&format!(
         "SELECT c.kind, c.id, json_extract(c.data, '$.title'), \
          COALESCE(json_array_length(c.data, '$.papers'), json_array_length(c.data, '$.theories')), \
          c.text, m.author_kind, m.author_id, m.conversation_id, v.title, m.id, c.created_at \
          FROM components c JOIN messages m ON m.id = c.message_id \
-         JOIN conversations v ON v.id = m.conversation_id WHERE c.kind != 'approval'",
-    )?;
+         JOIN conversations v ON v.id = m.conversation_id \
+         WHERE c.kind != 'approval' AND {in_conversations}",
+    ))?;
     let rows = stmt.query_map([], |row| {
         Ok((
             row.get::<_, String>(0)?,
@@ -191,11 +197,11 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
         generated
     };
     if !generated.is_empty() {
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare(&format!(
             "SELECT m.id, m.author_kind, m.author_id, m.conversation_id, v.title, m.attachments \
              FROM messages m JOIN conversations v ON v.id = m.conversation_id \
-             WHERE m.attachments != '[]' ORDER BY m.rowid",
-        )?;
+             WHERE m.attachments != '[]' AND {in_conversations} ORDER BY m.rowid",
+        ))?;
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -286,34 +292,20 @@ pub fn save_summary(project: &Project, summary: &str, at: i64) -> AppResult<()> 
 pub fn summary_material(project: &Project, library: &Library, budget: usize) -> AppResult<String> {
     let state = project.lock();
     let conversations: Vec<(String, String)> = {
-        let mut stmt =
-            state.conn.prepare(
-                "SELECT id, title FROM conversations ORDER BY last_activity_at DESC, rowid DESC",
-            )?;
+        let mut stmt = state.conn.prepare(&format!(
+            "SELECT id, title FROM conversations WHERE {} \
+             ORDER BY last_activity_at DESC, rowid DESC",
+            comments::not_a_thread(&state.conn, "id")?
+        ))?;
         stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<_, _>>()?
     };
     let mut material = String::new();
     for (id, title) in conversations {
-        let messages = state.conversation_messages(parse_id(&id)?)?;
         let mut block = format!("## {title}\n");
-        for message in &messages {
-            let speaker = match message.author.kind {
-                AuthorKind::User => "You".to_string(),
-                AuthorKind::System => continue,
-                AuthorKind::MiniMe => Uuid::parse_str(&message.author.id)
-                    .ok()
-                    .and_then(|id| library.mini_me(id))
-                    .map_or("A Mini-Me".to_string(), |m| m.name.clone()),
-            };
-            let text = if message.content.trim().is_empty() {
-                message.components.iter().map(|c| c.text.as_str()).collect::<Vec<_>>().join("\n")
-            } else {
-                message.content.clone()
-            };
-            if !text.trim().is_empty() {
-                block.push_str(&format!("{speaker}: {}\n", text.trim()));
-            }
+        for line in message_lines(&state, library, parse_id(&id)?)? {
+            block.push_str(&line);
+            block.push('\n');
         }
         if material.chars().count() + block.chars().count() + 1 > budget {
             continue;
@@ -324,12 +316,68 @@ pub fn summary_material(project: &Project, library: &Library, budget: usize) -> 
     Ok(material.trim_end().to_string())
 }
 
+/// The text a document is drafted from: one Conversation's messages, oldest first, each as
+/// "<speaker>: <text>". When they exceed `budget` characters the oldest are left out, and a
+/// newest message longer than `budget` is cut to its first `budget` characters.
+pub fn conversation_material(
+    project: &Project,
+    library: &Library,
+    conversation_id: Uuid,
+    budget: usize,
+) -> AppResult<String> {
+    let lines = message_lines(&project.lock(), library, conversation_id)?;
+    let mut kept = Vec::new();
+    let mut used = 0;
+    for line in lines.iter().rev() {
+        used += line.chars().count() + 1;
+        if used > budget {
+            if kept.is_empty() {
+                return Ok(line.chars().take(budget).collect());
+            }
+            break;
+        }
+        kept.push(line.as_str());
+    }
+    kept.reverse();
+    Ok(kept.join("\n"))
+}
+
+/// A Conversation's messages as "<speaker>: <text>" lines, oldest first: the user is "You", a
+/// Mini-Me is its name, and a message with no text stands for its components' text.
+fn message_lines(
+    state: &ProjectState,
+    library: &Library,
+    conversation_id: Uuid,
+) -> AppResult<Vec<String>> {
+    let mut lines = Vec::new();
+    for message in &state.conversation_messages(conversation_id)? {
+        let speaker = match message.author.kind {
+            AuthorKind::User => "You".to_string(),
+            AuthorKind::System => continue,
+            AuthorKind::MiniMe => Uuid::parse_str(&message.author.id)
+                .ok()
+                .and_then(|id| library.mini_me(id))
+                .map_or("A Mini-Me".to_string(), |m| m.name.clone()),
+        };
+        let text = if message.content.trim().is_empty() {
+            message.components.iter().map(|c| c.text.as_str()).collect::<Vec<_>>().join("\n")
+        } else {
+            message.content.clone()
+        };
+        if !text.trim().is_empty() {
+            lines.push(format!("{speaker}: {}", text.trim()));
+        }
+    }
+    Ok(lines)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::assets;
+    use crate::comments::test_support::into_thread;
     use crate::conversations::{self, SendMessageInput};
-    use crate::projects::test_support::temp_project;
+    use crate::projects::test_support::{temp_project, user};
     use crate::protocol::{EventKind, new_id};
     use serde_json::json;
 
@@ -385,8 +433,8 @@ mod tests {
             add(&project, second, researcher, "paper-sources", json!({ "papers": [{}, {}] }));
         let source = dir.path().join("upload.csv");
         std::fs::write(&source, "a\n1\n").unwrap();
-        assets::import(&project, &source).unwrap();
-        let saved = assets::write_generated(&project, "clean.csv", "", b"a\n1\n").unwrap();
+        assets::import(&project, &source, &user()).unwrap();
+        let saved = assets::write_generated(&project, "clean.csv", "", b"a\n1\n", &user()).unwrap();
         let event = EventKind::AttachmentAdded { message_id: researcher, asset: saved.clone() };
         project.lock().persist(second, event).unwrap();
 
@@ -466,5 +514,37 @@ mod tests {
 
         let small = summary_material(&project, &library, 60).unwrap();
         assert!(small.contains("clean the trial data") && !small.contains("planting"), "{small}");
+    }
+
+    #[test]
+    fn draft_material_keeps_the_newest_messages_and_cuts_one_too_long() {
+        let (_dir, project) = temp_project();
+        let library = Library::builtin();
+        let id = conversations::create(&project).unwrap().id;
+        ask(&project, id, "plan the trial");
+        ask(&project, id, "add a control plot");
+        let material = conversation_material(&project, &library, id, 30).unwrap();
+        assert_eq!(material, "You: add a control plot");
+        let cut = conversation_material(&project, &library, id, 10).unwrap();
+        assert_eq!(cut, "You: add a");
+    }
+
+    #[test]
+    fn a_thread_is_left_out_of_the_overview() {
+        let (_dir, project) = temp_project();
+        let library = Library::builtin();
+        let kept = conversations::create(&project).unwrap().id;
+        ask(&project, kept, "clean the trial data");
+        let thread = conversations::create(&project).unwrap().id;
+        into_thread(&project, thread);
+        let question = ask(&project, thread, "a comment on the report");
+        let answer = reply(&project, thread, question, "scribe");
+        add(&project, thread, answer, "table", json!({ "title": "Hidden" }));
+
+        let overview = overview(&project).unwrap();
+        assert_eq!(overview.conversations, 1);
+        assert!(overview.outputs.is_empty());
+        let material = summary_material(&project, &library, 100_000).unwrap();
+        assert!(!material.contains("a comment on the report"), "{material}");
     }
 }

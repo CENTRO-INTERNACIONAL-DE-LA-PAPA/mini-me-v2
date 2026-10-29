@@ -197,13 +197,75 @@ export interface ConversationRef {
 
 /** An Asset as the Project's Files screen lists it. */
 export interface FileEntry extends AssetRef {
-  /** `upload` for a file the user imported, `generated` for one a Mini-Me saved. */
+  /** `upload` for a file the user imported or started, `generated` for one the app made,
+   * such as a Mini-Me's output or an exported PDF. */
   source: "upload" | "generated";
   created_at: number;
-  /** The author of the first message the Asset is attached to, if any. */
+  /** When its file last changed (Unix ms); null when the file is missing. */
+  modified_at: number | null;
+  /** Who added the Asset; null for a file whose author was never recorded. */
   added_by: Author | null;
   /** The Conversations that attach or reference the Asset, in the order it first appeared. */
   used_in: ConversationRef[];
+}
+
+/** A comment thread on a passage of a document: a Conversation shown only in the document
+ * view. `start` and `end` are UTF-16 offsets in the source; `quote` is the passage's text when
+ * the thread was last anchored. */
+export interface CommentThread {
+  conversation_id: Uuid;
+  asset_id: Uuid;
+  start: number;
+  end: number;
+  quote: string;
+  resolved: boolean;
+  created_at: number;
+  /** How many comments and replies the thread holds. */
+  comments: number;
+  /** Its newest suggestion still waiting for an answer. */
+  pending: PendingSuggestion | null;
+  /** Where a Mini-Me opened it; null for a thread the user started. */
+  opened_from: OpenedFrom | null;
+}
+
+/** The Conversation a Mini-Me opened a thread from, by suggesting an edit there. */
+export interface OpenedFrom {
+  conversation_id: Uuid;
+  /** The Conversation's title; null once it no longer exists. */
+  title: string | null;
+  /** The Mini-Me that opened it. */
+  by: Author;
+}
+
+/** A suggestion waiting for the user's answer. */
+export interface PendingSuggestion {
+  message_id: Uuid;
+  component_id: Uuid;
+  author: Author;
+  text: string;
+}
+
+/** What the user decided about a suggestion. */
+export type SuggestionDecision = "accepted" | "rejected" | "dismissed";
+
+/** A document after a suggestion was accepted: its text and its threads, anchored anew. */
+export interface AcceptedSuggestion {
+  text: string;
+  threads: CommentThread[];
+}
+
+/** Where a comment thread's passage is now: UTF-16 offsets in the document's source. */
+export interface Anchor {
+  thread_id: Uuid;
+  start: number;
+  end: number;
+}
+
+/** A document as the document view opens it. */
+export interface OpenedDocument {
+  text: string;
+  /** When its file last changed (Unix ms); null when that cannot be read. */
+  modified_at: number | null;
 }
 
 export interface ProjectSummary {
@@ -342,6 +404,12 @@ export interface RecentConversation {
   /** Unix ms. */
   last_activity_at: number;
 }
+
+/** What arrives while Scribe drafts a document: some text, or the draft's end. */
+export type DraftEvent =
+  | { type: "delta"; text: string }
+  | { type: "done" }
+  | { type: "error"; error: ErrorInfo };
 
 /** A reply whose Mini-Me run is in flight, in any Project. */
 export interface RunningReply {

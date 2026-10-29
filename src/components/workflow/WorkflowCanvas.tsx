@@ -142,7 +142,7 @@ export function WorkflowCanvas({
       {/* The board: a grey card with a dot grid, inside the editor's sheet. */}
       <div
         style={surfaceStyle(miniMe.colors)}
-        className="relative h-full w-full overflow-hidden rounded-card border border-border bg-muted"
+        className="relative h-full w-full overflow-hidden rounded-card bg-muted"
       >
         <ReactFlow<LayoutNode, LayoutEdge>
           nodes={nodes}
@@ -191,7 +191,7 @@ export function WorkflowCanvas({
 function Toolbar() {
   const { start } = useCanvas();
   return (
-    <div className="absolute top-3.5 left-3.5 z-10 grid gap-0.5 rounded-xl border border-border bg-card p-1">
+    <div className="absolute top-3.5 left-3.5 z-10 grid gap-0.5 rounded-xl bg-card p-1">
       {TOOLBAR.map(({ kind, label, icon: Icon }) => (
         <Button
           key={kind}
@@ -212,7 +212,7 @@ function Toolbar() {
 function Ghost({ label, at }: { label: string; at: { x: number; y: number } }) {
   return (
     <div
-      className="pointer-events-none fixed z-50 rounded-full border border-border bg-card px-3 py-1 text-meta font-medium"
+      className="pointer-events-none fixed z-50 rounded-full bg-card px-3 py-1 text-meta font-medium"
       style={{ left: at.x + 12, top: at.y + 12 }}
     >
       {label}
@@ -316,16 +316,17 @@ function StepCard({
       className={cn(
         press.className,
         "group/step flex h-14 w-[220px] items-center gap-2.5 rounded-2xl bg-card px-3.5",
-        "border border-border",
+        "border border-transparent",
         editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         selectedId === step.id && "border-foreground outline-4 outline-tint",
       )}
       data-selected={selectedId === step.id || undefined}
     >
       <Ends />
-      <span className="grid size-8 shrink-0 place-items-center rounded-control bg-muted text-foreground group-data-selected/step:bg-tint group-data-selected/step:text-(--mm-ink,var(--foreground))">
-        <Icon className="size-4" />
-      </span>
+      <Icon
+        aria-hidden
+        className="size-4 shrink-0 text-foreground group-data-selected/step:text-(--mm-ink,var(--foreground))"
+      />
       <span className="grid min-w-0 gap-px">
         <span className="truncate text-ui font-semibold">{name}</span>
         <span className="truncate text-meta text-muted-foreground">{meta}</span>
@@ -370,7 +371,7 @@ function Pill({
       {...press}
       className={cn(
         press.className,
-        "flex h-8 w-[180px] items-center justify-center gap-[7px] rounded-full border border-border bg-card px-3 text-control font-medium",
+        "flex h-8 w-[180px] items-center justify-center gap-[7px] rounded-full bg-card px-3 text-control font-medium",
         step && (editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"),
         step && selectedId === step.id && "border-foreground outline-4 outline-tint",
         className,
@@ -401,22 +402,14 @@ function EndPill({ text }: { text: string }) {
   );
 }
 
-function MarkerNode({ data }: NodeProps<LayoutNode>) {
+/** A control Step's pill: a loop, or the start of a condition's or parallel Step's branches. */
+function ControlNode({ data }: NodeProps<LayoutNode>) {
   const step = data.step!;
-  const Icon = step.type === "parallel" ? SplitIcon : GitForkIcon;
+  const Icon =
+    step.type === "loop" ? RepeatIcon : step.type === "parallel" ? SplitIcon : GitForkIcon;
   return (
     <Pill step={step}>
       <Icon className="size-3.5 shrink-0" strokeWidth={1.4} />
-      <span className="truncate">{pillText(step)}</span>
-    </Pill>
-  );
-}
-
-function LoopNode({ data }: NodeProps<LayoutNode>) {
-  const step = data.step!;
-  return (
-    <Pill step={step}>
-      <RepeatIcon className="size-3.5 shrink-0" strokeWidth={1.4} />
       <span className="truncate">{pillText(step)}</span>
     </Pill>
   );
@@ -464,8 +457,8 @@ const NODE_TYPES = {
   end: () => <EndPill text="Reply in conversation" />,
   trait: TraitNode,
   approval: ApprovalNode,
-  marker: MarkerNode,
-  loop: LoopNode,
+  marker: ControlNode,
+  loop: ControlNode,
   frame: FrameNode,
   join: JoinNode,
   slot: SlotNode,
@@ -498,7 +491,7 @@ function ConnectorEdge(props: EdgeProps<LayoutEdge>) {
           <span
             data-slot={key}
             className={cn(
-              "nopan absolute grid size-5 place-items-center rounded-full border border-border-strong bg-card text-muted-foreground",
+              "nopan absolute grid size-5 place-items-center rounded-full bg-card text-muted-foreground",
               drag.over === key && "size-6 border-primary bg-primary text-primary-foreground",
             )}
             style={{

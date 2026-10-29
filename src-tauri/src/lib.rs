@@ -1,9 +1,11 @@
 mod ai2;
 mod approvals;
 mod assets;
+mod comments;
 mod components;
 mod conversations;
 mod db;
+mod documents;
 mod error;
 mod history;
 mod ipc;
@@ -64,7 +66,6 @@ pub fn run() {
             ipc::list_conversations,
             ipc::create_conversation,
             ipc::open_conversation,
-            ipc::subscribe_conversation,
             ipc::unsubscribe_conversation,
             ipc::reset_subscriptions,
             ipc::send_message,
@@ -72,10 +73,7 @@ pub fn run() {
             ipc::answer_approval,
             ipc::list_paused_approvals,
             ipc::list_recent_conversations,
-            ipc::get_running_replies,
             ipc::subscribe_running_replies,
-            ipc::add_reaction,
-            ipc::remove_reaction,
             ipc::import_assets,
             ipc::import_pasted_image,
             ipc::import_dropped,
@@ -86,7 +84,19 @@ pub fn run() {
             ipc::feature_component,
             ipc::update_overview_summary,
             ipc::open_asset,
-            ipc::get_sidecar_status,
+            ipc::create_document,
+            ipc::read_document,
+            ipc::save_document,
+            ipc::create_thread,
+            ipc::list_threads,
+            ipc::set_thread_resolved,
+            ipc::delete_thread,
+            ipc::accept_suggestion,
+            ipc::answer_suggestion,
+            ipc::draft_document,
+            ipc::stop_draft,
+            ipc::export_document_pdf,
+            ipc::preview_document,
             ipc::subscribe_sidecar_status,
             ipc::restart_sidecar,
             ipc::list_mini_mes,
@@ -111,7 +121,6 @@ pub fn run() {
             ipc::ai2_start_sign_in,
             ipc::subscribe_ai2_status,
             ipc::ai2_sign_out,
-            ipc::get_update_status,
             ipc::subscribe_update_status,
             ipc::restart_to_update,
         ])

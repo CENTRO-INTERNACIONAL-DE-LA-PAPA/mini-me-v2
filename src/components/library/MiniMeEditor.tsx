@@ -138,7 +138,6 @@ export function MiniMeEditor({
         <EditorHeader
           title={draft.name || "New Mini-Me"}
           icon={<Avatar {...draft.avatar} color={draft.colors} size={48} />}
-          miniMe={draft}
           subtitle={draft.description}
           back="Mini-Mes"
           tabs={
@@ -157,7 +156,12 @@ export function MiniMeEditor({
               </Button>
             ) : (
               <>
-                {id && !library.unreadable && <DeleteButton onDelete={remove} />}
+                {id && !library.unreadable && (
+                  <DeleteButton
+                    question={`Delete ${draft.name}? This can't be undone.`}
+                    onDelete={remove}
+                  />
+                )}
                 <Button disabled={readOnly} onClick={save}>
                   Save
                 </Button>

@@ -1,21 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { cn } from "@/lib/utils";
-import { ActivityIcon, ListTreeIcon, PaperclipIcon } from "lucide-react";
-import { api, errorMessage } from "../../api";
-import { ConversationStore } from "../../protocol/eventStore";
-import type { ProtocolEvent, Uuid } from "../../protocol/types";
+import { ActivityIcon, FileTextIcon, ListTreeIcon, PaperclipIcon } from "lucide-react";
+import { api } from "../../api";
+import type { Uuid } from "../../protocol/types";
 import { chatColumn, Composer, type ComposerHandle } from "./Composer";
 import { MessageItem } from "./MessageItem";
 import type { MessageView } from "../../protocol/eventStore";
 import { MiniMePill } from "../minime/MiniMePill";
 import { MainSheet, SheetHeader, ToolSwitch, type ToolOption } from "../shell/Sheet";
 import { FeaturingProvider } from "../interactive/featuring";
+import { OpenDocumentProvider } from "../documents/openDocument";
+import { ReportPanel } from "../documents/ReportPanel";
 import { componentNames } from "../interactive/component-names";
 import { ComponentReferencesProvider } from "../interactive/component-references";
 import type { ReferenceTarget } from "../../protocol/references";
 import { JobsPanel, OutlinePanel, StepsPanel, type Panel } from "./SidePanels";
 import { outline } from "./outline";
+import { useConversation } from "./useConversation";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useRunningReplies } from "../../hooks/useRunningReplies";
 
@@ -27,40 +29,9 @@ interface Props {
   messageId?: string;
   onActivity: () => void;
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
-}
-
-function useConversation(projectId: string, conversationId: string) {
-  const store = useMemo(() => new ConversationStore(), [projectId, conversationId]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    // Batches delivered before the opened state arrives wait for it; null once it has.
-    let pending: ProtocolEvent[] | null = [];
-    const opening = api.openConversation(projectId, conversationId, (events) => {
-      if (!active) return;
-      if (pending) pending.push(...events);
-      else store.applyBatch(events);
-    });
-    opening
-      .then((opened) => {
-        if (!active) return;
-        store.load(opened, pending ?? []);
-        pending = null;
-      })
-      .catch((e) => active && setError(errorMessage(e)));
-    return () => {
-      active = false;
-      // Waits for the open to finish, so that a Conversation closed while it opens is still
-      // unsubscribed.
-      opening
-        .then((opened) => api.unsubscribeConversation(projectId, opened.subscription_id))
-        .catch(() => {});
-    };
-  }, [store, projectId, conversationId]);
-
-  const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  return { state, error };
+  /** Opens a document: to be drafted from this Conversation, with its Comments sheet showing,
+   * or as it is. */
+  onOpenDocument: (assetId: Uuid, how?: "draft" | "comments") => void;
 }
 
 export function ChatView({
@@ -70,6 +41,7 @@ export function ChatView({
   messageId,
   onActivity,
   onOpenReply,
+  onOpenDocument,
 }: Props) {
   const { state, error } = useConversation(projectId, conversationId);
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -93,7 +65,7 @@ export function ChatView({
     ...running.filter((reply) => reply.conversation_id === conversationId),
     ...running.filter((reply) => reply.conversation_id !== conversationId),
   ];
-  const tools: ToolOption<"outline" | "jobs">[] = [
+  const tools: ToolOption<"outline" | "jobs" | "report">[] = [
     { id: "outline", label: "Outline", icon: ListTreeIcon },
     {
       id: "jobs",
@@ -101,6 +73,7 @@ export function ChatView({
       icon: ActivityIcon,
       count: jobs.length > 0 ? jobs.length : undefined,
     },
+    { id: "report", label: "Report", icon: FileTextIcon },
   ];
   const bottom = useRef<HTMLDivElement>(null);
   // The message sent from this view, until Mini-Me decides who answers it. Kept in memory
@@ -115,6 +88,15 @@ export function ChatView({
   const newestFirst = useMemo(() => [...names.values()].reverse(), [names]);
   const appendReference = useCallback(
     (target: ReferenceTarget) => composer.current?.appendReference(target),
+    [],
+  );
+  // Stable across renders, so the memoized messages that read it do not re-render with every
+  // streamed event.
+  const openDocumentRef = useRef(onOpenDocument);
+  openDocumentRef.current = onOpenDocument;
+  const openDocument = useCallback(
+    (assetId: Uuid, comments?: boolean) =>
+      openDocumentRef.current(assetId, comments ? "comments" : undefined),
     [],
   );
   /** Files are being dragged over the window. */
@@ -168,114 +150,133 @@ export function ChatView({
 
   return (
     <FeaturingProvider projectId={projectId}>
-      <ComponentReferencesProvider names={names} append={appendReference}>
-        <div className="flex min-h-0 min-w-0 flex-1 gap-3">
-          <MainSheet>
-            {dragging && (
-              <div
-                role="status"
-                className={cn(
-                  "pointer-events-none absolute inset-3 z-30 flex flex-col items-center",
-                  "justify-center gap-2 rounded-card border-2 border-dashed border-primary",
-                  "bg-background/90 text-ui font-semibold",
-                )}
-              >
-                <PaperclipIcon aria-hidden className="size-6" />
-                Drop to attach
-              </div>
-            )}
-            <SheetHeader
-              title={title}
-              compact={panel !== null}
-              actions={
-                <ToolSwitch
-                  label="Tools"
-                  options={tools}
-                  value={panel?.kind === "steps" ? null : (panel?.kind ?? null)}
-                  onToggle={(kind) => toggle({ kind })}
-                />
-              }
-            >
-              <Participants messages={state.messages} />
-            </SheetHeader>
-            {/* A gutter on both sides keeps the column centred like the composer whether or
-                not a scrollbar shows. */}
-            <div className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
-              {/* The list's top edge fades into the sheet. */}
-              <div
-                aria-hidden
-                className="pointer-events-none sticky top-0 z-10 -mb-14 h-14 bg-linear-to-b from-background to-transparent"
-              />
-              {/* The bottom padding lets the last reply clear the floating composer. */}
-              <div
-                className={cn(
-                  "flex flex-col gap-[22px] pt-8 pb-[150px]",
-                  chatColumn(panel !== null, "messages"),
-                )}
-              >
-                {state.messages.map((message) => (
-                  <MessageItem
-                    key={message.id}
-                    projectId={projectId}
-                    message={message}
-                    onToggleSteps={toggleSteps}
-                    stepsShown={stepsOf?.id === message.id}
+      <OpenDocumentProvider open={openDocument}>
+        <ComponentReferencesProvider names={names} append={appendReference}>
+          <div className="flex min-h-0 min-w-0 flex-1 gap-3">
+            <MainSheet>
+              {dragging && (
+                <div
+                  role="status"
+                  className={cn(
+                    "pointer-events-none absolute inset-3 z-30 flex flex-col items-center",
+                    "justify-center gap-2 rounded-card border-2 border-dashed border-primary",
+                    "bg-background/90 text-ui font-semibold",
+                  )}
+                >
+                  <PaperclipIcon aria-hidden className="size-6" />
+                  Drop to attach
+                </div>
+              )}
+              <SheetHeader
+                title={title}
+                compact={panel !== null}
+                actions={
+                  <ToolSwitch
+                    label="Tools"
+                    options={tools}
+                    value={panel?.kind === "steps" ? null : (panel?.kind ?? null)}
+                    onToggle={(kind) => toggle({ kind })}
                   />
-                ))}
-                {choosing && (
-                  <p role="status" className="text-meta text-muted-foreground">
-                    Choosing a Mini-Me…
-                  </p>
-                )}
-                {state.messages.length === 0 && (
-                  <p className="p-8 text-center text-muted-foreground">No messages yet.</p>
-                )}
-                <div ref={bottom} />
-              </div>
-            </div>
-            {error && <p className="px-8 py-2 text-meta text-destructive">{error}</p>}
-            <Composer
-              ref={composer}
-              narrow={panel !== null}
-              components={newestFirst}
-              projectId={projectId}
-              conversationId={conversationId}
-              replying={replying}
-              choosing={choosing}
-              onSent={(message) => {
-                setRouting(message.id);
-                onActivity();
-              }}
-            />
-          </MainSheet>
-          {panel?.kind === "outline" && (
-            <OutlinePanel outline={used} onClose={() => setPanel(null)} />
-          )}
-          {panel?.kind === "jobs" && (
-            <JobsPanel
-              replies={jobs}
-              conversationId={conversationId}
-              onOpen={(reply) => {
-                if (reply.conversation_id === conversationId) {
-                  document
-                    .querySelector(`[data-message-id="${reply.message_id}"]`)
-                    ?.scrollIntoView({ block: "center", behavior: "smooth" });
-                } else {
-                  onOpenReply(reply.project_id, reply.conversation_id, reply.message_id);
                 }
-              }}
-              onClose={() => setPanel(null)}
-            />
-          )}
-          {stepsOf && <StepsPanel message={stepsOf} onClose={() => setPanel(null)} />}
-        </div>
-      </ComponentReferencesProvider>
+              >
+                <Participants messages={state.messages} />
+              </SheetHeader>
+              {/* A gutter on both sides keeps the column centred like the composer whether or
+                  not a scrollbar shows. */}
+              <div className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
+                {/* The list's top edge fades into the sheet. */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none sticky top-0 z-10 -mb-14 h-14 bg-linear-to-b from-background to-transparent"
+                />
+                {/* The bottom padding lets the last reply clear the floating composer. */}
+                <div
+                  className={cn(
+                    "flex flex-col gap-[22px] pt-8 pb-[150px]",
+                    chatColumn(panel !== null, "messages"),
+                  )}
+                >
+                  {state.messages.map((message) => (
+                    <MessageItem
+                      key={message.id}
+                      projectId={projectId}
+                      message={message}
+                      onToggleSteps={toggleSteps}
+                      stepsShown={stepsOf?.id === message.id}
+                    />
+                  ))}
+                  {choosing && (
+                    <p role="status" className="text-meta text-muted-foreground">
+                      Choosing a Mini-Me…
+                    </p>
+                  )}
+                  {state.messages.length === 0 && (
+                    <p className="p-8 text-center text-muted-foreground">No messages yet.</p>
+                  )}
+                  <div ref={bottom} />
+                </div>
+              </div>
+              {error && <p className="px-8 py-2 text-meta text-destructive">{error}</p>}
+              <Composer
+                ref={composer}
+                narrow={panel !== null}
+                components={newestFirst}
+                projectId={projectId}
+                conversationId={conversationId}
+                replying={replying}
+                choosing={choosing}
+                onSent={(message) => {
+                  setRouting(message.id);
+                  onActivity();
+                }}
+              />
+            </MainSheet>
+            {panel?.kind === "outline" && (
+              <OutlinePanel outline={used} onClose={() => setPanel(null)} />
+            )}
+            {panel?.kind === "jobs" && (
+              <JobsPanel
+                replies={jobs}
+                conversationId={conversationId}
+                onOpen={(reply) => {
+                  if (reply.conversation_id === conversationId) {
+                    document
+                      .querySelector(`[data-message-id="${reply.message_id}"]`)
+                      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+                  } else {
+                    onOpenReply(reply.project_id, reply.conversation_id, reply.message_id);
+                  }
+                }}
+                onClose={() => setPanel(null)}
+              />
+            )}
+            {panel?.kind === "report" && (
+              <ReportPanel
+                projectId={projectId}
+                messages={state.messages}
+                replying={replying || choosing}
+                onDraft={async () => {
+                  const asset = await api.createDocument(projectId, title);
+                  onOpenDocument(asset.id, "draft");
+                }}
+                onStartBlank={async () => {
+                  const asset = await api.createDocument(projectId, "Untitled document");
+                  onOpenDocument(asset.id);
+                }}
+                onOpen={(assetId) => onOpenDocument(assetId)}
+                onClose={() => setPanel(null)}
+              />
+            )}
+            {stepsOf && <StepsPanel message={stepsOf} onClose={() => setPanel(null)} />}
+          </div>
+        </ComponentReferencesProvider>
+      </OpenDocumentProvider>
     </FeaturingProvider>
   );
 }
 
 const TAG_STATUS: Record<string, string | undefined> = {
-  streaming: "Replying",
+  streaming: "Replying…",
   paused: "Waiting for you",
 };
 

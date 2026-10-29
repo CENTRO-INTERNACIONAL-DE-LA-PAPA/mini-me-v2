@@ -147,7 +147,7 @@ function SettingRow({
  * inputs inside it stand out. */
 function AccountCard({ render, children }: { render?: ReactElement; children: ReactNode }) {
   return (
-    <Card render={render} className="gap-0 rounded-2xl bg-card px-4 py-3.5">
+    <Card render={render} className="gap-0 rounded-2xl border border-border bg-card px-4 py-3.5">
       {children}
     </Card>
   );
@@ -637,8 +637,8 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
         htmlFor="threshold"
         description={
           <>
-            From 0 to 1. When Jev is less sure than this, Mini-Me asks you to mention a Mini-Me
-            with @ instead of guessing.
+            From 0 to 1. When Jev is less sure than this of its choice, Assistant answers
+            instead, and Jev adds no reaction.
             {status && <span className="mt-1 block text-ink-2">{status}</span>}
           </>
         }
@@ -744,7 +744,7 @@ function KeyRow({
       <div className="flex items-center gap-3.5">
         <span
           aria-hidden
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-muted font-serif text-name font-medium"
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted font-serif text-name font-medium"
         >
           {name[0]}
         </span>

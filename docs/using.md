@@ -43,7 +43,69 @@ are shown exactly as you typed them.
 ## Files
 
 Reference a file with `#` or attach it to a message. Mini-Mes read text files, and the data
-Mini-Mes read CSV, TSV and Excel (`.xlsx`) tables; PDFs and images are not read yet.
+Mini-Mes read CSV, TSV and Excel (`.xlsx`) tables; PDFs and images are not read yet. A
+document (`.qmd`) opens in Mini-Me's document view rather than another app.
+
+## Documents
+
+A **document** is a report you edit in Mini-Me and keep in the Project's Files, as a Quarto
+(`.qmd`) file that Quarto, RStudio and other editors also open. To start one, pick **Report**
+next to Outline and Jobs in a Conversation:
+
+- **Draft from this conversation** creates a document titled after the Conversation and opens
+  it while Scribe writes a report from the Conversation's messages, which appears in the
+  source as it is written. **Stop** keeps what was written so far. Drafting sends the
+  Conversation's messages, never file contents, to the provider of the AI model chosen in
+  Settings, and adds nothing to the Conversation.
+- **Start blank** creates an empty document, with your name as author when you have set it.
+- **Open from Files** lists the Project's documents, most recently edited first.
+
+Documents also open from Files and from the card below a reply in which Assistant or Scribe
+wrote one; ask them for a report or a document.
+
+The document view shows the document's Quarto source beside a preview of its pages. Edit the
+source as text, including
+the title and author in its header; the buttons add bold, italic, headings, quotes and lists,
+and changes are saved as you type. The preview shows the pages exactly as **Export PDF** will
+make them; click **Render** to update it after editing. **Export PDF** saves a PDF of the
+document next to it in Files and offers to open it; both are made on your computer, and code in
+the document is shown, never run.
+
+### Comments and suggestions
+
+Select text in the source and click the comment button by the formatting buttons to start a
+thread on it. **Comments** shows the document's threads beside it, under **Open** and
+**Resolved**, numbered in the order their passages appear; in the source, each passage is
+underlined and followed by its number, and clicking either opens the thread. Threads follow
+their passages as you edit. One whose passage can no longer be found, for example after the
+file was changed in another editor, is listed under **Detached**. Comments are kept in the
+Project, not in the `.qmd` file.
+
+A comment is a note unless it @-mentions a Mini-Me. A mentioned Mini-Me runs its whole Workflow,
+as it would for a message, with the passage, the document's name and the thread's earlier
+comments, and answers in the thread. Mini-Mes whose Traits can suggest edits, such as Assistant
+or Scribe, may suggest new text for the passage: the source shows the passage struck through
+with the suggestion after it, and the reply offers:
+
+- **Accept and resolve**: puts the suggestion in the document and resolves the thread. If you
+  have edited the passage since, your edits are kept and combined with the suggestion; when
+  both changed the same words, nothing is applied, and you can discard it or ask again.
+- **Discard**: leaves the document as it is.
+
+For another version, @-mention the Mini-Me again in the thread and say what to change.
+
+**Resolve** moves a thread to Resolved, setting aside a suggestion still waiting, and
+**Reopen** brings it back. **Delete** removes the thread and its comments.
+
+### Editing a document from a Conversation
+
+Reference a document with `#` or attach it, and ask a Mini-Me whose Traits can edit documents,
+such as Assistant or Scribe, to change it ("@Scribe tighten the methods in #Trial report").
+The Mini-Me suggests its edits; the document itself is unchanged until you accept them. Each
+edit opens a thread on the passage it changes, saying "Opened by Scribe · from Trial design"
+with the Conversation's name as a link back, and holding the Mini-Me's reason and its
+suggestion, which you accept or discard as above. The reply shows a card for the document with
+how many suggested edits still wait; **Open** shows the document with its Comments.
 
 ## Follow-ups
 

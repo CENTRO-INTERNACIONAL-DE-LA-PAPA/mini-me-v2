@@ -13,7 +13,9 @@ use uuid::Uuid;
 use crate::ai2::{Ai2, Ai2Status, AppSecrets};
 use crate::approvals::{self, PausedApproval};
 use crate::assets;
+use crate::comments;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
+use crate::documents;
 use crate::error::{AppError, AppResult};
 use crate::projects::{self, ProjectSummary};
 use crate::recent::{self, RecentConversation};
@@ -24,7 +26,7 @@ use crate::user_library::{LibraryStore, Skipped, TraitDraft};
 use crate::user_profile::{ProfileStore, UserProfile};
 use crate::overview;
 use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
-use crate::runs::{CANCEL_TIMEOUT, RunningReply, Runs};
+use crate::runs::{CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
 use crate::settings::{AiSettings, HomeSettings, Settings};
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
@@ -37,6 +39,12 @@ const SUMMARY_BUDGET_CHARS: usize = HISTORY_BUDGET_CHARS * 4;
 
 /// How long a summary may take; long material can keep the model writing for a while.
 const SUMMARY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// How long a draft may go without new text before it is stopped.
+const DRAFT_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// How long making a PDF may take.
+const EXPORT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 pub struct AppState {
     config_dir: PathBuf,
@@ -221,21 +229,6 @@ pub async fn open_conversation(
     state
         .project(project_id)?
         .open(conversation_id, Box::new(ChannelSink(on_events)))
-}
-
-/// Sends `on_events` every event after `after_seq`, then new ones; returns the subscription's
-/// ID.
-#[tauri::command(rename_all = "snake_case")]
-pub async fn subscribe_conversation(
-    state: State<'_, AppState>,
-    project_id: Uuid,
-    conversation_id: Uuid,
-    after_seq: i64,
-    on_events: Channel<Vec<Event>>,
-) -> AppResult<Uuid> {
-    state
-        .project(project_id)?
-        .subscribe(conversation_id, after_seq, Box::new(ChannelSink(on_events)))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -557,12 +550,6 @@ pub async fn list_recent_conversations(
     recent::list(&state.data_root)
 }
 
-/// Every reply whose Mini-Me run is in flight, in any Project.
-#[tauri::command(rename_all = "snake_case")]
-pub async fn get_running_replies(state: State<'_, AppState>) -> AppResult<Vec<RunningReply>> {
-    Ok(state.runs.running())
-}
-
 /// Sends the running replies now and the whole list again each time it changes.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn subscribe_running_replies(
@@ -573,11 +560,6 @@ pub async fn subscribe_running_replies(
         .runs
         .subscribe(Box::new(move |running| on_change.send(running.to_vec()).is_ok()));
     Ok(())
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn get_sidecar_status(state: State<'_, AppState>) -> AppResult<SidecarStatus> {
-    Ok(state.sidecar.status())
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -598,11 +580,6 @@ pub async fn restart_sidecar(state: State<'_, AppState>) -> AppResult<()> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_update_status(state: State<'_, AppState>) -> AppResult<UpdateStatus> {
-    Ok(state.updates.status())
-}
-
-#[tauri::command(rename_all = "snake_case")]
 pub async fn subscribe_update_status(
     state: State<'_, AppState>,
     on_status: Channel<UpdateStatus>,
@@ -620,26 +597,6 @@ pub async fn restart_to_update(app: AppHandle, state: State<'_, AppState>) -> Ap
     state.sidecar.shutdown();
     state.updates.install_pending();
     app.restart()
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn add_reaction(
-    state: State<'_, AppState>,
-    project_id: Uuid,
-    message_id: Uuid,
-    emoji: String,
-) -> AppResult<()> {
-    conversations::add_reaction(&*state.project(project_id)?, message_id, &emoji, state.user())
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn remove_reaction(
-    state: State<'_, AppState>,
-    project_id: Uuid,
-    message_id: Uuid,
-    emoji: String,
-) -> AppResult<()> {
-    conversations::remove_reaction(&*state.project(project_id)?, message_id, &emoji, state.user())
 }
 
 /// Opens the native file picker and imports every picked file. Paths come only from the
@@ -663,7 +620,7 @@ pub async fn import_assets(
         let path = file
             .into_path()
             .map_err(|e| AppError::invalid_input(e.to_string()))?;
-        imported.push(assets::import(&project, &path)?);
+        imported.push(assets::import(&project, &path, &state.user())?);
     }
     Ok(imported)
 }
@@ -686,7 +643,8 @@ pub async fn import_pasted_image(
     let name = percent_encoding::percent_decode_str(header("name")).decode_utf8_lossy();
     let media_type = header("media-type");
     let project = state.project(project_id)?;
-    assets::import_bytes(&project, &assets::pasted_name(&name, media_type), media_type, bytes)
+    let name = assets::pasted_name(&name, media_type);
+    assets::import_bytes(&project, &name, media_type, bytes, &state.user())
 }
 
 /// Imports files dropped on the window; only paths of the latest drop are accepted.
@@ -697,7 +655,7 @@ pub async fn import_dropped(
     paths: Vec<PathBuf>,
 ) -> AppResult<Vec<AssetRef>> {
     let dropped = state.dropped.lock().unwrap_or_else(|p| p.into_inner()).clone();
-    assets::import_dropped(&*state.project(project_id)?, &paths, &dropped)
+    assets::import_dropped(&*state.project(project_id)?, &paths, &dropped, &state.user())
 }
 
 /// The bytes of an image Asset, for its thumbnail in the composer.
@@ -775,6 +733,114 @@ pub async fn update_overview_summary(
     overview::overview(&project)
 }
 
+/// Creates an empty document titled `title`, with the user's name as author when they have one.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn create_document(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    title: String,
+) -> AppResult<AssetRef> {
+    let author = state.profile.current().name;
+    documents::create(&*state.project(project_id)?, &title, author.as_deref(), &state.user())
+}
+
+/// Drafts the document `asset_id`, just created, from the Conversation `conversation_id`,
+/// sending each piece of text to `on_event` as it arrives. Whatever was written is saved after
+/// the document's header when the draft ends, fails or is stopped with `stop_draft`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn draft_document(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+    conversation_id: Uuid,
+    draft_id: Uuid,
+    on_event: Channel<DraftEvent>,
+) -> AppResult<()> {
+    let model = state
+        .settings()
+        .ai
+        .model()
+        .ok_or_else(|| AppError::new("model_not_set", "Choose an AI model in Settings first."))?;
+    let project = state.project(project_id)?;
+    let title = conversations::title(&project, conversation_id)?;
+    let material = overview::conversation_material(
+        &project,
+        &state.library.current(),
+        conversation_id,
+        HISTORY_BUDGET_CHARS,
+    )?;
+    if material.is_empty() {
+        return Err(AppError::invalid_input("There are no messages to draft from yet."));
+    }
+    let header = documents::read(&project, asset_id)?;
+    let runs = Arc::clone(&state.runs);
+    let (body, ending) = tauri::async_runtime::spawn_blocking(move || {
+        runs.draft(draft_id, model, title, material, DRAFT_IDLE, |event| {
+            let _ = on_event.send(event.clone());
+        })
+    })
+    .await
+    .map_err(|e| AppError::new("draft_failed", e.to_string()))?;
+    documents::save_draft(&project, asset_id, &header, &body)?;
+    ending.map_or(Ok(()), Err)
+}
+
+/// Stops the draft `draft_id`; `draft_document` then saves what was written.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn stop_draft(state: State<'_, AppState>, draft_id: Uuid) -> AppResult<()> {
+    state.runs.cancel_draft(draft_id);
+    Ok(())
+}
+
+/// The document text `source` as it would export, one SVG image per page.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn preview_document(state: State<'_, AppState>, source: String) -> AppResult<Vec<String>> {
+    let runs = Arc::clone(&state.runs);
+    tauri::async_runtime::spawn_blocking(move || runs.preview(source, EXPORT_TIMEOUT))
+        .await
+        .map_err(|e| AppError::new("preview_failed", e.to_string()))?
+}
+
+/// Exports the document `asset_id` as a PDF Asset named after it, and returns that Asset.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn export_document_pdf(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<AssetRef> {
+    let project = state.project(project_id)?;
+    let name = assets::find(&project.lock(), asset_id)?.name;
+    let source = documents::read(&project, asset_id)?;
+    let runs = Arc::clone(&state.runs);
+    let export_name = name.clone();
+    let pdf = tauri::async_runtime::spawn_blocking(move || {
+        runs.export_pdf(export_name, source, EXPORT_TIMEOUT)
+    })
+    .await
+    .map_err(|e| AppError::new("export_failed", e.to_string()))??;
+    documents::store_pdf(&project, asset_id, &name, &pdf, &state.user())
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn read_document(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<documents::OpenedDocument> {
+    documents::open(&*state.project(project_id)?, asset_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn save_document(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+    text: String,
+    anchors: Vec<comments::Anchor>,
+) -> AppResult<()> {
+    documents::save(&*state.project(project_id)?, asset_id, &text, &anchors)
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn open_asset(
     app: AppHandle,
@@ -786,4 +852,74 @@ pub async fn open_asset(
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
         .map_err(|e| AppError::new("open_failed", e.to_string()))
+}
+
+/// Starts a comment thread on the passage `start..end` of the document `asset_id`, which reads
+/// `quote`. Its comments are sent with `send_message` on its `conversation_id`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn create_thread(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+    start: u32,
+    end: u32,
+    quote: String,
+) -> AppResult<comments::CommentThread> {
+    comments::create(&*state.project(project_id)?, asset_id, (start, end), &quote)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn list_threads(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<Vec<comments::CommentThread>> {
+    comments::list(&*state.project(project_id)?, asset_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_thread_resolved(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    thread_id: Uuid,
+    resolved: bool,
+) -> AppResult<()> {
+    comments::set_resolved(&*state.project(project_id)?, thread_id, resolved)
+}
+
+/// Stops the thread's running reply, if any, then deletes the thread.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_thread(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    thread_id: Uuid,
+) -> AppResult<()> {
+    let project = state.project(project_id)?;
+    for message_id in conversations::stop_reply(&project, thread_id)? {
+        state.runs.cancel_message(message_id);
+    }
+    comments::delete(&project, thread_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn accept_suggestion(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    message_id: Uuid,
+    component_id: Uuid,
+) -> AppResult<comments::Accepted> {
+    comments::accept_suggestion(&*state.project(project_id)?, message_id, component_id)
+}
+
+/// Rejects or dismisses a suggestion, leaving the document as it is.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn answer_suggestion(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    message_id: Uuid,
+    component_id: Uuid,
+    decision: comments::Decision,
+) -> AppResult<()> {
+    let project = state.project(project_id)?;
+    comments::answer_suggestion(&project, message_id, component_id, decision)
 }

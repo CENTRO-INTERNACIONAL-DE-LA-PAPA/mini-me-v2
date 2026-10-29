@@ -16,6 +16,8 @@ import { ReferenceChip } from "./ReferenceChip";
 import { TextComponentChip } from "./TextComponentChip";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { useOpenDocument } from "../documents/openDocument";
+import { isDocument } from "../files/files";
 import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
 
 const STATUS_LABEL: Record<string, string | undefined> = {
@@ -32,6 +34,8 @@ interface Props {
   onToggleSteps?: (messageId: string) => void;
   /** Whether those steps are open. */
   stepsShown?: boolean;
+  /** In a comment thread's card: the user's comments without a bubble, and smaller replies. */
+  compact?: boolean;
 }
 
 /** The author's name, and the Mini-Me when the author is a known one. */
@@ -55,6 +59,7 @@ export const MessageItem = memo(function MessageItem({
   message,
   onToggleSteps,
   stepsShown = false,
+  compact = false,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const miniMes = useMiniMes();
@@ -73,15 +78,21 @@ export const MessageItem = memo(function MessageItem({
     (c) => c.kind !== "approval" || approvalState(c.answer, message.status) === "asking",
   );
 
+  const openDocument = useOpenDocument();
   const open = useCallback(
     async (assetId: string) => {
+      const name = message.attachments.find((a) => a.id === assetId)?.name;
+      if (openDocument && name && isDocument(name)) {
+        openDocument(assetId);
+        return;
+      }
       try {
         await api.openAsset(projectId, assetId);
       } catch (e) {
         setError(errorMessage(e));
       }
     },
-    [projectId],
+    [projectId, message.attachments, openDocument],
   );
 
   const status = STATUS_LABEL[message.status];
@@ -171,10 +182,23 @@ export const MessageItem = memo(function MessageItem({
     </>
   );
 
+  if (fromUser && compact) {
+    return (
+      <article data-message-id={message.id} className="flex flex-col gap-1">
+        <p className="text-meta text-muted-foreground">
+          {name} · {time}
+        </p>
+        {text}
+        {attachments}
+        {notes}
+      </article>
+    );
+  }
+
   if (fromUser) {
     return (
       <article data-message-id={message.id} className="flex max-w-[520px] flex-col items-end gap-1.5 self-end">
-        <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] border border-border bg-muted px-[15px] py-[11px] text-foreground">
+        <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] bg-bubble [--card-edge:transparent] px-[15px] py-[11px] text-foreground">
           {text}
           {attachments}
           {reactionPills}
@@ -192,10 +216,13 @@ export const MessageItem = memo(function MessageItem({
       miniMe={authorMiniMe}
       render={<article />}
       data-message-id={message.id}
-      className="relative flex flex-col gap-3.5 px-[18px] py-4 text-foreground"
+      className={cn(
+        "relative flex flex-col text-foreground",
+        compact ? "gap-2.5 px-3 py-2.5" : "gap-3.5 px-[18px] py-4",
+      )}
     >
       <header className="flex items-center gap-[9px] text-meta">
-        <MiniMeAvatar miniMe={authorMiniMe} size={28} />
+        <MiniMeAvatar miniMe={authorMiniMe} size={compact ? 20 : 28} />
         <strong className="font-serif text-name font-medium text-foreground">{name}</strong>
         <span className="text-mm-ink">
           {time}
@@ -214,13 +241,16 @@ export const MessageItem = memo(function MessageItem({
           stepsShown={stepsShown}
         />
       )}
+      {/* A reply with no text yet, or none at all, leaves no empty block to space around. */}
       {message.author.kind === "mini_me" ? (
-        <Markdown
-          content={message.content}
-          textComponents={message.text_components}
-          miniMes={miniMes}
-          onOpenAsset={open}
-        />
+        message.content.trim() !== "" && (
+          <Markdown
+            content={message.content}
+            textComponents={message.text_components}
+            miniMes={miniMes}
+            onOpenAsset={open}
+          />
+        )
       ) : (
         text
       )}

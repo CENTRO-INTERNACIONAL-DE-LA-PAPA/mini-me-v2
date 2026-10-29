@@ -4,6 +4,7 @@ from mini_me_sidecar.adapters.prompt import (
     RESEARCH_CONTEXT,
     _filtered,
     _material,
+    _offered,
     _merged,
     _system_prompt,
     _tools_error,
@@ -63,6 +64,22 @@ def test_the_conversations_files_and_components_are_listed_without_content():
     assert "- trial.csv (ID: a2)\n" in material
     assert material.endswith("- table from Curator (ID: c1)")
     assert _material("hello", {"assets": [], "components": []}) == "hello"
+
+
+def test_suggest_edit_is_offered_only_in_a_thread_and_edit_document_only_outside():
+    listed = ("save_file", "suggest_edit", "edit_document")
+    reads = ["read_file", "read_component"]
+    assert _offered(listed, in_thread=False) == [*reads, "save_file", "edit_document"]
+    assert _offered(listed, in_thread=True) == [*reads, "save_file", "suggest_edit"]
+
+
+def test_a_comment_comes_after_the_passage_it_is_about():
+    document = {"asset_id": "d1", "name": "Report.qmd", "passage": "Yield fell above 3,800 m."}
+    material = _material("make this shorter", {"assets": [], "components": []}, None, document)
+    assert material == (
+        "This comment is about a passage of the document Report.qmd (ID: d1), which read_file "
+        'reads in full:\n"""\nYield fell above 3,800 m.\n"""\n\nmake this shorter'
+    )
 
 
 def test_the_messages_references_are_listed_with_their_kind():

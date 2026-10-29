@@ -11,7 +11,7 @@ const badgeVariants = cva(
         default: "bg-primary text-primary-foreground",
         secondary: "border-border bg-muted text-foreground [a]:hover:bg-surface-3 [button]:hover:bg-surface-3",
         destructive: "border-border bg-card text-destructive",
-        outline: "border-border-strong bg-card text-foreground [a]:hover:bg-accent [button]:hover:bg-accent",
+        outline: "border-card-edge bg-card text-foreground [a]:hover:bg-accent [button]:hover:bg-accent",
         ghost: "text-ink-2 hover:bg-accent",
         link: "px-0 text-foreground hover:opacity-70",
         // A Mini-Me's chip or name tag: its tint with its ink, from the `--mm-*` variables

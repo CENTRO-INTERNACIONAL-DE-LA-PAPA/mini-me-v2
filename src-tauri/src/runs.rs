@@ -2,7 +2,7 @@
 //! events, pausing them at approvals, cancelling them, and answering the requests their
 //! Trait calls and model decisions make to the core.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -16,10 +16,11 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::assets;
+use crate::comments;
 use crate::components;
 use crate::conversations::{self, PausedRun};
 use crate::error::{AppError, AppResult};
-use crate::history::{HISTORY_BUDGET_CHARS, history, results};
+use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
 use crate::user_library::LibraryStore;
 use crate::link::{
@@ -48,9 +49,27 @@ const ROUTING_KEY: &str = "typesafe";
 /// Jev's answers to a routing request, by question ID.
 pub type RouteAnswers = BTreeMap<String, ChoiceAnswer>;
 
-type RouteOutcome = Result<RouteAnswers, ErrorInfo>;
+/// What the sidecar sends about a draft: some text, or its end.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DraftEvent {
+    Delta { text: String },
+    Done,
+    Error { error: ErrorInfo },
+}
 
-type SummaryOutcome = Result<String, ErrorInfo>;
+/// The sender each request waiting for the sidecar's answer is listed under, by its ID.
+type Pending<T> = HashMap<Uuid, mpsc::Sender<Result<T, ErrorInfo>>>;
+
+/// What a request to the sidecar fails with when no answer comes.
+struct NoAnswer {
+    /// The sidecar is not running.
+    not_ready: &'static str,
+    /// The code and message when the answer takes longer than the request's timeout.
+    timeout: (&'static str, &'static str),
+    /// The sidecar stopped before it answered.
+    stopped: &'static str,
+}
 
 /// The writing end of the link to a running sidecar. Returns `false` when the sidecar can
 /// no longer be reached.
@@ -169,10 +188,19 @@ struct Inner {
     adapters: HashMap<String, AdapterInfo>,
     runs: HashMap<Uuid, Run>,
     /// Routing requests waiting for their `route.done` or `route.error`.
-    routes: HashMap<Uuid, mpsc::Sender<RouteOutcome>>,
-    /// Summary requests waiting for their `summary.done` or `summary.error`, with the
-    /// provider whose key each may get.
-    summaries: HashMap<Uuid, (String, mpsc::Sender<SummaryOutcome>)>,
+    routes: Pending<RouteAnswers>,
+    /// Summary requests waiting for their `summary.done` or `summary.error`.
+    summaries: Pending<String>,
+    /// Drafts being written.
+    drafts: HashMap<Uuid, mpsc::Sender<DraftEvent>>,
+    /// The provider whose key each summary and draft may get, by its ID.
+    key_providers: HashMap<Uuid, String>,
+    /// Drafts stopped before they were sent to the sidecar; `draft` ends them at once.
+    stopped_drafts: HashSet<Uuid>,
+    /// PDF exports waiting for their `document.exported` or `document.export_error`.
+    exports: Pending<Vec<u8>>,
+    /// Previews waiting for their `document.previewed` or `document.preview_error`.
+    previews: Pending<Vec<String>>,
 }
 
 impl Inner {
@@ -201,6 +229,12 @@ struct ComponentAddParams {
     version: u32,
     data: Value,
     text: String,
+}
+
+#[derive(Deserialize)]
+struct DocumentEditParams {
+    asset_id: Uuid,
+    edits: Vec<comments::DocumentEdit>,
 }
 
 #[derive(Deserialize)]
@@ -261,9 +295,14 @@ impl Runs {
         let runs: Vec<Run> = {
             let mut inner = self.lock();
             inner.sink = None;
-            // Dropping the senders wakes every waiting routing and summary request.
+            // Dropping the senders wakes every waiting routing, summary, draft and export
+            // request.
             inner.routes.clear();
             inner.summaries.clear();
+            inner.drafts.clear();
+            inner.exports.clear();
+            inner.previews.clear();
+            inner.key_providers.clear();
             inner.runs.drain().map(|(_, run)| run).collect()
         };
         self.notify();
@@ -407,6 +446,7 @@ impl Runs {
                 conversation_id,
                 message: message.clone(),
                 needs_context: spec.needs_context,
+                document: comments::run_document(&project, conversation_id).ok().flatten(),
             },
         };
         self.lock().runs.insert(
@@ -446,39 +486,13 @@ impl Runs {
         timeout: Duration,
     ) -> AppResult<RouteAnswers> {
         let route_id = new_id();
-        let (tx, rx) = mpsc::channel();
-        let sink = {
-            let mut inner = self.lock();
-            let Some(sink) = inner.sink.clone() else {
-                return Err(AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime is not ready."));
-            };
-            inner.routes.insert(route_id, tx);
-            sink
+        let frame = CoreFrame::RouteStart { route_id, state, mini_mes, ask };
+        let no_answer = NoAnswer {
+            not_ready: "Mini-Me's runtime is not ready.",
+            timeout: ("jev_timeout", "Typesafe did not answer in time."),
+            stopped: "Mini-Me's runtime stopped before choosing a Mini-Me.",
         };
-        let sent = sink.send(&CoreFrame::RouteStart {
-            route_id,
-            state,
-            mini_mes,
-            ask,
-        });
-        let outcome = if sent {
-            rx.recv_timeout(timeout)
-        } else {
-            Err(RecvTimeoutError::Disconnected)
-        };
-        self.lock().routes.remove(&route_id);
-        match outcome {
-            Ok(Ok(answers)) => Ok(answers),
-            Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
-            Err(RecvTimeoutError::Timeout) => Err(AppError::new(
-                "jev_timeout",
-                "Typesafe did not answer in time.",
-            )),
-            Err(RecvTimeoutError::Disconnected) => Err(AppError::new(
-                SIDECAR_STOPPED,
-                "Mini-Me's runtime stopped before choosing a Mini-Me.",
-            )),
-        }
+        self.request(|inner| &mut inner.routes, route_id, frame, timeout, no_answer)
     }
 
     /// Asks the sidecar to summarise `material` with `model`, waiting at most `timeout`.
@@ -490,55 +504,191 @@ impl Runs {
         timeout: Duration,
     ) -> AppResult<String> {
         let summary_id = new_id();
+        self.lock().key_providers.insert(summary_id, model.provider.clone());
+        let frame = CoreFrame::SummaryStart { summary_id, model, material };
+        let no_answer = NoAnswer {
+            not_ready: "Mini-Me's runtime is not ready.",
+            timeout: ("summary_timeout", "The AI model did not finish the summary in time. Try again."),
+            stopped: "Mini-Me's runtime stopped before the summary was written.",
+        };
+        let summary = self.request(|inner| &mut inner.summaries, summary_id, frame, timeout, no_answer);
+        self.lock().key_providers.remove(&summary_id);
+        summary
+    }
+
+    /// Drafts a report titled `title` from `material` with `model`, passing each piece of text
+    /// to `on_event` as it arrives, until the draft ends, is cancelled with `cancel_draft`, or
+    /// no text arrives for `idle`. Returns the whole text, and the error that ended it if one
+    /// did; the text written before an error is kept.
+    pub fn draft(
+        &self,
+        draft_id: Uuid,
+        model: CallModel,
+        title: String,
+        material: String,
+        idle: Duration,
+        mut on_event: impl FnMut(&DraftEvent),
+    ) -> (String, Option<AppError>) {
+        let (tx, rx) = mpsc::channel();
+        let sink = {
+            let mut inner = self.lock();
+            if inner.stopped_drafts.remove(&draft_id) {
+                return (String::new(), None);
+            }
+            let Some(sink) = inner.sink.clone() else {
+                let error = AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime is not ready.");
+                return (String::new(), Some(error));
+            };
+            inner.drafts.insert(draft_id, tx);
+            inner.key_providers.insert(draft_id, model.provider.clone());
+            sink
+        };
+        let mut text = String::new();
+        let mut ending = None;
+        if sink.send(&CoreFrame::DraftStart { draft_id, model, title, material }) {
+            loop {
+                match rx.recv_timeout(idle) {
+                    Ok(event) => {
+                        on_event(&event);
+                        match event {
+                            DraftEvent::Delta { text: piece } => text.push_str(&piece),
+                            DraftEvent::Done => break,
+                            DraftEvent::Error { error } => {
+                                ending = Some(AppError::new(&error.code, error.message));
+                                break;
+                            }
+                        }
+                    }
+                    Err(RecvTimeoutError::Timeout) => {
+                        sink.send(&CoreFrame::DraftCancel { draft_id });
+                        ending = Some(AppError::new(
+                            "draft_timeout",
+                            "The AI model stopped sending the draft. Try again.",
+                        ));
+                        break;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        ending = Some(AppError::new(
+                            SIDECAR_STOPPED,
+                            "Mini-Me's runtime stopped while writing the draft.",
+                        ));
+                        break;
+                    }
+                }
+            }
+        } else {
+            ending = Some(AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime could not be reached."));
+        }
+        let mut inner = self.lock();
+        inner.drafts.remove(&draft_id);
+        inner.key_providers.remove(&draft_id);
+        drop(inner);
+        (text, ending)
+    }
+
+    /// Asks the sidecar to stop the draft `draft_id`; it then ends as `Done`. A draft not yet
+    /// sent to the sidecar, because the core is still gathering its material, ends empty when
+    /// it would start.
+    pub fn cancel_draft(&self, draft_id: Uuid) {
+        let sink = {
+            let mut inner = self.lock();
+            if !inner.drafts.contains_key(&draft_id) {
+                inner.stopped_drafts.insert(draft_id);
+                return;
+            }
+            inner.sink.clone()
+        };
+        if let Some(sink) = sink {
+            sink.send(&CoreFrame::DraftCancel { draft_id });
+        }
+    }
+
+    fn draft_event(&self, draft_id: Uuid, event: DraftEvent) {
+        let tx = self.lock().drafts.get(&draft_id).cloned();
+        match tx {
+            Some(tx) => {
+                let _ = tx.send(event);
+            }
+            None => self
+                .log
+                .line(&format!("ignoring a frame for draft {draft_id}, which is not open")),
+        }
+    }
+
+    /// The document `source`, named `name`, as PDF, within `timeout`.
+    pub fn export_pdf(&self, name: String, source: String, timeout: Duration) -> AppResult<Vec<u8>> {
+        let export_id = new_id();
+        let frame = CoreFrame::DocumentExport { export_id, name, source };
+        let no_answer = NoAnswer {
+            not_ready: "Mini-Me is not ready yet. Try again when it is.",
+            timeout: ("export_timeout", "The PDF took too long to make. Try again."),
+            stopped: "Mini-Me's runtime stopped before the PDF was made.",
+        };
+        self.request(|inner| &mut inner.exports, export_id, frame, timeout, no_answer)
+    }
+
+    /// The document `source` as SVG images, one per page, within `timeout`.
+    pub fn preview(&self, source: String, timeout: Duration) -> AppResult<Vec<String>> {
+        let preview_id = new_id();
+        let frame = CoreFrame::DocumentPreview { preview_id, source };
+        let no_answer = NoAnswer {
+            not_ready: "Mini-Me is not ready yet. Try again when it is.",
+            timeout: ("preview_timeout", "The preview took too long to make. Try again."),
+            stopped: "Mini-Me's runtime stopped before the preview was made.",
+        };
+        self.request(|inner| &mut inner.previews, preview_id, frame, timeout, no_answer)
+    }
+
+    /// Sends `frame` for the request `id`, listed in `pending` until it ends, and waits at most
+    /// `timeout` for the sidecar's answer, which `answered` passes on.
+    fn request<T>(
+        &self,
+        pending: fn(&mut Inner) -> &mut Pending<T>,
+        id: Uuid,
+        frame: CoreFrame,
+        timeout: Duration,
+        no_answer: NoAnswer,
+    ) -> AppResult<T> {
         let (tx, rx) = mpsc::channel();
         let sink = {
             let mut inner = self.lock();
             let Some(sink) = inner.sink.clone() else {
-                return Err(AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime is not ready."));
+                return Err(AppError::new(SIDECAR_STOPPED, no_answer.not_ready));
             };
-            inner.summaries.insert(summary_id, (model.provider.clone(), tx));
+            pending(&mut inner).insert(id, tx);
             sink
         };
-        let sent = sink.send(&CoreFrame::SummaryStart { summary_id, model, material });
-        let outcome = if sent {
+        let outcome = if sink.send(&frame) {
             rx.recv_timeout(timeout)
         } else {
             Err(RecvTimeoutError::Disconnected)
         };
-        self.lock().summaries.remove(&summary_id);
+        pending(&mut self.lock()).remove(&id);
         match outcome {
-            Ok(Ok(text)) => Ok(text),
+            Ok(Ok(answer)) => Ok(answer),
             Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
-            Err(RecvTimeoutError::Timeout) => Err(AppError::new(
-                "summary_timeout",
-                "The AI model did not finish the summary in time. Try again.",
-            )),
-            Err(RecvTimeoutError::Disconnected) => Err(AppError::new(
-                SIDECAR_STOPPED,
-                "Mini-Me's runtime stopped before the summary was written.",
-            )),
-        }
-    }
-
-    fn finish_summary(&self, summary_id: Uuid, outcome: SummaryOutcome) {
-        match self.lock().summaries.remove(&summary_id) {
-            Some((_, tx)) => {
-                let _ = tx.send(outcome);
+            Err(RecvTimeoutError::Timeout) => {
+                Err(AppError::new(no_answer.timeout.0, no_answer.timeout.1))
             }
-            None => self
-                .log
-                .line(&format!("ignoring the end of summary {summary_id}, which is not open")),
+            Err(RecvTimeoutError::Disconnected) => {
+                Err(AppError::new(SIDECAR_STOPPED, no_answer.stopped))
+            }
         }
     }
 
-    fn finish_route(&self, route_id: Uuid, outcome: RouteOutcome) {
-        match self.lock().routes.remove(&route_id) {
+    /// Passes the sidecar's answer to the request `id` of `pending`, named `what` in the log.
+    fn answered<T>(
+        &self,
+        pending: fn(&mut Inner) -> &mut Pending<T>,
+        what: &str,
+        id: Uuid,
+        outcome: Result<T, ErrorInfo>,
+    ) {
+        match pending(&mut self.lock()).remove(&id) {
             Some(tx) => {
                 let _ = tx.send(outcome);
             }
-            None => self
-                .log
-                .line(&format!("ignoring the end of route {route_id}, which is not open")),
+            None => self.log.line(&format!("ignoring the end of {what} {id}, which is not open")),
         }
     }
 
@@ -603,6 +753,9 @@ impl Runs {
         // Titles are read after the runs lock is released, so no Project lock is taken
         // while it is held.
         runs.into_iter()
+            .filter(|(_, project, conversation_id, ..)| {
+                !comments::is_thread(&project.lock(), *conversation_id).unwrap_or(false)
+            })
             .map(|(_, project, conversation_id, message_id, mini_me, step)| RunningReply {
                 project_id: project.id,
                 project_name: project.name.clone(),
@@ -781,16 +934,39 @@ impl Runs {
                 }
             }
             SidecarFrame::RouteDone { route_id, answers } => {
-                self.finish_route(route_id, Ok(answers));
+                self.answered(|inner| &mut inner.routes, "route", route_id, Ok(answers));
             }
             SidecarFrame::RouteError { route_id, error } => {
-                self.finish_route(route_id, Err(error));
+                self.answered(|inner| &mut inner.routes, "route", route_id, Err(error));
             }
             SidecarFrame::SummaryDone { summary_id, text } => {
-                self.finish_summary(summary_id, Ok(text));
+                self.answered(|inner| &mut inner.summaries, "summary", summary_id, Ok(text));
             }
             SidecarFrame::SummaryError { summary_id, error } => {
-                self.finish_summary(summary_id, Err(error));
+                self.answered(|inner| &mut inner.summaries, "summary", summary_id, Err(error));
+            }
+            SidecarFrame::DraftDelta { draft_id, text } => {
+                self.draft_event(draft_id, DraftEvent::Delta { text });
+            }
+            SidecarFrame::DraftDone { draft_id } => self.draft_event(draft_id, DraftEvent::Done),
+            SidecarFrame::DraftError { draft_id, error } => {
+                self.draft_event(draft_id, DraftEvent::Error { error });
+            }
+            SidecarFrame::DocumentExported { export_id, data } => {
+                let outcome = BASE64.decode(data.as_bytes()).map_err(|_| ErrorInfo {
+                    code: "export_failed".into(),
+                    message: "The PDF arrived damaged. Try again.".into(),
+                });
+                self.answered(|inner| &mut inner.exports, "export", export_id, outcome);
+            }
+            SidecarFrame::DocumentExportError { export_id, error } => {
+                self.answered(|inner| &mut inner.exports, "export", export_id, Err(error));
+            }
+            SidecarFrame::DocumentPreviewed { preview_id, pages } => {
+                self.answered(|inner| &mut inner.previews, "preview", preview_id, Ok(pages));
+            }
+            SidecarFrame::DocumentPreviewError { preview_id, error } => {
+                self.answered(|inner| &mut inner.previews, "preview", preview_id, Err(error));
             }
             SidecarFrame::CoreRequest {
                 request_id,
@@ -839,6 +1015,8 @@ impl Runs {
             conversation_id: Uuid,
             answers: Uuid,
             reply: Uuid,
+            /// The reply's author, the Mini-Me that adds what the call saves.
+            author: Author,
             provider: Option<String>,
             /// The Step the call runs.
             step_id: String,
@@ -852,6 +1030,7 @@ impl Runs {
                 conversation_id: run.conversation_id,
                 answers: run.answers,
                 reply: run.message_id,
+                author: run.spec.author.clone(),
                 provider: run.provider.clone(),
                 step_id: step_id.to_string(),
                 call: match kind {
@@ -859,20 +1038,21 @@ impl Runs {
                     CallKind::Decision => None,
                 },
             });
-            let summary_provider = inner.summaries.get(&call_id).map(|(p, _)| p.clone());
+            // A summary or a draft may only get its own model's key.
+            let summary_provider = inner.key_providers.get(&call_id).cloned();
             (place, inner.routes.contains_key(&call_id), summary_provider)
         };
         let Some(place) = place else {
             if is_route {
-                return self.answer_route(method, params);
+                return self.answer_key("routing request", Some(ROUTING_KEY), method, params);
             }
             if let Some(provider) = summary_provider {
-                return self.answer_summary(&provider, method, params);
+                return self.answer_key("summary request", Some(&provider), method, params);
             }
             return Err(AppError::new("call_not_active", "This Trait call has ended."));
         };
         let Some(adapter) = place.call else {
-            return self.answer_decision(place.provider.as_deref(), method, params);
+            return self.answer_key("Workflow decision", place.provider.as_deref(), method, params);
         };
         let project = place.project;
         let reply = place.reply;
@@ -888,18 +1068,25 @@ impl Runs {
             "asset.write" => {
                 let p: AssetWriteParams = parse_params(params)?;
                 let bytes = decode_asset(&p.data)?;
-                let asset =
-                    conversations::attach_generated(&project, reply, &p.name, &p.media_type, &bytes)
-                        .map_err(reply_ended)?;
+                let file = (p.name.as_str(), p.media_type.as_str(), bytes.as_slice());
+                let asset = conversations::attach_generated(&project, reply, &place.author, file)
+                    .map_err(reply_ended)?;
                 Ok(json!({ "asset": asset }))
             }
             "conversation.results" => {
                 let state = project.lock();
                 let messages = state.conversation_messages(place.conversation_id)?;
                 let library = self.library.current();
-                let found = results(&messages, place.answers, reply, &library, |id| {
+                let mut found = results(&messages, place.answers, reply, &library, |id| {
                     assets::find(&state, id).ok()
                 });
+                // A thread's document is part of what its comment is about.
+                if let Some(document) = comments::document_of(&state, place.conversation_id)? {
+                    found.assets.retain(|a| a.asset.id != document.id);
+                    let message_id = place.answers;
+                    let listed = ResultAsset { asset: document, message_id, current: true };
+                    found.assets.insert(0, listed);
+                }
                 Ok(serde_json::to_value(found)?)
             }
             "component.read" => {
@@ -908,11 +1095,28 @@ impl Runs {
             }
             "component.add" => {
                 let p: ComponentAddParams = parse_params(params)?;
-                let component = (p.kind.as_str(), p.version, p.data, p.text);
+                let data = match p.kind.as_str() {
+                    "suggestion" => comments::suggestion(&project, place.conversation_id, &p.data)?,
+                    _ => p.data,
+                };
+                let component = (p.kind.as_str(), p.version, data, p.text);
                 let step_id = Some(place.step_id.as_str());
                 let id = conversations::add_component(&project, reply, step_id, component)
                     .map_err(reply_ended)?;
                 Ok(json!({ "component_id": id }))
+            }
+            "document.edit" => {
+                let p: DocumentEditParams = parse_params(params)?;
+                let call = comments::EditingCall {
+                    conversation_id: place.conversation_id,
+                    answers: place.answers,
+                    reply,
+                    author: &place.author,
+                    step_id: Some(place.step_id.as_str()),
+                };
+                let edited = comments::edit_document(&project, &call, p.asset_id, &p.edits)
+                    .map_err(reply_ended)?;
+                Ok(serde_json::to_value(edited)?)
             }
             other => Err(AppError::new(
                 "unknown_method",
@@ -921,55 +1125,26 @@ impl Runs {
         }
     }
 
-    /// A routing request may only get the Typesafe key.
-    fn answer_route(&self, method: &str, params: Value) -> AppResult<Value> {
+    /// A request that may only get the `allowed` API key, such as a routing request, which
+    /// may only get Typesafe's. `what` names the request in errors.
+    fn answer_key(
+        &self,
+        what: &str,
+        allowed: Option<&str>,
+        method: &str,
+        params: Value,
+    ) -> AppResult<Value> {
         if method != "secret.get" {
             return Err(AppError::new(
                 "unknown_method",
-                format!("A routing request cannot use '{method}'."),
+                format!("A {what} cannot use '{method}'."),
             ));
         }
         let params: SecretGetParams = parse_params(params)?;
-        if params.provider != ROUTING_KEY {
+        if allowed != Some(params.provider.as_str()) {
             return Err(AppError::new(
                 "secret_not_allowed",
-                format!("Routing cannot use the {} API key.", provider_name(&params.provider)),
-            ));
-        }
-        self.secret_value(ROUTING_KEY)
-    }
-
-    /// A summary request may only get the key of the provider whose model writes it.
-    fn answer_summary(&self, provider: &str, method: &str, params: Value) -> AppResult<Value> {
-        if method != "secret.get" {
-            return Err(AppError::new(
-                "unknown_method",
-                format!("A summary request cannot use '{method}'."),
-            ));
-        }
-        let params: SecretGetParams = parse_params(params)?;
-        if params.provider != provider {
-            return Err(AppError::new(
-                "secret_not_allowed",
-                format!("This summary cannot use the {} API key.", provider_name(&params.provider)),
-            ));
-        }
-        self.secret_value(provider)
-    }
-
-    /// A model decision may only get the key of its run's AI provider.
-    fn answer_decision(&self, provider: Option<&str>, method: &str, params: Value) -> AppResult<Value> {
-        if method != "secret.get" {
-            return Err(AppError::new(
-                "unknown_method",
-                format!("A Workflow decision cannot use '{method}'."),
-            ));
-        }
-        let params: SecretGetParams = parse_params(params)?;
-        if provider != Some(params.provider.as_str()) {
-            return Err(AppError::new(
-                "secret_not_allowed",
-                format!("This decision cannot use the {} API key.", provider_name(&params.provider)),
+                format!("This {what} cannot use the {} API key.", provider_name(&params.provider)),
             ));
         }
         self.secret_value(&params.provider)
@@ -1106,9 +1281,10 @@ pub mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::comments::test_support::into_thread;
     use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
     use crate::library::Step;
-    use crate::projects::test_support::temp_project;
+    use crate::projects::test_support::{temp_project, user};
     use crate::protocol::{EventKind, MessageStatus};
     use crate::secrets::NoSecrets;
     use crate::secrets::test_support::MemorySecrets;
@@ -1463,6 +1639,26 @@ mod tests {
     }
 
     #[test]
+    fn a_call_can_ask_to_edit_only_a_document_its_message_references() {
+        let f = quick();
+        let (call_id, _) = f.start_call("echo");
+        let report = crate::documents::create(&f.project, "Report", None, &user()).unwrap();
+        let edit = json!({ "find": "Report", "replace": "Trial report", "reason": "Clearer." });
+        let params = json!({ "asset_id": report.id, "edits": [edit] });
+        let refused = f.runs.respond("r".into(), call_id, "document.edit", params);
+        assert_eq!(error_code(refused).as_deref(), Some("document_not_referenced"));
+    }
+
+    #[test]
+    fn a_trait_cannot_add_a_document_edits_card() {
+        let f = quick();
+        let (call_id, _) = f.start_call("echo");
+        let params = json!({ "kind": "document-edits", "version": 1, "data": {}, "text": "t" });
+        let refused = add_component(&f, call_id, params);
+        assert_eq!(error_code(refused).as_deref(), Some("component_not_allowed"));
+    }
+
+    #[test]
     fn a_valid_component_is_added_to_the_reply() {
         let f = quick();
         let (call_id, reply) = f.start_call("echo");
@@ -1490,6 +1686,18 @@ mod tests {
         result(add_component(&f, call_id, params));
 
         assert_eq!(f.message(reply).components[0].step_index, Some(1));
+    }
+
+    #[test]
+    fn a_call_in_a_thread_lists_the_threads_document_first() {
+        let f = quick();
+        let (call_id, reply) = f.start_call("echo");
+        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
+        into_thread(&f.project, conversation);
+        let listed = result(f.runs.respond("r".into(), call_id, "conversation.results", json!({})));
+        let first = &listed["assets"][0];
+        assert_eq!(first["name"], "Thread document.qmd");
+        assert_eq!(first["current"], true);
     }
 
     #[test]
@@ -1598,7 +1806,7 @@ mod tests {
         let source = source_dir.path().join("trial.bin");
         let content: Vec<u8> = (0..(ASSET_CHUNK_BYTES * 5 / 2)).map(|i| (i % 251) as u8).collect();
         std::fs::write(&source, &content).unwrap();
-        let asset = assets::import(&f.project, &source).unwrap();
+        let asset = assets::import(&f.project, &source, &user()).unwrap();
 
         let mut read = Vec::new();
         let mut responses = 0;
@@ -1619,7 +1827,7 @@ mod tests {
         assert_eq!(read, content);
 
         let (_other_dir, other) = temp_project();
-        let foreign = assets::import(&other, &source).unwrap();
+        let foreign = assets::import(&other, &source, &user()).unwrap();
         let response = f.runs.respond(
             "r".into(),
             call_id,
@@ -1952,6 +2160,155 @@ mod tests {
         handle.join().unwrap().unwrap();
     }
 
+    /// Waits until the sink has a frame `pick` accepts, and returns what it picked.
+    fn wait_for<T>(f: &Fixture, pick: impl Fn(CoreFrame) -> Option<T>) -> T {
+        loop {
+            if let Some(found) = f.sink.frames().into_iter().find_map(&pick) {
+                return found;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    type DraftOutcome = ((String, Option<AppError>), Vec<DraftEvent>);
+
+    fn start_draft(f: &Fixture, idle: Duration) -> (Uuid, std::thread::JoinHandle<DraftOutcome>) {
+        let runs = Arc::clone(&f.runs);
+        let draft_id = new_id();
+        let handle = std::thread::spawn(move || {
+            let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
+            let mut events = Vec::new();
+            let outcome = runs.draft(draft_id, model, "Trial".into(), "You: hi".into(), idle, |e| {
+                events.push(e.clone())
+            });
+            (outcome, events)
+        });
+        wait_for(f, |frame| match frame {
+            CoreFrame::DraftStart { draft_id: id, .. } if id == draft_id => Some(()),
+            _ => None,
+        });
+        (draft_id, handle)
+    }
+
+    #[test]
+    fn a_draft_streams_its_text_and_a_stopped_draft_keeps_it() {
+        let f = quick();
+        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
+        f.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "# Summary\n".into() });
+        f.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "Yield fell.".into() });
+        f.runs.cancel_draft(draft_id);
+        wait_for(&f, |frame| match frame {
+            CoreFrame::DraftCancel { draft_id: id } if id == draft_id => Some(()),
+            _ => None,
+        });
+        f.runs.handle(SidecarFrame::DraftDone { draft_id });
+        let ((text, ending), events) = handle.join().unwrap();
+        assert_eq!(text, "# Summary\nYield fell.");
+        assert!(ending.is_none());
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[2], DraftEvent::Done);
+    }
+
+    #[test]
+    fn a_draft_stopped_before_it_starts_writes_nothing() {
+        let f = quick();
+        let draft_id = new_id();
+        f.runs.cancel_draft(draft_id);
+        let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
+        let (text, ending) =
+            f.runs.draft(draft_id, model, "Trial".into(), "You: hi".into(), CANCEL_TIMEOUT, |_| {});
+        assert!(text.is_empty() && ending.is_none());
+        assert!(!f.sink.frames().iter().any(|frame| matches!(frame, CoreFrame::DraftStart { .. })));
+    }
+
+    #[test]
+    fn a_failed_or_silent_draft_keeps_its_text_and_says_why() {
+        let f = quick();
+        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
+        f.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "Partial".into() });
+        let error = ErrorInfo { code: "provider_refused".into(), message: "Refused.".into() };
+        f.runs.handle(SidecarFrame::DraftError { draft_id, error });
+        let ((text, ending), _) = handle.join().unwrap();
+        assert_eq!((text.as_str(), ending.unwrap().code.as_str()), ("Partial", "provider_refused"));
+
+        let g = quick();
+        let (_, handle) = start_draft(&g, Duration::from_millis(50));
+        let ((_, ending), _) = handle.join().unwrap();
+        assert_eq!(ending.unwrap().code, "draft_timeout");
+    }
+
+    #[test]
+    fn a_draft_may_only_get_its_models_key() {
+        let secrets = MemorySecrets(HashMap::from([
+            ("typesafe".to_string(), "ts-key".to_string()),
+            ("openai".to_string(), "sk-openai".to_string()),
+        ]));
+        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
+        let ask = |provider: &str| {
+            f.runs.respond("r".into(), draft_id, "secret.get", json!({ "provider": provider }))
+        };
+        assert_eq!(error_code(ask("typesafe")).as_deref(), Some("secret_not_allowed"));
+        assert_eq!(error_code(ask("openai")), None);
+        f.runs.handle(SidecarFrame::DraftDone { draft_id });
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn an_export_returns_the_pdf_or_the_sidecars_error() {
+        let f = quick();
+        let runs = Arc::clone(&f.runs);
+        let handle = std::thread::spawn(move || {
+            runs.export_pdf("Report.qmd".into(), "# A".into(), CANCEL_TIMEOUT)
+        });
+        let export_id = wait_for(&f, |frame| match frame {
+            CoreFrame::DocumentExport { export_id, name, .. } if name == "Report.qmd" => {
+                Some(export_id)
+            }
+            _ => None,
+        });
+        f.runs.handle(SidecarFrame::DocumentExported { export_id, data: BASE64.encode(b"%PDF-1.7") });
+        assert_eq!(handle.join().unwrap().unwrap(), b"%PDF-1.7");
+
+        let g = quick();
+        let runs = Arc::clone(&g.runs);
+        let handle = std::thread::spawn(move || {
+            runs.export_pdf("Report.qmd".into(), "# A".into(), CANCEL_TIMEOUT)
+        });
+        let export_id = wait_for(&g, |frame| match frame {
+            CoreFrame::DocumentExport { export_id, .. } => Some(export_id),
+            _ => None,
+        });
+        let error = ErrorInfo { code: "export_failed".into(), message: "No.".into() };
+        g.runs.handle(SidecarFrame::DocumentExportError { export_id, error });
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "export_failed");
+    }
+
+    #[test]
+    fn a_preview_returns_the_pages_or_the_sidecars_error() {
+        let f = quick();
+        let runs = Arc::clone(&f.runs);
+        let handle = std::thread::spawn(move || runs.preview("# A".into(), CANCEL_TIMEOUT));
+        let preview_id = wait_for(&f, |frame| match frame {
+            CoreFrame::DocumentPreview { preview_id, .. } => Some(preview_id),
+            _ => None,
+        });
+        let pages = vec!["<svg>1</svg>".to_string(), "<svg>2</svg>".to_string()];
+        f.runs.handle(SidecarFrame::DocumentPreviewed { preview_id, pages: pages.clone() });
+        assert_eq!(handle.join().unwrap().unwrap(), pages);
+
+        let g = quick();
+        let runs = Arc::clone(&g.runs);
+        let handle = std::thread::spawn(move || runs.preview("# A".into(), CANCEL_TIMEOUT));
+        let preview_id = wait_for(&g, |frame| match frame {
+            CoreFrame::DocumentPreview { preview_id, .. } => Some(preview_id),
+            _ => None,
+        });
+        let error = ErrorInfo { code: "preview_failed".into(), message: "No.".into() };
+        g.runs.handle(SidecarFrame::DocumentPreviewError { preview_id, error });
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "preview_failed");
+    }
+
     #[test]
     fn a_routing_request_may_only_get_the_typesafe_key() {
         let secrets = MemorySecrets(HashMap::from([
@@ -2019,5 +2376,14 @@ mod tests {
         assert_eq!(f.status(reply), MessageStatus::Streaming);
         let response = f.runs.respond("r".into(), call, "secret.get", json!({ "provider": "ai2" }));
         assert_eq!(result(response)["value"], json!("ai2-token"));
+    }
+
+    #[test]
+    fn a_reply_in_a_thread_is_not_listed_as_running() {
+        let f = quick();
+        let (_, reply) = f.start("echo");
+        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
+        into_thread(&f.project, conversation);
+        assert!(f.runs.running().is_empty());
     }
 }

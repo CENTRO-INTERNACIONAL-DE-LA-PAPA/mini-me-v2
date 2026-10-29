@@ -10,10 +10,13 @@ dependencies = [
     "langchain-google-genai>=4.4.2",
     "langchain-openai>=1.7.2",
     "langgraph>=1.2.16",
+    "markdown-it-py>=4.2.0",
     "openpyxl>=3.1.5",
     "pandas>=3.0.6",
     "pointblank>=1.1.1",
+    "pyyaml>=6.0.3",
     "typesafe-sdk>=0.7.5",
+    "typst>=0.15.0",
 ]
 
 [build-system]

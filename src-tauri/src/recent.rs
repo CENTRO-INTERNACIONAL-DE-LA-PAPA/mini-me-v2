@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::comments;
 use crate::error::AppResult;
 use crate::projects::{self, ProjectSummary};
 
@@ -33,8 +34,9 @@ pub fn list(data_root: &Path) -> AppResult<Vec<RecentConversation>> {
 
 fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<RecentConversation>> {
     let mut statement = conn.prepare(&format!(
-        "SELECT id, title, last_activity_at FROM conversations \
-         ORDER BY last_activity_at DESC LIMIT {RECENT_COUNT}"
+        "SELECT id, title, last_activity_at FROM conversations WHERE {} \
+         ORDER BY last_activity_at DESC LIMIT {RECENT_COUNT}",
+        comments::not_a_thread(conn, "id")?
     ))?;
     let rows = statement.query_map([], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
@@ -60,6 +62,7 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<RecentConv
 mod tests {
     use super::*;
     use crate::conversations;
+    use crate::comments::test_support::into_thread;
     use crate::db;
     use crate::projects::test_support::origin;
     use crate::store::Project;
@@ -112,5 +115,16 @@ mod tests {
         assert_eq!(recent.len(), 1);
         assert_eq!(recent[0].project_name, "Trials");
         assert_eq!(std::fs::read(&database).unwrap(), before);
+    }
+
+    #[test]
+    fn a_thread_is_not_a_recent_conversation() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
+        let trial = project(&root, "Trial", &[1, 2]);
+        let newest = conversations::list(&trial).unwrap()[0].id;
+        into_thread(&trial, newest);
+        let titles: Vec<String> = list(&root).unwrap().into_iter().map(|c| c.title).collect();
+        assert_eq!(titles, ["Trial 1"]);
     }
 }

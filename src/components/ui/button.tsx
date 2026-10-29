@@ -16,7 +16,7 @@ const buttonVariants = cva(
         // Inside a Mini-Me's surface: white with a ring in its edge colour (`--mm-edge`); a
         // hairline ring elsewhere.
         "mini-me":
-          "bg-card text-foreground border border-edge hover:bg-wash aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:shadow-none",
+          "bg-card text-foreground border border-card-edge hover:bg-wash aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:shadow-none",
         ghost:
           "text-ink-2 hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground",
         destructive: "bg-transparent text-destructive hover:opacity-70",

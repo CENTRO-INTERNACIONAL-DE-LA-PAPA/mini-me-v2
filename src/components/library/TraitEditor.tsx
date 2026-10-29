@@ -1,14 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PuzzleIcon } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { api, errorMessage } from "../../api";
 import type { LibraryView, MiniMe, TraitDraft, TraitSummary } from "../../protocol/types";
 import { copyName, NIL_ID } from "./library";
-import { DeleteButton, EditorHeader, EditorPage } from "./LibraryParts";
+import { DeleteButton, EditorHeader, EditorPage, Field } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { SheetSection } from "../shell/Sheet";
@@ -18,6 +17,21 @@ import type { View } from "../shell/view";
 const MODEL_TOOLS = [
   { id: "save_file", label: "Save files", hint: "Save what it writes as a file in the Project" },
   { id: "show_table", label: "Show tables", hint: "Show a table below its reply" },
+  {
+    id: "write_document",
+    label: "Write documents",
+    hint: "Write a report you can edit and export as PDF",
+  },
+  {
+    id: "suggest_edit",
+    label: "Suggest edits",
+    hint: "Suggest new text for a passage when asked in a document's comment",
+  },
+  {
+    id: "edit_document",
+    label: "Edit documents",
+    hint: "Suggest edits to a document you reference in a message",
+  },
 ];
 
 const EMPTY: TraitDraft = { id: NIL_ID, name: "", description: "", instructions: "", tools: [] };
@@ -110,7 +124,9 @@ export function TraitEditor({
     )
   ) : (
     <>
-      {saved && !library.unreadable && <DeleteButton onDelete={remove} />}
+      {saved && !library.unreadable && (
+        <DeleteButton question={`Delete ${draft.name}? This can't be undone.`} onDelete={remove} />
+      )}
       <Button disabled={readOnly} onClick={save}>
         Save
       </Button>
@@ -131,7 +147,7 @@ export function TraitEditor({
       <div className="grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5 pt-6 pr-7 pb-8 pl-8 max-lg:grid-cols-1">
         <div className="grid gap-[18px]">
           {!builtIn && (
-            <Labelled label="Name" htmlFor="trait-name">
+            <Field label="Name" htmlFor="trait-name">
               <Input
                 id="trait-name"
                 placeholder="An imperative verb in Title Case, like Translate"
@@ -139,19 +155,19 @@ export function TraitEditor({
                 disabled={readOnly}
                 onChange={(e) => update({ name: e.target.value })}
               />
-            </Labelled>
+            </Field>
           )}
-          <Labelled label="What it does" htmlFor="trait-description">
+          <Field label="What it does" htmlFor="trait-description">
             <Input
               id="trait-description"
               value={draft.description}
               disabled={readOnly}
               onChange={(e) => update({ description: e.target.value })}
             />
-          </Labelled>
+          </Field>
           {promptBased ? (
             <>
-              <Labelled label="Instructions" htmlFor="trait-instructions">
+              <Field label="Instructions" htmlFor="trait-instructions">
                 <Textarea
                   id="trait-instructions"
                   className="min-h-40"
@@ -160,8 +176,8 @@ export function TraitEditor({
                   disabled={readOnly}
                   onChange={(e) => update({ instructions: e.target.value })}
                 />
-              </Labelled>
-              <Labelled label="Tools">
+              </Field>
+              <Field label="Tools">
                 <ul className="border-t border-border">
                   <ToolRow
                     label="Read files"
@@ -186,7 +202,7 @@ export function TraitEditor({
                     />
                   ))}
                 </ul>
-              </Labelled>
+              </Field>
             </>
           ) : (
             <p className="text-meta text-muted-foreground">
@@ -230,26 +246,6 @@ function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: bo
         </ul>
       )}
     </SheetSection>
-  );
-}
-
-/** A field under a small grey label. */
-function Labelled({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor={htmlFor} className="text-control font-medium text-ink-2">
-        {label}
-      </Label>
-      {children}
-    </div>
   );
 }
 
