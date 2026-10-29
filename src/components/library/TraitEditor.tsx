@@ -22,6 +22,11 @@ const MODEL_TOOLS = [
     label: "Write documents",
     hint: "Write a report you can edit and export as PDF",
   },
+  {
+    id: "suggest_edit",
+    label: "Suggest edits",
+    hint: "Suggest new text for a passage when asked in a document's comment",
+  },
 ];
 
 const EMPTY: TraitDraft = { id: NIL_ID, name: "", description: "", instructions: "", tools: [] };
