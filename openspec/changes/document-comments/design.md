@@ -91,7 +91,7 @@ text, and records `accepted`; the command returns the new source and anchors, wh
 loads into the editor. A conflict changes nothing and returns `suggestion_conflict`. The view
 saves any pending edits before calling it, as it does before Export PDF.
 
-`diffy` (MIT/Apache-2.0) is pure Rust with no system dependencies, so it builds on Windows,
+`diffy` 0.5 (MIT/Apache-2.0) is pure Rust with no system dependencies, so it builds on Windows,
 macOS and Linux like the rest of the core. It merges line by line, so the passage is split into
 words first (one word per line) and joined back, which makes edits to different words of one
 sentence merge cleanly.

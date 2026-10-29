@@ -1,5 +1,5 @@
 """Writing documents: Quarto Markdown (`.qmd`) files the user opens and edits in the app's
-document view."""
+document view, and suggesting edits to a passage of one from a comment thread."""
 
 import json
 import re
@@ -10,6 +10,9 @@ from mini_me_sidecar.tools.base import ToolError, add_component
 from mini_me_sidecar.tools.files import MAX_TEXT_FILE_BYTES, save_file
 
 MEDIA_TYPE = "text/markdown"
+
+# The most UTF-8 bytes of the text a suggestion puts in place of a passage.
+MAX_SUGGESTION_BYTES = 64 * 1024
 
 # The same names `projects::folder_name` in the Rust core refuses on Windows.
 _WINDOWS_RESERVED = {
@@ -49,3 +52,15 @@ async def write_document(ctx: CallContext, title: str, body: str) -> dict[str, A
         ctx, "document", {"asset_id": saved["asset_id"], "title": title}, f"Document: {title}"
     )
     return saved
+
+
+async def suggest_edit(ctx: CallContext, text: str) -> dict[str, Any]:
+    """Suggests `text` in place of the passage of the comment thread the call answers, for the
+    user to accept or reject; returns `{ component_id }`. The document itself is unchanged."""
+    if ctx.document is None:
+        raise ToolError("Edits can only be suggested in a comment thread.", "not_in_thread")
+    if len(text.encode("utf-8")) > MAX_SUGGESTION_BYTES:
+        raise ToolError("A suggestion can be at most 64 KiB; suggest a shorter passage.")
+    shown = text if text.strip() else "Remove this passage."
+    component_id = await add_component(ctx, "suggestion", {"text": text}, shown)
+    return {"component_id": component_id}

@@ -21,7 +21,7 @@ from langchain_core.messages import (
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, chat_model, provider_error
 from mini_me_sidecar.context import CallContext, Model, TraitError
-from mini_me_sidecar.tools import READ_TOOLS
+from mini_me_sidecar.tools import READ_TOOLS, THREAD_TOOLS
 
 MAX_MATERIAL_CHARS = 400_000
 
@@ -129,7 +129,7 @@ class Prompt(Adapter):
         instructions = _system_prompt(ctx.mini_me_name, bool(ctx.steps), ctx.trait.instructions)
         messages = _messages(_merged(_turns(instructions, earlier, ctx.steps, material)))
 
-        names = [*READ_TOOLS, *(t for t in ctx.trait.tools if t not in READ_TOOLS)]
+        names = _offered(ctx.trait.tools, ctx.document is not None)
         offered = {n: MODEL_TOOLS[n] for n in names if n in MODEL_TOOLS}
         chat = chat_model(model, key.reveal()).bind_tools([t.schema() for t in offered.values()])
 
@@ -182,6 +182,13 @@ async def _converse(
         for call in reply.invalid_tool_calls:
             if call.get("id"):
                 messages.append(ToolMessage(content=_malformed(call), tool_call_id=call["id"]))
+
+
+def _offered(listed: tuple[str, ...], in_thread: bool) -> list[str]:
+    """The names of the tools offered to the model: the read tools, then those its Trait
+    lists, leaving out the tools that act on a comment thread outside one."""
+    names = [*READ_TOOLS, *(t for t in listed if t not in READ_TOOLS)]
+    return [n for n in names if in_thread or n not in THREAD_TOOLS]
 
 
 def _over_budget(size: int, left: int) -> str:

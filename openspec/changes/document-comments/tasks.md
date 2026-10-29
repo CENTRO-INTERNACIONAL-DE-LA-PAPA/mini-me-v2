@@ -14,9 +14,9 @@
 
 ## 3. Suggestions
 
-- [ ] 3.1 Add `suggest_edit` to the sidecar (tool, model form, `TOOL_NAMES`, `MODEL_TOOL_NAMES`, 64 KiB limit), offered by the prompt adapter only when `document` is set; verify with pytest for the size limit and that the tool is not offered outside a thread
-- [ ] 3.2 Complete `suggestion` components in the core on `component.add` (`{ document_id, base, text }`, refused with `not_in_thread` outside a thread); add `suggest_edit` to `library.rs`'s tool names and to *Assist* and *Summarize* in `builtin.json`; verify with inline Rust tests for the completed data, the refusal, and the library's Trait lists
-- [ ] 3.3 Add `diffy` and `accept_suggestion`, `reject_suggestion` and `ask_again`: a word-level three-way merge of `base`, the current passage and `text`, saving the document and recording `accepted` on a clean merge, returning `suggestion_conflict` otherwise; verify with inline Rust tests for an unchanged passage, a separate edit (the Huancayo and Junín example), an overlapping edit, a detached thread, and Ask again starting a new reply to the same comment
+- [x] 3.1 Add `suggest_edit` to the sidecar (tool, model form, `TOOL_NAMES`, `MODEL_TOOL_NAMES`, 64 KiB limit), offered by the prompt adapter only when `document` is set; verify with pytest for the size limit and that the tool is not offered outside a thread
+- [x] 3.2 Complete `suggestion` components in the core on `component.add` (`{ document_id, base, text }`, refused with `not_in_thread` outside a thread); add `suggest_edit` to `library.rs`'s tool names and to *Assist* and *Summarize* in `builtin.json`; verify with inline Rust tests for the completed data, the refusal, and the library's Trait lists
+- [x] 3.3 Add `diffy` and `accept_suggestion`, `reject_suggestion` and `ask_again`: a word-level three-way merge of `base`, the current passage and `text`, saving the document and recording `accepted` on a clean merge, returning `suggestion_conflict` otherwise; verify with inline Rust tests for an unchanged passage, a separate edit (the Huancayo and Junín example), an overlapping edit, a detached thread, and Ask again starting a new reply to the same comment
 
 ## 4. Resolving and deleting
 

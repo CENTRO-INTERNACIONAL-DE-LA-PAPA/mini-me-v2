@@ -15,7 +15,7 @@ use crate::error::{AppError, AppResult};
 use crate::library::{FALLBACK_MINI_ME, Library};
 use crate::user_library::LibraryStore;
 use crate::link::{CallModel, RouteMiniMe};
-use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
+use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, MessageStatus, TextComponentKind};
 use crate::runs::{RouteAnswers, RunSpec, Runs};
 use crate::store::Project;
 
@@ -199,6 +199,47 @@ impl Routing {
             }
             Err(err) => explain(project, conversation_id, message.id, &err),
         }
+    }
+
+    /// Dismisses the suggestion `component_id` of the thread reply `reply_id` and runs the
+    /// Mini-Me that wrote the reply again, answering the same comment with the passage as it
+    /// reads now. Fails with `reply_in_progress` while a reply in the thread runs.
+    pub fn ask_again(
+        &self,
+        calls: &Runs,
+        model: Option<CallModel>,
+        project: &Arc<Project>,
+        (reply_id, component_id): (Uuid, Uuid),
+    ) -> AppResult<()> {
+        let not_found = || AppError::not_found("Message not found");
+        let (conversation_id, reply) =
+            project.lock().load_message_with(reply_id, false)?.ok_or_else(not_found)?;
+        let comment_id = reply.reply_to.ok_or_else(not_found)?;
+        let (_, comment) =
+            project.lock().load_message_with(comment_id, false)?.ok_or_else(not_found)?;
+        let mini_me = Uuid::parse_str(&reply.author.id)
+            .map_err(|_| AppError::invalid_input("Only a Mini-Me's reply can be asked again."))?;
+        let running = [MessageStatus::Streaming, MessageStatus::Paused];
+        if !project.lock().messages_with_status(&running, Some(conversation_id))?.is_empty() {
+            return Err(AppError::new(
+                "reply_in_progress",
+                "Wait for the current reply to finish, or stop it, before asking again.",
+            ));
+        }
+        let dismissed = comments::Decision::Dismissed;
+        comments::answer_suggestion(project, reply_id, component_id, dismissed)?;
+        let library = self.library.current();
+        self.start_reply(
+            &library,
+            calls,
+            model,
+            project,
+            conversation_id,
+            &comment,
+            mini_me,
+            Some(true),
+        )?;
+        Ok(())
     }
 
     /// Starts `mini_me_id`'s reply to `message`; returns the reply's author.
@@ -743,8 +784,9 @@ mod tests {
             )),
             _ => None,
         });
-        let tools: Vec<String> =
-            ["save_file", "show_table", "write_document"].map(String::from).to_vec();
+        let tools: Vec<String> = ["save_file", "show_table", "write_document", "suggest_edit"]
+            .map(String::from)
+            .to_vec();
         assert_eq!(
             start,
             Some(("prompt".into(), tools, json!({ "text": "hi thanks" }), Some(false)))
@@ -810,5 +852,43 @@ mod tests {
 
         let again = f.send("and the next one", &[], ROUTE_TIMEOUT).unwrap_err();
         assert_eq!(again.code, "reply_in_progress");
+    }
+
+    #[test]
+    fn asking_again_dismisses_the_suggestion_and_answers_the_same_comment() {
+        let f = fixture();
+        into_thread(&f.project, f.conversation);
+        let mention = [("@Assistant", ASSISTANT)];
+        let comment = f.send("@Assistant shorten this", &mention, ROUTE_TIMEOUT).unwrap();
+        let reply = reply_to(&f.events(), comment.id).unwrap().id;
+        let data = json!({ "document_id": Uuid::nil(), "base": "x", "text": "y" });
+        let suggestion = ("suggestion", 1, data, "y".to_string());
+        let component = conversations::add_component(&f.project, reply, None, suggestion).unwrap();
+        let ask = |model| f.routing.ask_again(&f.calls, model, &f.project, (reply, component));
+        assert_eq!(ask(None).unwrap_err().code, "reply_in_progress");
+
+        let run_id = sent(&f, |frame| matches!(frame, CoreFrame::RunStart { .. }))
+            .into_iter()
+            .find_map(|frame| match frame {
+                CoreFrame::RunStart { run_id, .. } => Some(run_id),
+                _ => None,
+            })
+            .unwrap();
+        f.calls.handle(crate::link::SidecarFrame::RunDone { run_id });
+        let model = CallModel { provider: "dummy".into(), model: "dummy-model".into() };
+        ask(Some(model)).unwrap();
+
+        let events = f.events();
+        let answered = events.iter().any(|e| {
+            matches!(e, EventKind::ComponentAnswered { component_id, answer, .. }
+                if *component_id == component && answer["decision"] == "dismissed")
+        });
+        assert!(answered);
+        let replies = events.iter().filter(|e| match e {
+            EventKind::MessageCreated { message } => message.reply_to == Some(comment.id),
+            _ => false,
+        });
+        let replies = replies.count();
+        assert_eq!(replies, 2);
     }
 }

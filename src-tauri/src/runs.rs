@@ -1089,7 +1089,11 @@ impl Runs {
             }
             "component.add" => {
                 let p: ComponentAddParams = parse_params(params)?;
-                let component = (p.kind.as_str(), p.version, p.data, p.text);
+                let data = match p.kind.as_str() {
+                    "suggestion" => comments::suggestion(&project, place.conversation_id, &p.data)?,
+                    _ => p.data,
+                };
+                let component = (p.kind.as_str(), p.version, data, p.text);
                 let step_id = Some(place.step_id.as_str());
                 let id = conversations::add_component(&project, reply, step_id, component)
                     .map_err(reply_ended)?;
