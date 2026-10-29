@@ -7,13 +7,16 @@ use uuid::Uuid;
 
 /// Assistant, who answers when routing has no mentioned or confident choice.
 pub const FALLBACK_MINI_ME: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8e1f0d7b03);
+/// Scribe, who drafts reports from a Conversation.
+pub const SCRIBE: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8e1f0d7b01);
 
 /// Every tool a Trait may list; the sidecar's `tools` package knows the same names.
-pub const TOOLS: [&str; 8] = [
+pub const TOOLS: [&str; 9] = [
     "read_file",
     "read_table",
     "read_component",
     "save_file",
+    "write_document",
     "show_table",
     "show_chart",
     "show_papers",
@@ -22,7 +25,7 @@ pub const TOOLS: [&str; 8] = [
 
 /// The tools a prompt-based Trait may list: those with a form for models. The read tools are
 /// offered to every prompt-based Trait, so it does not list them.
-pub const MODEL_TOOLS: [&str; 2] = ["save_file", "show_table"];
+pub const MODEL_TOOLS: [&str; 3] = ["save_file", "show_table", "write_document"];
 
 /// The adapter that offers a Trait's tools to its AI model, and the only one user-made
 /// Traits run on.
@@ -472,7 +475,6 @@ mod tests {
                 "Plan",
                 "Wonder",
                 "Experiment",
-                "Document",
                 "Explore Dataverse",
                 "Code",
                 "Collect Data",
@@ -501,7 +503,8 @@ mod tests {
         assert_eq!(
             lists,
             [
-                ("Assist", vec!["save_file", "show_table"]),
+                ("Summarize", vec!["write_document"]),
+                ("Assist", vec!["save_file", "show_table", "write_document"]),
                 ("Find Papers", vec!["show_papers"]),
                 ("Theorize", vec!["show_theories", "save_file"]),
                 ("Profile Data", vec!["read_table", "show_table"]),
@@ -533,7 +536,7 @@ mod tests {
         assert!(refute.built_in && refute.prompt_based);
         assert!(refute.used_by.contains(&skeptic.id));
         assert!(!traits.iter().find(|t| t.name == "Find Papers").unwrap().prompt_based);
-        assert!(!traits.iter().any(|t| t.name == "Document"));
+        assert!(!traits.iter().any(|t| t.name == "Code"));
     }
 
     #[test]
@@ -626,7 +629,6 @@ mod tests {
         assert_eq!(
             placeholders,
             [
-                "Document",
                 "Explore Dataverse",
                 "Code",
                 "Collect Data",
@@ -643,19 +645,20 @@ mod tests {
         library.traits[1].id = library.traits[0].id;
         library.traits[0].name = "summarize".into();
         library.mini_mes[0].workflow.steps.clear();
-        let document = library.traits.iter().find(|t| t.name == "Document").unwrap().id;
-        library.mini_mes[1].workflow.steps[0].kind = StepKind::Trait { trait_id: document };
+        let code = library.traits.iter().find(|t| t.name == "Code").unwrap().id;
+        library.mini_mes[1].workflow.steps[0].kind = StepKind::Trait { trait_id: code };
         let problems = library.problems();
         assert!(problems.iter().any(|p| p.contains("share an ID")));
         assert!(problems.iter().any(|p| p.contains("Title Case")));
         assert!(problems.iter().any(|p| p.contains("has no Steps")));
-        assert!(problems.iter().any(|p| p.contains("placeholder Trait Document")));
+        assert!(problems.iter().any(|p| p.contains("placeholder Trait Code")));
     }
 
     #[test]
     fn the_fallback_is_assistant_and_must_exist() {
         let mut library = Library::builtin();
         assert_eq!(library.mini_me(FALLBACK_MINI_ME).unwrap().name, "Assistant");
+        assert_eq!(library.mini_me(SCRIBE).unwrap().name, "Scribe");
         library.mini_mes.retain(|m| m.id != FALLBACK_MINI_ME);
         assert!(library.problems().iter().any(|p| p.contains("fallback Mini-Me is missing")));
     }

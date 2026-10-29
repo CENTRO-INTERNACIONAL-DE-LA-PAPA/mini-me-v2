@@ -12,6 +12,7 @@ TOOL_NAMES = (
     "read_table",
     "read_component",
     "save_file",
+    "write_document",
     "show_table",
     "show_chart",
     "show_papers",
@@ -22,4 +23,4 @@ TOOL_NAMES = (
 READ_TOOLS = ("read_file", "read_component")
 
 # The tools with a form for models, which a prompt-based Trait may list.
-MODEL_TOOL_NAMES = ("save_file", "show_table")
+MODEL_TOOL_NAMES = ("save_file", "show_table", "write_document")

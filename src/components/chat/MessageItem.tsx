@@ -16,6 +16,8 @@ import { ReferenceChip } from "./ReferenceChip";
 import { TextComponentChip } from "./TextComponentChip";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { useOpenDocument } from "../documents/openDocument";
+import { isDocument } from "../files/files";
 import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
 
 const STATUS_LABEL: Record<string, string | undefined> = {
@@ -73,15 +75,21 @@ export const MessageItem = memo(function MessageItem({
     (c) => c.kind !== "approval" || approvalState(c.answer, message.status) === "asking",
   );
 
+  const openDocument = useOpenDocument();
   const open = useCallback(
     async (assetId: string) => {
+      const name = message.attachments.find((a) => a.id === assetId)?.name;
+      if (openDocument && name && isDocument(name)) {
+        openDocument(assetId);
+        return;
+      }
       try {
         await api.openAsset(projectId, assetId);
       } catch (e) {
         setError(errorMessage(e));
       }
     },
-    [projectId],
+    [projectId, message.attachments, openDocument],
   );
 
   const status = STATUS_LABEL[message.status];

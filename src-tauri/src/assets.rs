@@ -260,11 +260,15 @@ pub fn list(project: &Project, query: Option<&str>) -> AppResult<Vec<AssetRef>> 
 pub struct FileEntry {
     #[serde(flatten)]
     pub asset: AssetRef,
-    /// `upload` for a file the user imported, `generated` for one a Mini-Me saved.
+    /// `upload` for a file the user imported or started, `generated` for one the app made,
+    /// such as a Mini-Me's output or an exported PDF.
     pub source: String,
     /// When the Asset was registered, in milliseconds.
     pub created_at: i64,
-    /// The author of the first message the Asset is attached to, if it is attached to one.
+    /// When its file last changed, in milliseconds; none when the file is missing.
+    pub modified_at: Option<i64>,
+    /// Who added the Asset: the author stored with it, else the author of the first message
+    /// it is attached to; none when neither says.
     pub added_by: Option<Author>,
     /// The Conversations whose messages attach or reference the Asset, in the order it first
     /// appeared in them.
@@ -284,8 +288,8 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     let mut entries = Vec::new();
     {
         let mut stmt = state.conn.prepare(
-            "SELECT id, name, media_type, size_bytes, source, created_at FROM assets \
-             ORDER BY created_at DESC",
+            "SELECT id, name, media_type, size_bytes, source, created_at, rel_path, \
+             added_by_kind, added_by_id FROM assets ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok((
@@ -295,10 +299,26 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
                 row.get::<_, i64>(3)?,
                 row.get::<_, String>(4)?,
                 row.get::<_, i64>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, Option<String>>(8)?,
             ))
         })?;
         for row in rows {
-            let (id, name, media_type, size_bytes, source, created_at) = row?;
+            let (id, name, media_type, size_bytes, source, created_at, rel_path, by_kind, by_id) =
+                row?;
+            let added_by = by_kind
+                .as_deref()
+                .and_then(AuthorKind::parse)
+                .zip(by_id)
+                .map(|(kind, id)| Author { kind, id });
+            let modified_at = project
+                .paths
+                .resolve(&rel_path)
+                .ok()
+                .and_then(|path| std::fs::metadata(path).ok()?.modified().ok())
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|since| since.as_millis() as i64);
             entries.push(FileEntry {
                 asset: AssetRef {
                     id: Uuid::parse_str(&id).map_err(|_| corrupt())?,
@@ -308,7 +328,8 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
                 },
                 source,
                 created_at,
-                added_by: None,
+                modified_at,
+                added_by,
                 used_in: Vec::new(),
             });
         }
@@ -356,6 +377,47 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
         }
     }
     Ok(entries)
+}
+
+/// Records `author` as who added the Asset `id`, ahead of the messages that attach it.
+pub fn set_added_by(project: &Project, id: Uuid, author: &Author) -> AppResult<()> {
+    project.lock().conn.execute(
+        "UPDATE assets SET added_by_kind = ?1, added_by_id = ?2 WHERE id = ?3",
+        params![author.kind.as_str(), author.id, id.to_string()],
+    )?;
+    Ok(())
+}
+
+/// Who added the Asset `id`, as the Files screen shows it: the author recorded with it, else
+/// the author of the first message that attaches it.
+pub fn added_by(project: &Project, id: Uuid) -> AppResult<Option<Author>> {
+    let state = project.lock();
+    let (kind, author_id): (Option<String>, Option<String>) = state.conn.query_row(
+        "SELECT added_by_kind, added_by_id FROM assets WHERE id = ?1",
+        params![id.to_string()],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    if let Some(author) =
+        kind.as_deref().and_then(AuthorKind::parse).zip(author_id).map(|(kind, id)| Author { kind, id })
+    {
+        return Ok(Some(author));
+    }
+    // A cheap text match narrows the messages; the attachments are then read to be sure.
+    let mut stmt = state.conn.prepare(
+        "SELECT author_kind, author_id, attachments FROM messages WHERE attachments LIKE ?1 \
+         ORDER BY rowid",
+    )?;
+    let rows = stmt.query_map(params![format!("%{id}%")], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+    })?;
+    for row in rows {
+        let (kind, author_id, attachments) = row?;
+        let attached: Vec<AssetRef> = serde_json::from_str(&attachments)?;
+        if attached.iter().any(|a| a.id == id) {
+            return Ok(AuthorKind::parse(&kind).map(|kind| Author { kind, id: author_id }));
+        }
+    }
+    Ok(None)
 }
 
 /// The file behind an Asset, checked against Project-folder confinement.

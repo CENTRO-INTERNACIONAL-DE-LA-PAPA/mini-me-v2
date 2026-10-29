@@ -4,6 +4,7 @@ import { api, errorMessage } from "./api";
 import { useDeveloperMode } from "./hooks/useDeveloperMode";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/chat/ChatView";
+import { DocumentView } from "./components/documents/DocumentView";
 import { FilesView } from "./components/files/FilesView";
 import { HomeView } from "./components/home/HomeView";
 import { MiniMePlayground } from "./components/home/MiniMePlayground";
@@ -230,6 +231,7 @@ function Main({
             <FilesView
               project={project}
               onOpenConversation={(id) => onNavigate({ kind: "conversation", id })}
+              onOpenDocument={(assetId) => onNavigate({ kind: "document", assetId, from: view })}
               onChanged={onConversationActivity}
             />,
           )
@@ -244,8 +246,36 @@ function Main({
           title={conversations.find((c) => c.id === view.id)?.title ?? "Conversation"}
           onActivity={onConversationActivity}
           onOpenReply={onOpenReply}
+          onOpenDocument={(assetId, draft) =>
+            onNavigate({
+              kind: "document",
+              assetId,
+              from: view,
+              draftFrom: draft ? view.id : undefined,
+            })
+          }
         />
       ) : null;
+    case "document": {
+      const from = view.from;
+      const back =
+        from.kind === "conversation"
+          ? (conversations.find((c) => c.id === from.id)?.title ?? "Conversation")
+          : from.kind === "files"
+            ? "Files"
+            : "Back";
+      return project ? (
+        <DocumentView
+          key={view.assetId}
+          projectId={project.id}
+          projectName={project.name}
+          assetId={view.assetId}
+          draftFrom={view.draftFrom}
+          back={back}
+          onClose={() => onNavigate(from)}
+        />
+      ) : null;
+    }
     case "home":
       return project ? (
         <MainSheet>

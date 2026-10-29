@@ -10,6 +10,7 @@ from typing import BinaryIO
 from mini_me_sidecar import __version__
 from mini_me_sidecar.adapters.data.worker import WORKERS
 from mini_me_sidecar.context import Requests
+from mini_me_sidecar.documents import Documents
 from mini_me_sidecar.link import PROTOCOL, Link, log, parse
 from mini_me_sidecar.routing import Router
 from mini_me_sidecar.runs import Runs
@@ -43,6 +44,7 @@ async def _main(link: Link, test_adapters: bool) -> None:
     runs = Runs(link, adapters, requests)
     router = Router(link, requests)
     summarizer = Summarizer(link, requests)
+    documents = Documents(link, requests)
     loop = asyncio.get_running_loop()
     inbox: asyncio.Queue[bytes | None] = asyncio.Queue()
     threading.Thread(target=_read_stdin, args=(loop, inbox), daemon=True).start()
@@ -73,6 +75,14 @@ async def _main(link: Link, test_adapters: bool) -> None:
                 router.start(frame)
             case "summary.start":
                 summarizer.start(frame)
+            case "draft.start":
+                documents.start_draft(frame)
+            case "draft.cancel":
+                documents.cancel_draft(frame.get("draft_id"))
+            case "document.export":
+                documents.start_export(frame)
+            case "document.preview":
+                documents.start_preview(frame)
             case "run.cancel":
                 runs.cancel(frame.get("run_id"))
             case "core.response":
@@ -85,3 +95,4 @@ async def _main(link: Link, test_adapters: bool) -> None:
     await runs.close()
     await router.close()
     await summarizer.close()
+    await documents.close()

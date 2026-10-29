@@ -721,7 +721,8 @@ mod tests {
             )),
             _ => None,
         });
-        let tools = vec!["save_file".to_string(), "show_table".to_string()];
+        let tools: Vec<String> =
+            ["save_file", "show_table", "write_document"].map(String::from).to_vec();
         assert_eq!(
             start,
             Some(("prompt".into(), tools, json!({ "text": "hi thanks" }), Some(false)))

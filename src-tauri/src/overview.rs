@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::library::Library;
 use crate::protocol::{AssetRef, Author, AuthorKind, Component};
-use crate::store::Project;
+use crate::store::{Project, ProjectState};
 
 /// Component kinds that can be featured on the Overview.
 const FEATURABLE: [&str; 2] = ["chart", "table"];
@@ -295,25 +295,10 @@ pub fn summary_material(project: &Project, library: &Library, budget: usize) -> 
     };
     let mut material = String::new();
     for (id, title) in conversations {
-        let messages = state.conversation_messages(parse_id(&id)?)?;
         let mut block = format!("## {title}\n");
-        for message in &messages {
-            let speaker = match message.author.kind {
-                AuthorKind::User => "You".to_string(),
-                AuthorKind::System => continue,
-                AuthorKind::MiniMe => Uuid::parse_str(&message.author.id)
-                    .ok()
-                    .and_then(|id| library.mini_me(id))
-                    .map_or("A Mini-Me".to_string(), |m| m.name.clone()),
-            };
-            let text = if message.content.trim().is_empty() {
-                message.components.iter().map(|c| c.text.as_str()).collect::<Vec<_>>().join("\n")
-            } else {
-                message.content.clone()
-            };
-            if !text.trim().is_empty() {
-                block.push_str(&format!("{speaker}: {}\n", text.trim()));
-            }
+        for line in message_lines(&state, library, parse_id(&id)?)? {
+            block.push_str(&line);
+            block.push('\n');
         }
         if material.chars().count() + block.chars().count() + 1 > budget {
             continue;
@@ -322,6 +307,61 @@ pub fn summary_material(project: &Project, library: &Library, budget: usize) -> 
         material.push('\n');
     }
     Ok(material.trim_end().to_string())
+}
+
+/// The text a document is drafted from: one Conversation's messages, oldest first, each as
+/// "<speaker>: <text>". When they exceed `budget` characters the oldest are left out, and a
+/// newest message longer than `budget` is cut to its first `budget` characters.
+pub fn conversation_material(
+    project: &Project,
+    library: &Library,
+    conversation_id: Uuid,
+    budget: usize,
+) -> AppResult<String> {
+    let lines = message_lines(&project.lock(), library, conversation_id)?;
+    let mut kept = Vec::new();
+    let mut used = 0;
+    for line in lines.iter().rev() {
+        used += line.chars().count() + 1;
+        if used > budget {
+            if kept.is_empty() {
+                return Ok(line.chars().take(budget).collect());
+            }
+            break;
+        }
+        kept.push(line.as_str());
+    }
+    kept.reverse();
+    Ok(kept.join("\n"))
+}
+
+/// A Conversation's messages as "<speaker>: <text>" lines, oldest first: the user is "You", a
+/// Mini-Me is its name, and a message with no text stands for its components' text.
+fn message_lines(
+    state: &ProjectState,
+    library: &Library,
+    conversation_id: Uuid,
+) -> AppResult<Vec<String>> {
+    let mut lines = Vec::new();
+    for message in &state.conversation_messages(conversation_id)? {
+        let speaker = match message.author.kind {
+            AuthorKind::User => "You".to_string(),
+            AuthorKind::System => continue,
+            AuthorKind::MiniMe => Uuid::parse_str(&message.author.id)
+                .ok()
+                .and_then(|id| library.mini_me(id))
+                .map_or("A Mini-Me".to_string(), |m| m.name.clone()),
+        };
+        let text = if message.content.trim().is_empty() {
+            message.components.iter().map(|c| c.text.as_str()).collect::<Vec<_>>().join("\n")
+        } else {
+            message.content.clone()
+        };
+        if !text.trim().is_empty() {
+            lines.push(format!("{speaker}: {}", text.trim()));
+        }
+    }
+    Ok(lines)
 }
 
 #[cfg(test)]
@@ -466,5 +506,18 @@ mod tests {
 
         let small = summary_material(&project, &library, 60).unwrap();
         assert!(small.contains("clean the trial data") && !small.contains("planting"), "{small}");
+    }
+
+    #[test]
+    fn draft_material_keeps_the_newest_messages_and_cuts_one_too_long() {
+        let (_dir, project) = temp_project();
+        let library = Library::builtin();
+        let id = conversations::create(&project).unwrap().id;
+        ask(&project, id, "plan the trial");
+        ask(&project, id, "add a control plot");
+        let material = conversation_material(&project, &library, id, 30).unwrap();
+        assert_eq!(material, "You: add a control plot");
+        let cut = conversation_material(&project, &library, id, 10).unwrap();
+        assert_eq!(cut, "You: add a");
     }
 }

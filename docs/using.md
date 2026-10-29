@@ -43,7 +43,33 @@ are shown exactly as you typed them.
 ## Files
 
 Reference a file with `#` or attach it to a message. Mini-Mes read text files, and the data
-Mini-Mes read CSV, TSV and Excel (`.xlsx`) tables; PDFs and images are not read yet.
+Mini-Mes read CSV, TSV and Excel (`.xlsx`) tables; PDFs and images are not read yet. A
+document (`.qmd`) opens in Mini-Me's document view rather than another app.
+
+## Documents
+
+A **document** is a report you edit in Mini-Me and keep in the Project's Files, as a Quarto
+(`.qmd`) file that Quarto, RStudio and other editors also open. To start one, pick **Report**
+next to Outline and Jobs in a Conversation:
+
+- **Draft from this conversation** creates a document titled after the Conversation and opens
+  it while Scribe writes a report from the Conversation's messages, which appears in the
+  source as it is written. **Stop** keeps what was written so far. Drafting sends the
+  Conversation's messages, never file contents, to the provider of the AI model chosen in
+  Settings, and adds nothing to the Conversation.
+- **Start blank** creates an empty document, with your name as author when you have set it.
+- **Open from Files** lists the Project's documents, most recently edited first.
+
+Documents also open from Files and from the card below a reply in which Assistant or Scribe
+wrote one; ask them for a report or a document.
+
+The document view shows the document's Quarto source beside a preview of its pages. Edit the
+source as text, including
+the title and author in its header; the buttons add bold, italic, headings, quotes and lists,
+and changes are saved as you type. The **Outline** menu jumps to a heading. The preview shows
+the pages exactly as **Export PDF** will make them; click **Render** to update it after
+editing. **Export PDF** saves a PDF of the document next to it in Files and offers to open it;
+both are made on your computer, and code in the document is shown, never run.
 
 ## Follow-ups
 

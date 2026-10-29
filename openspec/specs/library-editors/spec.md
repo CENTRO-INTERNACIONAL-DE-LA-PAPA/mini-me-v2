@@ -65,7 +65,7 @@ n from 2 that makes the name unused. The copy SHALL exist only after the user sa
 ### Requirement: User-made Traits are prompt-based
 A user-made Trait SHALL run on the `prompt` adapter. Its editor SHALL let the user set the
 name, the description, the instructions (required, non-empty) and which of the model tools
-`save_file` and `show_table` the Trait may use. The read tools SHALL be offered to it as to
+`save_file`, `show_table` and `write_document` the Trait may use. The read tools SHALL be offered to it as to
 every prompt-based Trait, without being listed.
 
 #### Scenario: New Trait

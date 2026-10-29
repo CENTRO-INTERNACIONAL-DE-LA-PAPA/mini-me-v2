@@ -15,7 +15,7 @@ import { api, errorMessage } from "../../api";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { initials } from "../../lib/names";
 import type { FileEntry, ProjectSummary } from "../../protocol/types";
-import { fileKind, type FileKind } from "./files";
+import { fileKind, isDocument, type FileKind } from "./files";
 import { formatRelative, formatSize } from "../../lib/format";
 import { FileTile } from "./FileTile";
 import { surfaceStyle } from "../minime/miniMeColors";
@@ -42,12 +42,14 @@ const ICONS: Record<FileKind, typeof FileIcon> = {
 interface Props {
   project: ProjectSummary;
   onOpenConversation: (id: string) => void;
+  /** Opens a `.qmd` document in the document view. */
+  onOpenDocument: (assetId: string) => void;
   /** Called after files were added, so counts elsewhere can refresh. */
   onChanged: () => void;
 }
 
 /** The Project's files: every Asset, who added it, and the Conversations that use it. */
-export function FilesView({ project, onOpenConversation, onChanged }: Props) {
+export function FilesView({ project, onOpenConversation, onOpenDocument, onChanged }: Props) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [tab, setTab] = useState<Tab>("all");
   const [query, setQuery] = useState("");
@@ -152,7 +154,9 @@ export function FilesView({ project, onOpenConversation, onChanged }: Props) {
               <FileRow
                 key={entry.id}
                 entry={entry}
-                onOpen={() => open(entry.id)}
+                onOpen={() =>
+                  isDocument(entry.name) ? onOpenDocument(entry.id) : open(entry.id)
+                }
                 onOpenConversation={onOpenConversation}
               />
             ))}
@@ -191,6 +195,8 @@ function FileRow({
   const Icon = ICONS[fileKind(entry.media_type, entry.name)];
   const by = entry.added_by;
   const miniMe = by?.kind === "mini_me" ? miniMes.find((m) => m.id === by.id) : undefined;
+  // A file the user uploaded is theirs even when no message attaches it.
+  const byUser = by?.kind === "user" || (!by && entry.source === "upload");
 
   return (
     <TableRow className="cursor-pointer" onClick={onOpen}>
@@ -201,7 +207,7 @@ function FileRow({
         </span>
       </TableCell>
       <TableCell>
-        {by?.kind === "user" ? (
+        {byUser ? (
           <span className="flex items-center gap-2">
             {name && (
               <span className="flex size-4 items-center justify-center rounded-full border border-border bg-muted text-[7px] font-semibold">
@@ -219,9 +225,7 @@ function FileRow({
             {miniMe?.name ?? "Mini-Me"}
           </span>
         ) : (
-          <span className="text-muted-foreground">
-            {entry.source === "generated" ? "A Mini-Me" : "You"}
-          </span>
+          <span className="text-muted-foreground">A Mini-Me</span>
         )}
       </TableCell>
       <TableCell>

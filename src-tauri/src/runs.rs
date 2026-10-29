@@ -2,7 +2,7 @@
 //! events, pausing them at approvals, cancelling them, and answering the requests their
 //! Trait calls and model decisions make to the core.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -51,6 +51,19 @@ pub type RouteAnswers = BTreeMap<String, ChoiceAnswer>;
 type RouteOutcome = Result<RouteAnswers, ErrorInfo>;
 
 type SummaryOutcome = Result<String, ErrorInfo>;
+
+/// What the sidecar sends about a draft: some text, or its end.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DraftEvent {
+    Delta { text: String },
+    Done,
+    Error { error: ErrorInfo },
+}
+
+type ExportOutcome = Result<Vec<u8>, ErrorInfo>;
+
+type PreviewOutcome = Result<Vec<String>, ErrorInfo>;
 
 /// The writing end of the link to a running sidecar. Returns `false` when the sidecar can
 /// no longer be reached.
@@ -173,6 +186,14 @@ struct Inner {
     /// Summary requests waiting for their `summary.done` or `summary.error`, with the
     /// provider whose key each may get.
     summaries: HashMap<Uuid, (String, mpsc::Sender<SummaryOutcome>)>,
+    /// Drafts being written, with the provider whose key each may get.
+    drafts: HashMap<Uuid, (String, mpsc::Sender<DraftEvent>)>,
+    /// Drafts stopped before they were sent to the sidecar; `draft` ends them at once.
+    stopped_drafts: HashSet<Uuid>,
+    /// PDF exports waiting for their `document.exported` or `document.export_error`.
+    exports: HashMap<Uuid, mpsc::Sender<ExportOutcome>>,
+    /// Previews waiting for their `document.previewed` or `document.preview_error`.
+    previews: HashMap<Uuid, mpsc::Sender<PreviewOutcome>>,
 }
 
 impl Inner {
@@ -261,9 +282,13 @@ impl Runs {
         let runs: Vec<Run> = {
             let mut inner = self.lock();
             inner.sink = None;
-            // Dropping the senders wakes every waiting routing and summary request.
+            // Dropping the senders wakes every waiting routing, summary, draft and export
+            // request.
             inner.routes.clear();
             inner.summaries.clear();
+            inner.drafts.clear();
+            inner.exports.clear();
+            inner.previews.clear();
             inner.runs.drain().map(|(_, run)| run).collect()
         };
         self.notify();
@@ -517,6 +542,195 @@ impl Runs {
                 SIDECAR_STOPPED,
                 "Mini-Me's runtime stopped before the summary was written.",
             )),
+        }
+    }
+
+    /// Drafts a report titled `title` from `material` with `model`, passing each piece of text
+    /// to `on_event` as it arrives, until the draft ends, is cancelled with `cancel_draft`, or
+    /// no text arrives for `idle`. Returns the whole text, and the error that ended it if one
+    /// did; the text written before an error is kept.
+    pub fn draft(
+        &self,
+        draft_id: Uuid,
+        model: CallModel,
+        title: String,
+        material: String,
+        idle: Duration,
+        mut on_event: impl FnMut(&DraftEvent),
+    ) -> (String, Option<AppError>) {
+        let (tx, rx) = mpsc::channel();
+        let sink = {
+            let mut inner = self.lock();
+            if inner.stopped_drafts.remove(&draft_id) {
+                return (String::new(), None);
+            }
+            let Some(sink) = inner.sink.clone() else {
+                let error = AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime is not ready.");
+                return (String::new(), Some(error));
+            };
+            inner.drafts.insert(draft_id, (model.provider.clone(), tx));
+            sink
+        };
+        let mut text = String::new();
+        let mut ending = None;
+        if sink.send(&CoreFrame::DraftStart { draft_id, model, title, material }) {
+            loop {
+                match rx.recv_timeout(idle) {
+                    Ok(event) => {
+                        on_event(&event);
+                        match event {
+                            DraftEvent::Delta { text: piece } => text.push_str(&piece),
+                            DraftEvent::Done => break,
+                            DraftEvent::Error { error } => {
+                                ending = Some(AppError::new(&error.code, error.message));
+                                break;
+                            }
+                        }
+                    }
+                    Err(RecvTimeoutError::Timeout) => {
+                        sink.send(&CoreFrame::DraftCancel { draft_id });
+                        ending = Some(AppError::new(
+                            "draft_timeout",
+                            "The AI model stopped sending the draft. Try again.",
+                        ));
+                        break;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        ending = Some(AppError::new(
+                            SIDECAR_STOPPED,
+                            "Mini-Me's runtime stopped while writing the draft.",
+                        ));
+                        break;
+                    }
+                }
+            }
+        } else {
+            ending = Some(AppError::new(SIDECAR_STOPPED, "Mini-Me's runtime could not be reached."));
+        }
+        self.lock().drafts.remove(&draft_id);
+        (text, ending)
+    }
+
+    /// Asks the sidecar to stop the draft `draft_id`; it then ends as `Done`. A draft not yet
+    /// sent to the sidecar, because the core is still gathering its material, ends empty when
+    /// it would start.
+    pub fn cancel_draft(&self, draft_id: Uuid) {
+        let sink = {
+            let mut inner = self.lock();
+            if !inner.drafts.contains_key(&draft_id) {
+                inner.stopped_drafts.insert(draft_id);
+                return;
+            }
+            inner.sink.clone()
+        };
+        if let Some(sink) = sink {
+            sink.send(&CoreFrame::DraftCancel { draft_id });
+        }
+    }
+
+    fn draft_event(&self, draft_id: Uuid, event: DraftEvent) {
+        let tx = self.lock().drafts.get(&draft_id).map(|(_, tx)| tx.clone());
+        match tx {
+            Some(tx) => {
+                let _ = tx.send(event);
+            }
+            None => self
+                .log
+                .line(&format!("ignoring a frame for draft {draft_id}, which is not open")),
+        }
+    }
+
+    /// The document `source`, named `name`, as PDF, within `timeout`.
+    pub fn export_pdf(&self, name: String, source: String, timeout: Duration) -> AppResult<Vec<u8>> {
+        let export_id = new_id();
+        let (tx, rx) = mpsc::channel();
+        let sink = {
+            let mut inner = self.lock();
+            let Some(sink) = inner.sink.clone() else {
+                return Err(AppError::new(
+                    SIDECAR_STOPPED,
+                    "Mini-Me is not ready yet. Try again when it is.",
+                ));
+            };
+            inner.exports.insert(export_id, tx);
+            sink
+        };
+        let sent = sink.send(&CoreFrame::DocumentExport { export_id, name, source });
+        let outcome = if sent {
+            rx.recv_timeout(timeout)
+        } else {
+            Err(RecvTimeoutError::Disconnected)
+        };
+        self.lock().exports.remove(&export_id);
+        match outcome {
+            Ok(Ok(pdf)) => Ok(pdf),
+            Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
+            Err(RecvTimeoutError::Timeout) => Err(AppError::new(
+                "export_timeout",
+                "The PDF took too long to make. Try again.",
+            )),
+            Err(RecvTimeoutError::Disconnected) => Err(AppError::new(
+                SIDECAR_STOPPED,
+                "Mini-Me's runtime stopped before the PDF was made.",
+            )),
+        }
+    }
+
+    /// The document `source` as SVG images, one per page, within `timeout`.
+    pub fn preview(&self, source: String, timeout: Duration) -> AppResult<Vec<String>> {
+        let preview_id = new_id();
+        let (tx, rx) = mpsc::channel();
+        let sink = {
+            let mut inner = self.lock();
+            let Some(sink) = inner.sink.clone() else {
+                return Err(AppError::new(
+                    SIDECAR_STOPPED,
+                    "Mini-Me is not ready yet. Try again when it is.",
+                ));
+            };
+            inner.previews.insert(preview_id, tx);
+            sink
+        };
+        let sent = sink.send(&CoreFrame::DocumentPreview { preview_id, source });
+        let outcome = if sent {
+            rx.recv_timeout(timeout)
+        } else {
+            Err(RecvTimeoutError::Disconnected)
+        };
+        self.lock().previews.remove(&preview_id);
+        match outcome {
+            Ok(Ok(pages)) => Ok(pages),
+            Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
+            Err(RecvTimeoutError::Timeout) => Err(AppError::new(
+                "preview_timeout",
+                "The preview took too long to make. Try again.",
+            )),
+            Err(RecvTimeoutError::Disconnected) => Err(AppError::new(
+                SIDECAR_STOPPED,
+                "Mini-Me's runtime stopped before the preview was made.",
+            )),
+        }
+    }
+
+    fn finish_preview(&self, preview_id: Uuid, outcome: PreviewOutcome) {
+        match self.lock().previews.remove(&preview_id) {
+            Some(tx) => {
+                let _ = tx.send(outcome);
+            }
+            None => self
+                .log
+                .line(&format!("ignoring the end of preview {preview_id}, which is not open")),
+        }
+    }
+
+    fn finish_export(&self, export_id: Uuid, outcome: ExportOutcome) {
+        match self.lock().exports.remove(&export_id) {
+            Some(tx) => {
+                let _ = tx.send(outcome);
+            }
+            None => self
+                .log
+                .line(&format!("ignoring the end of export {export_id}, which is not open")),
         }
     }
 
@@ -792,6 +1006,29 @@ impl Runs {
             SidecarFrame::SummaryError { summary_id, error } => {
                 self.finish_summary(summary_id, Err(error));
             }
+            SidecarFrame::DraftDelta { draft_id, text } => {
+                self.draft_event(draft_id, DraftEvent::Delta { text });
+            }
+            SidecarFrame::DraftDone { draft_id } => self.draft_event(draft_id, DraftEvent::Done),
+            SidecarFrame::DraftError { draft_id, error } => {
+                self.draft_event(draft_id, DraftEvent::Error { error });
+            }
+            SidecarFrame::DocumentExported { export_id, data } => {
+                let outcome = BASE64.decode(data.as_bytes()).map_err(|_| ErrorInfo {
+                    code: "export_failed".into(),
+                    message: "The PDF arrived damaged. Try again.".into(),
+                });
+                self.finish_export(export_id, outcome);
+            }
+            SidecarFrame::DocumentExportError { export_id, error } => {
+                self.finish_export(export_id, Err(error));
+            }
+            SidecarFrame::DocumentPreviewed { preview_id, pages } => {
+                self.finish_preview(preview_id, Ok(pages));
+            }
+            SidecarFrame::DocumentPreviewError { preview_id, error } => {
+                self.finish_preview(preview_id, Err(error));
+            }
             SidecarFrame::CoreRequest {
                 request_id,
                 call_id,
@@ -859,7 +1096,12 @@ impl Runs {
                     CallKind::Decision => None,
                 },
             });
-            let summary_provider = inner.summaries.get(&call_id).map(|(p, _)| p.clone());
+            // A summary or a draft may only get its own model's key.
+            let summary_provider = inner
+                .summaries
+                .get(&call_id)
+                .map(|(p, _)| p.clone())
+                .or_else(|| inner.drafts.get(&call_id).map(|(p, _)| p.clone()));
             (place, inner.routes.contains_key(&call_id), summary_provider)
         };
         let Some(place) = place else {
@@ -1950,6 +2192,155 @@ mod tests {
         assert_eq!(error_code(ask("openai")), None);
         f.runs.handle(SidecarFrame::SummaryDone { summary_id, text: String::new() });
         handle.join().unwrap().unwrap();
+    }
+
+    /// Waits until the sink has a frame `pick` accepts, and returns what it picked.
+    fn wait_for<T>(f: &Fixture, pick: impl Fn(CoreFrame) -> Option<T>) -> T {
+        loop {
+            if let Some(found) = f.sink.frames().into_iter().find_map(&pick) {
+                return found;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    type DraftOutcome = ((String, Option<AppError>), Vec<DraftEvent>);
+
+    fn start_draft(f: &Fixture, idle: Duration) -> (Uuid, std::thread::JoinHandle<DraftOutcome>) {
+        let runs = Arc::clone(&f.runs);
+        let draft_id = new_id();
+        let handle = std::thread::spawn(move || {
+            let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
+            let mut events = Vec::new();
+            let outcome = runs.draft(draft_id, model, "Trial".into(), "You: hi".into(), idle, |e| {
+                events.push(e.clone())
+            });
+            (outcome, events)
+        });
+        wait_for(f, |frame| match frame {
+            CoreFrame::DraftStart { draft_id: id, .. } if id == draft_id => Some(()),
+            _ => None,
+        });
+        (draft_id, handle)
+    }
+
+    #[test]
+    fn a_draft_streams_its_text_and_a_stopped_draft_keeps_it() {
+        let f = quick();
+        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
+        f.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "# Summary\n".into() });
+        f.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "Yield fell.".into() });
+        f.runs.cancel_draft(draft_id);
+        wait_for(&f, |frame| match frame {
+            CoreFrame::DraftCancel { draft_id: id } if id == draft_id => Some(()),
+            _ => None,
+        });
+        f.runs.handle(SidecarFrame::DraftDone { draft_id });
+        let ((text, ending), events) = handle.join().unwrap();
+        assert_eq!(text, "# Summary\nYield fell.");
+        assert!(ending.is_none());
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[2], DraftEvent::Done);
+    }
+
+    #[test]
+    fn a_draft_stopped_before_it_starts_writes_nothing() {
+        let f = quick();
+        let draft_id = new_id();
+        f.runs.cancel_draft(draft_id);
+        let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
+        let (text, ending) =
+            f.runs.draft(draft_id, model, "Trial".into(), "You: hi".into(), CANCEL_TIMEOUT, |_| {});
+        assert!(text.is_empty() && ending.is_none());
+        assert!(!f.sink.frames().iter().any(|frame| matches!(frame, CoreFrame::DraftStart { .. })));
+    }
+
+    #[test]
+    fn a_failed_or_silent_draft_keeps_its_text_and_says_why() {
+        let f = quick();
+        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
+        f.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "Partial".into() });
+        let error = ErrorInfo { code: "provider_refused".into(), message: "Refused.".into() };
+        f.runs.handle(SidecarFrame::DraftError { draft_id, error });
+        let ((text, ending), _) = handle.join().unwrap();
+        assert_eq!((text.as_str(), ending.unwrap().code.as_str()), ("Partial", "provider_refused"));
+
+        let g = quick();
+        let (_, handle) = start_draft(&g, Duration::from_millis(50));
+        let ((_, ending), _) = handle.join().unwrap();
+        assert_eq!(ending.unwrap().code, "draft_timeout");
+    }
+
+    #[test]
+    fn a_draft_may_only_get_its_models_key() {
+        let secrets = MemorySecrets(HashMap::from([
+            ("typesafe".to_string(), "ts-key".to_string()),
+            ("openai".to_string(), "sk-openai".to_string()),
+        ]));
+        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
+        let ask = |provider: &str| {
+            f.runs.respond("r".into(), draft_id, "secret.get", json!({ "provider": provider }))
+        };
+        assert_eq!(error_code(ask("typesafe")).as_deref(), Some("secret_not_allowed"));
+        assert_eq!(error_code(ask("openai")), None);
+        f.runs.handle(SidecarFrame::DraftDone { draft_id });
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn an_export_returns_the_pdf_or_the_sidecars_error() {
+        let f = quick();
+        let runs = Arc::clone(&f.runs);
+        let handle = std::thread::spawn(move || {
+            runs.export_pdf("Report.qmd".into(), "# A".into(), CANCEL_TIMEOUT)
+        });
+        let export_id = wait_for(&f, |frame| match frame {
+            CoreFrame::DocumentExport { export_id, name, .. } if name == "Report.qmd" => {
+                Some(export_id)
+            }
+            _ => None,
+        });
+        f.runs.handle(SidecarFrame::DocumentExported { export_id, data: BASE64.encode(b"%PDF-1.7") });
+        assert_eq!(handle.join().unwrap().unwrap(), b"%PDF-1.7");
+
+        let g = quick();
+        let runs = Arc::clone(&g.runs);
+        let handle = std::thread::spawn(move || {
+            runs.export_pdf("Report.qmd".into(), "# A".into(), CANCEL_TIMEOUT)
+        });
+        let export_id = wait_for(&g, |frame| match frame {
+            CoreFrame::DocumentExport { export_id, .. } => Some(export_id),
+            _ => None,
+        });
+        let error = ErrorInfo { code: "export_failed".into(), message: "No.".into() };
+        g.runs.handle(SidecarFrame::DocumentExportError { export_id, error });
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "export_failed");
+    }
+
+    #[test]
+    fn a_preview_returns_the_pages_or_the_sidecars_error() {
+        let f = quick();
+        let runs = Arc::clone(&f.runs);
+        let handle = std::thread::spawn(move || runs.preview("# A".into(), CANCEL_TIMEOUT));
+        let preview_id = wait_for(&f, |frame| match frame {
+            CoreFrame::DocumentPreview { preview_id, .. } => Some(preview_id),
+            _ => None,
+        });
+        let pages = vec!["<svg>1</svg>".to_string(), "<svg>2</svg>".to_string()];
+        f.runs.handle(SidecarFrame::DocumentPreviewed { preview_id, pages: pages.clone() });
+        assert_eq!(handle.join().unwrap().unwrap(), pages);
+
+        let g = quick();
+        let runs = Arc::clone(&g.runs);
+        let handle = std::thread::spawn(move || runs.preview("# A".into(), CANCEL_TIMEOUT));
+        let preview_id = wait_for(&g, |frame| match frame {
+            CoreFrame::DocumentPreview { preview_id, .. } => Some(preview_id),
+            _ => None,
+        });
+        let error = ErrorInfo { code: "preview_failed".into(), message: "No.".into() };
+        g.runs.handle(SidecarFrame::DocumentPreviewError { preview_id, error });
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "preview_failed");
     }
 
     #[test]

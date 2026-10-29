@@ -20,7 +20,7 @@ hypothesis validation to experiments and results.
 | **Conversation** | A chat inside a Project, where you invoke Mini-Mes. |
 | **Mini-Me** | Your "little scientist", defined by its **Traits** and its **Workflow**. Use the predefined ones, or build your own in a visual editor. |
 | **Trait** | Something a Mini-Me can do, focused on a single task. Traits live in a shared library; you can use the built-in ones, duplicate and edit them, or create your own. |
-| **Tool** | An action a Trait can take while it works, such as reading a file, saving a file or showing a table. Each Trait lists its tools. Some Traits always take the same actions; others, like *Assist*, let their AI model choose them as the request needs. |
+| **Tool** | An action a Trait can take while it works, such as reading a file, saving a file, showing a table or writing a document. Each Trait lists its tools. Some Traits always take the same actions; others, like *Assist*, let their AI model choose them as the request needs. |
 | **Workflow** | How a Mini-Me uses its Traits: a graph of **Steps** with conditions, loops, parallel branches and approval points where you review before it continues. |
 | **Step** | A node in a Workflow. It either runs a Trait or controls the flow (approval, condition, loop, parallel split/join). |
 | **Interactive Component** | A rich, interactive element in an answer, such as a table or chart, that you can sort, hover over or switch to another view. |
@@ -31,7 +31,7 @@ A Mini-Me for literature review might have the Traits *Find Papers*, *Summarize*
 *Refute*, with this Workflow:
 
 ```
-Find Papers ──► Summarize ──► [you approve] ──► Refute ──► Document
+Find Papers ──► Summarize ──► [you approve] ──► Refute
 ```
 
 You invoke a Mini-Me with `@`. When you don't, Typesafe's Jev picks the most suitable one,
@@ -53,7 +53,6 @@ Traits; those marked *planned* are on the [Roadmap](docs/roadmap.md).
 | **Refute** | Argues that a statement is wrong, using the information it's given. |
 | **Plan** | Creates an architecture or a sequence of steps for a project. |
 | **Experiment** | Designs experiments to verify a hypothesis. |
-| **Document** *(planned)* | Produces a report (PDF) that you can edit in the app and, later, upload to Dataverse. |
 | **Explore Dataverse** *(planned)* | Finds information in Dataverse. |
 | **Index Sources** *(planned)* | Indexes sources so they can be referenced later. |
 | **Code** *(planned)* | Solves problems by writing and running code (Python and R). |

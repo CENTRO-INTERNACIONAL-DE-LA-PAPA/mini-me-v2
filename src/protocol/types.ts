@@ -197,13 +197,24 @@ export interface ConversationRef {
 
 /** An Asset as the Project's Files screen lists it. */
 export interface FileEntry extends AssetRef {
-  /** `upload` for a file the user imported, `generated` for one a Mini-Me saved. */
+  /** `upload` for a file the user imported or started, `generated` for one the app made,
+   * such as a Mini-Me's output or an exported PDF. */
   source: "upload" | "generated";
   created_at: number;
-  /** The author of the first message the Asset is attached to, if any. */
+  /** When its file last changed (Unix ms); null when the file is missing. */
+  modified_at: number | null;
+  /** Who added the Asset: the author stored with it, else the author of the first message it
+   * is attached to; null when neither says. */
   added_by: Author | null;
   /** The Conversations that attach or reference the Asset, in the order it first appeared. */
   used_in: ConversationRef[];
+}
+
+/** A document as the document view opens it. */
+export interface OpenedDocument {
+  text: string;
+  /** When its file last changed (Unix ms); null when that cannot be read. */
+  modified_at: number | null;
 }
 
 export interface ProjectSummary {
@@ -342,6 +353,12 @@ export interface RecentConversation {
   /** Unix ms. */
   last_activity_at: number;
 }
+
+/** What arrives while Scribe drafts a document: some text, or the draft's end. */
+export type DraftEvent =
+  | { type: "delta"; text: string }
+  | { type: "done" }
+  | { type: "error"; error: ErrorInfo };
 
 /** A reply whose Mini-Me run is in flight, in any Project. */
 export interface RunningReply {
