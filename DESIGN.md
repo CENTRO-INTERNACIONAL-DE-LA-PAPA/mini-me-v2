@@ -48,7 +48,7 @@ pointing a new token at the palette, never by adding a value.
 | Entry | Hex | Roles |
 |---|---|---|
 | `--white` | `#FFFFFF` | `--background`, `--card`, `--popover`: sheets, tool sheets, popovers, composer, selected tab pill and sidebar row |
-| `--fill-soft` | `#FAFAF8` | `--bubble`: your message bubble |
+| `--fill-soft` | `#F7F7F4` | `--bubble`: your message bubble |
 | `--fill` | `#F4F4F1` | `--muted`, `--well`, `--accent`, `--secondary`, `--sidebar`: neutral cards, the Workflow board, tab-switch tracks, inputs, secondary buttons, hover on white, the navigation sheet |
 | `--fill-strong` | `#ECECE8` | `--well-hover`, `--sidebar-accent`: hover on a fill |
 | `--desk` | `#E9E9E5` | Window background behind all sheets |

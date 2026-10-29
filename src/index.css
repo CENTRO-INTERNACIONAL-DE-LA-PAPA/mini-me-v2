@@ -150,7 +150,7 @@
     /* The palette: every neutral the app draws with, from the sheet's white to ink, and the
        two status colours. A theme redefines these; the tokens below only name their roles. */
     --white: #ffffff;
-    --fill-soft: #fafaf8;
+    --fill-soft: #f7f7f4;
     --fill: #f4f4f1;
     --fill-strong: #ecece8;
     --desk: #e9e9e5;
