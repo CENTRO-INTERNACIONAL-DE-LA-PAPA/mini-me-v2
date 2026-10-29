@@ -89,12 +89,23 @@ with the suggestion after it, and the reply offers:
 
 - **Accept and resolve**: puts the suggestion in the document and resolves the thread. If you
   have edited the passage since, your edits are kept and combined with the suggestion; when
-  both changed the same words, nothing is applied and you can try again or discard it.
-- **Try again**: asks the same Mini-Me again with the passage as it reads now.
+  both changed the same words, nothing is applied, and you can discard it or ask again.
 - **Discard**: leaves the document as it is.
+
+For another version, @-mention the Mini-Me again in the thread and say what to change.
 
 **Resolve** moves a thread to Resolved, setting aside a suggestion still waiting, and
 **Reopen** brings it back. **Delete** removes the thread and its comments.
+
+### Editing a document from a Conversation
+
+Reference a document with `#` or attach it, and ask a Mini-Me whose Traits can edit documents,
+such as Assistant or Scribe, to change it ("@Scribe tighten the methods in #Trial report").
+The Mini-Me suggests its edits; the document itself is unchanged until you accept them. Each
+edit opens a thread on the passage it changes, saying "Opened by Scribe · from Trial design"
+with the Conversation's name as a link back, and holding the Mini-Me's reason and its
+suggestion, which you accept or discard as above. The reply shows a card for the document with
+how many suggested edits still wait; **Open** shows the document with its Comments.
 
 ## Follow-ups
 

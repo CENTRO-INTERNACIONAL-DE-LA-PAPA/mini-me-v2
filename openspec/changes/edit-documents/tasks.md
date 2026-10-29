@@ -21,8 +21,8 @@
 
 ## 5. Docs and checks
 
-- [ ] 5.1 Update `docs/using.md` and DESIGN.md as built; verify they match the app
-- [ ] 5.2 Run `cd src-tauri && cargo test`, `npm test` and `cd sidecar && uv run pytest`; verify all pass
+- [x] 5.1 Update `docs/using.md` and DESIGN.md as built; verify they match the app
+- [x] 5.2 Run `cd src-tauri && cargo test`, `npm test` and `cd sidecar && uv run pytest`; verify all pass
 
 ## Workflow follow-up
 
