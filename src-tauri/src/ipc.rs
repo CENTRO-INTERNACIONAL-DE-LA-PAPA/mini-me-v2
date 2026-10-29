@@ -923,15 +923,3 @@ pub async fn answer_suggestion(
     let project = state.project(project_id)?;
     comments::answer_suggestion(&project, message_id, component_id, decision)
 }
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn ask_again(
-    state: State<'_, AppState>,
-    project_id: Uuid,
-    message_id: Uuid,
-    component_id: Uuid,
-) -> AppResult<()> {
-    let project = state.project(project_id)?;
-    let model = state.settings().ai.model();
-    state.routing.ask_again(&state.runs, model, &project, (message_id, component_id))
-}

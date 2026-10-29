@@ -49,8 +49,8 @@ export function ThreadSuggestionsProvider({
   );
 }
 
-/** A suggestion in its Mini-Me's reply: the suggested text with Accept and resolve, Try again
- * and Discard while it waits, then with the decision. */
+/** A suggestion in its Mini-Me's reply: the suggested text with Accept and resolve and Discard
+ * while it waits, then with the decision. */
 function SuggestionV1({ data, answer, projectId, messageId, componentId }: RendererProps) {
   const { text = "" } = (data ?? {}) as SuggestionData;
   const thread = useContext(ThreadSuggestionsContext);
@@ -81,10 +81,8 @@ function SuggestionV1({ data, answer, projectId, messageId, componentId }: Rende
       decision={null}
       problem={conflict ?? failure}
       canAccept={Boolean(thread) && !thread?.detached && !conflict}
-      canTryAgain={Boolean(thread) && !thread?.detached}
       busy={busy}
       onAccept={() => void respond((m, c) => thread!.accept(m, c))}
-      onTryAgain={() => projectId && void respond((m, c) => api.askAgain(projectId, m, c))}
       onDiscard={() =>
         projectId && void respond((m, c) => api.answerSuggestion(projectId, m, c, "rejected"))
       }
@@ -101,20 +99,16 @@ export function SuggestionCard({
   decision,
   problem = null,
   canAccept = false,
-  canTryAgain = false,
   busy = false,
   onAccept,
-  onTryAgain,
   onDiscard,
 }: {
   text: string;
   decision: SuggestionDecision | null;
   problem?: string | null;
   canAccept?: boolean;
-  canTryAgain?: boolean;
   busy?: boolean;
   onAccept?: () => void;
-  onTryAgain?: () => void;
   onDiscard?: () => void;
 }) {
   return (
@@ -129,11 +123,6 @@ export function SuggestionCard({
           {canAccept && (
             <Button size="sm" disabled={busy} onClick={onAccept}>
               Accept and resolve
-            </Button>
-          )}
-          {canTryAgain && (
-            <Button size="sm" variant="outline" disabled={busy} onClick={onTryAgain}>
-              Try again
             </Button>
           )}
           <Button size="sm" variant="ghost" disabled={busy} onClick={onDiscard}>

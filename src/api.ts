@@ -139,9 +139,6 @@ export const api = {
     component_id: Uuid,
     decision: Exclude<SuggestionDecision, "accepted">,
   ) => invoke<void>("answer_suggestion", { project_id, message_id, component_id, decision }),
-  /** Dismisses a suggestion and runs its Mini-Me again on the passage as it reads now. */
-  askAgain: (project_id: Uuid, message_id: Uuid, component_id: Uuid) =>
-    invoke<void>("ask_again", { project_id, message_id, component_id }),
   /** Drafts the new document `asset_id` from a Conversation, calling `onEvent` as text arrives.
    * Resolves once the draft has ended and what was written is saved; rejects with why it
    * stopped early. */
