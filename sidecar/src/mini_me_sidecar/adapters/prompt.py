@@ -123,7 +123,7 @@ class Prompt(Adapter):
                 "input_too_large",
                 f"This is {len(text):,} characters; the limit is {MAX_MATERIAL_CHARS:,}.",
             )
-        material = _material(text, await ctx.results(), ctx.message)
+        material = _material(text, await ctx.results(), ctx.message, ctx.document)
         earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []
         key = await ctx.secret(model.provider)
         instructions = _system_prompt(ctx.mini_me_name, bool(ctx.steps), ctx.trait.instructions)
@@ -303,13 +303,24 @@ def _tools_error(error: Exception, model: Model) -> TraitError | None:
 
 
 def _material(
-    text: str, results: dict[str, Any], message: dict[str, Any] | None = None
+    text: str,
+    results: dict[str, Any],
+    message: dict[str, Any] | None = None,
+    document: dict[str, Any] | None = None,
 ) -> str:
-    """The user prompt: `text`, then the Conversation's files and components with their IDs,
-    newest first, and the components `message` references with `$`, all without their content."""
+    """The user prompt: for a comment, the passage of `document` it is about; then `text`, the
+    Conversation's files and components with their IDs, newest first, and the components
+    `message` references with `$`, all without their content."""
     files = (results.get("assets") or [])[:MAX_LISTED]
     components = (results.get("components") or [])[:MAX_LISTED]
-    parts = [text]
+    parts = []
+    if document:
+        parts.append(
+            f"This comment is about a passage of the document {document.get('name')} "
+            f"(ID: {document.get('asset_id')}), which read_file reads in full:\n"
+            f'"""\n{document.get("passage", "")}\n"""'
+        )
+    parts.append(text)
     if files:
         lines = [
             f"- {f.get('name')} (ID: {f.get('id')})"

@@ -65,6 +65,15 @@ def test_the_conversations_files_and_components_are_listed_without_content():
     assert _material("hello", {"assets": [], "components": []}) == "hello"
 
 
+def test_a_comment_comes_after_the_passage_it_is_about():
+    document = {"asset_id": "d1", "name": "Report.qmd", "passage": "Yield fell above 3,800 m."}
+    material = _material("make this shorter", {"assets": [], "components": []}, None, document)
+    assert material == (
+        "This comment is about a passage of the document Report.qmd (ID: d1), which read_file "
+        'reads in full:\n"""\nYield fell above 3,800 m.\n"""\n\nmake this shorter'
+    )
+
+
 def test_the_messages_references_are_listed_with_their_kind():
     table = {"id": "c1", "kind": "table", "author": "Curator", "current": True}
     chart = {"id": "c2", "kind": "chart", "author": "Plotter", "current": True}

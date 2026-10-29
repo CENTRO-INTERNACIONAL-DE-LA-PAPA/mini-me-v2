@@ -3,7 +3,7 @@
 //! resolved are stored beside it in `comment_threads`. Threads are listed only here, never as
 //! Conversations.
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -11,7 +11,8 @@ use crate::assets;
 use crate::conversations;
 use crate::documents;
 use crate::error::{AppError, AppResult};
-use crate::protocol::now_ms;
+use crate::link::RunDocument;
+use crate::protocol::{AssetRef, now_ms};
 use crate::store::{Project, ProjectState};
 
 /// A thread as the document view shows it. `start` and `end` are UTF-16 offsets in the
@@ -98,6 +99,47 @@ pub fn is_thread(state: &ProjectState, conversation_id: Uuid) -> AppResult<bool>
         params![conversation_id.to_string()],
         |row| row.get(0),
     )?)
+}
+
+/// The document the thread `conversation_id` is about; none for an ordinary Conversation.
+pub fn document_of(state: &ProjectState, conversation_id: Uuid) -> AppResult<Option<AssetRef>> {
+    let asset_id: Option<String> = state
+        .conn
+        .query_row(
+            "SELECT asset_id FROM comment_threads WHERE conversation_id = ?1",
+            params![conversation_id.to_string()],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(asset_id) = asset_id else {
+        return Ok(None);
+    };
+    let asset_id =
+        Uuid::parse_str(&asset_id).map_err(|_| AppError::storage("stored ID is not readable"))?;
+    Ok(Some(assets::find(state, asset_id)?))
+}
+
+/// What a run answering a comment in the thread `conversation_id` is told about its document,
+/// with the passage as the saved document reads now, or as last quoted when the thread's
+/// anchor no longer marks a passage; none for an ordinary Conversation.
+pub fn run_document(project: &Project, conversation_id: Uuid) -> AppResult<Option<RunDocument>> {
+    let found = {
+        let state = project.lock();
+        let Some(document) = document_of(&state, conversation_id)? else {
+            return Ok(None);
+        };
+        let anchor: (u32, u32, String) = state.conn.query_row(
+            "SELECT passage_start, passage_end, quote FROM comment_threads \
+             WHERE conversation_id = ?1",
+            params![conversation_id.to_string()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        (document, anchor)
+    };
+    let (document, (start, end, quote)) = found;
+    let text = documents::read(project, document.id)?;
+    let passage = passage(&text, start, end).filter(|p| *p == quote).unwrap_or(quote);
+    Ok(Some(RunDocument { asset_id: document.id, name: document.name, passage }))
 }
 
 /// Starts a thread on the passage `start..end` of the document `asset_id`, which reads
@@ -230,6 +272,26 @@ mod tests {
         let saved = list(&project, report.id).unwrap().remove(0);
         assert_eq!((saved.start, saved.end, saved.quote.as_str()), (11, 16, "yield"));
         assert_eq!(passage("añ🥔b", 2, 4).as_deref(), Some("🥔"));
+    }
+
+    #[test]
+    fn a_run_in_a_thread_gets_its_document_and_passage() {
+        let (_dir, project) = temp_project();
+        let report = documents::create(&project, "Report", None, &user()).unwrap();
+        documents::save(&project, report.id, "Yield fell above 3,800 m.", &[]).unwrap();
+        let thread = create(&project, report.id, (11, 24), "above 3,800 m").unwrap();
+        let document = run_document(&project, thread.conversation_id).unwrap().unwrap();
+        assert_eq!(document.name, "Report.qmd");
+        assert_eq!(document.passage, "above 3,800 m");
+
+        // Edited outside Mini-Me, so the anchor no longer marks the passage: its quote is used.
+        let path = assets::file_path(&project, report.id).unwrap();
+        std::fs::write(path, "Yields fell.").unwrap();
+        let document = run_document(&project, thread.conversation_id).unwrap().unwrap();
+        assert_eq!(document.passage, "above 3,800 m");
+
+        let conversation = conversations::create(&project).unwrap().id;
+        assert!(run_document(&project, conversation).unwrap().is_none());
     }
 
     #[test]

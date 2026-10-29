@@ -102,6 +102,8 @@ class CallContext:
         self.message: dict[str, Any] = context.get("message") or {}
         # Routing's answer to whether the message needs earlier context; None when unknown.
         self.needs_context: bool | None = context.get("needs_context")
+        # For a call answering a comment: the thread's document, `{ asset_id, name, passage }`.
+        self.document: dict[str, Any] | None = context.get("document")
         # The Mini-Me whose reply this call writes, which tells its own replies from others'.
         self.mini_me_name: str | None = context.get("mini_me_name")
         # Outputs of the run's earlier Trait Steps, `{ step_id, name, output }`, in the order

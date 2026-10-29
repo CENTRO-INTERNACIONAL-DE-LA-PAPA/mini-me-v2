@@ -8,9 +8,9 @@
 
 ## 2. Comments and Mini-Me runs
 
-- [ ] 2.1 Make `Routing::send` handle threads: for a thread's Conversation, ask no Jev, start the @-mentioned Mini-Me's run through `start_reply` with `needs_context: Some(true)`, and start nothing for a note; verify with inline Rust tests that a note starts no run, a mention starts one without a routing request, and a second comment is refused while a reply runs
-- [ ] 2.2 Add `document: { asset_id, name, passage }` to the run context on both sides of the link, filled for runs in a thread from the saved document at the anchor, list the document in a thread's `conversation.results`, and raise the protocol version; verify with an inline Rust test for the run context and `cd sidecar && uv run pytest`
-- [ ] 2.3 Add the document's name and passage to the prompt adapter's material when `document` is set; verify with pytest on the material builder
+- [x] 2.1 Make `Routing::send` handle threads: for a thread's Conversation, ask no Jev, start the @-mentioned Mini-Me's run through `start_reply` with `needs_context: Some(true)`, and start nothing for a note; verify with inline Rust tests that a note starts no run, a mention starts one without a routing request, and a second comment is refused while a reply runs
+- [x] 2.2 Add `document: { asset_id, name, passage }` to the run context on both sides of the link, filled for runs in a thread from the saved document at the anchor, list the document in a thread's `conversation.results`, and raise the protocol version; verify with an inline Rust test for the run context and `cd sidecar && uv run pytest`
+- [x] 2.3 Add the document's name and passage to the prompt adapter's material when `document` is set; verify with pytest on the material builder
 
 ## 3. Suggestions
 

@@ -20,7 +20,7 @@ use crate::comments;
 use crate::components;
 use crate::conversations::{self, PausedRun};
 use crate::error::{AppError, AppResult};
-use crate::history::{HISTORY_BUDGET_CHARS, history, results};
+use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
 use crate::user_library::LibraryStore;
 use crate::link::{
@@ -440,6 +440,7 @@ impl Runs {
                 conversation_id,
                 message: message.clone(),
                 needs_context: spec.needs_context,
+                document: comments::run_document(&project, conversation_id).ok().flatten(),
             },
         };
         self.lock().runs.insert(
@@ -1070,9 +1071,16 @@ impl Runs {
                 let state = project.lock();
                 let messages = state.conversation_messages(place.conversation_id)?;
                 let library = self.library.current();
-                let found = results(&messages, place.answers, reply, &library, |id| {
+                let mut found = results(&messages, place.answers, reply, &library, |id| {
                     assets::find(&state, id).ok()
                 });
+                // A thread's document is part of what its comment is about.
+                if let Some(document) = comments::document_of(&state, place.conversation_id)? {
+                    found.assets.retain(|a| a.asset.id != document.id);
+                    let message_id = place.answers;
+                    let listed = ResultAsset { asset: document, message_id, current: true };
+                    found.assets.insert(0, listed);
+                }
                 Ok(serde_json::to_value(found)?)
             }
             "component.read" => {
@@ -1635,6 +1643,18 @@ mod tests {
         result(add_component(&f, call_id, params));
 
         assert_eq!(f.message(reply).components[0].step_index, Some(1));
+    }
+
+    #[test]
+    fn a_call_in_a_thread_lists_the_threads_document_first() {
+        let f = quick();
+        let (call_id, reply) = f.start_call("echo");
+        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
+        into_thread(&f.project, conversation);
+        let listed = result(f.runs.respond("r".into(), call_id, "conversation.results", json!({})));
+        let first = &listed["assets"][0];
+        assert_eq!(first["name"], "Thread document.qmd");
+        assert_eq!(first["current"], true);
     }
 
     #[test]
