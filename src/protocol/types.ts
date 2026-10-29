@@ -224,6 +224,17 @@ export interface CommentThread {
   comments: number;
   /** Its newest suggestion still waiting for an answer. */
   pending: PendingSuggestion | null;
+  /** Where a Mini-Me opened it; null for a thread the user started. */
+  opened_from: OpenedFrom | null;
+}
+
+/** The Conversation a Mini-Me opened a thread from, by suggesting an edit there. */
+export interface OpenedFrom {
+  conversation_id: Uuid;
+  /** The Conversation's title; null once it no longer exists. */
+  title: string | null;
+  /** The Mini-Me that opened it. */
+  by: Author;
 }
 
 /** A suggestion waiting for the user's answer. */

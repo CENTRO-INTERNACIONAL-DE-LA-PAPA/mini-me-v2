@@ -11,13 +11,16 @@ interface DocumentData {
   title?: string;
 }
 
-/** A document a reply wrote: its title and an Open button, or a note that it was removed. */
+/** A document a reply wrote or edited: its title, `meta` below it, and an Open button, or a
+ * note that it was removed. */
 export function DocumentCard({
   title,
+  meta = "Document · Quarto",
   removed,
   onOpen,
 }: {
   title: string;
+  meta?: string;
   removed: boolean;
   onOpen: () => void;
 }) {
@@ -29,7 +32,7 @@ export function DocumentCard({
       <span className="grid min-w-0 flex-1">
         <span className="truncate font-medium text-foreground">{title}</span>
         <span className="text-meta text-muted-foreground">
-          {removed ? "This document was removed from the Project." : "Document · Quarto"}
+          {removed ? "This document was removed from the Project." : meta}
         </span>
       </span>
       {!removed && (
@@ -41,11 +44,9 @@ export function DocumentCard({
   );
 }
 
-function DocumentV1({ data, projectId }: RendererProps) {
-  const { asset_id: assetId, title } = (data ?? {}) as DocumentData;
-  const openDocument = useOpenDocument();
+/** Whether the document `assetId` is gone from the Project, once its files have been read. */
+export function useRemoved(projectId: string | undefined, assetId: string | undefined) {
   const [removed, setRemoved] = useState(false);
-
   useEffect(() => {
     if (!projectId || !assetId) return;
     let active = true;
@@ -57,6 +58,13 @@ function DocumentV1({ data, projectId }: RendererProps) {
       active = false;
     };
   }, [projectId, assetId]);
+  return removed;
+}
+
+function DocumentV1({ data, projectId }: RendererProps) {
+  const { asset_id: assetId, title } = (data ?? {}) as DocumentData;
+  const openDocument = useOpenDocument();
+  const removed = useRemoved(projectId, assetId);
 
   const open = () => {
     if (!assetId) return;

@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 8;
+pub const SCHEMA_VERSION: i32 = 9;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -150,6 +150,11 @@ CREATE TABLE comment_threads (
     created_at       INTEGER NOT NULL
 );
 CREATE INDEX comment_threads_by_asset ON comment_threads(asset_id);
+"#,
+    r#"
+-- The Conversation a thread was opened from, when a Mini-Me opened it there by suggesting an
+-- edit; null for a thread the user started.
+ALTER TABLE comment_threads ADD COLUMN opened_from TEXT;
 "#,
 ];
 
@@ -344,6 +349,22 @@ mod tests {
         assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
         conn.prepare("SELECT passage_start, passage_end, quote, resolved FROM comment_threads")
             .unwrap();
+    }
+
+    #[test]
+    fn a_version_8_database_gains_where_threads_were_opened_from() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..8] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 8).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        conn.prepare("SELECT opened_from FROM comment_threads").unwrap();
     }
 
     #[test]

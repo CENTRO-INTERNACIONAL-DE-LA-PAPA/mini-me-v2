@@ -9,7 +9,7 @@ from typing import Any
 from mini_me_sidecar.context import CallContext
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import read_component
-from mini_me_sidecar.tools.documents import suggest_edit, write_document
+from mini_me_sidecar.tools.documents import edit_document, suggest_edit, write_document
 from mini_me_sidecar.tools.files import read_file, save_text_file
 from mini_me_sidecar.tools.tables import show_table
 
@@ -162,6 +162,42 @@ MODEL_TOOLS: dict[str, ModelTool] = {
                 "required": ["text"],
             },
             run=suggest_edit,
+        ),
+        ModelTool(
+            name="edit_document",
+            description=(
+                "Suggests edits to a document the user's message references or attaches, which "
+                "the user accepts or rejects one by one in the document; it does not change the "
+                "document itself. Each edit quotes the exact text it replaces, as read_file "
+                "shows it, long enough to occur only once in the document, and gives the new "
+                "text in Quarto Markdown (at most 64 KiB; empty removes the passage) and a "
+                "one-sentence reason. Send all edits to a document in one call. Returns the "
+                "IDs of the suggestions' threads."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string", "description": "The document's file ID."},
+                    "edits": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "find": {
+                                    "type": "string",
+                                    "description": "The exact text to replace.",
+                                },
+                                "replace": {"type": "string", "description": "The new text."},
+                                "reason": {"type": "string", "description": "Why, briefly."},
+                            },
+                            "required": ["find", "replace", "reason"],
+                        },
+                    },
+                },
+                "required": ["document_id", "edits"],
+            },
+            run=edit_document,
         ),
         ModelTool(
             name="show_table",

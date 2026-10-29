@@ -14,6 +14,7 @@ TOOL_NAMES = (
     "save_file",
     "write_document",
     "suggest_edit",
+    "edit_document",
     "show_table",
     "show_chart",
     "show_papers",
@@ -24,7 +25,10 @@ TOOL_NAMES = (
 READ_TOOLS = ("read_file", "read_component")
 
 # The tools with a form for models, which a prompt-based Trait may list.
-MODEL_TOOL_NAMES = ("save_file", "show_table", "write_document", "suggest_edit")
+MODEL_TOOL_NAMES = ("save_file", "show_table", "write_document", "suggest_edit", "edit_document")
 
 # Offered only to a call answering a comment thread, whose passage it changes.
 THREAD_TOOLS = ("suggest_edit",)
+
+# Offered only outside a comment thread, where a document is edited by quoting its passages.
+CONVERSATION_TOOLS = ("edit_document",)

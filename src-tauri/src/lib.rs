@@ -93,7 +93,6 @@ pub fn run() {
             ipc::delete_thread,
             ipc::accept_suggestion,
             ipc::answer_suggestion,
-            ipc::ask_again,
             ipc::draft_document,
             ipc::stop_draft,
             ipc::export_document_pdf,

@@ -13,7 +13,10 @@ use crate::conversations;
 use crate::documents;
 use crate::error::{AppError, AppResult};
 use crate::link::RunDocument;
-use crate::protocol::{AssetRef, Author, AuthorKind, EventKind, now_ms};
+use crate::protocol::{
+    AssetRef, Author, AuthorKind, Component, EventKind, Message, MessageStatus, TextComponentKind,
+    new_id,
+};
 use crate::store::{Project, ProjectState};
 
 /// A thread as the document view shows it. `start` and `end` are UTF-16 offsets in the
@@ -31,6 +34,18 @@ pub struct CommentThread {
     pub comments: u32,
     /// Its newest suggestion still waiting for an answer.
     pub pending: Option<PendingSuggestion>,
+    /// Where a Mini-Me opened it; none for a thread the user started.
+    pub opened_from: Option<OpenedFrom>,
+}
+
+/// The Conversation a Mini-Me opened a thread from, by suggesting an edit there.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct OpenedFrom {
+    pub conversation_id: Uuid,
+    /// The Conversation's title; none once it no longer exists.
+    pub title: Option<String>,
+    /// The Mini-Me that opened it, the author of its first message.
+    pub by: Author,
 }
 
 /// A suggestion waiting for the user's answer, as the thread view and the source show it.
@@ -214,7 +229,8 @@ pub fn accept_suggestion(
     let merged = merge(base, &ours, theirs).ok_or_else(|| {
         AppError::new(
             "suggestion_conflict",
-            "You've changed the same words since this was suggested. Try again, or discard it.",
+            "You've changed the same words since this was suggested. Ask again in the thread, or \
+             discard it.",
         )
     })?;
 
@@ -318,34 +334,231 @@ pub fn create(
     if !documents::is_document(&asset.name) {
         return Err(AppError::invalid_input(format!("\"{}\" is not a document.", asset.name)));
     }
-    // One transaction, so a thread's Conversation never exists without its row and so never
-    // shows up as an ordinary Conversation.
-    let tx = state.conn.unchecked_transaction()?;
-    let conversation = conversations::insert(&tx)?;
-    let thread = CommentThread {
-        conversation_id: conversation.id,
+    let (conversation_id, created_at) = insert_thread(&state, asset_id, (start, end), quote, None)?;
+    Ok(CommentThread {
+        conversation_id,
         asset_id,
         start,
         end,
         quote: quote.to_string(),
         resolved: false,
-        created_at: now_ms(),
+        created_at,
         comments: 0,
         pending: None,
-    };
+        opened_from: None,
+    })
+}
+
+/// Stores a thread on `start..end` of `asset_id`, opened from the Conversation `opened_from`
+/// when a Mini-Me opened it there; returns the thread's Conversation and when it was made.
+fn insert_thread(
+    state: &ProjectState,
+    asset_id: Uuid,
+    (start, end): (u32, u32),
+    quote: &str,
+    opened_from: Option<Uuid>,
+) -> AppResult<(Uuid, i64)> {
+    // One transaction, so a thread's Conversation never exists without its row and so never
+    // shows up as an ordinary Conversation.
+    let tx = state.conn.unchecked_transaction()?;
+    let conversation = conversations::insert(&tx)?;
     tx.execute(
         "INSERT INTO comment_threads (conversation_id, asset_id, passage_start, passage_end, \
-         quote, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+         quote, created_at, opened_from) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
-            thread.conversation_id.to_string(),
+            conversation.id.to_string(),
             asset_id.to_string(),
             start,
             end,
-            thread.quote,
-            thread.created_at
+            quote,
+            conversation.created_at,
+            opened_from.map(|id| id.to_string())
         ],
     )?;
     tx.commit()?;
+    Ok((conversation.id, conversation.created_at))
+}
+
+/// The most bytes an edit's new text may take, as for a suggestion in a thread.
+const MAX_EDIT_BYTES: usize = 64 * 1024;
+
+/// One edit a Mini-Me suggests from a Conversation: the exact text it replaces in the saved
+/// document, the new text, and why.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DocumentEdit {
+    pub find: String,
+    pub replace: String,
+    pub reason: String,
+}
+
+/// The Trait call that edits a document: its Conversation, the message it answers, and its
+/// reply, written by `author` in the Step `step_id`.
+pub struct EditingCall<'a> {
+    pub conversation_id: Uuid,
+    pub answers: Uuid,
+    pub reply: Uuid,
+    pub author: &'a Author,
+    pub step_id: Option<&'a str>,
+}
+
+/// What `edit_document` made: the reply's `document-edits` card and the threads it opened.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EditedDocument {
+    pub component_id: Uuid,
+    pub threads: Vec<Uuid>,
+}
+
+/// Opens a thread on each edit's passage of the document `asset_id`, holding the call's
+/// Mini-Me's reason and its suggestion, and adds a `document-edits` card for them to the
+/// reply. The document's file is only read. Nothing is made unless every edit can be: it fails
+/// with `in_thread` inside a comment thread, `document_not_referenced` for a document the
+/// answered message neither references nor attaches, and as `passages` does for the edits.
+pub fn edit_document(
+    project: &Project,
+    call: &EditingCall,
+    asset_id: Uuid,
+    edits: &[DocumentEdit],
+) -> AppResult<EditedDocument> {
+    let name = {
+        let state = project.lock();
+        if thread_of(&state, call.conversation_id)?.is_some() {
+            return Err(AppError::new(
+                "in_thread",
+                "In a comment thread, suggest an edit to the thread's passage instead.",
+            ));
+        }
+        let (_, message) = state
+            .load_message_with(call.answers, false)?
+            .ok_or_else(|| AppError::not_found("Message not found"))?;
+        let referenced = message.attachments.iter().any(|a| a.id == asset_id)
+            || message
+                .text_components
+                .iter()
+                .any(|t| t.kind == TextComponentKind::Asset && t.id == asset_id);
+        match assets::find(&state, asset_id) {
+            Ok(asset) if referenced && documents::is_document(&asset.name) => asset.name,
+            _ => {
+                return Err(AppError::new(
+                    "document_not_referenced",
+                    "Only a document the message references with # or attaches can be edited.",
+                ));
+            }
+        }
+    };
+    let text = documents::read(project, asset_id)?;
+    let ranges = passages(&text, &name, edits)?;
+    let mut threads = Vec::with_capacity(edits.len());
+    for (edit, range) in edits.iter().zip(ranges) {
+        threads.push(open_suggestion(project, call, asset_id, range, edit)?);
+    }
+    let title = name.strip_suffix(".qmd").unwrap_or(&name).to_string();
+    let count = match edits.len() {
+        1 => "1 edit".to_string(),
+        n => format!("{n} edits"),
+    };
+    let data = json!({ "asset_id": asset_id, "title": title, "threads": threads });
+    let card = ("document-edits", 1, data, format!("Suggested {count} to {title}"));
+    let component_id = conversations::add_core_component(project, call.reply, call.step_id, card)?;
+    Ok(EditedDocument { component_id, threads })
+}
+
+/// Where each edit's `find` is in `text`, the document `name`, as UTF-16 ranges in the order of
+/// `edits`. Fails, naming the edit, with `passage_not_found` or `passage_not_unique` unless its
+/// `find` occurs exactly once, with `edits_overlap` when two passages overlap, and with
+/// `invalid_input` for no edits or a new text over 64 KiB.
+fn passages(text: &str, name: &str, edits: &[DocumentEdit]) -> AppResult<Vec<(u32, u32)>> {
+    if edits.is_empty() {
+        return Err(AppError::invalid_input("Give at least one edit."));
+    }
+    // Byte ranges, each with its edit's number as the error messages count them.
+    let mut found = Vec::with_capacity(edits.len());
+    for (number, edit) in (1..).zip(edits) {
+        if edit.replace.len() > MAX_EDIT_BYTES {
+            return Err(AppError::invalid_input(format!(
+                "Edit {number}'s new text is larger than 64 KiB; split it into smaller edits."
+            )));
+        }
+        let quoted = beginning(&edit.find);
+        let at: Vec<usize> = match edit.find.is_empty() {
+            true => Vec::new(),
+            false => text.match_indices(edit.find.as_str()).map(|(at, _)| at).collect(),
+        };
+        match at.as_slice() {
+            [start] => found.push((*start, start + edit.find.len(), number)),
+            [] => {
+                return Err(AppError::new(
+                    "passage_not_found",
+                    format!(
+                        "Edit {number} quotes \"{quoted}\", which is not in {name}. Quote the \
+                         text exactly as read-a-file shows it."
+                    ),
+                ));
+            }
+            many => {
+                return Err(AppError::new(
+                    "passage_not_unique",
+                    format!(
+                        "Edit {number} quotes \"{quoted}\", which occurs {} times in {name}. \
+                         Quote more of the passage so it occurs once.",
+                        many.len()
+                    ),
+                ));
+            }
+        }
+    }
+    let mut sorted = found.clone();
+    sorted.sort();
+    if let Some(pair) = sorted.windows(2).find(|pair| pair[1].0 < pair[0].1) {
+        let (first, second) = (pair[0].2.min(pair[1].2), pair[0].2.max(pair[1].2));
+        return Err(AppError::new(
+            "edits_overlap",
+            format!("Edits {first} and {second} overlap; make them one edit."),
+        ));
+    }
+    let utf16 = |at: usize| text[..at].encode_utf16().count() as u32;
+    Ok(found.into_iter().map(|(start, end, _)| (utf16(start), utf16(end))).collect())
+}
+
+/// The first 40 characters of `text`, for naming an edit in an error.
+fn beginning(text: &str) -> String {
+    let mut chars = text.chars();
+    let start: String = chars.by_ref().take(40).collect();
+    if chars.next().is_some() { format!("{start}…") } else { start }
+}
+
+/// Opens a thread on `range` of `asset_id`, starting with the call's Mini-Me's message: the
+/// edit's reason, with the edit as a pending suggestion. Returns the thread's Conversation.
+fn open_suggestion(
+    project: &Project,
+    call: &EditingCall,
+    asset_id: Uuid,
+    range: (u32, u32),
+    edit: &DocumentEdit,
+) -> AppResult<Uuid> {
+    let mut state = project.lock();
+    let opened_from = Some(call.conversation_id);
+    let (thread, _) = insert_thread(&state, asset_id, range, &edit.find, opened_from)?;
+    let author = call.author.clone();
+    let message = Message::new(author, edit.reason.clone(), MessageStatus::Complete, None);
+    let message_id = message.id;
+    let shown = match edit.replace.trim().is_empty() {
+        true => "Remove this passage.".to_string(),
+        false => edit.replace.clone(),
+    };
+    let component = Component {
+        id: new_id(),
+        kind: "suggestion".to_string(),
+        version: 1,
+        data: json!({ "document_id": asset_id, "base": edit.find, "text": edit.replace }),
+        text: shown,
+        answer: Value::Null,
+        step_index: None,
+    };
+    let events = vec![
+        EventKind::MessageCreated { message },
+        EventKind::ComponentAdded { message_id, component },
+    ];
+    state.persist_all(thread, events, |_| Ok(()))?;
     Ok(thread)
 }
 
@@ -399,27 +612,53 @@ pub fn list(project: &Project, asset_id: Uuid) -> AppResult<Vec<CommentThread>> 
 /// The threads matching `condition` on the ID `id`, in the order of their passages.
 fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<Vec<CommentThread>> {
     let count = "(SELECT COUNT(*) FROM messages m WHERE m.conversation_id = t.conversation_id)";
+    let first = |column: &str| {
+        format!(
+            "(SELECT {column} FROM messages m WHERE m.conversation_id = t.conversation_id \
+             ORDER BY m.rowid LIMIT 1)"
+        )
+    };
     let mut stmt = state.conn.prepare(&format!(
-        "SELECT conversation_id, asset_id, passage_start, passage_end, quote, resolved, \
-         created_at, {count} FROM comment_threads t WHERE {condition} \
-         ORDER BY passage_start, created_at"
+        "SELECT t.conversation_id, asset_id, passage_start, passage_end, quote, resolved, \
+         t.created_at, {count}, opened_from, c.title, {}, {} FROM comment_threads t \
+         LEFT JOIN conversations c ON c.id = t.opened_from WHERE {condition} \
+         ORDER BY passage_start, t.created_at",
+        first("author_kind"),
+        first("author_id"),
     ))?;
     let rows = stmt.query_map(params![id.to_string()], |row| {
         Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, u32>(2)?,
-            row.get::<_, u32>(3)?,
-            row.get::<_, String>(4)?,
-            row.get::<_, bool>(5)?,
-            row.get::<_, i64>(6)?,
-            row.get::<_, u32>(7)?,
+            (
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, u32>(2)?,
+                row.get::<_, u32>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, bool>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, u32>(7)?,
+            ),
+            (
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, Option<String>>(9)?,
+                row.get::<_, Option<String>>(10)?,
+                row.get::<_, Option<String>>(11)?,
+            ),
         ))
     })?;
     let corrupt = || AppError::storage("stored ID is not readable");
     let mut threads = Vec::new();
     for row in rows {
-        let (conversation_id, asset_id, start, end, quote, resolved, created_at, comments) = row?;
+        let ((conversation_id, asset_id, start, end, quote, resolved, created_at, comments), from) =
+            row?;
+        let opened_from = match from {
+            (Some(conversation), title, Some(kind), Some(id)) => Some(OpenedFrom {
+                conversation_id: Uuid::parse_str(&conversation).map_err(|_| corrupt())?,
+                title,
+                by: Author { kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?, id },
+            }),
+            _ => None,
+        };
         threads.push(CommentThread {
             conversation_id: Uuid::parse_str(&conversation_id).map_err(|_| corrupt())?,
             asset_id: Uuid::parse_str(&asset_id).map_err(|_| corrupt())?,
@@ -430,6 +669,7 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
             created_at,
             comments,
             pending: None,
+            opened_from,
         });
     }
     for thread in &mut threads {
@@ -496,7 +736,7 @@ pub mod test_support {
 mod tests {
     use super::*;
     use crate::projects::test_support::{temp_project, user};
-    use crate::protocol::new_id;
+    use crate::protocol::TextComponent;
 
     #[test]
     fn a_thread_is_created_on_a_passage_of_a_document_and_listed_in_order() {
@@ -692,6 +932,7 @@ mod tests {
         let (document, _, answer) = suggested(&project, SENTENCE, "Huancayo", "Junín");
         let thread = list(&project, document).unwrap().remove(0);
         assert_eq!(thread.comments, 2);
+        assert_eq!(thread.opened_from, None);
         let pending = thread.pending.unwrap();
         assert_eq!((pending.component_id, pending.text.as_str()), (answer.1, "Junín"));
 
@@ -707,5 +948,122 @@ mod tests {
         assert_eq!(error.code, "invalid_input");
         let report = documents::create(&project, "Report", None, &user()).unwrap();
         assert!(create(&project, report.id, (5, 5), "").is_err());
+    }
+
+    /// A Conversation whose message references `document` with `#`, and Scribe's reply to it;
+    /// returns the editing call's `(conversation, message, reply)`.
+    fn asked(project: &Project, document: Uuid) -> (Uuid, Uuid, Uuid) {
+        let conversation = conversations::create(project).unwrap().id;
+        let reference = TextComponent {
+            kind: TextComponentKind::Asset,
+            id: document,
+            label: "#Report".into(),
+            start: 8,
+            end: 15,
+        };
+        let input = conversations::SendMessageInput {
+            content: "tighten #Report".into(),
+            attachments: Vec::new(),
+            text_components: vec![reference],
+        };
+        let message = conversations::send_message(project, conversation, input, new_id()).unwrap();
+        let scribe = Author { kind: AuthorKind::MiniMe, id: "scribe".into() };
+        let reply = conversations::start_reply(project, conversation, message.id, scribe).unwrap();
+        (conversation, message.id, reply)
+    }
+
+    fn edit_of(find: &str, replace: &str) -> DocumentEdit {
+        DocumentEdit { find: find.into(), replace: replace.into(), reason: "Shorter.".into() }
+    }
+
+    const JUNIN: &str = "Junín was dry. Yield fell above 3,800 m in 2025. Huancayo too.";
+
+    #[test]
+    fn edits_open_threads_with_the_mini_mes_suggestions_and_a_card() {
+        let (_dir, project) = temp_project();
+        let document = documents::create(&project, "Report", None, &user()).unwrap().id;
+        documents::save(&project, document, JUNIN, &[]).unwrap();
+        let (conversation, answers, reply) = asked(&project, document);
+        let scribe = Author { kind: AuthorKind::MiniMe, id: "scribe".into() };
+        let call = EditingCall {
+            conversation_id: conversation,
+            answers,
+            reply,
+            author: &scribe,
+            step_id: None,
+        };
+        let edits = [edit_of("Huancayo too.", ""), edit_of("above 3,800 m", "above 3,800 m")];
+        let edited = edit_document(&project, &call, document, &edits).unwrap();
+
+        assert_eq!(documents::read(&project, document).unwrap(), JUNIN);
+        let threads = list(&project, document).unwrap();
+        assert_eq!(threads.len(), 2);
+        // "Junín" counts one UTF-16 unit per character, as CodeMirror does.
+        let above = &threads[0];
+        assert_eq!((above.start, above.quote.as_str()), (26, "above 3,800 m"));
+        let from = above.opened_from.clone().unwrap();
+        assert_eq!((from.conversation_id, from.by), (conversation, scribe.clone()));
+        assert!(from.title.is_some());
+        assert_eq!(threads[1].pending.as_ref().unwrap().text, "");
+
+        let state = project.lock();
+        let messages = state.conversation_messages(edited.threads[0]).unwrap();
+        let [first] = messages.as_slice() else { panic!("expected one message") };
+        assert_eq!((first.content.as_str(), &first.author), ("Shorter.", &scribe));
+        assert_eq!(first.components[0].text, "Remove this passage.");
+        let card = state.conversation_component(conversation, edited.component_id).unwrap();
+        let card = card.unwrap();
+        let shown = (card.kind.as_str(), card.text.as_str());
+        assert_eq!(shown, ("document-edits", "Suggested 2 edits to Report"));
+        assert_eq!(card.data["threads"], json!(edited.threads));
+    }
+
+    #[test]
+    fn a_refused_edit_leaves_nothing_behind() {
+        let (_dir, project) = temp_project();
+        let document = documents::create(&project, "Report", None, &user()).unwrap().id;
+        documents::save(&project, document, JUNIN, &[]).unwrap();
+        let other = documents::create(&project, "Other", None, &user()).unwrap().id;
+        let (conversation, answers, reply) = asked(&project, document);
+        let scribe = Author { kind: AuthorKind::MiniMe, id: "scribe".into() };
+        let call = EditingCall {
+            conversation_id: conversation,
+            answers,
+            reply,
+            author: &scribe,
+            step_id: None,
+        };
+        let refused = |asset: Uuid, edits: &[DocumentEdit]| {
+            edit_document(&project, &call, asset, edits).unwrap_err().code
+        };
+        let large = "x".repeat(MAX_EDIT_BYTES + 1);
+        assert_eq!(refused(other, &[edit_of("x", "y")]), "document_not_referenced");
+        assert_eq!(refused(document, &[edit_of("Puno", "y")]), "passage_not_found");
+        // A valid first edit still opens nothing when a later one is refused.
+        let one_unclear = [edit_of("dry", "y"), edit_of("a", "b")];
+        assert_eq!(refused(document, &one_unclear), "passage_not_unique");
+        let overlapping = [edit_of("above 3,800 m", "y"), edit_of("3,800 m in", "z")];
+        assert_eq!(refused(document, &overlapping), "edits_overlap");
+        assert_eq!(refused(document, &[edit_of("Huancayo", &large)]), "invalid_input");
+        assert!(list(&project, document).unwrap().is_empty());
+        let state = project.lock();
+        let (_, message) = state.load_message_with(reply, false).unwrap().unwrap();
+        assert!(message.components.is_empty());
+    }
+
+    #[test]
+    fn a_document_cannot_be_edited_from_inside_a_thread() {
+        let (_dir, project) = temp_project();
+        let (document, thread, (reply, _)) = suggested(&project, SENTENCE, "Huancayo", "Junín");
+        let scribe = Author { kind: AuthorKind::MiniMe, id: "scribe".into() };
+        let call = EditingCall {
+            conversation_id: thread.conversation_id,
+            answers: reply,
+            reply,
+            author: &scribe,
+            step_id: None,
+        };
+        let error = edit_document(&project, &call, document, &[edit_of("Yield", "y")]);
+        assert_eq!(error.unwrap_err().code, "in_thread");
     }
 }

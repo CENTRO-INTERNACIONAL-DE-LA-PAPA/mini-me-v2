@@ -54,7 +54,10 @@ interface Props {
   back: string;
   /** Set for a document just created to be drafted from this Conversation. */
   draftFrom?: Uuid;
+  /** Set to open with the Comments sheet showing, as for a Mini-Me's suggested edits. */
+  comments?: boolean;
   onClose: () => void;
+  onOpenConversation: (id: Uuid) => void;
 }
 
 /** Source highlighting in the theme's colours: headings and strong text in ink, the rest of
@@ -87,7 +90,16 @@ const theme = EditorView.theme({
  * types, beside a preview rendered by the same engine as the PDF export, with the comment
  * threads on its passages in a sheet of their own. A document being drafted fills as Scribe
  * writes and can be edited once the draft ends. */
-export function DocumentView({ projectId, projectName, assetId, back, draftFrom, onClose }: Props) {
+export function DocumentView({
+  projectId,
+  projectName,
+  assetId,
+  back,
+  draftFrom,
+  comments,
+  onClose,
+  onOpenConversation,
+}: Props) {
   const [text, setText] = useState("");
   const [editedAt, setEditedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +112,7 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
   const [pages, setPages] = useState<string[]>([]);
   const [rendering, setRendering] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(Boolean(comments));
   const [threads, setThreads] = useState<CommentThread[]>([]);
   const [placements, setPlacementsShown] = useState<ReadonlyMap<Uuid, Placement>>(new Map());
   const [selected, setSelected] = useState<Uuid | null>(null);
@@ -591,6 +603,7 @@ export function DocumentView({ projectId, projectName, assetId, back, draftFrom,
           // Cleared after the delete, so the thread is no longer there to be left empty.
           onDelete={(id) => void remove(id).then(() => setSelected(null))}
           onAccept={accept}
+          onOpenConversation={onOpenConversation}
         />
       )}
     </>

@@ -8,7 +8,7 @@ export type View =
   | { kind: "overview" }
   | { kind: "files" }
   | { kind: "conversation"; id: string; messageId?: string }
-  | { kind: "document"; assetId: string; from: View; draftFrom?: string }
+  | { kind: "document"; assetId: string; from: View; draftFrom?: string; comments?: boolean }
   | { kind: "settings" }
   | { kind: "avatars" }
   | { kind: "library"; tab?: LibraryTab }

@@ -246,12 +246,13 @@ function Main({
           title={conversations.find((c) => c.id === view.id)?.title ?? "Conversation"}
           onActivity={onConversationActivity}
           onOpenReply={onOpenReply}
-          onOpenDocument={(assetId, draft) =>
+          onOpenDocument={(assetId, how) =>
             onNavigate({
               kind: "document",
               assetId,
               from: view,
-              draftFrom: draft ? view.id : undefined,
+              draftFrom: how === "draft" ? view.id : undefined,
+              comments: how === "comments",
             })
           }
         />
@@ -271,8 +272,10 @@ function Main({
           projectName={project.name}
           assetId={view.assetId}
           draftFrom={view.draftFrom}
+          comments={view.comments}
           back={back}
           onClose={() => onNavigate(from)}
+          onOpenConversation={(id) => onNavigate({ kind: "conversation", id })}
         />
       ) : null;
     }

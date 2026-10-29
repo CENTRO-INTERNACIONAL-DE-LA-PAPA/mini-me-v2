@@ -27,6 +27,11 @@ const MODEL_TOOLS = [
     label: "Suggest edits",
     hint: "Suggest new text for a passage when asked in a document's comment",
   },
+  {
+    id: "edit_document",
+    label: "Edit documents",
+    hint: "Suggest edits to a document you reference in a message",
+  },
 ];
 
 const EMPTY: TraitDraft = { id: NIL_ID, name: "", description: "", instructions: "", tools: [] };
