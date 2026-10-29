@@ -646,31 +646,6 @@ pub fn add_reaction(project: &Project, message_id: Uuid, emoji: &str, by: Author
     Ok(())
 }
 
-/// Removes a reaction; does nothing if it does not exist.
-pub fn remove_reaction(
-    project: &Project,
-    message_id: Uuid,
-    emoji: &str,
-    by: Author,
-) -> AppResult<()> {
-    let mut state = project.lock();
-    let (conversation, _) = state
-        .message_place(message_id)?
-        .ok_or_else(|| AppError::not_found("Message not found"))?;
-    if !state.has_reaction(message_id, emoji, &by)? {
-        return Ok(());
-    }
-    state.persist(
-        conversation,
-        EventKind::ReactionRemoved {
-            message_id,
-            emoji: emoji.to_string(),
-            by,
-        },
-    )?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -947,9 +922,5 @@ mod tests {
         add_reaction(&project, message.id, "👍", user(user_id)).unwrap();
         add_reaction(&project, message.id, "👍", user(user_id)).unwrap();
         assert_eq!(collector.settled(1).len(), 1);
-
-        remove_reaction(&project, message.id, "👍", user(user_id)).unwrap();
-        remove_reaction(&project, message.id, "👍", user(user_id)).unwrap();
-        assert_eq!(collector.settled(2).len(), 2);
     }
 }

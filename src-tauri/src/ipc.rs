@@ -230,21 +230,6 @@ pub async fn open_conversation(
         .open(conversation_id, Box::new(ChannelSink(on_events)))
 }
 
-/// Sends `on_events` every event after `after_seq`, then new ones; returns the subscription's
-/// ID.
-#[tauri::command(rename_all = "snake_case")]
-pub async fn subscribe_conversation(
-    state: State<'_, AppState>,
-    project_id: Uuid,
-    conversation_id: Uuid,
-    after_seq: i64,
-    on_events: Channel<Vec<Event>>,
-) -> AppResult<Uuid> {
-    state
-        .project(project_id)?
-        .subscribe(conversation_id, after_seq, Box::new(ChannelSink(on_events)))
-}
-
 #[tauri::command(rename_all = "snake_case")]
 pub async fn unsubscribe_conversation(
     state: State<'_, AppState>,
@@ -564,12 +549,6 @@ pub async fn list_recent_conversations(
     recent::list(&state.data_root)
 }
 
-/// Every reply whose Mini-Me run is in flight, in any Project.
-#[tauri::command(rename_all = "snake_case")]
-pub async fn get_running_replies(state: State<'_, AppState>) -> AppResult<Vec<RunningReply>> {
-    Ok(state.runs.running())
-}
-
 /// Sends the running replies now and the whole list again each time it changes.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn subscribe_running_replies(
@@ -580,11 +559,6 @@ pub async fn subscribe_running_replies(
         .runs
         .subscribe(Box::new(move |running| on_change.send(running.to_vec()).is_ok()));
     Ok(())
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn get_sidecar_status(state: State<'_, AppState>) -> AppResult<SidecarStatus> {
-    Ok(state.sidecar.status())
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -605,11 +579,6 @@ pub async fn restart_sidecar(state: State<'_, AppState>) -> AppResult<()> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_update_status(state: State<'_, AppState>) -> AppResult<UpdateStatus> {
-    Ok(state.updates.status())
-}
-
-#[tauri::command(rename_all = "snake_case")]
 pub async fn subscribe_update_status(
     state: State<'_, AppState>,
     on_status: Channel<UpdateStatus>,
@@ -627,26 +596,6 @@ pub async fn restart_to_update(app: AppHandle, state: State<'_, AppState>) -> Ap
     state.sidecar.shutdown();
     state.updates.install_pending();
     app.restart()
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn add_reaction(
-    state: State<'_, AppState>,
-    project_id: Uuid,
-    message_id: Uuid,
-    emoji: String,
-) -> AppResult<()> {
-    conversations::add_reaction(&*state.project(project_id)?, message_id, &emoji, state.user())
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn remove_reaction(
-    state: State<'_, AppState>,
-    project_id: Uuid,
-    message_id: Uuid,
-    emoji: String,
-) -> AppResult<()> {
-    conversations::remove_reaction(&*state.project(project_id)?, message_id, &emoji, state.user())
 }
 
 /// Opens the native file picker and imports every picked file. Paths come only from the
