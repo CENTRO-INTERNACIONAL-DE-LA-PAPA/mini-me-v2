@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { ChevronLeftIcon } from "lucide-react";
 import { useState } from "react";
 import { Avatar, type AvatarStyle } from "./Avatar";
 import { ColorPicker } from "./ColorPicker";
@@ -37,7 +38,8 @@ export function AvatarDebugView({ onClose }: Props) {
   return (
     <main className="mx-auto mt-[6vh] max-w-5xl px-4 pb-16">
       <Button variant="link" className="mb-2 px-0 text-muted-foreground" onClick={onClose}>
-        ← Back
+        <ChevronLeftIcon />
+        Back
       </Button>
       <h1 className="mb-6 text-page font-bold">[DEBUG] Avatars</h1>
       <div className="grid grid-cols-[300px_1fr] items-start gap-10">

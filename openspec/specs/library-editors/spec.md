@@ -65,8 +65,8 @@ n from 2 that makes the name unused. The copy SHALL exist only after the user sa
 ### Requirement: User-made Traits are prompt-based
 A user-made Trait SHALL run on the `prompt` adapter. Its editor SHALL let the user set the
 name, the description, the instructions (required, non-empty) and which of the model tools
-`save_file`, `show_table` and `write_document` the Trait may use. The read tools SHALL be offered to it as to
-every prompt-based Trait, without being listed.
+`save_file`, `show_table`, `write_document` and `suggest_edit` the Trait may use. The read tools
+SHALL be offered to it as to every prompt-based Trait, without being listed.
 
 #### Scenario: New Trait
 - **WHEN** the user creates a Trait named "Translate" with instructions and `save_file`
@@ -76,6 +76,11 @@ every prompt-based Trait, without being listed.
 #### Scenario: Empty instructions
 - **WHEN** the user tries to save a Trait without instructions
 - **THEN** the save is refused and the editor says the instructions are missing
+
+#### Scenario: A Trait that suggests edits
+- **WHEN** the user ticks "Suggest edits" for *Translate* and saves
+- **THEN** *Translate* lists `suggest_edit`, and a Mini-Me running it can suggest edits when
+  @-mentioned in a comment thread
 
 ### Requirement: Editing a Trait affects every Mini-Me that uses it
 Saving a user-made Trait SHALL change it for every Mini-Me whose Workflow references it. The

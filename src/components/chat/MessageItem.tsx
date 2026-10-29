@@ -34,6 +34,8 @@ interface Props {
   onToggleSteps?: (messageId: string) => void;
   /** Whether those steps are open. */
   stepsShown?: boolean;
+  /** In a comment thread's card: the user's comments without a bubble, and smaller replies. */
+  compact?: boolean;
 }
 
 /** The author's name, and the Mini-Me when the author is a known one. */
@@ -57,6 +59,7 @@ export const MessageItem = memo(function MessageItem({
   message,
   onToggleSteps,
   stepsShown = false,
+  compact = false,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const miniMes = useMiniMes();
@@ -179,6 +182,19 @@ export const MessageItem = memo(function MessageItem({
     </>
   );
 
+  if (fromUser && compact) {
+    return (
+      <article data-message-id={message.id} className="flex flex-col gap-1">
+        <p className="text-meta text-muted-foreground">
+          {name} · {time}
+        </p>
+        {text}
+        {attachments}
+        {notes}
+      </article>
+    );
+  }
+
   if (fromUser) {
     return (
       <article data-message-id={message.id} className="flex max-w-[520px] flex-col items-end gap-1.5 self-end">
@@ -200,10 +216,13 @@ export const MessageItem = memo(function MessageItem({
       miniMe={authorMiniMe}
       render={<article />}
       data-message-id={message.id}
-      className="relative flex flex-col gap-3.5 px-[18px] py-4 text-foreground"
+      className={cn(
+        "relative flex flex-col text-foreground",
+        compact ? "gap-2.5 px-3 py-2.5" : "gap-3.5 px-[18px] py-4",
+      )}
     >
       <header className="flex items-center gap-[9px] text-meta">
-        <MiniMeAvatar miniMe={authorMiniMe} size={28} />
+        <MiniMeAvatar miniMe={authorMiniMe} size={compact ? 20 : 28} />
         <strong className="font-serif text-name font-medium text-foreground">{name}</strong>
         <span className="text-mm-ink">
           {time}

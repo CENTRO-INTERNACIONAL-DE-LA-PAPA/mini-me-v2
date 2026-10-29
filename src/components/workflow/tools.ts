@@ -5,6 +5,7 @@ const TOOL_LABELS: Record<string, string> = {
   read_component: "Read tables and charts",
   save_file: "Save files",
   write_document: "Write documents",
+  suggest_edit: "Suggest edits",
   show_table: "Show tables",
   show_chart: "Show charts",
   show_papers: "Show papers",

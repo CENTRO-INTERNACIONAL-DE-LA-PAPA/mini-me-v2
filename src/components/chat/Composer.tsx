@@ -50,6 +50,9 @@ interface Props {
   components: ComponentName[];
   /** A tool sheet is open beside the Conversation, so the chat column is narrower. */
   narrow?: boolean;
+  /** In a comment thread's card: placed in the card instead of floating over the sheet, and a
+   * comment without an @-mention is a note. */
+  thread?: boolean;
   ref?: Ref<ComposerHandle>;
 }
 
@@ -112,6 +115,7 @@ export function Composer({
   onSent,
   components,
   narrow = false,
+  thread = false,
   ref,
 }: Props) {
   const [attachments, setAttachments] = useState<AssetRef[]>([]);
@@ -134,7 +138,11 @@ export function Composer({
       Text,
       HardBreak,
       UndoRedo,
-      Placeholder.configure({ placeholder: "Ask a Mini-Me, or type @ to choose one…" }),
+      Placeholder.configure({
+        placeholder: thread
+          ? "Reply, or @ a Mini-Me…"
+          : "Ask a Mini-Me, or type @ to choose one…",
+      }),
       ReferenceNode.configure({
         suggestions: SIGNS.map(([char, kind]) => suggestion(char, kind)),
       }),
@@ -148,7 +156,9 @@ export function Composer({
       attributes: {
         "aria-label": "Message",
         class: cn(
-          "max-h-48 min-h-9 overflow-y-auto px-4 pt-3 pb-1 text-body outline-none",
+          thread
+            ? "max-h-32 min-h-7 overflow-y-auto px-2 py-1 text-ui outline-none"
+            : "max-h-48 min-h-9 overflow-y-auto px-4 pt-3 pb-1 text-body outline-none",
           "wrap-break-word [scrollbar-gutter:stable]",
         ),
       },
@@ -333,10 +343,38 @@ export function Composer({
     }
   }
 
+  const size = thread ? "size-7" : "size-[34px]";
+  const action = replying ? (
+    <Button
+      size="icon"
+      className={cn(size, "shrink-0 rounded-full", asked && "bg-(--mm-ink)")}
+      aria-label="Stop the reply"
+      title="Stop the reply"
+      onClick={stop}
+    >
+      <SquareIcon className="size-3 fill-current" />
+    </Button>
+  ) : (
+    <Button
+      size="icon"
+      className={cn(size, "shrink-0 rounded-full", asked && "bg-(--mm-ink)")}
+      aria-label="Send"
+      title="Send"
+      onClick={send}
+      disabled={empty || !ready || choosing}
+    >
+      <ArrowUpIcon />
+    </Button>
+  );
+
   return (
-    // Floats over the bottom of the Conversation sheet, centred on the chat column.
+    // In a Conversation it floats over the bottom of the sheet, centred on the chat column; in a
+    // comment thread's card it sits in place.
     <div
-      className={cn("absolute inset-x-0 bottom-[22px] z-20", chatColumn(narrow, "composer"))}
+      className={cn(
+        thread ? "relative" : "absolute inset-x-0 bottom-[22px] z-20",
+        !thread && chatColumn(narrow, "composer"),
+      )}
     >
       {suggestions.length > 0 && (
         <div
@@ -379,77 +417,73 @@ export function Composer({
         </p>
       )}
       {/* Addressed to a Mini-Me, the box is outlined in its edge colour and sends in its ink. */}
-      <div
-        style={surfaceStyle(asked?.colors)}
-        className="rounded-composer border border-edge bg-card px-1.5 pt-1"
-      >
-        <AttachmentTray
-          projectId={projectId}
-          attachments={attachments}
-          onRemove={(asset) => setAttachments((current) => current.filter((a) => a !== asset))}
-        />
-        <EditorContent editor={editor} className="composer-editor" />
-        <div className="flex items-center gap-0.5 px-1 pb-2.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Mention a Mini-Me"
-            title="Mention a Mini-Me"
-            onClick={() => startReference("@")}
-          >
-            <AtSignIcon />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Reference a file"
-            title="Reference a file"
-            onClick={() => startReference("#")}
-          >
-            <HashIcon />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Attach files"
-            title="Attach files"
-            onClick={attach}
-          >
-            <PaperclipIcon />
-          </Button>
-          <span className="ml-2 flex-1 truncate text-meta text-muted-foreground">
-            {asked ? (
-              <span className="flex items-center gap-1.5">
-                Asking <MiniMePill miniMe={asked}>{asked.name}</MiniMePill>
-              </span>
-            ) : (
-              "Auto-pick Mini-Me"
-            )}
-          </span>
-          {replying ? (
-            <Button
-              size="icon"
-              className={cn("size-[34px] rounded-full", asked && "bg-(--mm-ink)")}
-              aria-label="Stop the reply"
-              title="Stop the reply"
-              onClick={stop}
-            >
-              <SquareIcon className="size-3 fill-current" />
-            </Button>
-          ) : (
-            <Button
-              size="icon"
-              className={cn("size-[34px] rounded-full", asked && "bg-(--mm-ink)")}
-              aria-label="Send"
-              title="Send"
-              onClick={send}
-              disabled={empty || !ready || choosing}
-            >
-              <ArrowUpIcon />
-            </Button>
-          )}
+      {thread ? (
+        <div
+          style={surfaceStyle(asked?.colors)}
+          className="rounded-control border border-edge bg-card p-1"
+        >
+          <AttachmentTray
+            projectId={projectId}
+            attachments={attachments}
+            onRemove={(asset) => setAttachments((current) => current.filter((a) => a !== asset))}
+          />
+          <div className="flex items-end gap-1">
+            <EditorContent editor={editor} className="composer-editor min-w-0 flex-1" />
+            {action}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div
+          style={surfaceStyle(asked?.colors)}
+          className="rounded-composer border border-edge bg-card px-1.5 pt-1"
+        >
+          <AttachmentTray
+            projectId={projectId}
+            attachments={attachments}
+            onRemove={(asset) => setAttachments((current) => current.filter((a) => a !== asset))}
+          />
+          <EditorContent editor={editor} className="composer-editor" />
+          <div className="flex items-center gap-0.5 px-1 pb-2.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Mention a Mini-Me"
+              title="Mention a Mini-Me"
+              onClick={() => startReference("@")}
+            >
+              <AtSignIcon />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Reference a file"
+              title="Reference a file"
+              onClick={() => startReference("#")}
+            >
+              <HashIcon />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Attach files"
+              title="Attach files"
+              onClick={attach}
+            >
+              <PaperclipIcon />
+            </Button>
+            <span className="ml-2 flex-1 truncate text-meta text-muted-foreground">
+              {asked ? (
+                <span className="flex items-center gap-1.5">
+                  Asking <MiniMePill miniMe={asked}>{asked.name}</MiniMePill>
+                </span>
+              ) : (
+                "Auto-pick Mini-Me"
+              )}
+            </span>
+            {action}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

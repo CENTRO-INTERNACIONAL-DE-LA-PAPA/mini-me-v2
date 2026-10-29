@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { cn } from "@/lib/utils";
 import { ActivityIcon, FileTextIcon, ListTreeIcon, PaperclipIcon } from "lucide-react";
-import { api, errorMessage } from "../../api";
-import { ConversationStore } from "../../protocol/eventStore";
-import type { ProtocolEvent, Uuid } from "../../protocol/types";
+import { api } from "../../api";
+import type { Uuid } from "../../protocol/types";
 import { chatColumn, Composer, type ComposerHandle } from "./Composer";
 import { MessageItem } from "./MessageItem";
 import type { MessageView } from "../../protocol/eventStore";
@@ -18,6 +17,7 @@ import { ComponentReferencesProvider } from "../interactive/component-references
 import type { ReferenceTarget } from "../../protocol/references";
 import { JobsPanel, OutlinePanel, StepsPanel, type Panel } from "./SidePanels";
 import { outline } from "./outline";
+import { useConversation } from "./useConversation";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useRunningReplies } from "../../hooks/useRunningReplies";
 
@@ -31,40 +31,6 @@ interface Props {
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
   /** Opens a document, to be drafted from this Conversation when `draft` is set. */
   onOpenDocument: (assetId: Uuid, draft?: boolean) => void;
-}
-
-function useConversation(projectId: string, conversationId: string) {
-  const store = useMemo(() => new ConversationStore(), [projectId, conversationId]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    // Batches delivered before the opened state arrives wait for it; null once it has.
-    let pending: ProtocolEvent[] | null = [];
-    const opening = api.openConversation(projectId, conversationId, (events) => {
-      if (!active) return;
-      if (pending) pending.push(...events);
-      else store.applyBatch(events);
-    });
-    opening
-      .then((opened) => {
-        if (!active) return;
-        store.load(opened, pending ?? []);
-        pending = null;
-      })
-      .catch((e) => active && setError(errorMessage(e)));
-    return () => {
-      active = false;
-      // Waits for the open to finish, so that a Conversation closed while it opens is still
-      // unsubscribed.
-      opening
-        .then((opened) => api.unsubscribeConversation(projectId, opened.subscription_id))
-        .catch(() => {});
-    };
-  }, [store, projectId, conversationId]);
-
-  const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  return { state, error };
 }
 
 export function ChatView({

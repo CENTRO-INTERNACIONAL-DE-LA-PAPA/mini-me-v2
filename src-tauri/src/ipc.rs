@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::ai2::{Ai2, Ai2Status, AppSecrets};
 use crate::approvals::{self, PausedApproval};
 use crate::assets;
+use crate::comments;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
 use crate::documents;
 use crate::error::{AppError, AppResult};
@@ -835,8 +836,9 @@ pub async fn save_document(
     project_id: Uuid,
     asset_id: Uuid,
     text: String,
+    anchors: Vec<comments::Anchor>,
 ) -> AppResult<()> {
-    documents::save(&*state.project(project_id)?, asset_id, &text)
+    documents::save(&*state.project(project_id)?, asset_id, &text, &anchors)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -850,4 +852,86 @@ pub async fn open_asset(
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
         .map_err(|e| AppError::new("open_failed", e.to_string()))
+}
+
+/// Starts a comment thread on the passage `start..end` of the document `asset_id`, which reads
+/// `quote`. Its comments are sent with `send_message` on its `conversation_id`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn create_thread(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+    start: u32,
+    end: u32,
+    quote: String,
+) -> AppResult<comments::CommentThread> {
+    comments::create(&*state.project(project_id)?, asset_id, (start, end), &quote)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn list_threads(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<Vec<comments::CommentThread>> {
+    comments::list(&*state.project(project_id)?, asset_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_thread_resolved(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    thread_id: Uuid,
+    resolved: bool,
+) -> AppResult<()> {
+    comments::set_resolved(&*state.project(project_id)?, thread_id, resolved)
+}
+
+/// Stops the thread's running reply, if any, then deletes the thread.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_thread(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    thread_id: Uuid,
+) -> AppResult<()> {
+    let project = state.project(project_id)?;
+    for message_id in conversations::stop_reply(&project, thread_id)? {
+        state.runs.cancel_message(message_id);
+    }
+    comments::delete(&project, thread_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn accept_suggestion(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    message_id: Uuid,
+    component_id: Uuid,
+) -> AppResult<comments::Accepted> {
+    comments::accept_suggestion(&*state.project(project_id)?, message_id, component_id)
+}
+
+/// Rejects or dismisses a suggestion, leaving the document as it is.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn answer_suggestion(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    message_id: Uuid,
+    component_id: Uuid,
+    decision: comments::Decision,
+) -> AppResult<()> {
+    let project = state.project(project_id)?;
+    comments::answer_suggestion(&project, message_id, component_id, decision)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn ask_again(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    message_id: Uuid,
+    component_id: Uuid,
+) -> AppResult<()> {
+    let project = state.project(project_id)?;
+    let model = state.settings().ai.model();
+    state.routing.ask_again(&state.runs, model, &project, (message_id, component_id))
 }

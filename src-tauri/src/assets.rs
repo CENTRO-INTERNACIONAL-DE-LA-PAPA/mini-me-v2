@@ -7,6 +7,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::comments;
 use crate::error::{AppError, AppResult};
 use crate::protocol::{
     AssetRef, Author, AuthorKind, TextComponent, TextComponentKind, new_id, now_ms,
@@ -340,10 +341,11 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     let index: HashMap<Uuid, usize> =
         entries.iter().enumerate().map(|(i, e)| (e.asset.id, i)).collect();
 
-    let mut stmt = state.conn.prepare(
+    let mut stmt = state.conn.prepare(&format!(
         "SELECT m.conversation_id, c.title, m.attachments, m.text_components FROM messages m \
-         JOIN conversations c ON c.id = m.conversation_id ORDER BY m.rowid",
-    )?;
+         JOIN conversations c ON c.id = m.conversation_id WHERE {} ORDER BY m.rowid",
+        comments::not_a_thread(&state.conn, "c.id")?
+    ))?;
     let rows = stmt.query_map([], |row| {
         Ok((
             row.get::<_, String>(0)?,
@@ -412,6 +414,8 @@ pub fn file_path(project: &Project, id: Uuid) -> AppResult<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::comments::test_support::into_thread;
+    use crate::conversations::{self, SendMessageInput};
     use crate::projects::test_support::{temp_project, user};
 
     #[test]
@@ -542,7 +546,6 @@ mod tests {
 
     #[test]
     fn project_files_lists_who_added_each_asset_and_where_it_is_used() {
-        use crate::conversations::{self, SendMessageInput};
         let (dir, project) = temp_project();
         let source = dir.path().join("field-trial.csv");
         std::fs::write(&source, "plot,yield\n1,20\n").unwrap();
@@ -633,5 +636,22 @@ mod tests {
         let table = import_bytes(&project, "plots.csv", "", b"plot", &user()).unwrap();
         assert_eq!(read_image(&project, image.id).unwrap(), ("image/png".into(), b"png".to_vec()));
         assert_eq!(read_image(&project, table.id).unwrap_err().code, "invalid_input");
+    }
+
+    #[test]
+    fn a_thread_is_not_where_a_file_is_used() {
+        let (_dir, project) = temp_project();
+        let trial = import_bytes(&project, "trial.csv", "text/csv", b"a\n", &user()).unwrap();
+        let thread = conversations::create(&project).unwrap().id;
+        into_thread(&project, thread);
+        let input = SendMessageInput {
+            content: "see this".into(),
+            attachments: vec![trial.id],
+            text_components: Vec::new(),
+        };
+        conversations::send_message(&project, thread, input, new_id()).unwrap();
+        let files = project_files(&project).unwrap();
+        let entry = files.iter().find(|e| e.asset.id == trial.id).unwrap();
+        assert!(entry.used_in.is_empty());
     }
 }

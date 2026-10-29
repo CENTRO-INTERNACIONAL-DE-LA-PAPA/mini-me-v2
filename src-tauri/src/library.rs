@@ -11,12 +11,13 @@ pub const FALLBACK_MINI_ME: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8
 pub const SCRIBE: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8e1f0d7b01);
 
 /// Every tool a Trait may list; the sidecar's `tools` package knows the same names.
-pub const TOOLS: [&str; 9] = [
+pub const TOOLS: [&str; 10] = [
     "read_file",
     "read_table",
     "read_component",
     "save_file",
     "write_document",
+    "suggest_edit",
     "show_table",
     "show_chart",
     "show_papers",
@@ -25,7 +26,7 @@ pub const TOOLS: [&str; 9] = [
 
 /// The tools a prompt-based Trait may list: those with a form for models. The read tools are
 /// offered to every prompt-based Trait, so it does not list them.
-pub const MODEL_TOOLS: [&str; 3] = ["save_file", "show_table", "write_document"];
+pub const MODEL_TOOLS: [&str; 4] = ["save_file", "show_table", "write_document", "suggest_edit"];
 
 /// The adapter that offers a Trait's tools to its AI model, and the only one user-made
 /// Traits run on.
@@ -503,8 +504,8 @@ mod tests {
         assert_eq!(
             lists,
             [
-                ("Summarize", vec!["write_document"]),
-                ("Assist", vec!["save_file", "show_table", "write_document"]),
+                ("Summarize", vec!["write_document", "suggest_edit"]),
+                ("Assist", vec!["save_file", "show_table", "write_document", "suggest_edit"]),
                 ("Find Papers", vec!["show_papers"]),
                 ("Theorize", vec!["show_theories", "save_file"]),
                 ("Profile Data", vec!["read_table", "show_table"]),

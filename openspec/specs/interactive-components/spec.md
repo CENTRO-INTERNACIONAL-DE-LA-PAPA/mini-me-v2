@@ -12,13 +12,15 @@ the UI shows them below a reply's text.
 Each Interactive Component kind SHALL be hand-coded in the UI, with a kebab-case `kind` name
 and a renderer for each of its versions (positive integers). Component data SHALL come only
 from a Trait's adapter through the kind's show tool, or, for the `approval` kind, from the
-Rust core. Adding a kind SHALL NOT need a change to the event protocol, the link protocol or
-the Project database.
+Rust core; the Rust core SHALL complete a `suggestion`'s data with the passage it is based on.
+Adding a kind SHALL NOT need a change to the event protocol, the link protocol or the Project
+database.
 
 #### Scenario: Kinds in this version
 - **WHEN** the app starts
 - **THEN** the UI renders `paper-sources` version 1, `theories` version 1, `table`
-  version 1, `approval` version 1 and `chart` version 1
+  version 1, `approval` version 1, `chart` version 1, `document` version 1 and `suggestion`
+  version 1
 
 #### Scenario: Every listed kind is rendered
 - **WHEN** the app is built
@@ -324,3 +326,14 @@ document view. A card whose document no longer exists SHALL say it was removed.
 #### Scenario: Document deleted
 - **WHEN** the card's `.qmd` Asset has been removed
 - **THEN** the card says the document was removed and offers no Open
+
+### Requirement: Suggestion component
+A `suggestion` component (version 1) SHALL hold `{ document_id, base, text }`: the document, the
+passage text the suggestion is based on, and the suggested text. In a thread's messages it SHALL
+show the suggested text with "Accept and resolve", "Try again" and Discard while it waits, as
+the comment threads describe, and once answered its decision: accepted, discarded or dismissed.
+Its `text` for history SHALL be the suggested text.
+
+#### Scenario: Answered suggestion
+- **WHEN** a suggestion has been accepted
+- **THEN** it shows the suggested text, marked as accepted, without buttons or Mini-Me colour

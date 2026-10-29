@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 7;
+pub const SCHEMA_VERSION: i32 = 8;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -135,6 +135,21 @@ UPDATE assets SET (added_by_kind, added_by_id) = (
 UPDATE assets SET added_by_kind = 'user', added_by_id = COALESCE(
     (SELECT author_id FROM messages WHERE author_kind = 'user' LIMIT 1), ''
 ) WHERE added_by_kind IS NULL AND source = 'upload';
+"#,
+    r#"
+-- Comment threads: each is a Conversation about a passage of a document, shown only in the
+-- document view. The passage is anchored by UTF-16 offsets in the document's source and the
+-- text it held, which finds it again when the offsets no longer point at it.
+CREATE TABLE comment_threads (
+    conversation_id  TEXT PRIMARY KEY REFERENCES conversations(id),
+    asset_id         TEXT NOT NULL REFERENCES assets(id),
+    passage_start    INTEGER NOT NULL,
+    passage_end      INTEGER NOT NULL,
+    quote            TEXT NOT NULL,
+    resolved         INTEGER NOT NULL DEFAULT 0,
+    created_at       INTEGER NOT NULL
+);
+CREATE INDEX comment_threads_by_asset ON comment_threads(asset_id);
 "#,
 ];
 
@@ -312,6 +327,23 @@ mod tests {
         };
         assert_eq!(added_by("saved"), ("mini_me".into(), "plotter".into()));
         assert_eq!(added_by("upload"), ("user".into(), "u".into()));
+    }
+
+    #[test]
+    fn a_version_7_database_gains_comment_threads() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..7] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 7).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        conn.prepare("SELECT passage_start, passage_end, quote, resolved FROM comment_threads")
+            .unwrap();
     }
 
     #[test]

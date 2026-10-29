@@ -9,12 +9,13 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::comments;
 use crate::conversations::{self, SendMessageInput};
 use crate::error::{AppError, AppResult};
 use crate::library::{FALLBACK_MINI_ME, Library};
 use crate::user_library::LibraryStore;
 use crate::link::{CallModel, RouteMiniMe};
-use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
+use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, MessageStatus, TextComponentKind};
 use crate::runs::{RouteAnswers, RunSpec, Runs};
 use crate::store::Project;
 
@@ -61,7 +62,8 @@ impl Routing {
 
     /// Validates and persists a user message, then decides on a background thread who
     /// answers it. Fails with `reply_in_progress` while an earlier message of the
-    /// Conversation is still waiting for its decision.
+    /// Conversation is still waiting for its decision. In a comment thread, Jev is not asked:
+    /// the first Mini-Me the comment mentions answers, and a comment without one is a note.
     pub fn send(
         self: &Arc<Self>,
         calls: Arc<Runs>,
@@ -72,6 +74,26 @@ impl Routing {
         user_id: Uuid,
     ) -> AppResult<Message> {
         check_mentions(&input, &self.library.current())?;
+        if comments::is_thread(&project.lock(), conversation_id)? {
+            let message = conversations::send_message(&project, conversation_id, input, user_id)?;
+            if let Some(mini_me) = first_mention(&message) {
+                let library = self.library.current();
+                let started = self.start_reply(
+                    &library,
+                    &calls,
+                    settings.model,
+                    &project,
+                    conversation_id,
+                    &message,
+                    mini_me,
+                    Some(true),
+                );
+                if let Err(err) = started {
+                    explain(&project, conversation_id, message.id, &err);
+                }
+            }
+            return Ok(message);
+        }
         let message = {
             let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
             if pending.contains(&conversation_id) {
@@ -175,20 +197,49 @@ impl Routing {
                     }
                 }
             }
-            Err(err) => {
-                eprintln!("could not start a reply: {err}");
-                let content = format!("Couldn't start a reply: {}", err.message);
-                if let Err(err) = conversations::system_reply(
-                    project,
-                    conversation_id,
-                    message.id,
-                    ROUTING_AUTHOR,
-                    &content,
-                ) {
-                    eprintln!("could not say why there is no reply: {err}");
-                }
-            }
+            Err(err) => explain(project, conversation_id, message.id, &err),
         }
+    }
+
+    /// Dismisses the suggestion `component_id` of the thread reply `reply_id` and runs the
+    /// Mini-Me that wrote the reply again, answering the same comment with the passage as it
+    /// reads now. Fails with `reply_in_progress` while a reply in the thread runs.
+    pub fn ask_again(
+        &self,
+        calls: &Runs,
+        model: Option<CallModel>,
+        project: &Arc<Project>,
+        (reply_id, component_id): (Uuid, Uuid),
+    ) -> AppResult<()> {
+        let not_found = || AppError::not_found("Message not found");
+        let (conversation_id, reply) =
+            project.lock().load_message_with(reply_id, false)?.ok_or_else(not_found)?;
+        let comment_id = reply.reply_to.ok_or_else(not_found)?;
+        let (_, comment) =
+            project.lock().load_message_with(comment_id, false)?.ok_or_else(not_found)?;
+        let mini_me = Uuid::parse_str(&reply.author.id)
+            .map_err(|_| AppError::invalid_input("Only a Mini-Me's reply can be asked again."))?;
+        let running = [MessageStatus::Streaming, MessageStatus::Paused];
+        if !project.lock().messages_with_status(&running, Some(conversation_id))?.is_empty() {
+            return Err(AppError::new(
+                "reply_in_progress",
+                "Wait for the current reply to finish, or stop it, before asking again.",
+            ));
+        }
+        let dismissed = comments::Decision::Dismissed;
+        comments::answer_suggestion(project, reply_id, component_id, dismissed)?;
+        let library = self.library.current();
+        self.start_reply(
+            &library,
+            calls,
+            model,
+            project,
+            conversation_id,
+            &comment,
+            mini_me,
+            Some(true),
+        )?;
+        Ok(())
     }
 
     /// Starts `mini_me_id`'s reply to `message`; returns the reply's author.
@@ -212,6 +263,17 @@ impl Routing {
             RunSpec::for_mini_me(library, mini_me_id, author.clone(), input, needs_context)?;
         calls.start(Arc::clone(project), conversation_id, message, spec, model)?;
         Ok(author)
+    }
+}
+
+/// Notes under the message `message_id` why no reply could start.
+fn explain(project: &Project, conversation_id: Uuid, message_id: Uuid, err: &AppError) {
+    eprintln!("could not start a reply: {err}");
+    let content = format!("Couldn't start a reply: {}", err.message);
+    let noted =
+        conversations::system_reply(project, conversation_id, message_id, ROUTING_AUTHOR, &content);
+    if let Err(err) = noted {
+        eprintln!("could not say why there is no reply: {err}");
     }
 }
 
@@ -309,6 +371,7 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
+    use crate::comments::test_support::into_thread;
     use crate::link::{AdapterInfo, ChoiceAnswer, CoreFrame};
     use crate::protocol::{EventKind, MessageStatus, TextComponent, new_id};
     use crate::secrets::NoSecrets;
@@ -721,8 +784,9 @@ mod tests {
             )),
             _ => None,
         });
-        let tools: Vec<String> =
-            ["save_file", "show_table", "write_document"].map(String::from).to_vec();
+        let tools: Vec<String> = ["save_file", "show_table", "write_document", "suggest_edit"]
+            .map(String::from)
+            .to_vec();
         assert_eq!(
             start,
             Some(("prompt".into(), tools, json!({ "text": "hi thanks" }), Some(false)))
@@ -756,5 +820,75 @@ mod tests {
         assert_eq!(note.reply_to, Some(sent.id));
         assert_eq!(note.status, MessageStatus::Complete);
         assert!(note.content.starts_with("Couldn't start a reply"));
+    }
+
+    /// The frames of the given types the sidecar has been sent.
+    fn sent(f: &Fixture, of: impl Fn(&CoreFrame) -> bool) -> Vec<CoreFrame> {
+        f.sink.0.lock().unwrap().iter().filter(|frame| of(frame)).cloned().collect()
+    }
+
+    #[test]
+    fn a_note_in_a_thread_starts_no_run_and_asks_no_jev() {
+        let f = fixture();
+        into_thread(&f.project, f.conversation);
+        let note = f.send("check the 2024 plots too", &[], ROUTE_TIMEOUT).unwrap();
+        assert!(sent(&f, |_| true).is_empty());
+        assert!(reply_to(&f.events(), note.id).is_none());
+    }
+
+    #[test]
+    fn a_mention_in_a_thread_runs_that_mini_me_with_the_threads_history() {
+        let f = fixture();
+        into_thread(&f.project, f.conversation);
+        let mention = [("@Assistant", ASSISTANT)];
+        let comment = f.send("@Assistant shorten this", &mention, ROUTE_TIMEOUT).unwrap();
+        assert!(sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. })).is_empty());
+        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RunStart { .. }));
+        let [CoreFrame::RunStart { plan, .. }] = starts.as_slice() else {
+            panic!("expected one run.start, got {starts:?}");
+        };
+        assert_eq!((plan.mini_me.id, plan.context.needs_context), (ASSISTANT, Some(true)));
+        assert!(reply_to(&f.events(), comment.id).is_some());
+
+        let again = f.send("and the next one", &[], ROUTE_TIMEOUT).unwrap_err();
+        assert_eq!(again.code, "reply_in_progress");
+    }
+
+    #[test]
+    fn asking_again_dismisses_the_suggestion_and_answers_the_same_comment() {
+        let f = fixture();
+        into_thread(&f.project, f.conversation);
+        let mention = [("@Assistant", ASSISTANT)];
+        let comment = f.send("@Assistant shorten this", &mention, ROUTE_TIMEOUT).unwrap();
+        let reply = reply_to(&f.events(), comment.id).unwrap().id;
+        let data = json!({ "document_id": Uuid::nil(), "base": "x", "text": "y" });
+        let suggestion = ("suggestion", 1, data, "y".to_string());
+        let component = conversations::add_component(&f.project, reply, None, suggestion).unwrap();
+        let ask = |model| f.routing.ask_again(&f.calls, model, &f.project, (reply, component));
+        assert_eq!(ask(None).unwrap_err().code, "reply_in_progress");
+
+        let run_id = sent(&f, |frame| matches!(frame, CoreFrame::RunStart { .. }))
+            .into_iter()
+            .find_map(|frame| match frame {
+                CoreFrame::RunStart { run_id, .. } => Some(run_id),
+                _ => None,
+            })
+            .unwrap();
+        f.calls.handle(crate::link::SidecarFrame::RunDone { run_id });
+        let model = CallModel { provider: "dummy".into(), model: "dummy-model".into() };
+        ask(Some(model)).unwrap();
+
+        let events = f.events();
+        let answered = events.iter().any(|e| {
+            matches!(e, EventKind::ComponentAnswered { component_id, answer, .. }
+                if *component_id == component && answer["decision"] == "dismissed")
+        });
+        assert!(answered);
+        let replies = events.iter().filter(|e| match e {
+            EventKind::MessageCreated { message } => message.reply_to == Some(comment.id),
+            _ => false,
+        });
+        let replies = replies.count();
+        assert_eq!(replies, 2);
     }
 }

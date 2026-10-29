@@ -9,7 +9,7 @@ from typing import Any
 from mini_me_sidecar.context import CallContext
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import read_component
-from mini_me_sidecar.tools.documents import write_document
+from mini_me_sidecar.tools.documents import suggest_edit, write_document
 from mini_me_sidecar.tools.files import read_file, save_text_file
 from mini_me_sidecar.tools.tables import show_table
 
@@ -144,6 +144,24 @@ MODEL_TOOLS: dict[str, ModelTool] = {
                 "required": ["title", "body"],
             },
             run=write_document,
+        ),
+        ModelTool(
+            name="suggest_edit",
+            description=(
+                "Suggests new text for the passage the comment is about, which the user "
+                "accepts or rejects in the document; it does not change the document itself. "
+                "Give the whole passage as it should read, in the document's Quarto Markdown, "
+                "at most 64 KiB; an empty text suggests removing it. Returns the "
+                "suggestion's ID."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The passage as it should read."},
+                },
+                "required": ["text"],
+            },
+            run=suggest_edit,
         ),
         ModelTool(
             name="show_table",

@@ -16,10 +16,11 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::assets;
+use crate::comments;
 use crate::components;
 use crate::conversations::{self, PausedRun};
 use crate::error::{AppError, AppResult};
-use crate::history::{HISTORY_BUDGET_CHARS, history, results};
+use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
 use crate::user_library::LibraryStore;
 use crate::link::{
@@ -439,6 +440,7 @@ impl Runs {
                 conversation_id,
                 message: message.clone(),
                 needs_context: spec.needs_context,
+                document: comments::run_document(&project, conversation_id).ok().flatten(),
             },
         };
         self.lock().runs.insert(
@@ -745,6 +747,9 @@ impl Runs {
         // Titles are read after the runs lock is released, so no Project lock is taken
         // while it is held.
         runs.into_iter()
+            .filter(|(_, project, conversation_id, ..)| {
+                !comments::is_thread(&project.lock(), *conversation_id).unwrap_or(false)
+            })
             .map(|(_, project, conversation_id, message_id, mini_me, step)| RunningReply {
                 project_id: project.id,
                 project_name: project.name.clone(),
@@ -1066,9 +1071,16 @@ impl Runs {
                 let state = project.lock();
                 let messages = state.conversation_messages(place.conversation_id)?;
                 let library = self.library.current();
-                let found = results(&messages, place.answers, reply, &library, |id| {
+                let mut found = results(&messages, place.answers, reply, &library, |id| {
                     assets::find(&state, id).ok()
                 });
+                // A thread's document is part of what its comment is about.
+                if let Some(document) = comments::document_of(&state, place.conversation_id)? {
+                    found.assets.retain(|a| a.asset.id != document.id);
+                    let message_id = place.answers;
+                    let listed = ResultAsset { asset: document, message_id, current: true };
+                    found.assets.insert(0, listed);
+                }
                 Ok(serde_json::to_value(found)?)
             }
             "component.read" => {
@@ -1077,7 +1089,11 @@ impl Runs {
             }
             "component.add" => {
                 let p: ComponentAddParams = parse_params(params)?;
-                let component = (p.kind.as_str(), p.version, p.data, p.text);
+                let data = match p.kind.as_str() {
+                    "suggestion" => comments::suggestion(&project, place.conversation_id, &p.data)?,
+                    _ => p.data,
+                };
+                let component = (p.kind.as_str(), p.version, data, p.text);
                 let step_id = Some(place.step_id.as_str());
                 let id = conversations::add_component(&project, reply, step_id, component)
                     .map_err(reply_ended)?;
@@ -1246,6 +1262,7 @@ pub mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::comments::test_support::into_thread;
     use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
     use crate::library::Step;
     use crate::projects::test_support::{temp_project, user};
@@ -1630,6 +1647,18 @@ mod tests {
         result(add_component(&f, call_id, params));
 
         assert_eq!(f.message(reply).components[0].step_index, Some(1));
+    }
+
+    #[test]
+    fn a_call_in_a_thread_lists_the_threads_document_first() {
+        let f = quick();
+        let (call_id, reply) = f.start_call("echo");
+        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
+        into_thread(&f.project, conversation);
+        let listed = result(f.runs.respond("r".into(), call_id, "conversation.results", json!({})));
+        let first = &listed["assets"][0];
+        assert_eq!(first["name"], "Thread document.qmd");
+        assert_eq!(first["current"], true);
     }
 
     #[test]
@@ -2308,5 +2337,14 @@ mod tests {
         assert_eq!(f.status(reply), MessageStatus::Streaming);
         let response = f.runs.respond("r".into(), call, "secret.get", json!({ "provider": "ai2" }));
         assert_eq!(result(response)["value"], json!("ai2-token"));
+    }
+
+    #[test]
+    fn a_reply_in_a_thread_is_not_listed_as_running() {
+        let f = quick();
+        let (_, reply) = f.start("echo");
+        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
+        into_thread(&f.project, conversation);
+        assert!(f.runs.running().is_empty());
     }
 }

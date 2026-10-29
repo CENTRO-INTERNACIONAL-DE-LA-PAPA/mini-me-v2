@@ -66,10 +66,35 @@ wrote one; ask them for a report or a document.
 The document view shows the document's Quarto source beside a preview of its pages. Edit the
 source as text, including
 the title and author in its header; the buttons add bold, italic, headings, quotes and lists,
-and changes are saved as you type. The **Outline** menu jumps to a heading. The preview shows
-the pages exactly as **Export PDF** will make them; click **Render** to update it after
-editing. **Export PDF** saves a PDF of the document next to it in Files and offers to open it;
-both are made on your computer, and code in the document is shown, never run.
+and changes are saved as you type. The preview shows the pages exactly as **Export PDF** will
+make them; click **Render** to update it after editing. **Export PDF** saves a PDF of the
+document next to it in Files and offers to open it; both are made on your computer, and code in
+the document is shown, never run.
+
+### Comments and suggestions
+
+Select text in the source and click the comment button by the formatting buttons to start a
+thread on it. **Comments** shows the document's threads beside it, under **Open** and
+**Resolved**, numbered in the order their passages appear; in the source, each passage is
+underlined and followed by its number, and clicking either opens the thread. Threads follow
+their passages as you edit. One whose passage can no longer be found, for example after the
+file was changed in another editor, is listed under **Detached**. Comments are kept in the
+Project, not in the `.qmd` file.
+
+A comment is a note unless it @-mentions a Mini-Me. A mentioned Mini-Me runs its whole Workflow,
+as it would for a message, with the passage, the document's name and the thread's earlier
+comments, and answers in the thread. Mini-Mes whose Traits can suggest edits, such as Assistant
+or Scribe, may suggest new text for the passage: the source shows the passage struck through
+with the suggestion after it, and the reply offers:
+
+- **Accept and resolve**: puts the suggestion in the document and resolves the thread. If you
+  have edited the passage since, your edits are kept and combined with the suggestion; when
+  both changed the same words, nothing is applied and you can try again or discard it.
+- **Try again**: asks the same Mini-Me again with the passage as it reads now.
+- **Discard**: leaves the document as it is.
+
+**Resolve** moves a thread to Resolved, setting aside a suggestion still waiting, and
+**Reopen** brings it back. **Delete** removes the thread and its comments.
 
 ## Follow-ups
 

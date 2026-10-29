@@ -1,0 +1,45 @@
+# Tasks
+
+## 1. Threads in the core
+
+- [x] 1.1 Add schema version 8 with the `comment_threads` table (`conversation_id`, `asset_id`, `start`, `end`, `quote`, `resolved`, `created_at`) and a `comments` module that creates a thread (a Conversation plus its row) on a passage of a `.qmd` Asset and lists a document's threads; verify with inline Rust tests for creating a thread, refusing a non-document Asset, and the migration from version 7
+- [x] 1.2 Skip comment threads in every Conversation listing (sidebar list, recent Conversations, paused approvals, Overview counts, outputs and summary material, Files' "Used in", running replies) with one shared condition; verify with one inline Rust test per listing that a thread does not appear
+- [x] 1.3 Save anchors with the document: `save_document` takes `anchors: [{ thread_id, start, end }]` and stores them in the same Project lock as the text; verify with an inline Rust test that saved anchors are read back with the threads
+
+## 2. Comments and Mini-Me runs
+
+- [x] 2.1 Make `Routing::send` handle threads: for a thread's Conversation, ask no Jev, start the @-mentioned Mini-Me's run through `start_reply` with `needs_context: Some(true)`, and start nothing for a note; verify with inline Rust tests that a note starts no run, a mention starts one without a routing request, and a second comment is refused while a reply runs
+- [x] 2.2 Add `document: { asset_id, name, passage }` to the run context on both sides of the link, filled for runs in a thread from the saved document at the anchor, list the document in a thread's `conversation.results`, and raise the protocol version; verify with an inline Rust test for the run context and `cd sidecar && uv run pytest`
+- [x] 2.3 Add the document's name and passage to the prompt adapter's material when `document` is set; verify with pytest on the material builder
+
+## 3. Suggestions
+
+- [x] 3.1 Add `suggest_edit` to the sidecar (tool, model form, `TOOL_NAMES`, `MODEL_TOOL_NAMES`, 64 KiB limit), offered by the prompt adapter only when `document` is set; verify with pytest for the size limit and that the tool is not offered outside a thread
+- [x] 3.2 Complete `suggestion` components in the core on `component.add` (`{ document_id, base, text }`, refused with `not_in_thread` outside a thread); add `suggest_edit` to `library.rs`'s tool names and to *Assist* and *Summarize* in `builtin.json`; verify with inline Rust tests for the completed data, the refusal, and the library's Trait lists
+- [x] 3.3 Add `diffy` and `accept_suggestion`, `reject_suggestion` and `ask_again`: a word-level three-way merge of `base`, the current passage and `text`, saving the document and recording `accepted` on a clean merge, returning `suggestion_conflict` otherwise; verify with inline Rust tests for an unchanged passage, a separate edit (the Huancayo and Junín example), an overlapping edit, a detached thread, and Ask again starting a new reply to the same comment
+
+## 4. Resolving and deleting
+
+- [x] 4.1 Add `set_thread_resolved` and `delete_thread` (stopping a running reply, removing the thread's rows, messages, events, components, steps, reactions and paused runs, keeping Assets); verify with inline Rust tests that a deleted thread leaves no rows and its saved file stays
+- [x] 4.2 Register the new comment commands in `lib.rs` and add their types and calls to `src/protocol/types.ts` and `src/api.ts`; sending, Stop and approvals reuse `send_message`, `stop_reply` and `answer_approval`; verify `cd src-tauri && cargo test` and `npx tsc --noEmit` pass
+
+## 5. The document view
+
+- [x] 5.1 Add anchor logic in the UI: map thread ranges through editor changes, check them against their quotes on open, re-anchor a passage found once, and detach the rest; verify with `*.test.ts` for mapping, re-anchoring and detaching
+- [x] 5.2 Move ChatView's `useConversation` into its own file, and give `MessageItem` and `Composer` a compact layout for the panel's width; verify `npx tsc --noEmit` and `npm test` pass and the Conversation view looks unchanged
+- [x] 5.3 Have `list_threads` also return each thread's comment count and its pending suggestion; replace the Outline menu with the Comments button and the Comments sheet (a `ToolSheet` beside the main sheet): Open and Resolved tabs with counts, rows in passage order (number, section, passage, time), "Detached" last; verify with an inline Rust test for the new fields and in the app that the sheet shows, hides and lists threads as designed
+- [x] 5.4 Add the thread view (All comments, N of M open with previous and next, number and location such as "Hypothesis, bullet 3", who opened it and when, Resolve or Reopen and Delete beside who opened it, the messages, the one-line `Composer`), the Comment icon button by the formatting buttons, underlines and number badges that open the thread view, and deleting a thread left before its first comment; verify with a `*.test.ts` for the location and in the app that commenting, notes, an @-mentioned reply, navigation, resolving, reopening and deleting work
+- [x] 5.5 Show a pending suggestion in its Mini-Me's reply in the thread view with "Accept and resolve", "Try again" and Discard (and the conflict message when accepting fails), answered ones with their decision in the messages, and pending ones in the source as the passage struck through with the suggested text after it, underlined in the Mini-Me's colour; verify with a renderer test for each state and in the app that accepting, a merged accept, discarding and trying again behave as the specs describe
+- [x] 5.6 Offer `suggest_edit` ("Suggest edits") in the Trait editor's tool choices; verify `npx tsc --noEmit` passes
+
+## 6. Docs and checks
+
+- [x] 6.1 Update README, `docs/using.md` and DESIGN.md's document view notes as built; verify they match the app
+- [x] 6.2 Run `cd src-tauri && cargo test`, `npm test` and `cd sidecar && uv run pytest`; verify all pass
+
+## Workflow follow-up
+
+- The user verifies the change in the app.
+- Archive the change with `/opsx:archive`, syncing its specs into `openspec/specs/`.
+- Mark this change "Done" in `docs/roadmap.md` and #22 "Next".
+- Ask the user, then open the pull request into `dev`.

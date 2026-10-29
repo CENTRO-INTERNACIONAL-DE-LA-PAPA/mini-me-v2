@@ -3,13 +3,20 @@ import asyncio
 import pytest
 
 from mini_me_sidecar.tools.base import ToolError
-from mini_me_sidecar.tools.documents import document_text, file_name, write_document
+from mini_me_sidecar.tools.documents import (
+    MAX_SUGGESTION_BYTES,
+    document_text,
+    file_name,
+    suggest_edit,
+    write_document,
+)
 
 
 class Call:
     """A call context that records what the tool asks the core for."""
 
-    def __init__(self) -> None:
+    def __init__(self, document: dict | None = None) -> None:
+        self.document = document
         self.written: list[tuple[str, str, bytes]] = []
         self.components: list[tuple[str, int, dict, str]] = []
 
@@ -65,3 +72,17 @@ def test_a_document_over_2_mib_is_refused():
     with pytest.raises(ToolError, match="2 MiB"):
         asyncio.run(write_document(call, "Big", "x" * (2 * 1024 * 1024)))
     assert call.written == []
+
+
+def test_a_suggestion_is_added_only_in_a_thread_and_within_its_limit():
+    thread = Call({"asset_id": "d1", "name": "Report.qmd", "passage": "Yield fell."})
+    result = asyncio.run(suggest_edit(thread, "Yield fell sharply."))
+    assert result == {"component_id": "component-1"}
+    suggested = ("suggestion", 1, {"text": "Yield fell sharply."}, "Yield fell sharply.")
+    assert thread.components == [suggested]
+
+    with pytest.raises(ToolError) as refused:
+        asyncio.run(suggest_edit(Call(), "Yield fell sharply."))
+    assert refused.value.code == "not_in_thread"
+    with pytest.raises(ToolError):
+        asyncio.run(suggest_edit(thread, "x" * (MAX_SUGGESTION_BYTES + 1)))

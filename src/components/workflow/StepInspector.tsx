@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { PlusIcon, XIcon } from "lucide-react";
+import { ChevronRightIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { MiniMe, TraitSummary, WorkflowBranch, WorkflowStep } from "../../protocol/types";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
@@ -107,7 +107,8 @@ export function StepInspector({
                     className="text-meta font-semibold"
                     onClick={() => onOpen({ kind: "trait", id: trait.id })}
                   >
-                    Edit Trait →
+                    Edit Trait
+                    <ChevronRightIcon />
                   </Button>
                 </div>
               </MiniMeSurface>

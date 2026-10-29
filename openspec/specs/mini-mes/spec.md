@@ -40,8 +40,8 @@ placeholder Traits.
 
 #### Scenario: Components of the built-in Traits
 - **WHEN** the app starts
-- **THEN** *Assist* lists `save_file`, `show_table` and `write_document`; *Summarize*
-  `write_document`; *Find Papers* `show_papers`;
+- **THEN** *Assist* lists `save_file`, `show_table`, `write_document` and `suggest_edit`;
+  *Summarize* `write_document` and `suggest_edit`; *Find Papers* `show_papers`;
   *Theorize* `show_theories` and `save_file`; *Profile Data* `read_table` and `show_table`;
   *Validate Data*, *Clean Data* and *Join Data* `read_table`, `show_table` and `save_file`;
   *Plot* `read_table` and `show_chart`; and every other Trait lists none

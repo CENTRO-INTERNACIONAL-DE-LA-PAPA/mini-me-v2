@@ -2,9 +2,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon, PuzzleIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { MiniMe } from "../../protocol/types";
 import { surfaceStyle } from "../minime/miniMeColors";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
@@ -130,31 +131,41 @@ export function Field({
   );
 }
 
-/** A Delete button that asks once more before calling `onDelete`. */
-export function DeleteButton({ onDelete }: { onDelete: () => void }) {
+/** A Delete button that asks `question` in a popover below it before calling `onDelete`. Keep,
+ * Escape and clicking outside all close it, and Keep has the focus. `variant` styles the button,
+ * such as `mini-me` to stand out on a grey background. */
+export function DeleteButton({
+  question,
+  onDelete,
+  variant = "outline",
+}: {
+  question: string;
+  onDelete: () => void;
+  variant?: "outline" | "mini-me";
+}) {
   const [asking, setAsking] = useState(false);
-  if (!asking) {
-    return (
-      <Button variant="outline" onClick={() => setAsking(true)}>
-        Delete
-      </Button>
-    );
-  }
+  const keep = useRef<HTMLButtonElement>(null);
   return (
-    <>
-      <Button variant="ghost" onClick={() => setAsking(false)}>
-        Keep
-      </Button>
-      <Button
-        variant="destructive"
-        onClick={() => {
-          setAsking(false);
-          onDelete();
-        }}
-      >
-        Delete for good
-      </Button>
-    </>
+    <Popover open={asking} onOpenChange={setAsking}>
+      <PopoverTrigger render={<Button variant={variant} />}>Delete</PopoverTrigger>
+      <PopoverContent align="end" initialFocus={keep}>
+        <p>{question}</p>
+        <div className="flex justify-end gap-2">
+          <Button ref={keep} variant="ghost" onClick={() => setAsking(false)}>
+            Keep
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setAsking(false);
+              onDelete();
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
