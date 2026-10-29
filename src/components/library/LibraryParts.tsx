@@ -179,7 +179,7 @@ export function TraitIcon({ size = 42 }: { size?: number }) {
   return (
     <span
       aria-hidden
-      className="flex shrink-0 items-center justify-center rounded-well border border-border bg-muted"
+      className="flex shrink-0 items-center justify-center rounded-well bg-muted"
       style={{ width: size, height: size }}
     >
       <PuzzleIcon className="size-[18px]" strokeWidth={1.6} />
@@ -248,7 +248,7 @@ export function MiniMeCard({
           <MiniMeAvatar miniMe={miniMe} size={56} />
           <Badge
             variant="outline"
-            className="h-auto border-transparent bg-card px-2.5 py-[3px] text-meta text-(--mm-ink,var(--ink-2)) border border-edge"
+            className="h-auto border border-card-edge bg-card px-2.5 py-[3px] text-meta text-(--mm-ink,var(--ink-2))"
           >
             {miniMe.built_in ? "Built-in" : "Yours"}
           </Badge>

@@ -20,7 +20,7 @@ export function FileTile({
       aria-hidden
       style={surfaceStyle(miniMe?.colors)}
       className={cn(
-        "flex shrink-0 items-center justify-center border border-edge bg-tint text-(--mm-ink,var(--ink-2))",
+        "flex shrink-0 items-center justify-center bg-tint text-(--mm-ink,var(--ink-2))",
         size === "sm" ? "size-8 rounded-lg" : "size-[42px] rounded-well",
       )}
     >

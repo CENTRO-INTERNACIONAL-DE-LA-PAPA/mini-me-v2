@@ -68,7 +68,7 @@ function ImageAttachment({
 
   return (
     <figure className="relative w-20">
-      <div className="size-20 overflow-hidden rounded-lg border border-border bg-muted">
+      <div className="size-20 overflow-hidden rounded-lg bg-muted">
         {url && <img src={url} alt={asset.name} className="size-full object-cover" />}
       </div>
       <figcaption className="mt-1 truncate text-meta text-muted-foreground" title={asset.name}>

@@ -221,7 +221,7 @@ export function AppSidebar({
           <UpdateStatusLine />
         </div>
         {/* The Mini-Mes stack opens the Library; your avatar opens Settings. */}
-        <div className="flex items-center gap-1 rounded-well border border-border bg-card p-1">
+        <div className="flex items-center gap-1 rounded-well bg-card p-1">
           <Button
             variant="ghost"
             aria-pressed={["library", "mini-me", "trait"].includes(view.kind)}

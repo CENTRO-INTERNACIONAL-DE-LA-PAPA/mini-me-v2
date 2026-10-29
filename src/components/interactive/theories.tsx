@@ -113,7 +113,7 @@ function Theories({ data }: { data: unknown }) {
   const { theories, references } = data as { theories: Theory[]; references: Reference[] };
   const prefix = `ref-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
   return (
-    <div className="overflow-hidden rounded-xl bg-card border border-edge">
+    <div className="overflow-hidden rounded-xl border border-card-edge bg-card">
       {theories.map((theory, index) => (
         <TheorySection key={index} theory={theory} number={index + 1} prefix={prefix} />
       ))}

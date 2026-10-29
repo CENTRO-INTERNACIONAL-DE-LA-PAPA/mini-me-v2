@@ -208,7 +208,7 @@ function FileRow({
         {by?.kind === "user" ? (
           <span className="flex items-center gap-2">
             {name && (
-              <span className="flex size-4 items-center justify-center rounded-full border border-border bg-muted text-[7px] font-semibold">
+              <span className="flex size-4 items-center justify-center rounded-full bg-muted text-[7px] font-semibold">
                 {initials(name)}
               </span>
             )}

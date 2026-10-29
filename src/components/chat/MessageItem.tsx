@@ -198,7 +198,7 @@ export const MessageItem = memo(function MessageItem({
   if (fromUser) {
     return (
       <article data-message-id={message.id} className="flex max-w-[520px] flex-col items-end gap-1.5 self-end">
-        <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] border border-border bg-muted px-[15px] py-[11px] text-foreground">
+        <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] bg-muted [--card-edge:transparent] px-[15px] py-[11px] text-foreground">
           {text}
           {attachments}
           {reactionPills}

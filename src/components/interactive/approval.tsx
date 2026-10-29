@@ -43,7 +43,7 @@ function Approval({ data, answer, projectId, messageId, componentId, replyStatus
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl bg-card border border-edge px-4 py-3">
+    <div className="flex flex-col gap-3 rounded-xl border border-card-edge bg-card px-4 py-3">
       <p className="text-ui text-foreground">{prompt}</p>
       <div className="flex gap-2">
         <Button onClick={() => respond(true)} disabled={sending}>

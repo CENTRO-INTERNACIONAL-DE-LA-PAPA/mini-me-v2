@@ -63,6 +63,9 @@
     --color-wash: var(--mm-wash, var(--muted));
     --color-tint: var(--mm-tint, var(--muted));
     --color-edge: var(--mm-edge, var(--border));
+    /* A white card's outline: the edge on white, and none on a surface of another colour,
+       which sets `--card-edge` to transparent (`Card`, `MiniMeSurface`). */
+    --color-card-edge: var(--card-edge, var(--color-edge));
     --color-mm-ink: var(--mm-ink, var(--muted-foreground));
     --color-dash: var(--dash);
     --color-chev: var(--chev);
