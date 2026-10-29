@@ -14,7 +14,7 @@ use crate::store::ProjectState;
 pub const MAX_DATA_BYTES: usize = 2 * 1024 * 1024;
 
 /// Kinds only the core creates, such as the approval a paused Workflow waits on.
-const CORE_KINDS: [&str; 1] = ["approval"];
+const CORE_KINDS: [&str; 2] = ["approval", "document-edits"];
 
 /// Refuses a component of a kind only the core creates (`component_not_allowed`), and one
 /// with an empty `text` or `data` larger than `MAX_DATA_BYTES` (`invalid_component`).

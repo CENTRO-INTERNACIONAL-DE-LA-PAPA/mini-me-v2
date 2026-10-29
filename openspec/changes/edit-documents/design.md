@@ -67,15 +67,15 @@ events as a reply (`message.created` with status complete, `component.added`), s
 thread view shows them live. No run starts in the thread.
 
 Then `conversations::add_component` adds `document-edits` `{ asset_id, title, threads }` to the
-reply, with the text "Suggested N edits to <title>" for history; `title` is the document's
-header title, or its file name without `.qmd`. `component.add` refuses `document-edits` from a
+reply, with the text "Suggested N edits to <title>" for history; `title` is the document's file
+name without `.qmd`. `component.add` refuses `document-edits` from a
 Trait call (`component_not_allowed`), as it does `approval`.
 
 ### Who opened a thread (schema v9)
 `comment_threads` gains `opened_from TEXT NULL`, the Conversation a thread was opened from.
-`CommentThread` gains `opened_by: Author` (the user, or the author of its first message when
-`opened_from` is set) and `opened_from: { conversation_id, title } | null`, where `title` is
-null once that Conversation is gone. The thread view shows "Opened by you", "Opened by Scribe ·
+`CommentThread` gains `opened_from: { conversation_id, title, by } | null`: null for a thread
+the user started, else the Conversation, its title (null once it is gone) and `by`, the author
+of the thread's first message. The thread view shows "Opened by you", "Opened by Scribe ·
 from Trial design" with the title as a link, or "Opened by Scribe". The link calls `App`'s
 `onNavigate` with `{ kind: "conversation", id }`, passed down to `DocumentView` beside `onClose`.
 

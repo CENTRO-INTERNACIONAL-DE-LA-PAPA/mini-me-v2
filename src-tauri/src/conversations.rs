@@ -251,9 +251,20 @@ pub fn add_component(
     project: &Project,
     message_id: Uuid,
     step_id: Option<&str>,
+    component: (&str, u32, serde_json::Value, String),
+) -> AppResult<Uuid> {
+    components::check(component.0, &component.2, &component.3)?;
+    add_core_component(project, message_id, step_id, component)
+}
+
+/// Adds a component the core itself makes, of a kind `add_component` refuses from a Trait, to
+/// a streaming reply; returns its new ID.
+pub fn add_core_component(
+    project: &Project,
+    message_id: Uuid,
+    step_id: Option<&str>,
     (kind, version, data, text): (&str, u32, serde_json::Value, String),
 ) -> AppResult<Uuid> {
-    components::check(kind, &data, &text)?;
     let mut state = project.lock();
     let conversation = streaming_reply(&state, message_id)?;
     let step_index = match step_id {

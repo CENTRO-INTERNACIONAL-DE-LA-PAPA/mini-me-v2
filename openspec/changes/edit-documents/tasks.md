@@ -6,9 +6,9 @@
 
 ## 2. Threads opened from a Conversation (core)
 
-- [ ] 2.1 Add schema version 9 with `comment_threads.opened_from`, and have `list_threads` return each thread's `opened_by` and `opened_from { conversation_id, title }` (title null once that Conversation is deleted); verify with inline Rust tests for the migration from version 8 and the listed fields for a user's thread and a Mini-Me's
-- [ ] 2.2 Add `comments::edit_document`: check the document is referenced or attached in the answered message, the call is not in a thread, each `find` occurs once, no edits overlap and each `replace` is at most 64 KiB; then open one thread per edit (the Mini-Me's completed message with its reason and a `suggestion`) and add the `document-edits` component to the reply; verify with inline Rust tests for a successful edit (threads, messages, suggestions, card, unchanged file), each refusal leaving nothing behind, and UTF-16 offsets after non-ASCII text
-- [ ] 2.3 Answer `document.edit` in `Runs::answer`, refuse `document-edits` in `component.add`, and add `edit_document` to `library.rs`'s tool names and to *Assist* and *Summarize* in `builtin.json`; verify with inline Rust tests for the request, the refusal and the library's Trait lists
+- [x] 2.1 Add schema version 9 with `comment_threads.opened_from`, and have `list_threads` return each thread's `opened_from { conversation_id, title, by }` (null for a thread the user started; title null once that Conversation is gone); verify with inline Rust tests for the migration from version 8 and a user's thread (a Mini-Me's is tested with 2.2)
+- [x] 2.2 Add `comments::edit_document`: check the document is referenced or attached in the answered message, the call is not in a thread, each `find` occurs once, no edits overlap and each `replace` is at most 64 KiB; then open one thread per edit (the Mini-Me's completed message with its reason and a `suggestion`) and add the `document-edits` component to the reply; verify with inline Rust tests for a successful edit (threads, messages, suggestions, card, unchanged file), each refusal leaving nothing behind, and UTF-16 offsets after non-ASCII text
+- [x] 2.3 Answer `document.edit` in `Runs::answer`, refuse `document-edits` in `component.add`, and add `edit_document` to `library.rs`'s tool names and to *Assist* and *Summarize* in `builtin.json`; verify with inline Rust tests for the request, the refusal and the library's Trait lists
 
 ## 3. The tool (sidecar)
 

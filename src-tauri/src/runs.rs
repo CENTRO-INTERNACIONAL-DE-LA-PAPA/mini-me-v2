@@ -232,6 +232,12 @@ struct ComponentAddParams {
 }
 
 #[derive(Deserialize)]
+struct DocumentEditParams {
+    asset_id: Uuid,
+    edits: Vec<comments::DocumentEdit>,
+}
+
+#[derive(Deserialize)]
 struct ComponentReadParams {
     component_id: Uuid,
 }
@@ -1099,6 +1105,19 @@ impl Runs {
                     .map_err(reply_ended)?;
                 Ok(json!({ "component_id": id }))
             }
+            "document.edit" => {
+                let p: DocumentEditParams = parse_params(params)?;
+                let call = comments::EditingCall {
+                    conversation_id: place.conversation_id,
+                    answers: place.answers,
+                    reply,
+                    author: &place.author,
+                    step_id: Some(place.step_id.as_str()),
+                };
+                let edited = comments::edit_document(&project, &call, p.asset_id, &p.edits)
+                    .map_err(reply_ended)?;
+                Ok(serde_json::to_value(edited)?)
+            }
             other => Err(AppError::new(
                 "unknown_method",
                 format!("The core has no request method called '{other}'."),
@@ -1617,6 +1636,26 @@ mod tests {
 
     fn add_component(f: &Fixture, call_id: Uuid, params: Value) -> CoreFrame {
         f.runs.respond("r".into(), call_id, "component.add", params)
+    }
+
+    #[test]
+    fn a_call_can_ask_to_edit_only_a_document_its_message_references() {
+        let f = quick();
+        let (call_id, _) = f.start_call("echo");
+        let report = crate::documents::create(&f.project, "Report", None, &user()).unwrap();
+        let edit = json!({ "find": "Report", "replace": "Trial report", "reason": "Clearer." });
+        let params = json!({ "asset_id": report.id, "edits": [edit] });
+        let refused = f.runs.respond("r".into(), call_id, "document.edit", params);
+        assert_eq!(error_code(refused).as_deref(), Some("document_not_referenced"));
+    }
+
+    #[test]
+    fn a_trait_cannot_add_a_document_edits_card() {
+        let f = quick();
+        let (call_id, _) = f.start_call("echo");
+        let params = json!({ "kind": "document-edits", "version": 1, "data": {}, "text": "t" });
+        let refused = add_component(&f, call_id, params);
+        assert_eq!(error_code(refused).as_deref(), Some("component_not_allowed"));
     }
 
     #[test]
