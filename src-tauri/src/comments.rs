@@ -334,6 +334,48 @@ pub fn create(
     Ok(thread)
 }
 
+/// Resolves the thread `conversation_id`, which hides it until "Show resolved", or reopens it.
+pub fn set_resolved(project: &Project, conversation_id: Uuid, resolved: bool) -> AppResult<()> {
+    let changed = project.lock().conn.execute(
+        "UPDATE comment_threads SET resolved = ?1 WHERE conversation_id = ?2",
+        params![resolved, conversation_id.to_string()],
+    )?;
+    if changed == 0 {
+        return Err(AppError::not_found("Comment thread not found"));
+    }
+    Ok(())
+}
+
+/// Deletes the thread `conversation_id` with its comments, replies and their suggestions, in
+/// one transaction. Files its replies saved stay in the Project. A running reply must be
+/// stopped first, as `conversations::stop_reply` does.
+pub fn delete(project: &Project, conversation_id: Uuid) -> AppResult<()> {
+    let state = project.lock();
+    if thread_of(&state, conversation_id)?.is_none() {
+        return Err(AppError::not_found("Comment thread not found"));
+    }
+    let messages = "SELECT id FROM messages WHERE conversation_id = ?1";
+    let tx = state.conn.unchecked_transaction()?;
+    for statement in [
+        format!(
+            "UPDATE overview SET featured_component = NULL WHERE featured_component IN \
+             (SELECT id FROM components WHERE message_id IN ({messages}))"
+        ),
+        format!("DELETE FROM paused_runs WHERE message_id IN ({messages})"),
+        format!("DELETE FROM reactions WHERE message_id IN ({messages})"),
+        format!("DELETE FROM message_steps WHERE message_id IN ({messages})"),
+        format!("DELETE FROM components WHERE message_id IN ({messages})"),
+        "DELETE FROM messages WHERE conversation_id = ?1".to_string(),
+        "DELETE FROM events WHERE conversation_id = ?1".to_string(),
+        "DELETE FROM comment_threads WHERE conversation_id = ?1".to_string(),
+        "DELETE FROM conversations WHERE id = ?1".to_string(),
+    ] {
+        tx.execute(&statement, params![conversation_id.to_string()])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 /// The threads of the document `asset_id`, in the order of their passages.
 pub fn list(project: &Project, asset_id: Uuid) -> AppResult<Vec<CommentThread>> {
     threads_where(&project.lock(), "asset_id = ?1", asset_id)
@@ -562,6 +604,30 @@ mod tests {
         std::fs::write(assets::file_path(&project, document).unwrap(), "Rewritten.").unwrap();
         let error = accept_suggestion(&project, answer.0, answer.1).unwrap_err();
         assert_eq!(error.code, "suggestion_detached");
+    }
+
+    #[test]
+    fn a_resolved_thread_can_be_reopened_and_a_deleted_one_leaves_no_rows() {
+        let (_dir, project) = temp_project();
+        let (document, thread, (reply, _)) = suggested(&project, SENTENCE, "Huancayo", "Junín");
+        set_resolved(&project, thread.conversation_id, true).unwrap();
+        assert!(list(&project, document).unwrap()[0].resolved);
+        set_resolved(&project, thread.conversation_id, false).unwrap();
+        assert!(!list(&project, document).unwrap()[0].resolved);
+
+        let file = ("notes.txt", "", b"x".as_slice());
+        let saved = conversations::attach_generated(&project, reply, &user(), file).unwrap();
+        delete(&project, thread.conversation_id).unwrap();
+        assert!(list(&project, document).unwrap().is_empty());
+        let state = project.lock();
+        for table in ["conversations", "messages", "events", "components"] {
+            let count = format!("SELECT COUNT(*) FROM {table}");
+            let rows: i64 = state.conn.query_row(&count, [], |row| row.get(0)).unwrap();
+            assert_eq!(rows, 0, "{table}");
+        }
+        assert!(assets::find(&state, saved.id).is_ok());
+        drop(state);
+        assert_eq!(delete(&project, thread.conversation_id).unwrap_err().code, "not_found");
     }
 
     #[test]

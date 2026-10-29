@@ -3,8 +3,10 @@ import type { OpenedConversation } from "./protocol/eventStore";
 import type {
   AppError,
   Ai2Status,
+  AcceptedSuggestion,
   AiSettings,
   Anchor,
+  CommentThread,
   AssetRef,
   KeyAccount,
   ConversationSummary,
@@ -26,6 +28,7 @@ import type {
   SavedDefinition,
   SendMessageInput,
   SidecarStatus,
+  SuggestionDecision,
   TraitDraft,
   UpdateStatus,
   UserProfile,
@@ -115,6 +118,30 @@ export const api = {
   /** Saves the document's text, and moves its comment threads to `anchors`. */
   saveDocument: (project_id: Uuid, asset_id: Uuid, text: string, anchors: Anchor[] = []) =>
     invoke<void>("save_document", { project_id, asset_id, text, anchors }),
+  /** Starts a comment thread on `start..end` of a document's source, which reads `quote`. Its
+   * comments go through `sendMessage` on the thread's `conversation_id`. */
+  createThread: (project_id: Uuid, asset_id: Uuid, start: number, end: number, quote: string) =>
+    invoke<CommentThread>("create_thread", { project_id, asset_id, start, end, quote }),
+  listThreads: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<CommentThread[]>("list_threads", { project_id, asset_id }),
+  setThreadResolved: (project_id: Uuid, thread_id: Uuid, resolved: boolean) =>
+    invoke<void>("set_thread_resolved", { project_id, thread_id, resolved }),
+  /** Stops the thread's running reply, if any, then deletes the thread. */
+  deleteThread: (project_id: Uuid, thread_id: Uuid) =>
+    invoke<void>("delete_thread", { project_id, thread_id }),
+  /** Applies a suggestion to the saved document; fails with `suggestion_conflict` when the
+   * user's edits and the suggestion change the same words. */
+  acceptSuggestion: (project_id: Uuid, message_id: Uuid, component_id: Uuid) =>
+    invoke<AcceptedSuggestion>("accept_suggestion", { project_id, message_id, component_id }),
+  answerSuggestion: (
+    project_id: Uuid,
+    message_id: Uuid,
+    component_id: Uuid,
+    decision: Exclude<SuggestionDecision, "accepted">,
+  ) => invoke<void>("answer_suggestion", { project_id, message_id, component_id, decision }),
+  /** Dismisses a suggestion and runs its Mini-Me again on the passage as it reads now. */
+  askAgain: (project_id: Uuid, message_id: Uuid, component_id: Uuid) =>
+    invoke<void>("ask_again", { project_id, message_id, component_id }),
   /** Drafts the new document `asset_id` from a Conversation, calling `onEvent` as text arrives.
    * Resolves once the draft has ended and what was written is saved; rejects with why it
    * stopped early. */

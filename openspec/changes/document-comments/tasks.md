@@ -20,8 +20,8 @@
 
 ## 4. Resolving and deleting
 
-- [ ] 4.1 Add `set_thread_resolved` and `delete_thread` (stopping a running reply, removing the thread's rows, messages, events, components, steps, reactions and paused runs, keeping Assets); verify with inline Rust tests that a deleted thread leaves no rows and its saved file stays
-- [ ] 4.2 Register the new comment commands in `lib.rs` and add their types and calls to `src/protocol/types.ts` and `src/api.ts`; sending, Stop and approvals reuse `send_message`, `stop_reply` and `answer_approval`; verify `cd src-tauri && cargo test` and `npx tsc --noEmit` pass
+- [x] 4.1 Add `set_thread_resolved` and `delete_thread` (stopping a running reply, removing the thread's rows, messages, events, components, steps, reactions and paused runs, keeping Assets); verify with inline Rust tests that a deleted thread leaves no rows and its saved file stays
+- [x] 4.2 Register the new comment commands in `lib.rs` and add their types and calls to `src/protocol/types.ts` and `src/api.ts`; sending, Stop and approvals reuse `send_message`, `stop_reply` and `answer_approval`; verify `cd src-tauri && cargo test` and `npx tsc --noEmit` pass
 
 ## 5. The document view
 

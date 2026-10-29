@@ -209,6 +209,28 @@ export interface FileEntry extends AssetRef {
   used_in: ConversationRef[];
 }
 
+/** A comment thread on a passage of a document: a Conversation shown only in the document
+ * view. `start` and `end` are UTF-16 offsets in the source; `quote` is the passage's text when
+ * the thread was last anchored. */
+export interface CommentThread {
+  conversation_id: Uuid;
+  asset_id: Uuid;
+  start: number;
+  end: number;
+  quote: string;
+  resolved: boolean;
+  created_at: number;
+}
+
+/** What the user decided about a suggestion. */
+export type SuggestionDecision = "accepted" | "rejected" | "dismissed";
+
+/** A document after a suggestion was accepted: its text and its threads, anchored anew. */
+export interface AcceptedSuggestion {
+  text: string;
+  threads: CommentThread[];
+}
+
 /** Where a comment thread's passage is now: UTF-16 offsets in the document's source. */
 export interface Anchor {
   thread_id: Uuid;
