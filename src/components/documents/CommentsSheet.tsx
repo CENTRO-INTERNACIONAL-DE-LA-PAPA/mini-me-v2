@@ -280,7 +280,13 @@ function ThreadView({
               </Button>
             )
           )}
-          <DeleteButton onDelete={onDelete} variant="mini-me" />
+          <DeleteButton
+            question={`Delete this thread and its ${thread.comments} comment${
+              thread.comments === 1 ? "" : "s"
+            }?`}
+            onDelete={onDelete}
+            variant="mini-me"
+          />
         </div>
       </div>
       {state.messages.length > 0 && (

@@ -114,7 +114,9 @@ export function TraitEditor({
     )
   ) : (
     <>
-      {saved && !library.unreadable && <DeleteButton onDelete={remove} />}
+      {saved && !library.unreadable && (
+        <DeleteButton question={`Delete ${draft.name}? This can't be undone.`} onDelete={remove} />
+      )}
       <Button disabled={readOnly} onClick={save}>
         Save
       </Button>
