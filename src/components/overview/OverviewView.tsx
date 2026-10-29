@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   BookOpenIcon,
   ChartColumnIcon,
+  ChevronRightIcon,
   FileIcon,
   LightbulbIcon,
   RefreshCwIcon,
@@ -153,7 +154,8 @@ export function OverviewView({ project, onOpenConversation, onOpenFiles }: Props
           title="Latest outputs"
           actions={
             <Button variant="link" className="text-meta text-muted-foreground" onClick={onOpenFiles}>
-              Open Files →
+              Open Files
+              <ChevronRightIcon />
             </Button>
           }
         >
