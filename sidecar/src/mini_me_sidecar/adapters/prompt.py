@@ -123,7 +123,7 @@ class Prompt(Adapter):
                 "input_too_large",
                 f"This is {len(text):,} characters; the limit is {MAX_MATERIAL_CHARS:,}.",
             )
-        material = _material(text, await ctx.results(), ctx.message, ctx.document)
+        material = _material(text, await ctx.results(), ctx.message, ctx.document, ctx.file)
         earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []
         key = await ctx.secret(model.provider)
         instructions = _system_prompt(ctx.mini_me_name, bool(ctx.steps), ctx.trait.instructions)
@@ -316,11 +316,14 @@ def _material(
     results: dict[str, Any],
     message: dict[str, Any] | None = None,
     document: dict[str, Any] | None = None,
+    picked: dict[str, Any] | None = None,
 ) -> str:
     """The user prompt: for a comment, the passage of `document` it is about; then `text`, the
-    Conversation's files and components with their IDs, newest first, and the components
-    `message` references with `$`, all without their content."""
+    Conversation's files and components with their IDs, newest first, marking `picked`,
+    routing's pick of the file the user means, and the components `message` references with
+    `$`, all without their content."""
     files = (results.get("assets") or [])[:MAX_LISTED]
+    picked_id = (picked or {}).get("asset_id")
     components = (results.get("components") or [])[:MAX_LISTED]
     parts = []
     if document:
@@ -334,6 +337,7 @@ def _material(
         lines = [
             f"- {f.get('name')} (ID: {f.get('id')})"
             + (" — in this message" if f.get("current") else "")
+            + (" — probably the file the user means" if f.get("id") == picked_id else "")
             for f in files
         ]
         parts.append("Files in this Conversation:\n" + "\n".join(lines))

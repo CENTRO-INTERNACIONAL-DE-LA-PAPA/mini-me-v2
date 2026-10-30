@@ -27,6 +27,7 @@ from mini_me_sidecar.adapters.data.tables import (
     NO_TABLE,
     Table,
     column_type,
+    fallback_source,
     table_file,
     table_sources,
 )
@@ -89,7 +90,8 @@ async def clean(ctx: CallContext, text: str) -> None:
 
 
 async def join_tables(ctx: CallContext, text: str) -> None:
-    tables = await read_tables(ctx, text)
+    # Joining needs two tables the user chose, so one guessed table would not help.
+    tables = await read_tables(ctx, text, fallback=False)
     if len(tables) < 2:
         raise TraitError("two_tables", "Reference or attach two tables to join.")
     left, right = tables[0], tables[1]
@@ -160,13 +162,22 @@ async def plot(ctx: CallContext, text: str) -> None:
     _write_ignored(ctx, ignored, "Not drawn")
 
 
-async def read_tables(ctx: CallContext, text: str) -> list[Table]:
-    """Every table the call's message points to, in order. Fails when there is none."""
+async def read_tables(ctx: CallContext, text: str, fallback: bool = True) -> list[Table]:
+    """Every table the call's message points to, in order. When it points to none and
+    `fallback` is set, the picked file or the Conversation's newest table, named in the reply.
+    Fails when there is none."""
+    sources = table_sources(ctx.message)
+    if not sources and fallback:
+        found = fallback_source(ctx.file, (await ctx.results()).get("assets") or [])
+        if found is not None:
+            source, note = found
+            ctx.write(note + "\n\n")
+            sources = [source]
     tables = [
         await read_reference(ctx, source.reference)
         if source.reference is not None
         else await read_table(ctx, str(source.asset_id), source.name, text)
-        for source in table_sources(ctx.message)
+        for source in sources
     ]
     if not tables:
         raise TraitError("no_table", NO_TABLE)

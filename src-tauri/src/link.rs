@@ -12,7 +12,7 @@ use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 11;
+pub const SIDECAR_PROTOCOL: u32 = 12;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -55,9 +55,20 @@ pub struct RunContext {
     /// a decision.
     #[serde(default)]
     pub needs_context: Option<bool>,
+    /// The file routing picked as the one the message means, for a message that tags and
+    /// attaches none; `None` without a pick.
+    #[serde(default)]
+    pub file: Option<RunFile>,
     /// The document a comment thread is about, for a run answering a comment in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document: Option<RunDocument>,
+}
+
+/// An Asset of the Conversation, as a run's picked file.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunFile {
+    pub asset_id: Uuid,
+    pub name: String,
 }
 
 /// A comment thread's document: its Asset, its name, and the thread's passage as it reads when
@@ -106,6 +117,13 @@ pub struct RouteMiniMe {
     pub description: String,
 }
 
+/// An option of Jev's `file` question: an Asset of the Conversation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouteFile {
+    pub id: Uuid,
+    pub name: String,
+}
+
 /// Jev's answer to one Choice question.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChoiceAnswer {
@@ -140,7 +158,9 @@ pub enum CoreFrame {
         route_id: Uuid,
         state: Value,
         mini_mes: Vec<RouteMiniMe>,
-        /// The question IDs to ask: `mini_me`, `reaction`, `needs_context`.
+        /// The options of the `file` question, newest first; empty when it is not asked.
+        files: Vec<RouteFile>,
+        /// The question IDs to ask: `mini_me`, `reaction`, `needs_context`, `file`.
         ask: Vec<String>,
     },
     /// Asks for a summary of a Project's Conversations; `material` is their text.

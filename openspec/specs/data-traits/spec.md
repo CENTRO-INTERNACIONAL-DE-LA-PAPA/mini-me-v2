@@ -20,6 +20,12 @@ with `$` SHALL fail with a message saying the Trait reads tables, naming the cha
 read through `asset.read` only, so Project-folder confinement holds, and an Asset larger
 than 100 MiB is refused.
 
+When the message points to no table, every data Trait except Join Data SHALL read one table
+instead: the reply's picked file when it is a table file, and otherwise the newest table
+file of the Conversation. Its reply SHALL start by naming that file and saying why it was
+used. The Conversation's files are the Assets attached to or referenced by its messages, so
+the fallback never reaches other files of the Project.
+
 #### Scenario: CSV referenced
 - **WHEN** the user sends "@Profiler #field-trial.csv"
 - **THEN** Profiler reads `field-trial.csv` as a table
@@ -31,9 +37,30 @@ than 100 MiB is refused.
   `harvest.xlsx`
 
 #### Scenario: No table
-- **WHEN** the message references no CSV, TSV or Excel file and no table
+- **WHEN** the message references no CSV, TSV or Excel file and no table, there is no
+  picked file, and the Conversation holds no table file
 - **THEN** the reply fails with a message asking to reference a file with `#` or a table
   with `$`, or to attach a file
+
+#### Scenario: Picked file
+- **WHEN** Curator saved `field-trial-cleaned.csv` from `field-trial.csv`, the user sends
+  "@Validator check the cleaned data", and Jev picks `field-trial-cleaned.csv`
+- **THEN** Validator checks `field-trial-cleaned.csv`, and its reply says it used that file
+  because the message seems to mean it
+
+#### Scenario: Newest table of the Conversation
+- **WHEN** a message tagged `harvest.csv`, the user then sends "@Plotter compare average
+  yield by variety", and there is no picked file
+- **THEN** Plot draws from `harvest.csv`, and its reply says it used that file because it
+  is the newest table in the Conversation
+
+#### Scenario: Picked file is not a table
+- **WHEN** the picked file is `notes.txt` and the Conversation holds `harvest.csv`
+- **THEN** the Trait reads `harvest.csv` as the newest table of the Conversation
+
+#### Scenario: Join Data needs both tables tagged
+- **WHEN** the user sends "@Linker join the two tables" without references
+- **THEN** Join Data fails as before, asking for the tables to be referenced
 
 #### Scenario: Unreadable file
 - **WHEN** a referenced `.csv` cannot be parsed as a table
