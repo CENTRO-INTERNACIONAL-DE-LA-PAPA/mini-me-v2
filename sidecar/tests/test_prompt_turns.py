@@ -70,9 +70,9 @@ def test_the_conversations_files_and_components_are_listed_without_content():
 
 def test_suggest_edit_is_offered_only_in_a_thread_and_edit_document_only_outside():
     listed = ("save_file", "suggest_edit", "edit_document")
-    reads = ["read_file", "read_component"]
-    assert _offered(listed, in_thread=False) == [*reads, "save_file", "edit_document"]
-    assert _offered(listed, in_thread=True) == [*reads, "save_file", "suggest_edit"]
+    defaults = ["read_file", "read_component", "hand_off"]
+    assert _offered(listed, in_thread=False) == [*defaults, "save_file", "edit_document"]
+    assert _offered(listed, in_thread=True) == [*defaults, "save_file", "suggest_edit"]
 
 
 def test_a_comment_comes_after_the_passage_it_is_about():

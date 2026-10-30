@@ -11,10 +11,11 @@ pub const FALLBACK_MINI_ME: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8
 pub const SCRIBE: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8e1f0d7b01);
 
 /// Every tool a Trait may list; the sidecar's `tools` package knows the same names.
-pub const TOOLS: [&str; 11] = [
+pub const TOOLS: [&str; 12] = [
     "read_file",
     "read_table",
     "read_component",
+    "hand_off",
     "save_file",
     "write_document",
     "suggest_edit",
@@ -25,8 +26,8 @@ pub const TOOLS: [&str; 11] = [
     "show_theories",
 ];
 
-/// The tools a prompt-based Trait may list: those with a form for models. The read tools are
-/// offered to every prompt-based Trait, so it does not list them.
+/// The tools a prompt-based Trait may list: those with a form for models. The read tools and
+/// hand-off are offered to every prompt-based Trait, so it does not list them.
 pub const MODEL_TOOLS: [&str; 5] =
     ["save_file", "show_table", "write_document", "suggest_edit", "edit_document"];
 

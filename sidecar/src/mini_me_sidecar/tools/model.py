@@ -10,6 +10,7 @@ from mini_me_sidecar.context import CallContext
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import read_component
 from mini_me_sidecar.tools.documents import edit_document, suggest_edit, write_document
+from mini_me_sidecar.tools.hand_offs import hand_off
 from mini_me_sidecar.tools.files import read_file, save_text_file
 from mini_me_sidecar.tools.tables import show_table
 
@@ -229,6 +230,28 @@ MODEL_TOOLS: dict[str, ModelTool] = {
                 },
             },
             run=show_table,
+        ),
+        ModelTool(
+            name="hand_off",
+            description=(
+                "Hands part of the user's request to another Mini-Me, which answers after your "
+                "reply as if the user had asked it. Use it only for work another Mini-Me does "
+                "clearly better than you, at most once, and call it before you write your "
+                "answer; say in your reply what you handed off. `mini_me` is a name from "
+                "\"Mini-Mes you can hand off to\". Keep `request` to one short sentence: the "
+                "other Mini-Me sees the Conversation. Give `file` as the ID of the "
+                "Conversation's file it needs, if any."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "mini_me": {"type": "string"},
+                    "request": {"type": "string"},
+                    "file": {"type": "string"},
+                },
+                "required": ["mini_me", "request"],
+            },
+            run=hand_off,
         ),
     ]
 }

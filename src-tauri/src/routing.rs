@@ -306,7 +306,7 @@ impl Routing {
 }
 
 /// Notes under the message `message_id` why no reply could start.
-fn explain(project: &Project, conversation_id: Uuid, message_id: Uuid, err: &AppError) {
+pub fn explain(project: &Project, conversation_id: Uuid, message_id: Uuid, err: &AppError) {
     eprintln!("could not start a reply: {err}");
     let content = format!("Couldn't start a reply: {}", err.message);
     let noted =

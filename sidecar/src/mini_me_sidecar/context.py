@@ -105,6 +105,9 @@ class CallContext:
         # Routing's pick of the Conversation's file the message means, `{ asset_id, name }`,
         # for a message that tags none; None without a pick.
         self.file: dict[str, Any] | None = context.get("file")
+        # Every Mini-Me of the library, `{ id, name, description }`, which the model may hand
+        # off to.
+        self.mini_mes: list[dict[str, Any]] = context.get("mini_mes") or []
         # For a call answering a comment: the thread's document, `{ asset_id, name, passage }`.
         self.document: dict[str, Any] | None = context.get("document")
         # The Mini-Me whose reply this call writes, which tells its own replies from others'.
@@ -230,6 +233,16 @@ class CallContext:
         )
         self._results = None
         return result
+
+    async def hand_off(self, mini_me_id: str, request: str, asset_id: str | None) -> None:
+        """Asks the core to hand `request` and the file `asset_id` to the Mini-Me `mini_me_id`
+        once the reply completes. Raises `CoreRequestError` when the core refuses, for example
+        because the reply already hands off."""
+        await self._requests.send(
+            self.call_id,
+            "reply.hand_off",
+            {"mini_me_id": mini_me_id, "request": request, "asset_id": asset_id},
+        )
 
     async def write_asset(self, name: str, media_type: str, data: bytes) -> dict[str, Any]:
         """Saves `data` (at most 32 MiB) in the Project as the file `name`, attaches it to the
