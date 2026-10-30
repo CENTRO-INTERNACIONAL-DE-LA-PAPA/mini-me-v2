@@ -178,6 +178,12 @@ export const api = {
     on_status.onmessage = onStatus;
     return invoke<void>("subscribe_sidecar_status", { on_status });
   },
+  /** Why Mini-Mes are not chosen automatically, or null while Jev chooses them. */
+  subscribeRoutingWarning: (onWarning: (warning: string | null) => void) => {
+    const on_warning = new Channel<string | null>();
+    on_warning.onmessage = onWarning;
+    return invoke<void>("subscribe_routing_warning", { on_warning });
+  },
   /** Starts the sidecar again after it stopped. */
   restartSidecar: () => invoke<void>("restart_sidecar"),
 

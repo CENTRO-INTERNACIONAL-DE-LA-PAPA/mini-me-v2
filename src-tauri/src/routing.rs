@@ -51,18 +51,63 @@ struct Decision {
     needs_context: Option<bool>,
 }
 
+/// The warnings shown while Jev cannot choose, so the fallback Mini-Me answers every message
+/// without a mention.
+const NO_KEY: &str = "Mini-Mes aren't chosen automatically: there is no Typesafe key. Add one \
+    in Settings → Accounts.";
+const NOT_ANSWERING: &str = "Mini-Mes aren't chosen automatically: Typesafe isn't answering. \
+    Assistant answers until it does.";
+
+type WarningSink = Box<dyn Fn(Option<&str>) -> bool + Send>;
+
 pub struct Routing {
     library: Arc<LibraryStore>,
     /// Conversations whose latest message is waiting for a routing decision.
     pending: Mutex<HashSet<Uuid>>,
+    /// Why Jev cannot choose right now, if it cannot.
+    warning: Mutex<Option<&'static str>>,
+    subscribers: Mutex<Vec<WarningSink>>,
 }
 
 impl Routing {
-    pub fn new(library: Arc<LibraryStore>) -> Arc<Self> {
+    /// `has_key` is whether a Typesafe key is saved.
+    pub fn new(library: Arc<LibraryStore>, has_key: bool) -> Arc<Self> {
         Arc::new(Self {
             library,
             pending: Mutex::new(HashSet::new()),
+            warning: Mutex::new((!has_key).then_some(NO_KEY)),
+            subscribers: Mutex::new(Vec::new()),
         })
+    }
+
+    /// Sends the current warning to `sink` and then every change. `sink` returns `false`
+    /// when it is gone.
+    pub fn subscribe(&self, sink: WarningSink) {
+        let warning = self.warning.lock().unwrap_or_else(|p| p.into_inner());
+        if sink(*warning) {
+            self.subscribers
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(sink);
+        }
+    }
+
+    /// Clears the warning when a Typesafe key is saved, which the next route confirms, and
+    /// warns when it is removed.
+    pub fn key_saved(&self, saved: bool) {
+        self.warn(if saved { None } else { Some(NO_KEY) });
+    }
+
+    fn warn(&self, next: Option<&'static str>) {
+        let mut warning = self.warning.lock().unwrap_or_else(|p| p.into_inner());
+        if *warning == next {
+            return;
+        }
+        *warning = next;
+        self.subscribers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .retain(|sink| sink(next));
     }
 
     /// Validates and persists a user message, then decides on a background thread who
@@ -170,6 +215,9 @@ impl Routing {
             ) {
                 eprintln!("could not store Jev's answers: {err}");
             }
+        }
+        if let Some(warning) = warning_after(&routed) {
+            self.warn(warning);
         }
         let answers = match routed {
             Ok(answers) => Some(answers),
@@ -299,6 +347,17 @@ fn recent(messages: &[Message], before: Uuid, library: &Library) -> Value {
         })
         .collect();
     json!(turns)
+}
+
+/// The warning a route's outcome calls for, or `None` to keep the current one. A stopped
+/// runtime keeps it, since the sidecar's own status explains that.
+fn warning_after(routed: &AppResult<RouteAnswers>) -> Option<Option<&'static str>> {
+    match routed {
+        Ok(_) => Some(None),
+        Err(err) if err.code == "sidecar_stopped" => None,
+        Err(err) if err.code == "secret_unavailable" => Some(Some(NO_KEY)),
+        Err(_) => Some(Some(NOT_ANSWERING)),
+    }
 }
 
 /// Turns Jev's answers (`None` when Jev could not be asked) into who answers, the reaction
@@ -576,6 +635,26 @@ mod tests {
     }
 
     #[test]
+    fn a_warning_shows_until_routing_works_again() {
+        let routing = Routing::new(LibraryStore::builtin(), false);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let log = Arc::clone(&seen);
+        routing.subscribe(Box::new(move |w| {
+            log.lock().unwrap().push(w.map(str::to_string));
+            true
+        }));
+        let failed = |code: &str| Err(AppError::new(code, ""));
+        for routed in [failed("jev_timeout"), failed("sidecar_stopped"), Ok(RouteAnswers::new())] {
+            if let Some(warning) = warning_after(&routed) {
+                routing.warn(warning);
+            }
+        }
+        routing.key_saved(false);
+        let expected = [Some(NO_KEY), Some(NOT_ANSWERING), None, Some(NO_KEY)];
+        assert_eq!(*seen.lock().unwrap(), expected.map(|w| w.map(str::to_string)));
+    }
+
+    #[test]
     fn unknown_mentions_are_rejected() {
         let library = Library::builtin();
         let mut input = SendMessageInput {
@@ -641,7 +720,7 @@ mod tests {
             conversation,
             calls,
             sink,
-            routing: Routing::new(library),
+            routing: Routing::new(library, true),
         }
     }
 

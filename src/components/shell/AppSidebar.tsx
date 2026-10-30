@@ -43,7 +43,8 @@ import type {
 } from "../../protocol/types";
 import { formatRelative } from "../../lib/format";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
-import { SidecarStatusLine, useSidecarStatus } from "./SidecarStatusLine";
+import { RoutingWarningLine } from "./RoutingWarningLine";
+import { SidecarStatusLine, sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
 import { UpdateStatusLine } from "./UpdateStatusLine";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import type { View } from "./view";
@@ -218,6 +219,7 @@ export function AppSidebar({
       <SidebarFooter className="gap-3 px-3.5 pb-3.5">
         <div className="grid gap-2 px-2">
           <SidecarStatusLine status={sidecar} />
+          {sidecarReady(sidecar) && <RoutingWarningLine />}
           <UpdateStatusLine />
         </div>
         {/* The Mini-Mes stack opens the Library; your avatar opens Settings. */}

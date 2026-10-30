@@ -46,6 +46,9 @@ const DRAFT_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
 /// How long making a PDF may take.
 const EXPORT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
+/// The key account Jev's routing uses.
+const TYPESAFE: &str = "typesafe";
+
 pub struct AppState {
     config_dir: PathBuf,
     /// Whether this app is Mini-Me Dev, which has Developer mode on until the user turns it off.
@@ -122,7 +125,10 @@ impl AppState {
             config_dir,
             open_projects: Mutex::new(HashMap::new()),
             runs,
-            routing: Routing::new(Arc::clone(&library)),
+            routing: Routing::new(
+                Arc::clone(&library),
+                KeychainSecrets::saved().iter().any(|k| k == TYPESAFE),
+            ),
             library,
             profile,
             sidecar,
@@ -477,19 +483,31 @@ pub async fn ai2_sign_out(state: State<'_, AppState>) -> AppResult<()> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn save_api_key(provider: String, key: String) -> AppResult<()> {
+pub async fn save_api_key(
+    state: State<'_, AppState>,
+    provider: String,
+    key: String,
+) -> AppResult<()> {
     if provider == crate::ai2::AI2_ACCOUNT {
         return Err(AppError::invalid_input("The Ai2 account is managed by signing in and out."));
     }
-    KeychainSecrets::save(&provider, &key)
+    KeychainSecrets::save(&provider, &key)?;
+    if provider == TYPESAFE {
+        state.routing.key_saved(true);
+    }
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn remove_api_key(provider: String) -> AppResult<()> {
+pub async fn remove_api_key(state: State<'_, AppState>, provider: String) -> AppResult<()> {
     if provider == crate::ai2::AI2_ACCOUNT {
         return Err(AppError::invalid_input("The Ai2 account is managed by signing in and out."));
     }
-    KeychainSecrets::remove(&provider)
+    KeychainSecrets::remove(&provider)?;
+    if provider == TYPESAFE {
+        state.routing.key_saved(false);
+    }
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -570,6 +588,19 @@ pub async fn subscribe_sidecar_status(
     state
         .sidecar
         .subscribe(Box::new(move |status| on_status.send(status.clone()).is_ok()));
+    Ok(())
+}
+
+/// Sends why Mini-Mes are not chosen automatically, or `None` while Jev chooses them, now and
+/// on every change.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn subscribe_routing_warning(
+    state: State<'_, AppState>,
+    on_warning: Channel<Option<String>>,
+) -> AppResult<()> {
+    state
+        .routing
+        .subscribe(Box::new(move |warning| on_warning.send(warning.map(str::to_string)).is_ok()));
     Ok(())
 }
 
