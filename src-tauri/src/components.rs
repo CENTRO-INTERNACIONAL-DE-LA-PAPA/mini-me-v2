@@ -13,8 +13,9 @@ use crate::store::ProjectState;
 /// The most bytes a component's `data` may take as JSON.
 pub const MAX_DATA_BYTES: usize = 2 * 1024 * 1024;
 
-/// Kinds only the core creates, such as the approval a paused Workflow waits on.
-const CORE_KINDS: [&str; 2] = ["approval", "document-edits"];
+/// Kinds only the core creates, such as the approval a paused Workflow waits on and a
+/// reply's hand-off.
+const CORE_KINDS: [&str; 3] = ["approval", "document-edits", "hand-off"];
 
 /// Refuses a component of a kind only the core creates (`component_not_allowed`), and one
 /// with an empty `text` or `data` larger than `MAX_DATA_BYTES` (`invalid_component`).
@@ -81,6 +82,7 @@ mod tests {
     fn an_approval_from_a_trait_is_refused() {
         let err = check("approval", &json!({}), "t").unwrap_err();
         assert_eq!(err.code, "component_not_allowed");
+        assert_eq!(check("hand-off", &json!({}), "t").unwrap_err().code, "component_not_allowed");
     }
 
     #[test]

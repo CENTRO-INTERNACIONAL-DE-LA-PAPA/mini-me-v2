@@ -86,7 +86,8 @@
           "steps": []
         },
         "needs_context": false,
-        "file": null
+        "file": null,
+        "mini_mes": []
       },
       "resume": { "state": "eyJmb3JtYXQiOjF9", "step_id": "ask", "approved": true }
     },

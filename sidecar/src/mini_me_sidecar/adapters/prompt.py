@@ -21,7 +21,7 @@ from langchain_core.messages import (
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, chat_model, provider_error
 from mini_me_sidecar.context import CallContext, Model, TraitError
-from mini_me_sidecar.tools import CONVERSATION_TOOLS, READ_TOOLS, THREAD_TOOLS
+from mini_me_sidecar.tools import CONVERSATION_TOOLS, DEFAULT_TOOLS, THREAD_TOOLS
 
 MAX_MATERIAL_CHARS = 400_000
 
@@ -123,7 +123,9 @@ class Prompt(Adapter):
                 "input_too_large",
                 f"This is {len(text):,} characters; the limit is {MAX_MATERIAL_CHARS:,}.",
             )
-        material = _material(text, await ctx.results(), ctx.message, ctx.document, ctx.file)
+        material = _material(
+            text, await ctx.results(), ctx.message, ctx.document, ctx.file, ctx.mini_mes
+        )
         earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []
         key = await ctx.secret(model.provider)
         instructions = _system_prompt(ctx.mini_me_name, bool(ctx.steps), ctx.trait.instructions)
@@ -185,10 +187,10 @@ async def _converse(
 
 
 def _offered(listed: tuple[str, ...], in_thread: bool) -> list[str]:
-    """The names of the tools offered to the model: the read tools, then those its Trait
+    """The names of the tools offered to the model: the default tools, then those its Trait
     lists, leaving out the tools that act on a comment thread outside one and those that act
     from a Conversation inside one."""
-    names = [*READ_TOOLS, *(t for t in listed if t not in READ_TOOLS)]
+    names = [*DEFAULT_TOOLS, *(t for t in listed if t not in DEFAULT_TOOLS)]
     left_out = CONVERSATION_TOOLS if in_thread else THREAD_TOOLS
     return [n for n in names if n not in left_out]
 
@@ -317,11 +319,12 @@ def _material(
     message: dict[str, Any] | None = None,
     document: dict[str, Any] | None = None,
     picked: dict[str, Any] | None = None,
+    mini_mes: list[dict[str, Any]] | None = None,
 ) -> str:
     """The user prompt: for a comment, the passage of `document` it is about; then `text`, the
     Conversation's files and components with their IDs, newest first, marking `picked`,
-    routing's pick of the file the user means, and the components `message` references with
-    `$`, all without their content."""
+    routing's pick of the file the user means, the components `message` references with `$`,
+    all without their content, and the Mini-Mes `mini_mes` the model may hand off to."""
     files = (results.get("assets") or [])[:MAX_LISTED]
     picked_id = (picked or {}).get("asset_id")
     components = (results.get("components") or [])[:MAX_LISTED]
@@ -361,6 +364,9 @@ def _material(
             "Components referenced in this message, to read with read_component:\n"
             + "\n".join(lines)
         )
+    if mini_mes:
+        lines = [f"- {m.get('name')}: {m.get('description')}" for m in mini_mes]
+        parts.append("Mini-Mes you can hand off to:\n" + "\n".join(lines))
     return "\n\n".join(p for p in parts if p)
 
 

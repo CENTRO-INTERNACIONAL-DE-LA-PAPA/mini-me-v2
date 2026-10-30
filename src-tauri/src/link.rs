@@ -12,7 +12,7 @@ use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 12;
+pub const SIDECAR_PROTOCOL: u32 = 13;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -59,6 +59,9 @@ pub struct RunContext {
     /// attaches none; `None` without a pick.
     #[serde(default)]
     pub file: Option<RunFile>,
+    /// Every Mini-Me of the library, which a call's model may hand off to.
+    #[serde(default)]
+    pub mini_mes: Vec<RouteMiniMe>,
     /// The document a comment thread is about, for a run answering a comment in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document: Option<RunDocument>,
