@@ -168,7 +168,7 @@ pub fn results(
 }
 
 /// A reply's Mini-Me name, or "Mini-Me" when the library no longer has it.
-fn author_name(message: &Message, library: &Library) -> String {
+pub fn author_name(message: &Message, library: &Library) -> String {
     Uuid::parse_str(&message.author.id)
         .ok()
         .and_then(|id| library.mini_me(id))
