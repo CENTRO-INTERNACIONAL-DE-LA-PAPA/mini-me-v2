@@ -48,14 +48,12 @@
 ## 6. Checks
 
 - [x] 6.1 `cd src-tauri && cargo test`, `npm test` and `cd sidecar && uv run pytest` pass
-- [ ] 6.2 In the app: "@Assistant what's in #field-trial.csv? Ask Profiler to profile it" shows
+- [x] 6.2 In the app: "@Assistant what's in #field-trial.csv? Ask Profiler to profile it" shows
   a hand-off card on Assistant's reply, then Profiler's profile of `field-trial.csv`
-- [ ] 6.3 In the app: "find papers on late blight and plot #harvest.csv" sent to Assistant
+- [x] 6.3 In the app: "find papers on late blight and plot #harvest.csv" sent to Assistant
   hands off one part and shows the card
-- [ ] 6.4 In the app: "@Skeptic the sky is blue" gets one reply and no hand-off
+- [x] 6.4 In the app: "@Skeptic the sky is blue" gets one reply and no hand-off
 
 ## Workflow follow-up
 
-- Open a follow-up issue: Jev decides that a message needs a second Mini-Me, and the core
-  starts it after a Mini-Me whose reply is fixed.
 - Archive the change with `/opsx:archive`, syncing the delta specs into `openspec/specs/`.
