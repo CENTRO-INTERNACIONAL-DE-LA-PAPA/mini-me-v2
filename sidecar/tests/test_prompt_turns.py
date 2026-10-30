@@ -64,6 +64,8 @@ def test_the_conversations_files_and_components_are_listed_without_content():
     assert "- trial.csv (ID: a2)\n" in material
     assert material.endswith("- table from Curator (ID: c1)")
     assert _material("hello", {"assets": [], "components": []}) == "hello"
+    picked = _material("summarize the trial", results, None, None, {"asset_id": "a2"})
+    assert "- trial.csv (ID: a2) — probably the file the user means" in picked
 
 
 def test_suggest_edit_is_offered_only_in_a_thread_and_edit_document_only_outside():

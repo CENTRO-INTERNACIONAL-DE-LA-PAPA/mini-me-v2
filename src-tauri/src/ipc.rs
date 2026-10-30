@@ -25,7 +25,7 @@ use crate::library::{MiniMe, MiniMeSummary, TraitSummary};
 use crate::user_library::{LibraryStore, Skipped, TraitDraft};
 use crate::user_profile::{ProfileStore, UserProfile};
 use crate::overview;
-use crate::routing::{ROUTE_TIMEOUT, RouteSettings, Routing};
+use crate::routing::{REACTION_CHANCE, ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
 use crate::settings::{AiSettings, HomeSettings, Settings};
@@ -279,6 +279,7 @@ pub async fn send_message(
         timeout: ROUTE_TIMEOUT,
         // Jev's raw answers are a developer aid, kept only while Developer mode is on.
         show_answers: settings.routing.show_answers && state.developer_mode(),
+        reaction_chance: REACTION_CHANCE,
     };
     state.routing.send(
         Arc::clone(&state.runs),

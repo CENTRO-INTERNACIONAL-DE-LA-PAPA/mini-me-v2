@@ -462,7 +462,7 @@ function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged
       </Section>
       <Section
         title="Choosing a Mini-Me"
-        description="When you don't mention a Mini-Me, Typesafe's Jev chooses one. Your message's text and the names of its files are sent to Typesafe, with the start of the last few messages and who wrote them; file contents are not."
+        description="When you don't mention a Mini-Me, Typesafe's Jev chooses one. Your message's text, the names of the Conversation's files, and the start of the last few messages and who wrote them are sent to Typesafe; file contents are not."
       >
         <ul className="grid gap-2">
           <KeyRow

@@ -79,6 +79,24 @@ def table_sources(message: dict[str, Any]) -> list[TableSource]:
     return sources
 
 
+def fallback_source(
+    picked: dict[str, Any] | None, assets: list[dict[str, Any]]
+) -> tuple[TableSource, str] | None:
+    """The table to read when the message points to none, with a note saying which and why:
+    `picked`, routing's `{ asset_id, name }`, when it is a table file, else the first table
+    file of `assets`, the Conversation's Assets newest first. None when neither has one."""
+    if picked and str(picked.get("name", "")).lower().endswith(TABLE_EXTENSIONS):
+        name = str(picked["name"])
+        source = TableSource(asset_id=str(picked.get("asset_id")), name=name)
+        return source, f"Used `{name}`, the file your message seems to mean."
+    for asset in assets:
+        name = str(asset.get("name", ""))
+        if name.lower().endswith(TABLE_EXTENSIONS):
+            source = TableSource(asset_id=str(asset.get("id")), name=name)
+            return source, f"Used `{name}`, the newest table in this Conversation."
+    return None
+
+
 def parse_table(name: str, data: bytes, text: str = "") -> Table:
     """Parses one file by its extension. For Excel, reads the sheet whose name appears in
     `text`, else the first."""

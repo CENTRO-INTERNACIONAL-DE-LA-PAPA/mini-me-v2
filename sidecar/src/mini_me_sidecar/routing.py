@@ -1,6 +1,6 @@
 """Routing decisions from Typesafe's Jev: which Mini-Me answers a message, whether it reacts,
-and whether the message needs earlier context. Each `route.start` gets exactly one
-`route.done` or `route.error`."""
+whether the message needs earlier context, and which of the Conversation's files it means.
+Each `route.start` gets exactly one `route.done` or `route.error`."""
 
 import asyncio
 import sys
@@ -25,7 +25,16 @@ REACTIONS = {
     "😄": "The user expresses happiness or excitement",
     "😡": "The user expresses anger or frustration",
     "😢": "The user expresses sadness or disappointment",
-    "🥔": "The message contains the word 'potato' or 'solanum"
+    "🥔": "The message contains the word 'potato' or 'solanum'",
+    "🤔": "The user is puzzled by a result or unsure whether something is right",
+    "😮": "The user is surprised by a result",
+    "💪": "The user is determined, or encourages the assistant to keep going",
+    "🌱": "The message is about planting, seedlings, sprouting or the start of a field season",
+    "😅": "The user admits a mistake or laughs at a setback",
+    "🙏": "The user apologizes or asks for patience",
+    "☕": "The user mentions a break, coffee or a long day",
+    "🧪": "The message is about running an experiment or lab work",
+    "🌧️": "The message is about rain, drought or weather affecting the field",
 }
 
 NEEDS_CONTEXT = {
@@ -63,7 +72,9 @@ class Router:
 
     async def _ask(self, route_id: str, frame: dict[str, Any]) -> dict[str, Any]:
         key = await self._requests.send(route_id, "secret.get", {"provider": "typesafe"})
-        questions = _questions(frame.get("ask") or [], frame.get("mini_mes") or [])
+        questions = _questions(
+            frame.get("ask") or [], frame.get("mini_mes") or [], frame.get("files") or []
+        )
         async with AsyncTypeSafeClient(
             api_key=key["value"],
             model=JEV_MODEL,
@@ -89,7 +100,9 @@ class Router:
             task.cancel()
 
 
-def _questions(ask: list[str], mini_mes: list[dict[str, Any]]) -> dict[str, Any]:
+def _questions(
+    ask: list[str], mini_mes: list[dict[str, Any]], files: list[dict[str, Any]]
+) -> dict[str, Any]:
     available = {
         "mini_me": lambda: Choice(
             instructions="Which assistant should answer the user's message?",
@@ -105,6 +118,13 @@ def _questions(ask: list[str], mini_mes: list[dict[str, Any]]) -> dict[str, Any]
             instructions="Does answering this message need the earlier messages of the "
             "conversation?",
             criteria=NEEDS_CONTEXT,
+        ),
+        "file": lambda: Choice(
+            instructions="Which of the conversation's files does the user's message mean?",
+            criteria={
+                **{str(f.get("id")): f"The file {f.get('name')}" for f in files},
+                "none": "The message is not about one of these files",
+            },
         ),
     }
     return {name: available[name]() for name in ask if name in available}

@@ -85,7 +85,8 @@
           "components": [],
           "steps": []
         },
-        "needs_context": false
+        "needs_context": false,
+        "file": null
       },
       "resume": { "state": "eyJmb3JtYXQiOjF9", "step_id": "ask", "approved": true }
     },
@@ -101,6 +102,7 @@
           "description": "Summarizes your messages and the files you reference"
         }
       ],
+      "files": [],
       "ask": ["mini_me", "reaction", "needs_context"]
     },
     {

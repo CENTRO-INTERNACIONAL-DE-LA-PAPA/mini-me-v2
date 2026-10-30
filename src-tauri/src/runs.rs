@@ -24,8 +24,8 @@ use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
 use crate::user_library::LibraryStore;
 use crate::link::{
-    AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, RouteMiniMe, RunContext, RunMiniMe,
-    RunPlan, RunResume, RunTrait, SidecarFrame,
+    AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, RouteFile, RouteMiniMe, RunContext,
+    RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame,
 };
 use crate::protocol::{Author, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
@@ -90,10 +90,13 @@ pub struct RunSpec {
     pub input: Value,
     /// The routing decision's answer to whether the message needs earlier context.
     pub needs_context: Option<bool>,
+    /// The file the routing decision picked as the one the message means.
+    pub file: Option<RunFile>,
 }
 
 impl RunSpec {
-    /// The run of `mini_me_id`'s Workflow, with the Traits it uses from `library`.
+    /// The run of `mini_me_id`'s Workflow, with the Traits it uses from `library`, and no
+    /// picked file.
     pub fn for_mini_me(
         library: &Library,
         mini_me_id: Uuid,
@@ -111,6 +114,7 @@ impl RunSpec {
             traits: library.workflow_traits(&mini_me.workflow).into_iter().cloned().collect(),
             input,
             needs_context,
+            file: None,
         })
     }
 
@@ -446,6 +450,7 @@ impl Runs {
                 conversation_id,
                 message: message.clone(),
                 needs_context: spec.needs_context,
+                file: spec.file.clone(),
                 document: comments::run_document(&project, conversation_id).ok().flatten(),
             },
         };
@@ -477,16 +482,18 @@ impl Runs {
     }
 
     /// Asks the sidecar for Jev's answers to the `ask` questions about `state`, waiting at
-    /// most `timeout`. Fails with the sidecar's error, `jev_timeout`, or `sidecar_stopped`.
+    /// most `timeout`; `mini_mes` and `files` are the options of the `mini_me` and `file`
+    /// questions. Fails with the sidecar's error, `jev_timeout`, or `sidecar_stopped`.
     pub fn route(
         &self,
         state: Value,
         mini_mes: Vec<RouteMiniMe>,
+        files: Vec<RouteFile>,
         ask: Vec<String>,
         timeout: Duration,
     ) -> AppResult<RouteAnswers> {
         let route_id = new_id();
-        let frame = CoreFrame::RouteStart { route_id, state, mini_mes, ask };
+        let frame = CoreFrame::RouteStart { route_id, state, mini_mes, files, ask };
         let no_answer = NoAnswer {
             not_ready: "Mini-Me's runtime is not ready.",
             timeout: ("jev_timeout", "Typesafe did not answer in time."),
@@ -1266,6 +1273,7 @@ pub mod test_support {
             traits: vec![trait_def],
             input,
             needs_context: None,
+            file: None,
         }
     }
 
@@ -2053,7 +2061,8 @@ mod tests {
     ) -> (Uuid, std::thread::JoinHandle<AppResult<RouteAnswers>>) {
         let runs = Arc::clone(&f.runs);
         let handle = std::thread::spawn(move || {
-            runs.route(json!({ "message": "hi" }), Vec::new(), vec!["reaction".into()], timeout)
+            let ask = vec!["reaction".into()];
+            runs.route(json!({ "message": "hi" }), Vec::new(), Vec::new(), ask, timeout)
         });
         let route_id = loop {
             let found = f.sink.frames().into_iter().find_map(|frame| match frame {

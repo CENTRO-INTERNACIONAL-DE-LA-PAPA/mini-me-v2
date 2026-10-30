@@ -1,6 +1,7 @@
-//! Which Mini-Me answers a user message, whether it also reacts to it, and whether the
-//! message needs earlier context, as decided by Typesafe's Jev. When Jev is unsure or cannot
-//! be asked, the fallback Mini-Me answers.
+//! Which Mini-Me answers a user message, whether it also reacts to it, whether the message
+//! needs earlier context, and which of the Conversation's files it means when it tags none, as
+//! decided by Typesafe's Jev. When Jev is unsure or cannot be asked, the fallback Mini-Me
+//! answers.
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -9,13 +10,14 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::assets;
 use crate::comments;
 use crate::conversations::{self, SendMessageInput};
 use crate::error::{AppError, AppResult};
-use crate::history::author_name;
+use crate::history::{author_name, results};
 use crate::library::{FALLBACK_MINI_ME, Library};
 use crate::user_library::LibraryStore;
-use crate::link::{CallModel, RouteMiniMe};
+use crate::link::{CallModel, RouteFile, RouteMiniMe, RunFile};
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
 use crate::runs::{RouteAnswers, RunSpec, Runs};
 use crate::store::Project;
@@ -24,7 +26,13 @@ use crate::store::Project;
 pub const ROUTE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The reactions Jev may choose besides `none`.
-const REACTIONS: [&str; 7] = ["👍", "🎉", "💛", "😄", "😡", "😢", "🥔"];
+const REACTIONS: [&str; 16] = [
+    "👍", "🎉", "💛", "😄", "😡", "😢", "🥔", "🤔", "😮", "💪", "🌱", "😅", "🙏", "☕", "🧪", "🌧️",
+];
+
+/// The share of Jev's confident reactions that are added, so that a Conversation about one
+/// topic does not get the same reaction on every message.
+pub const REACTION_CHANCE: f64 = 0.5;
 
 /// How many earlier messages Jev sees, and how many characters of each.
 const RECENT_TURNS: usize = 4;
@@ -38,6 +46,8 @@ pub struct RouteSettings {
     pub timeout: Duration,
     /// Store Jev's raw answers with the message (a developer setting).
     pub show_answers: bool,
+    /// The share of confident reactions that are added, from 0 to 1.
+    pub reaction_chance: f64,
 }
 
 /// The author ID of the notes that say why a message got no reply.
@@ -49,6 +59,8 @@ struct Decision {
     answerer: Uuid,
     reaction: Option<String>,
     needs_context: Option<bool>,
+    /// The Conversation's file the message means, when it tags none.
+    file: Option<RunFile>,
 }
 
 /// The warnings shown while Jev cannot choose, so the fallback Mini-Me answers every message
@@ -137,6 +149,7 @@ impl Routing {
                     &message,
                     mini_me,
                     Some(true),
+                    None,
                 );
                 if let Err(err) = started {
                     explain(&project, conversation_id, message.id, &err);
@@ -193,8 +206,13 @@ impl Routing {
             })
             .collect();
         let messages = project.lock().conversation_messages(conversation_id).unwrap_or_default();
+        let files = file_options(project, &messages, message, &library);
+        if !files.is_empty() {
+            ask.push("file".to_string());
+        }
         let recent = recent(&messages, message.id, &library);
-        let routed = calls.route(state(message, recent), mini_mes, ask, settings.timeout);
+        let state = state(message, recent);
+        let routed = calls.route(state, mini_mes, files.clone(), ask, settings.timeout);
         if settings.show_answers {
             let (answers, error) = match &routed {
                 Ok(answers) => (json!(answers), None),
@@ -226,10 +244,13 @@ impl Routing {
                 None
             }
         };
+        let reacts = draw() < settings.reaction_chance;
         let decision = decide(
             answers.as_ref(),
             mentioned,
+            &files,
             settings.threshold,
+            reacts,
             &library,
         );
         let started = self.start_reply(
@@ -241,6 +262,7 @@ impl Routing {
             message,
             decision.answerer,
             decision.needs_context,
+            decision.file,
         );
         match started {
             Ok(author) => {
@@ -256,7 +278,8 @@ impl Routing {
         }
     }
 
-    /// Starts `mini_me_id`'s reply to `message`; returns the reply's author.
+    /// Starts `mini_me_id`'s reply to `message`, with `file` as its picked file; returns the
+    /// reply's author.
     fn start_reply(
         &self,
         library: &Library,
@@ -267,14 +290,16 @@ impl Routing {
         message: &Message,
         mini_me_id: Uuid,
         needs_context: Option<bool>,
+        file: Option<RunFile>,
     ) -> AppResult<Author> {
         let author = Author {
             kind: AuthorKind::MiniMe,
             id: mini_me_id.to_string(),
         };
         let input = json!({ "text": input_text(message) });
-        let spec =
+        let mut spec =
             RunSpec::for_mini_me(library, mini_me_id, author.clone(), input, needs_context)?;
+        spec.file = file;
         calls.start(Arc::clone(project), conversation_id, message, spec, model)?;
         Ok(author)
     }
@@ -360,13 +385,47 @@ fn warning_after(routed: &AppResult<RouteAnswers>) -> Option<Option<&'static str
     }
 }
 
-/// Turns Jev's answers (`None` when Jev could not be asked) into who answers, the reaction
-/// and the context answer. A confidence equal to the threshold passes; below it, or without
-/// an answer, the fallback Mini-Me answers.
+/// The options of Jev's `file` question: the Conversation's Assets, newest first, or none
+/// when `message` references or attaches a file of its own, which always wins.
+fn file_options(
+    project: &Project,
+    messages: &[Message],
+    message: &Message,
+    library: &Library,
+) -> Vec<RouteFile> {
+    if !conversations::file_names(message).is_empty() {
+        return Vec::new();
+    }
+    let state = project.lock();
+    let found = results(messages, message.id, message.id, library, |id| {
+        assets::find(&state, id).ok()
+    });
+    found
+        .assets
+        .into_iter()
+        .map(|a| RouteFile {
+            id: a.asset.id,
+            name: a.asset.name,
+        })
+        .collect()
+}
+
+/// A random number from 0 up to 1, taken from the random bits of a new UUIDv7.
+fn draw() -> f64 {
+    let (_, random) = Uuid::now_v7().as_u64_pair();
+    (random & ((1 << 53) - 1)) as f64 / (1u64 << 53) as f64
+}
+
+/// Turns Jev's answers (`None` when Jev could not be asked) into who answers, the reaction,
+/// the context answer and the picked file, one of `files`. A confidence equal to the
+/// threshold passes; below it, or without an answer, the fallback Mini-Me answers and no file
+/// is picked. A confident reaction is kept only when `reacts`.
 fn decide(
     answers: Option<&RouteAnswers>,
     mentioned: Option<Uuid>,
+    files: &[RouteFile],
     threshold: f64,
+    reacts: bool,
     library: &Library,
 ) -> Decision {
     let answer = |question: &str| answers.and_then(|a| a.get(question));
@@ -379,16 +438,25 @@ fn decide(
 
     let reaction = answer("reaction")
         .filter(|r| r.confidence >= threshold && REACTIONS.contains(&r.choice.as_str()))
+        .filter(|_| reacts)
         .map(|r| r.choice.clone());
     let needs_context = answer("needs_context").and_then(|c| match c.choice.as_str() {
         "yes" => Some(true),
         "no" => Some(false),
         _ => None,
     });
+    let file = answer("file")
+        .filter(|f| f.confidence >= threshold)
+        .and_then(|f| files.iter().find(|o| o.id.to_string() == f.choice))
+        .map(|o| RunFile {
+            asset_id: o.id,
+            name: o.name.clone(),
+        });
     Decision {
         answerer,
         reaction,
         needs_context,
+        file,
     }
 }
 
@@ -429,7 +497,7 @@ mod tests {
     use super::*;
     use crate::comments::test_support::into_thread;
     use crate::link::{AdapterInfo, ChoiceAnswer, CoreFrame};
-    use crate::protocol::{EventKind, MessageStatus, TextComponent, new_id};
+    use crate::protocol::{AssetRef, EventKind, MessageStatus, TextComponent, new_id};
     use crate::secrets::NoSecrets;
     use crate::sidecar::SidecarLog;
     use crate::runs::FrameSink;
@@ -497,7 +565,7 @@ mod tests {
         let scribe = SCRIBE.to_string();
         let sure = answers(vec![("mini_me", answer(&scribe, 0.5, &[]))]);
         assert_eq!(
-            decide(Some(&sure), None, 0.5, &library).answerer,
+            decide(Some(&sure), None, &[], 0.5, true, &library).answerer,
             SCRIBE
         );
     }
@@ -507,12 +575,12 @@ mod tests {
         let library = Library::builtin();
         let unsure = answers(vec![("mini_me", answer(&SCRIBE.to_string(), 0.3, &[]))]);
         assert_eq!(
-            decide(Some(&unsure), None, 0.5, &library).answerer,
+            decide(Some(&unsure), None, &[], 0.5, true, &library).answerer,
             FALLBACK_MINI_ME
         );
         let unknown = answers(vec![("mini_me", answer(&new_id().to_string(), 0.99, &[]))]);
         assert_eq!(
-            decide(Some(&unknown), None, 0.5, &library).answerer,
+            decide(Some(&unknown), None, &[], 0.5, true, &library).answerer,
             FALLBACK_MINI_ME
         );
     }
@@ -521,19 +589,21 @@ mod tests {
     fn without_jev_a_mentioned_mini_me_answers_or_else_the_fallback() {
         let library = Library::builtin();
         assert_eq!(
-            decide(None, None, 0.5, &library),
+            decide(None, None, &[], 0.5, true, &library),
             Decision {
                 answerer: FALLBACK_MINI_ME,
                 reaction: None,
                 needs_context: None,
+                file: None,
             }
         );
         assert_eq!(
-            decide(None, Some(SCRIBE), 0.5, &library),
+            decide(None, Some(SCRIBE), &[], 0.5, true, &library),
             Decision {
                 answerer: SCRIBE,
                 reaction: None,
                 needs_context: None,
+                file: None,
             }
         );
     }
@@ -545,7 +615,7 @@ mod tests {
             ("mini_me", answer(&SCRIBE.to_string(), 0.3, &[])),
             ("reaction", answer("👍", 0.8, &[])),
         ]);
-        let decision = decide(Some(&unsure), None, 0.5, &library);
+        let decision = decide(Some(&unsure), None, &[], 0.5, true, &library);
         assert_eq!(decision.answerer, FALLBACK_MINI_ME);
         assert_eq!(decision.reaction.as_deref(), Some("👍"));
     }
@@ -557,7 +627,7 @@ mod tests {
             ("reaction", answer("👍", 0.8, &[])),
             ("needs_context", answer("yes", 0.6, &[])),
         ]);
-        let decision = decide(Some(&confident), Some(SCRIBE), 0.5, &library);
+        let decision = decide(Some(&confident), Some(SCRIBE), &[], 0.5, true, &library);
         assert_eq!(decision.reaction.as_deref(), Some("👍"));
         assert_eq!(decision.needs_context, Some(true));
 
@@ -565,15 +635,40 @@ mod tests {
             ("reaction", answer("🎉", 0.4, &[])),
             ("needs_context", answer("no", 0.9, &[])),
         ]);
-        let decision = decide(Some(&unsure), Some(SCRIBE), 0.5, &library);
+        let decision = decide(Some(&unsure), Some(SCRIBE), &[], 0.5, true, &library);
         assert_eq!(decision.reaction, None);
         assert_eq!(decision.needs_context, Some(false));
 
         let none = answers(vec![("reaction", answer("none", 0.99, &[]))]);
         assert_eq!(
-            decide(Some(&none), Some(SCRIBE), 0.5, &library).reaction,
+            decide(Some(&none), Some(SCRIBE), &[], 0.5, true, &library).reaction,
             None
         );
+    }
+
+    #[test]
+    fn jev_picks_one_of_the_offered_files_at_or_above_the_threshold() {
+        let library = Library::builtin();
+        let cleaned = RouteFile { id: new_id(), name: "field-trial-cleaned.csv".into() };
+        let files = [cleaned.clone()];
+        let pick = |choice: &str, confidence: f64| {
+            let answers = answers(vec![("file", answer(choice, confidence, &[]))]);
+            decide(Some(&answers), None, &files, 0.5, true, &library).file
+        };
+        let picked = RunFile { asset_id: cleaned.id, name: cleaned.name.clone() };
+        assert_eq!(pick(&cleaned.id.to_string(), 0.5), Some(picked));
+        assert_eq!(pick(&cleaned.id.to_string(), 0.4), None);
+        assert_eq!(pick("none", 0.9), None);
+        assert_eq!(pick(&new_id().to_string(), 0.9), None);
+    }
+
+    #[test]
+    fn a_confident_reaction_is_kept_only_when_the_draw_passes() {
+        let library = Library::builtin();
+        let potato = answers(vec![("reaction", answer("🥔", 0.9, &[]))]);
+        let reaction = |reacts| decide(Some(&potato), Some(SCRIBE), &[], 0.5, reacts, &library);
+        assert_eq!(reaction(true).reaction.as_deref(), Some("🥔"));
+        assert_eq!(reaction(false).reaction, None);
     }
 
     #[test]
@@ -744,6 +839,7 @@ mod tests {
                 threshold: 0.5,
                 timeout,
                 show_answers: false,
+                reaction_chance: 1.0,
             };
             self.routing.send(
                 Arc::clone(&self.calls),
@@ -841,6 +937,33 @@ mod tests {
             })
             .unwrap();
         assert!(offered.contains(&saved.id));
+    }
+
+    #[test]
+    fn no_file_question_without_files_or_with_a_tagged_one() {
+        let f = fixture();
+        let library = Library::builtin();
+        let plain = message("check the data", &[]);
+        let mut earlier = message("here it is", &[]);
+        earlier.attachments.push(AssetRef {
+            id: new_id(),
+            name: "trial.csv".into(),
+            media_type: "text/csv".into(),
+            size_bytes: 1,
+        });
+        let mut tagged = message("check #trial.csv", &[]);
+        tagged.attachments = earlier.attachments.clone();
+        assert!(file_options(&f.project, &[plain.clone()], &plain, &library).is_empty());
+        let messages = [earlier, tagged.clone()];
+        assert!(file_options(&f.project, &messages, &tagged, &library).is_empty());
+
+        f.send("check the data", &[], ROUTE_TIMEOUT).unwrap();
+        f.route_id();
+        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
+        let [CoreFrame::RouteStart { files, ask, .. }] = starts.as_slice() else {
+            panic!("expected one route.start, got {starts:?}");
+        };
+        assert!(files.is_empty() && !ask.contains(&"file".to_string()));
     }
 
     #[test]
