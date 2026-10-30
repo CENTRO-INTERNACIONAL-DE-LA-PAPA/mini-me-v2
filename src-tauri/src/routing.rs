@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::comments;
 use crate::conversations::{self, SendMessageInput};
 use crate::error::{AppError, AppResult};
+use crate::history::author_name;
 use crate::library::{FALLBACK_MINI_ME, Library};
 use crate::user_library::LibraryStore;
 use crate::link::{CallModel, RouteMiniMe};
@@ -24,6 +25,10 @@ pub const ROUTE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The reactions Jev may choose besides `none`.
 const REACTIONS: [&str; 7] = ["👍", "🎉", "💛", "😄", "😡", "😢", "🥔"];
+
+/// How many earlier messages Jev sees, and how many characters of each.
+const RECENT_TURNS: usize = 4;
+const RECENT_CHARS: usize = 200;
 
 /// What a routing decision depends on besides the message.
 #[derive(Debug, Clone)]
@@ -46,18 +51,63 @@ struct Decision {
     needs_context: Option<bool>,
 }
 
+/// The warnings shown while Jev cannot choose, so the fallback Mini-Me answers every message
+/// without a mention.
+const NO_KEY: &str = "Mini-Mes aren't chosen automatically: there is no Typesafe key. Add one \
+    in Settings → Accounts.";
+const NOT_ANSWERING: &str = "Mini-Mes aren't chosen automatically: Typesafe isn't answering. \
+    Assistant answers until it does.";
+
+type WarningSink = Box<dyn Fn(Option<&str>) -> bool + Send>;
+
 pub struct Routing {
     library: Arc<LibraryStore>,
     /// Conversations whose latest message is waiting for a routing decision.
     pending: Mutex<HashSet<Uuid>>,
+    /// Why Jev cannot choose right now, if it cannot.
+    warning: Mutex<Option<&'static str>>,
+    subscribers: Mutex<Vec<WarningSink>>,
 }
 
 impl Routing {
-    pub fn new(library: Arc<LibraryStore>) -> Arc<Self> {
+    /// `has_key` is whether a Typesafe key is saved.
+    pub fn new(library: Arc<LibraryStore>, has_key: bool) -> Arc<Self> {
         Arc::new(Self {
             library,
             pending: Mutex::new(HashSet::new()),
+            warning: Mutex::new((!has_key).then_some(NO_KEY)),
+            subscribers: Mutex::new(Vec::new()),
         })
+    }
+
+    /// Sends the current warning to `sink` and then every change. `sink` returns `false`
+    /// when it is gone.
+    pub fn subscribe(&self, sink: WarningSink) {
+        let warning = self.warning.lock().unwrap_or_else(|p| p.into_inner());
+        if sink(*warning) {
+            self.subscribers
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(sink);
+        }
+    }
+
+    /// Clears the warning when a Typesafe key is saved, which the next route confirms, and
+    /// warns when it is removed.
+    pub fn key_saved(&self, saved: bool) {
+        self.warn(if saved { None } else { Some(NO_KEY) });
+    }
+
+    fn warn(&self, next: Option<&'static str>) {
+        let mut warning = self.warning.lock().unwrap_or_else(|p| p.into_inner());
+        if *warning == next {
+            return;
+        }
+        *warning = next;
+        self.subscribers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .retain(|sink| sink(next));
     }
 
     /// Validates and persists a user message, then decides on a background thread who
@@ -142,7 +192,9 @@ impl Routing {
                 description: m.description,
             })
             .collect();
-        let routed = calls.route(state(message), mini_mes, ask, settings.timeout);
+        let messages = project.lock().conversation_messages(conversation_id).unwrap_or_default();
+        let recent = recent(&messages, message.id, &library);
+        let routed = calls.route(state(message, recent), mini_mes, ask, settings.timeout);
         if settings.show_answers {
             let (answers, error) = match &routed {
                 Ok(answers) => (json!(answers), None),
@@ -163,6 +215,9 @@ impl Routing {
             ) {
                 eprintln!("could not store Jev's answers: {err}");
             }
+        }
+        if let Some(warning) = warning_after(&routed) {
+            self.warn(warning);
         }
         let answers = match routed {
             Ok(answers) => Some(answers),
@@ -257,10 +312,52 @@ fn first_mention(message: &Message) -> Option<Uuid> {
         .map(|c| c.id)
 }
 
-/// What Jev sees of a message: its text without mentions and the names of its files. File
-/// contents stay on the user's computer.
-fn state(message: &Message) -> Value {
-    json!({ "message": input_text(message), "files": conversations::file_names(message) })
+/// What Jev sees of a message: its text without mentions, the names of its files, and the
+/// recent turns before it. File contents stay on the user's computer.
+fn state(message: &Message, recent: Value) -> Value {
+    json!({
+        "message": input_text(message),
+        "files": conversations::file_names(message),
+        "recent": recent,
+    })
+}
+
+/// The last `RECENT_TURNS` messages before `before` in `messages` (a whole Conversation in
+/// creation order), oldest first, each as its author's name, the start of its text and its
+/// file names. Interactive Components are left out, since their text can hold table data.
+fn recent(messages: &[Message], before: Uuid, library: &Library) -> Value {
+    let earlier: Vec<&Message> = messages
+        .iter()
+        .take_while(|m| m.id != before)
+        .filter(|m| m.author.kind != AuthorKind::System)
+        .collect();
+    let start = earlier.len().saturating_sub(RECENT_TURNS);
+    let turns: Vec<Value> = earlier[start..]
+        .iter()
+        .map(|m| {
+            let name = match m.author.kind {
+                AuthorKind::User => "You".to_string(),
+                _ => author_name(m, library),
+            };
+            json!({
+                "name": name,
+                "content": m.content.chars().take(RECENT_CHARS).collect::<String>(),
+                "files": conversations::file_names(m),
+            })
+        })
+        .collect();
+    json!(turns)
+}
+
+/// The warning a route's outcome calls for, or `None` to keep the current one. A stopped
+/// runtime keeps it, since the sidecar's own status explains that.
+fn warning_after(routed: &AppResult<RouteAnswers>) -> Option<Option<&'static str>> {
+    match routed {
+        Ok(_) => Some(None),
+        Err(err) if err.code == "sidecar_stopped" => None,
+        Err(err) if err.code == "secret_unavailable" => Some(Some(NO_KEY)),
+        Err(_) => Some(Some(NOT_ANSWERING)),
+    }
 }
 
 /// Turns Jev's answers (`None` when Jev could not be asked) into who answers, the reaction
@@ -507,9 +604,54 @@ mod tests {
             end: 31,
         });
         assert_eq!(
-            state(&sent),
-            json!({ "message": "summarize #notes.txt", "files": ["notes.txt"] })
+            state(&sent, json!([])),
+            json!({ "message": "summarize #notes.txt", "files": ["notes.txt"], "recent": [] })
         );
+    }
+
+    #[test]
+    fn jev_sees_the_last_turns_by_name_and_shortened() {
+        let by = |kind: AuthorKind, id: &str, content: &str| {
+            let mut m = message(content, &[]);
+            m.author = Author { kind, id: id.into() };
+            m
+        };
+        let scribe = SCRIBE.to_string();
+        let messages = [
+            by(AuthorKind::User, "user", "hello"),
+            by(AuthorKind::User, "user", "first question"),
+            by(AuthorKind::MiniMe, &scribe, "first answer"),
+            by(AuthorKind::User, "user", "clean the table"),
+            by(AuthorKind::System, ROUTING_AUTHOR, "Couldn't start a reply"),
+            by(AuthorKind::MiniMe, &scribe, &"é".repeat(RECENT_CHARS + 50)),
+            by(AuthorKind::User, "user", "now remove the empty rows"),
+        ];
+        let turns = recent(&messages, messages[6].id, &Library::builtin());
+        let turns = turns.as_array().unwrap();
+        let names: Vec<&str> = turns.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert_eq!(names, ["You", "Scribe", "You", "Scribe"]);
+        assert_eq!(turns[0]["content"], "first question");
+        assert_eq!(turns[3]["content"].as_str().unwrap().chars().count(), RECENT_CHARS);
+    }
+
+    #[test]
+    fn a_warning_shows_until_routing_works_again() {
+        let routing = Routing::new(LibraryStore::builtin(), false);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let log = Arc::clone(&seen);
+        routing.subscribe(Box::new(move |w| {
+            log.lock().unwrap().push(w.map(str::to_string));
+            true
+        }));
+        let failed = |code: &str| Err(AppError::new(code, ""));
+        for routed in [failed("jev_timeout"), failed("sidecar_stopped"), Ok(RouteAnswers::new())] {
+            if let Some(warning) = warning_after(&routed) {
+                routing.warn(warning);
+            }
+        }
+        routing.key_saved(false);
+        let expected = [Some(NO_KEY), Some(NOT_ANSWERING), None, Some(NO_KEY)];
+        assert_eq!(*seen.lock().unwrap(), expected.map(|w| w.map(str::to_string)));
     }
 
     #[test]
@@ -578,7 +720,7 @@ mod tests {
             conversation,
             calls,
             sink,
-            routing: Routing::new(library),
+            routing: Routing::new(library, true),
         }
     }
 
