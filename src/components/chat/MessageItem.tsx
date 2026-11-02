@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "../../api";
 import type { MessageView } from "../../protocol/eventStore";
 import { segments } from "../../protocol/references";
-import type { JevAnswers, MiniMe } from "../../protocol/types";
+import type { AssetRef, JevAnswers, MiniMe } from "../../protocol/types";
 import { formatClock, formatSize } from "../../lib/format";
 import { approvalState } from "../interactive/approval";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
@@ -13,6 +13,7 @@ import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMePill } from "../minime/MiniMePill";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { ReferenceChip } from "./ReferenceChip";
+import { useFileExists } from "./existingFiles";
 import { TextComponentChip } from "./TextComponentChip";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useMiniMes } from "../../hooks/useMiniMes";
@@ -121,9 +122,7 @@ export const MessageItem = memo(function MessageItem({
   const attachments = message.attachments.length > 0 && (
     <div className="flex flex-wrap gap-1.5">
       {message.attachments.map((asset) => (
-        <ReferenceChip key={asset.id} title="Open file" onOpen={() => open(asset.id)}>
-          {asset.name} · {formatSize(asset.size_bytes)}
-        </ReferenceChip>
+        <AttachmentChip key={asset.id} asset={asset} onOpen={() => open(asset.id)} />
       ))}
     </div>
   );
@@ -330,5 +329,21 @@ function JevAnswersBlock({
           </p>
         ))}
     </details>
+  );
+}
+
+/** A file attached to a message: it opens the file, or says that the file was removed. */
+function AttachmentChip({ asset, onOpen }: { asset: AssetRef; onOpen: () => void }) {
+  if (!useFileExists(asset.id)) {
+    return (
+      <ReferenceChip title="This file was deleted" className="text-muted-foreground">
+        {asset.name} · file removed
+      </ReferenceChip>
+    );
+  }
+  return (
+    <ReferenceChip title="Open file" onOpen={onOpen}>
+      {asset.name} · {formatSize(asset.size_bytes)}
+    </ReferenceChip>
   );
 }

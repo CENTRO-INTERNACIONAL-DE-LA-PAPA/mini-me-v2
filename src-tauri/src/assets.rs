@@ -8,6 +8,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::comments;
+use crate::conversations;
 use crate::error::{AppError, AppResult};
 use crate::protocol::{
     AssetRef, Author, AuthorKind, TextComponent, TextComponentKind, new_id, now_ms,
@@ -167,6 +168,81 @@ fn store(
     register(project, asset, source, author, &rel_path).inspect_err(|_| {
         let _ = remove_files(project, id);
     })
+}
+
+/// The name that `typed` gives a file now called `current`: the extension stays, whether or not
+/// `typed` repeats it.
+fn renamed(current: &str, typed: &str) -> String {
+    let typed = typed.trim();
+    let Some(extension) = Path::new(current).extension().and_then(|e| e.to_str()) else {
+        return typed.to_string();
+    };
+    let dotted = format!(".{extension}");
+    let repeats = typed
+        .len()
+        .checked_sub(dotted.len())
+        .and_then(|from| typed.get(from..))
+        .is_some_and(|tail| tail.eq_ignore_ascii_case(&dotted));
+    let stem = if repeats { &typed[..typed.len() - dotted.len()] } else { typed };
+    format!("{stem}{dotted}")
+}
+
+/// Renames the file `id`, keeping its extension, and returns it. The file keeps its ID, so
+/// references to it keep working.
+pub fn rename(project: &Project, id: Uuid, typed: &str) -> AppResult<AssetRef> {
+    let current = find(&project.lock(), id)?;
+    let name = renamed(&current.name, typed);
+    // Nothing typed, or only the extension, would leave a hidden file with no name.
+    if typed.trim().is_empty() || (name.starts_with('.') && !current.name.starts_with('.')) {
+        return Err(AppError::invalid_input("A file needs a name."));
+    }
+    if name == current.name {
+        return Ok(current);
+    }
+    check_name(&name)?;
+    let from = file_path(project, id)?;
+    let rel_path = format!("assets/{id}/{name}");
+    let to = project.paths.resolve(&rel_path)?;
+    std::fs::rename(&from, &to)?;
+    let updated = project.lock().conn.execute(
+        "UPDATE assets SET name = ?1, rel_path = ?2 WHERE id = ?3",
+        params![name, rel_path, id.to_string()],
+    );
+    if let Err(error) = updated {
+        let _ = std::fs::rename(&to, &from);
+        return Err(error.into());
+    }
+    Ok(AssetRef { name, ..current })
+}
+
+/// Adds a copy of the file `id` named "<name> copy" before its extension, added by `user`.
+pub fn duplicate(project: &Project, id: Uuid, user: &Author) -> AppResult<AssetRef> {
+    let asset = find(&project.lock(), id)?;
+    let bytes = std::fs::read(file_path(project, id)?)?;
+    let path = Path::new(&asset.name);
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or(&asset.name);
+    let name = match path.extension().and_then(|e| e.to_str()) {
+        Some(extension) => format!("{stem} copy.{extension}"),
+        None => format!("{stem} copy"),
+    };
+    import_bytes(project, &name, &asset.media_type, &bytes, user)
+}
+
+/// Deletes the file `id` with its folder, and the comment threads of a document.
+pub fn delete(project: &Project, id: Uuid) -> AppResult<()> {
+    let threads: Vec<String> = {
+        let state = project.lock();
+        let mut stmt = state
+            .conn
+            .prepare("SELECT conversation_id FROM comment_threads WHERE asset_id = ?1")?;
+        let rows = stmt.query_map(params![id.to_string()], |row| row.get(0))?;
+        rows.collect::<Result<_, _>>()?
+    };
+    for thread in threads {
+        let thread = Uuid::parse_str(&thread).map_err(|_| AppError::storage("bad thread ID"))?;
+        conversations::delete(project, thread)?;
+    }
+    remove(project, id)
 }
 
 /// Removes a generated Asset that could not be attached to its reply, with its folder.
@@ -417,6 +493,44 @@ mod tests {
     use crate::comments::test_support::into_thread;
     use crate::conversations::{self, SendMessageInput};
     use crate::projects::test_support::{temp_project, user};
+
+    #[test]
+    fn a_rename_keeps_the_extension_and_the_id() {
+        assert_eq!(renamed("field-trial.csv", "trial-2025"), "trial-2025.csv");
+        assert_eq!(renamed("field-trial.csv", "trial-2025.CSV"), "trial-2025.csv");
+        assert_eq!(renamed("README", "notes"), "notes");
+
+        let (_dir, project) = temp_project();
+        let asset = import_bytes(&project, "field-trial.csv", "text/csv", b"a,b", &user()).unwrap();
+        let after = rename(&project, asset.id, " trial-2025 ").unwrap();
+        assert_eq!((after.id, after.name.as_str()), (asset.id, "trial-2025.csv"));
+        let path = file_path(&project, asset.id).unwrap();
+        assert!(path.ends_with("trial-2025.csv"));
+        assert_eq!(std::fs::read(path).unwrap(), b"a,b");
+        assert!(rename(&project, asset.id, "a/b").is_err());
+        assert!(rename(&project, asset.id, "   ").is_err());
+        assert!(rename(&project, asset.id, ".csv").is_err());
+    }
+
+    #[test]
+    fn a_duplicate_is_a_new_file_named_copy() {
+        let (_dir, project) = temp_project();
+        let asset = import_bytes(&project, "field-trial.csv", "text/csv", b"a,b", &user()).unwrap();
+        let copy = duplicate(&project, asset.id, &user()).unwrap();
+        assert_ne!(copy.id, asset.id);
+        assert_eq!(copy.name, "field-trial copy.csv");
+        assert_eq!(std::fs::read(file_path(&project, copy.id).unwrap()).unwrap(), b"a,b");
+    }
+
+    #[test]
+    fn deleting_a_file_removes_its_record_and_folder() {
+        let (_dir, project) = temp_project();
+        let asset = import_bytes(&project, "field-trial.csv", "text/csv", b"a", &user()).unwrap();
+        let folder = file_path(&project, asset.id).unwrap().parent().unwrap().to_path_buf();
+        delete(&project, asset.id).unwrap();
+        assert!(!folder.exists());
+        assert!(find(&project.lock(), asset.id).is_err());
+    }
 
     #[test]
     fn import_copies_and_registers() {

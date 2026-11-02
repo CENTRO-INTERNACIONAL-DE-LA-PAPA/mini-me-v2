@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -21,6 +22,7 @@ import {
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, errorMessage } from "../../api";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { recheckQuarto, useQuarto } from "../../hooks/useQuarto";
 import { formatRelative } from "../../lib/format";
 import type { AssetRef, CommentThread, Uuid } from "../../protocol/types";
 import { EditorHeader } from "../library/LibraryParts";
@@ -36,6 +38,8 @@ import {
 import { CommentsSheet, threadsInOrder } from "./CommentsSheet";
 import { setHighlighted, threadAt, threadHighlights, type Suggested } from "./highlights";
 import { headerField } from "./qmd";
+import { documentsBlocked } from "./quarto";
+import { QuartoNotice } from "./QuartoNotice";
 import { blockPrefix, wrapSelection } from "./sourceEdits";
 
 /** How long typing must pause before a document is saved. */
@@ -119,6 +123,8 @@ export function DocumentView({
   const [hasSelection, setHasSelection] = useState(false);
   const miniMes = useMiniMes();
   const scribe = miniMes.find((m) => m.name === "Scribe");
+  const quarto = useQuarto();
+  const blocked = documentsBlocked(quarto);
 
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -127,6 +133,11 @@ export function DocumentView({
   const draftId = useRef<string | null>(null);
   // Set while the source is replaced by code, so the change is not saved as an edit.
   const loading = useRef(false);
+  // Whether the text has been loaded into the editor, and whether Quarto blocks the document,
+  // which the load reads when it finishes.
+  const loaded = useRef(false);
+  const blockedRef = useRef(false);
+  blockedRef.current = blocked;
 
   /** Saves the source; resolves false when the save failed, which the view then reports. */
   const save = useCallback(async () => {
@@ -167,17 +178,28 @@ export function DocumentView({
   const setEditable = (on: boolean) =>
     view.current?.dispatch({ effects: editable.current.reconfigure(EditorView.editable.of(on)) });
 
-  const render = useCallback(async (source: string) => {
-    setRendering(true);
-    try {
-      setPages(await api.previewDocument(source));
-      setPreviewError(null);
-    } catch (e) {
-      setPreviewError(errorMessage(e));
-    } finally {
-      setRendering(false);
-    }
-  }, []);
+  const render = useCallback(
+    async (source: string) => {
+      setRendering(true);
+      try {
+        setPages(await api.previewDocument(projectId, source));
+        setPreviewError(null);
+      } catch (e) {
+        setPreviewError(errorMessage(e));
+      } finally {
+        setRendering(false);
+      }
+    },
+    [projectId],
+  );
+
+  // When Quarto becomes usable or stops being, the source can or cannot be edited, and the
+  // preview renders again once it can.
+  useEffect(() => {
+    if (!loaded.current || drafting) return;
+    setEditable(!blocked);
+    if (!blocked) void render(text);
+  }, [blocked]);
 
   // The editor is made once; the document's text is loaded into it below.
   useEffect(() => {
@@ -246,8 +268,9 @@ export function DocumentView({
       setThreads(found);
       view.current?.dispatch({ effects: setPlacements.of(placeThreads(source, found)) });
       if (modified_at !== null) setEditedAt(modified_at);
-      setEditable(true);
-      void render(source);
+      loaded.current = true;
+      setEditable(!blockedRef.current);
+      if (!blockedRef.current) void render(source);
     };
     if (!draftFrom) {
       load().catch((e) => active && setError(errorMessage(e)));
@@ -453,6 +476,7 @@ export function DocumentView({
                 <Button
                   variant={showComments ? "default" : "secondary"}
                   aria-pressed={showComments}
+                  disabled={blocked}
                   onClick={() => (showComments ? hideComments() : setShowComments(true))}
                 >
                   <MessageSquareTextIcon />
@@ -460,7 +484,7 @@ export function DocumentView({
                 </Button>
                 <Button
                   variant="secondary"
-                  disabled={rendering || drafting}
+                  disabled={rendering || drafting || blocked}
                   onClick={() => void render(text)}
                 >
                   <RefreshCwIcon />
@@ -472,7 +496,7 @@ export function DocumentView({
                   onOpenChange={(open) => !open && setShowExported(false)}
                 >
                   <PopoverTrigger
-                    render={<Button variant="secondary" disabled={drafting || exporting} />}
+                    render={<Button variant="secondary" disabled={drafting || exporting || blocked} />}
                     onClick={exportPdf}
                   >
                     <FileDownIcon />
@@ -497,7 +521,7 @@ export function DocumentView({
             problems={error}
             onBack={onClose}
           />
-          <div className={BAR}>
+          <div className={cn(BAR, blocked && "hidden")}>
             <SourceButton
               label="Bold"
               disabled={drafting}
@@ -552,7 +576,7 @@ export function DocumentView({
               <span className="ml-auto text-meta text-muted-foreground">{previewError}</span>
             )}
           </div>
-          <div className="grid min-h-0 flex-1 grid-cols-2">
+          <div className={cn("grid min-h-0 flex-1 grid-cols-2", blocked && "hidden")}>
             <section
               aria-label="Source"
               className="flex min-h-0 min-w-0 flex-col border-r border-border bg-muted"
@@ -587,6 +611,7 @@ export function DocumentView({
               <PreviewPages pages={pages} />
             </section>
           </div>
+          {blocked && quarto && <QuartoNotice status={quarto} onCheck={recheckQuarto} />}
         </div>
       </MainSheet>
       {showComments && (

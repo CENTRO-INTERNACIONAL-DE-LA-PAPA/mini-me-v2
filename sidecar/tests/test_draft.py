@@ -1,5 +1,4 @@
 import asyncio
-import base64
 
 import pytest
 
@@ -106,47 +105,8 @@ def test_an_empty_draft_is_an_error(monkeypatch):
     assert sent[-1]["error"]["code"] == "provider_empty"
 
 
-def test_an_export_answers_with_the_pdf():
-    link = FakeLink()
-
-    async def main() -> None:
-        documents = Documents(link, None)  # type: ignore[arg-type]
-        documents.start_export({"type": "document.export", "export_id": "e1", "source": "# A"})
-        while not link.sent:
-            await asyncio.sleep(0.01)
-
-    asyncio.run(main())
-    assert link.sent[0]["type"] == "document.exported"
-    assert base64.b64decode(link.sent[0]["data"]).startswith(b"%PDF")
-
-
-def test_a_preview_answers_with_one_svg_per_page():
-    link = FakeLink()
-    source = "# A\n\n" + "\n\n".join(["Text " * 400] * 6)
-
-    async def main() -> None:
-        documents = Documents(link, None)  # type: ignore[arg-type]
-        documents.start_preview({"type": "document.preview", "preview_id": "p1", "source": source})
-        while not link.sent:
-            await asyncio.sleep(0.01)
-
-    asyncio.run(main())
-    frame = link.sent[0]
-    assert frame["type"] == "document.previewed" and frame["preview_id"] == "p1"
-    assert len(frame["pages"]) > 1
-    assert all(page.startswith("<svg") for page in frame["pages"])
-
-
-@pytest.mark.parametrize(
-    "frame", [{"type": "draft.start"}, {"type": "document.export"}, {"type": "document.preview"}]
-)
-def test_requests_without_an_id_are_ignored(frame):
+def test_a_draft_request_without_an_id_is_ignored():
     link = FakeLink()
     documents = Documents(link, None)  # type: ignore[arg-type]
-    start = {
-        "draft.start": documents.start_draft,
-        "document.export": documents.start_export,
-        "document.preview": documents.start_preview,
-    }[frame["type"]]
-    start(frame)
+    documents.start_draft({"type": "draft.start"})
     assert link.sent == []

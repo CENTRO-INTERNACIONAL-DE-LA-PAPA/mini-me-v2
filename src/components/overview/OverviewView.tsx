@@ -16,7 +16,10 @@ import { api, errorMessage } from "../../api";
 import type { MiniMe, Overview, OverviewOutput, ProjectSummary } from "../../protocol/types";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
 import { FileMark } from "../files/FileMark";
+import { FileMenu } from "../files/FileMenu";
+import { isDocument } from "../files/files";
 import { MiniMePill } from "../minime/MiniMePill";
+import { ItemMenu } from "../shell/ItemMenu";
 import { SheetPage, SheetSection } from "../shell/Sheet";
 import { headerLine, relativeInSentence, shownOutputs } from "./overview";
 import { useMiniMes } from "../../hooks/useMiniMes";
@@ -25,6 +28,11 @@ interface Props {
   project: ProjectSummary;
   onOpenConversation: (conversationId: string, messageId: string) => void;
   onOpenFiles: () => void;
+  /** Called after a file was renamed, copied or deleted, so counts elsewhere can refresh. */
+  onChanged: () => void;
+  onOpenDocument: (assetId: string) => void;
+  onRenameProject: (name: string) => Promise<unknown>;
+  onDeleteProject: () => Promise<unknown>;
 }
 
 const KINDS: Record<string, { label: string; icon: typeof FileIcon }> = {
@@ -39,7 +47,15 @@ const kindOf = (kind: string) =>
   KINDS[kind] ?? { label: kind[0].toUpperCase() + kind.slice(1), icon: FileIcon };
 
 /** The Project Overview: where the Project stands and what its Conversations produced. */
-export function OverviewView({ project, onOpenConversation, onOpenFiles }: Props) {
+export function OverviewView({
+  project,
+  onOpenConversation,
+  onOpenFiles,
+  onChanged,
+  onOpenDocument,
+  onRenameProject,
+  onDeleteProject,
+}: Props) {
   const miniMes = useMiniMes();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [writing, setWriting] = useState(false);
@@ -89,7 +105,20 @@ export function OverviewView({ project, onOpenConversation, onOpenFiles }: Props
   const shown = shownOutputs(overview.outputs, all);
 
   return (
-    <SheetPage title={project.name} description={headerLine(overview)}>
+    <SheetPage
+      title={project.name}
+      titleAction={
+        <ItemMenu
+          name={project.name}
+          rename={{ current: project.name, onRename: onRenameProject }}
+          remove={{
+            question: `Delete "${project.name}"? Its Conversations and files are removed for good. This can't be undone.`,
+            onDelete: onDeleteProject,
+          }}
+        />
+      }
+      description={headerLine(overview)}
+    >
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-start gap-4 max-lg:grid-cols-1">
         <div className="flex flex-col gap-4">
           <Card aria-label="Summary" className="gap-2.5 px-[22px] py-5">
@@ -166,12 +195,28 @@ export function OverviewView({ project, onOpenConversation, onOpenFiles }: Props
           ) : (
             <ul className="grid gap-0.5">
               {shown.map((output) => (
-                <li key={`${output.kind}-${output.id}`}>
+                <li key={`${output.kind}-${output.id}`} className="group/output relative">
                   <OutputRow
                     output={output}
                     miniMe={miniMeOf(output.author.id)}
                     onOpen={() => onOpenConversation(output.conversation_id, output.message_id)}
                   />
+                  {output.kind === "file" && (
+                    <FileMenu
+                      projectId={project.id}
+                      file={{ id: output.id, name: output.title }}
+                      className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/output:opacity-100 group-hover/output:opacity-100 aria-expanded:opacity-100"
+                      onOpen={() =>
+                        isDocument(output.title)
+                          ? onOpenDocument(output.id)
+                          : api.openAsset(project.id, output.id)
+                      }
+                      onChanged={() => {
+                        void refresh();
+                        onChanged();
+                      }}
+                    />
+                  )}
                 </li>
               ))}
             </ul>

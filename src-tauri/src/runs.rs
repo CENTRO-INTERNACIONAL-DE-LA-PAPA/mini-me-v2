@@ -26,7 +26,7 @@ use crate::routing::explain;
 use crate::user_library::LibraryStore;
 use crate::link::{
     AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, RouteFile, RouteMiniMe, RunContext,
-    RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame,
+    RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
 };
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
@@ -61,6 +61,9 @@ pub enum DraftEvent {
 
 /// The sender each request waiting for the sidecar's answer is listed under, by its ID.
 type Pending<T> = HashMap<Uuid, mpsc::Sender<Result<T, ErrorInfo>>>;
+
+/// Checks that document work is possible, which the app sets once it knows where Quarto is.
+pub type DocumentGate = Arc<dyn Fn() -> AppResult<()> + Send + Sync>;
 
 /// What a request to the sidecar fails with when no answer comes.
 struct NoAnswer {
@@ -215,10 +218,6 @@ struct Inner {
     key_providers: HashMap<Uuid, String>,
     /// Drafts stopped before they were sent to the sidecar; `draft` ends them at once.
     stopped_drafts: HashSet<Uuid>,
-    /// PDF exports waiting for their `document.exported` or `document.export_error`.
-    exports: Pending<Vec<u8>>,
-    /// Previews waiting for their `document.previewed` or `document.preview_error`.
-    previews: Pending<Vec<String>>,
 }
 
 impl Inner {
@@ -239,6 +238,8 @@ pub struct Runs {
     secrets: Box<dyn SecretSource>,
     log: Arc<SidecarLog>,
     cancel_timeout: Duration,
+    /// Asked before a Mini-Me writes or edits a document; none until the app sets one.
+    document_gate: Mutex<Option<DocumentGate>>,
 }
 
 #[derive(Deserialize)]
@@ -315,7 +316,19 @@ impl Runs {
             secrets,
             log,
             cancel_timeout,
+            document_gate: Mutex::new(None),
         }
+    }
+
+    /// Sets the check that a Mini-Me may write or edit documents.
+    pub fn set_document_gate(&self, gate: DocumentGate) {
+        *self.document_gate.lock().unwrap_or_else(|p| p.into_inner()) = Some(gate);
+    }
+
+    /// Fails with the gate's error when document work is not possible.
+    fn document_allowed(&self) -> AppResult<()> {
+        let gate = self.document_gate.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        gate.map_or(Ok(()), |check| check())
     }
 
 
@@ -341,8 +354,6 @@ impl Runs {
             inner.routes.clear();
             inner.summaries.clear();
             inner.drafts.clear();
-            inner.exports.clear();
-            inner.previews.clear();
             inner.key_providers.clear();
             inner.runs.drain().map(|(_, run)| run).collect()
         };
@@ -549,11 +560,12 @@ impl Runs {
         &self,
         model: CallModel,
         material: String,
+        kind: SummaryKind,
         timeout: Duration,
     ) -> AppResult<String> {
         let summary_id = new_id();
         self.lock().key_providers.insert(summary_id, model.provider.clone());
-        let frame = CoreFrame::SummaryStart { summary_id, model, material };
+        let frame = CoreFrame::SummaryStart { summary_id, model, material, kind };
         let no_answer = NoAnswer {
             not_ready: "Mini-Me's runtime is not ready.",
             timeout: ("summary_timeout", "The AI model did not finish the summary in time. Try again."),
@@ -661,30 +673,6 @@ impl Runs {
                 .log
                 .line(&format!("ignoring a frame for draft {draft_id}, which is not open")),
         }
-    }
-
-    /// The document `source`, named `name`, as PDF, within `timeout`.
-    pub fn export_pdf(&self, name: String, source: String, timeout: Duration) -> AppResult<Vec<u8>> {
-        let export_id = new_id();
-        let frame = CoreFrame::DocumentExport { export_id, name, source };
-        let no_answer = NoAnswer {
-            not_ready: "Mini-Me is not ready yet. Try again when it is.",
-            timeout: ("export_timeout", "The PDF took too long to make. Try again."),
-            stopped: "Mini-Me's runtime stopped before the PDF was made.",
-        };
-        self.request(|inner| &mut inner.exports, export_id, frame, timeout, no_answer)
-    }
-
-    /// The document `source` as SVG images, one per page, within `timeout`.
-    pub fn preview(&self, source: String, timeout: Duration) -> AppResult<Vec<String>> {
-        let preview_id = new_id();
-        let frame = CoreFrame::DocumentPreview { preview_id, source };
-        let no_answer = NoAnswer {
-            not_ready: "Mini-Me is not ready yet. Try again when it is.",
-            timeout: ("preview_timeout", "The preview took too long to make. Try again."),
-            stopped: "Mini-Me's runtime stopped before the preview was made.",
-        };
-        self.request(|inner| &mut inner.previews, preview_id, frame, timeout, no_answer)
     }
 
     /// Sends `frame` for the request `id`, listed in `pending` until it ends, and waits at most
@@ -806,7 +794,7 @@ impl Runs {
             })
             .map(|(_, project, conversation_id, message_id, mini_me, step)| RunningReply {
                 project_id: project.id,
-                project_name: project.name.clone(),
+                project_name: project.name(),
                 conversation_id,
                 conversation_title: conversations::title(&project, conversation_id)
                     .unwrap_or_default(),
@@ -1003,22 +991,6 @@ impl Runs {
             SidecarFrame::DraftError { draft_id, error } => {
                 self.draft_event(draft_id, DraftEvent::Error { error });
             }
-            SidecarFrame::DocumentExported { export_id, data } => {
-                let outcome = BASE64.decode(data.as_bytes()).map_err(|_| ErrorInfo {
-                    code: "export_failed".into(),
-                    message: "The PDF arrived damaged. Try again.".into(),
-                });
-                self.answered(|inner| &mut inner.exports, "export", export_id, outcome);
-            }
-            SidecarFrame::DocumentExportError { export_id, error } => {
-                self.answered(|inner| &mut inner.exports, "export", export_id, Err(error));
-            }
-            SidecarFrame::DocumentPreviewed { preview_id, pages } => {
-                self.answered(|inner| &mut inner.previews, "preview", preview_id, Ok(pages));
-            }
-            SidecarFrame::DocumentPreviewError { preview_id, error } => {
-                self.answered(|inner| &mut inner.previews, "preview", preview_id, Err(error));
-            }
             SidecarFrame::CoreRequest {
                 request_id,
                 call_id,
@@ -1104,6 +1076,9 @@ impl Runs {
             "secret.get" => self.secret(&adapter, place.provider.as_deref(), parse_params(params)?),
             "asset.write" => {
                 let p: AssetWriteParams = parse_params(params)?;
+                if crate::documents::is_document(&p.name) {
+                    self.document_allowed()?;
+                }
                 let bytes = decode_asset(&p.data)?;
                 let file = (p.name.as_str(), p.media_type.as_str(), bytes.as_slice());
                 let asset = conversations::attach_generated(&project, reply, &place.author, file)
@@ -1144,6 +1119,7 @@ impl Runs {
             }
             "document.edit" => {
                 let p: DocumentEditParams = parse_params(params)?;
+                self.document_allowed()?;
                 let call = comments::EditingCall {
                     conversation_id: place.conversation_id,
                     answers: place.answers,
@@ -2344,7 +2320,7 @@ mod tests {
         let runs = Arc::clone(&f.runs);
         let handle = std::thread::spawn(move || {
             let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
-            runs.summarize(model, "## Trial\nYou: plot yield".into(), timeout)
+            runs.summarize(model, "## Trial\nYou: plot yield".into(), SummaryKind::Overview, timeout)
         });
         let summary_id = loop {
             let found = f.sink.frames().into_iter().find_map(|frame| match frame {
@@ -2494,61 +2470,6 @@ mod tests {
         assert_eq!(error_code(ask("openai")), None);
         f.runs.handle(SidecarFrame::DraftDone { draft_id });
         handle.join().unwrap();
-    }
-
-    #[test]
-    fn an_export_returns_the_pdf_or_the_sidecars_error() {
-        let f = quick();
-        let runs = Arc::clone(&f.runs);
-        let handle = std::thread::spawn(move || {
-            runs.export_pdf("Report.qmd".into(), "# A".into(), CANCEL_TIMEOUT)
-        });
-        let export_id = wait_for(&f, |frame| match frame {
-            CoreFrame::DocumentExport { export_id, name, .. } if name == "Report.qmd" => {
-                Some(export_id)
-            }
-            _ => None,
-        });
-        f.runs.handle(SidecarFrame::DocumentExported { export_id, data: BASE64.encode(b"%PDF-1.7") });
-        assert_eq!(handle.join().unwrap().unwrap(), b"%PDF-1.7");
-
-        let g = quick();
-        let runs = Arc::clone(&g.runs);
-        let handle = std::thread::spawn(move || {
-            runs.export_pdf("Report.qmd".into(), "# A".into(), CANCEL_TIMEOUT)
-        });
-        let export_id = wait_for(&g, |frame| match frame {
-            CoreFrame::DocumentExport { export_id, .. } => Some(export_id),
-            _ => None,
-        });
-        let error = ErrorInfo { code: "export_failed".into(), message: "No.".into() };
-        g.runs.handle(SidecarFrame::DocumentExportError { export_id, error });
-        assert_eq!(handle.join().unwrap().unwrap_err().code, "export_failed");
-    }
-
-    #[test]
-    fn a_preview_returns_the_pages_or_the_sidecars_error() {
-        let f = quick();
-        let runs = Arc::clone(&f.runs);
-        let handle = std::thread::spawn(move || runs.preview("# A".into(), CANCEL_TIMEOUT));
-        let preview_id = wait_for(&f, |frame| match frame {
-            CoreFrame::DocumentPreview { preview_id, .. } => Some(preview_id),
-            _ => None,
-        });
-        let pages = vec!["<svg>1</svg>".to_string(), "<svg>2</svg>".to_string()];
-        f.runs.handle(SidecarFrame::DocumentPreviewed { preview_id, pages: pages.clone() });
-        assert_eq!(handle.join().unwrap().unwrap(), pages);
-
-        let g = quick();
-        let runs = Arc::clone(&g.runs);
-        let handle = std::thread::spawn(move || runs.preview("# A".into(), CANCEL_TIMEOUT));
-        let preview_id = wait_for(&g, |frame| match frame {
-            CoreFrame::DocumentPreview { preview_id, .. } => Some(preview_id),
-            _ => None,
-        });
-        let error = ErrorInfo { code: "preview_failed".into(), message: "No.".into() };
-        g.runs.handle(SidecarFrame::DocumentPreviewError { preview_id, error });
-        assert_eq!(handle.join().unwrap().unwrap_err().code, "preview_failed");
     }
 
     #[test]

@@ -31,6 +31,9 @@ pub struct Settings {
     /// Mini-Me Dev, off in Mini-Me).
     #[serde(default)]
     pub developer_mode: Option<bool>,
+    /// The Quarto program the user chose in Settings; when unset, the app looks for one.
+    #[serde(default)]
+    pub quarto_path: Option<String>,
 }
 
 /// How Home looks.
@@ -125,6 +128,7 @@ impl Settings {
             routing: RoutingSettings::default(),
             home: HomeSettings::default(),
             developer_mode: None,
+            quarto_path: None,
         };
         settings.save(config_dir)?;
         Ok(settings)

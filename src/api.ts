@@ -18,6 +18,7 @@ import type {
   MiniMe,
   MiniMeDefinition,
   OpenedDocument,
+  QuartoStatus,
   Overview,
   PausedApproval,
   ProjectSummary,
@@ -160,8 +161,41 @@ export const api = {
     });
   },
   stopDraft: (draft_id: Uuid) => invoke<void>("stop_draft", { draft_id }),
-  /** The document text `source` as it would export, one SVG image per page. */
-  previewDocument: (source: string) => invoke<string[]>("preview_document", { source }),
+  /** The document text `source` as Quarto renders it, one SVG image per page. The Project's
+   * files that the text names are available to the render. */
+  previewDocument: (project_id: Uuid, source: string) =>
+    invoke<string[]>("preview_document", { project_id, source }),
+  /** Names a new Conversation after its first message and returns the title, or null when it was
+   * not named: already titled, no AI model set, or the model could not answer. */
+  nameConversation: (project_id: Uuid, conversation_id: Uuid) =>
+    invoke<string | null>("name_conversation", { project_id, conversation_id }),
+  renameConversation: (project_id: Uuid, conversation_id: Uuid, title: string) =>
+    invoke<void>("rename_conversation", { project_id, conversation_id, title }),
+  /** Stops the Conversation's running reply, then removes it with its messages. */
+  deleteConversation: (project_id: Uuid, conversation_id: Uuid) =>
+    invoke<void>("delete_conversation", { project_id, conversation_id }),
+  /** Only the Project's name changes, never its folder. */
+  renameProject: (project_id: Uuid, name: string) =>
+    invoke<ProjectSummary>("rename_project", { project_id, name }),
+  /** Removes the Project and its folder for good. */
+  deleteProject: (project_id: Uuid) => invoke<void>("delete_project", { project_id }),
+  /** Renames a file, keeping its extension. */
+  renameAsset: (project_id: Uuid, asset_id: Uuid, name: string) =>
+    invoke<AssetRef>("rename_asset", { project_id, asset_id, name }),
+  duplicateAsset: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<AssetRef>("duplicate_asset", { project_id, asset_id }),
+  deleteAsset: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<void>("delete_asset", { project_id, asset_id }),
+  /** Shows the file in the system's file manager. */
+  revealAsset: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<void>("reveal_asset", { project_id, asset_id }),
+  /** Whether Quarto is usable, its version and where it is, as last looked up: when the app
+   * started, when asked again, or when its location changed. */
+  quartoStatus: () => invoke<QuartoStatus>("quarto_status"),
+  /** Looks for Quarto again, as when it was installed after the app started. */
+  recheckQuarto: () => invoke<QuartoStatus>("recheck_quarto"),
+  /** Sets the Quarto program to use, or clears it with null so the app looks for one. */
+  setQuartoPath: (path: string | null) => invoke<QuartoStatus>("set_quarto_path", { path }),
   /** Saves the document as a PDF Asset named after it, and returns that Asset. */
   exportDocumentPdf: (project_id: Uuid, asset_id: Uuid) =>
     invoke<AssetRef>("export_document_pdf", { project_id, asset_id }),

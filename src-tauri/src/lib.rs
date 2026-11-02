@@ -16,6 +16,7 @@ mod paths;
 mod projects;
 mod recent;
 mod protocol;
+mod quarto;
 mod routing;
 mod runs;
 mod secrets;
@@ -84,6 +85,15 @@ pub fn run() {
             ipc::feature_component,
             ipc::update_overview_summary,
             ipc::open_asset,
+            ipc::rename_asset,
+            ipc::duplicate_asset,
+            ipc::delete_asset,
+            ipc::reveal_asset,
+            ipc::rename_conversation,
+            ipc::name_conversation,
+            ipc::delete_conversation,
+            ipc::rename_project,
+            ipc::delete_project,
             ipc::create_document,
             ipc::read_document,
             ipc::save_document,
@@ -97,6 +107,9 @@ pub fn run() {
             ipc::stop_draft,
             ipc::export_document_pdf,
             ipc::preview_document,
+            ipc::quarto_status,
+            ipc::recheck_quarto,
+            ipc::set_quarto_path,
             ipc::subscribe_sidecar_status,
             ipc::subscribe_routing_warning,
             ipc::restart_sidecar,

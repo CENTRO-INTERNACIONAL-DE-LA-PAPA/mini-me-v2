@@ -12,7 +12,7 @@ use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 13;
+pub const SIDECAR_PROTOCOL: u32 = 15;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -137,6 +137,16 @@ pub struct ChoiceAnswer {
 }
 
 /// Frames the core sends to the sidecar.
+/// What a `summary.start` asks the sidecar to write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SummaryKind {
+    /// The summary at the top of a Project's Overview.
+    Overview,
+    /// A short title for a Conversation, from its first message.
+    Title,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum CoreFrame {
@@ -166,12 +176,14 @@ pub enum CoreFrame {
         /// The question IDs to ask: `mini_me`, `reaction`, `needs_context`, `file`.
         ask: Vec<String>,
     },
-    /// Asks for a summary of a Project's Conversations; `material` is their text.
+    /// Asks for a short text written from `material`: a summary of a Project's Conversations,
+    /// or a title for a Conversation, by `kind`.
     #[serde(rename = "summary.start")]
     SummaryStart {
         summary_id: Uuid,
         model: CallModel,
         material: String,
+        kind: SummaryKind,
     },
     /// Asks for a report drafted from one Conversation; `material` is its messages. The
     /// text streams back in `draft.delta` frames.
@@ -185,16 +197,6 @@ pub enum CoreFrame {
     /// Stops a draft; the sidecar ends it with `draft.done`.
     #[serde(rename = "draft.cancel")]
     DraftCancel { draft_id: Uuid },
-    /// Asks for a document's text as PDF.
-    #[serde(rename = "document.export")]
-    DocumentExport {
-        export_id: Uuid,
-        name: String,
-        source: String,
-    },
-    /// Asks for a document's pages as SVG images, for its preview.
-    #[serde(rename = "document.preview")]
-    DocumentPreview { preview_id: Uuid, source: String },
     /// Exactly one of `result` and `error` is set.
     #[serde(rename = "core.response")]
     CoreResponse {
@@ -277,16 +279,6 @@ pub enum SidecarFrame {
     DraftDone { draft_id: Uuid },
     #[serde(rename = "draft.error")]
     DraftError { draft_id: Uuid, error: ErrorInfo },
-    /// `data` is the PDF, base64-encoded.
-    #[serde(rename = "document.exported")]
-    DocumentExported { export_id: Uuid, data: String },
-    #[serde(rename = "document.export_error")]
-    DocumentExportError { export_id: Uuid, error: ErrorInfo },
-    /// One SVG image per page.
-    #[serde(rename = "document.previewed")]
-    DocumentPreviewed { preview_id: Uuid, pages: Vec<String> },
-    #[serde(rename = "document.preview_error")]
-    DocumentPreviewError { preview_id: Uuid, error: ErrorInfo },
     #[serde(rename = "core.request")]
     CoreRequest {
         request_id: String,

@@ -25,10 +25,12 @@ use crate::library::{MiniMe, MiniMeSummary, TraitSummary};
 use crate::user_library::{LibraryStore, Skipped, TraitDraft};
 use crate::user_profile::{ProfileStore, UserProfile};
 use crate::overview;
+use crate::quarto;
 use crate::routing::{REACTION_CHANCE, ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
 use crate::settings::{AiSettings, HomeSettings, Settings};
+use crate::link::SummaryKind;
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
 use crate::updates::{UpdateStatus, Updates};
@@ -40,11 +42,11 @@ const SUMMARY_BUDGET_CHARS: usize = HISTORY_BUDGET_CHARS * 4;
 /// How long a summary may take; long material can keep the model writing for a while.
 const SUMMARY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
+/// How long naming a Conversation may take; its title is a few words.
+const TITLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// How long a draft may go without new text before it is stopped.
 const DRAFT_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
-
-/// How long making a PDF may take.
-const EXPORT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 /// The key account Jev's routing uses.
 const TYPESAFE: &str = "typesafe";
@@ -55,6 +57,9 @@ pub struct AppState {
     dev_app: bool,
     data_root: PathBuf,
     settings: Mutex<Settings>,
+    /// The user's Quarto as last looked up, shared with the check that gates the document
+    /// tools of a running Mini-Me.
+    quarto: Arc<quarto::Known>,
     open_projects: Mutex<HashMap<Uuid, Arc<Project>>>,
     runs: Arc<Runs>,
     routing: Arc<Routing>,
@@ -97,6 +102,13 @@ impl AppState {
         let library = Arc::new(LibraryStore::open(&data_root));
         let profile = ProfileStore::open(&data_root);
         let ai2 = Ai2::system();
+        let settings = Settings::load_or_create(&config_dir)?;
+        let quarto = Arc::new(quarto::Known::new(settings.quarto_path.clone()));
+        // Looked up now, in the background, so a document does not wait for it.
+        let warm = Arc::clone(&quarto);
+        std::thread::spawn(move || {
+            warm.status();
+        });
         let runs = Arc::new(Runs::new(
             Box::new(AppSecrets {
                 ai2: Arc::clone(&ai2),
@@ -105,6 +117,8 @@ impl AppState {
             CANCEL_TIMEOUT,
             Arc::clone(&library),
         ));
+        let gate = Arc::clone(&quarto);
+        runs.set_document_gate(Arc::new(move || gate.require().map(|_| ())));
         let sidecar = Supervisor::new(
             launch,
             false,
@@ -120,7 +134,8 @@ impl AppState {
         }
         Ok(Self {
             dev_app: projects::is_mini_me_dev(&identifier),
-            settings: Mutex::new(Settings::load_or_create(&config_dir)?),
+            settings: Mutex::new(settings),
+            quarto,
             data_root,
             config_dir,
             open_projects: Mutex::new(HashMap::new()),
@@ -213,6 +228,94 @@ pub async fn list_conversations(
     project_id: Uuid,
 ) -> AppResult<Vec<ConversationSummary>> {
     conversations::list(&*state.project(project_id)?)
+}
+
+/// Names a new Conversation from its first message, as soon as it is sent and while the reply is
+/// still being written, with the AI model chosen in Settings, and returns the title. Returns
+/// `None`, and changes nothing, when the Conversation is already titled or has had more than one
+/// message, when no model is set, or when the model cannot answer, so a missing key never fails
+/// anything.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn name_conversation(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    conversation_id: Uuid,
+) -> AppResult<Option<String>> {
+    let project = state.project(project_id)?;
+    let Some(material) = conversations::first_message_to_name(&project, conversation_id)? else {
+        return Ok(None);
+    };
+    let Some(model) = state.settings().ai.model() else {
+        return Ok(None);
+    };
+    let runs = Arc::clone(&state.runs);
+    let written = tauri::async_runtime::spawn_blocking(move || {
+        runs.summarize(model, material, SummaryKind::Title, TITLE_TIMEOUT)
+    })
+    .await
+    .map_err(|e| AppError::new("title_failed", e.to_string()))?;
+    let Ok(title) = written else {
+        return Ok(None);
+    };
+    let named = conversations::set_title_if_default(&project, conversation_id, &title)?;
+    Ok(named.then(|| title.trim().to_string()))
+}
+
+/// Gives the Conversation a new title.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn rename_conversation(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    conversation_id: Uuid,
+    title: String,
+) -> AppResult<()> {
+    conversations::rename(&*state.project(project_id)?, conversation_id, &title)
+}
+
+/// Deletes the Conversation after stopping its running reply.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_conversation(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    conversation_id: Uuid,
+) -> AppResult<()> {
+    let project = state.project(project_id)?;
+    for message_id in conversations::stop_reply(&project, conversation_id)? {
+        state.runs.cancel_message(message_id);
+    }
+    conversations::delete(&project, conversation_id)
+}
+
+/// Renames the Project; only its name changes, never its folder.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn rename_project(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    name: String,
+) -> AppResult<ProjectSummary> {
+    let summary = state.find_summary(project_id)?;
+    // Through the open Project, so running replies and every other holder share one instance.
+    let name = state.project(project_id)?.rename(&name)?;
+    Ok(ProjectSummary { name, ..summary })
+}
+
+/// Deletes the Project with its folder, after stopping every running reply in it.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_project(state: State<'_, AppState>, project_id: Uuid) -> AppResult<()> {
+    let summary = state.find_summary(project_id)?;
+    {
+        let project = state.project(project_id)?;
+        for conversation in conversations::list(&project)? {
+            for message_id in conversations::stop_reply(&project, conversation.id)? {
+                state.runs.cancel_message(message_id);
+            }
+        }
+    }
+    state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).remove(&project_id);
+    projects::delete(&summary.folder)?;
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.recent_projects.remove(&project_id);
+    settings.save(&state.config_dir)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -757,12 +860,71 @@ pub async fn update_overview_summary(
     }
     let runs = Arc::clone(&state.runs);
     let text = tauri::async_runtime::spawn_blocking(move || {
-        runs.summarize(model, material, SUMMARY_TIMEOUT)
+        runs.summarize(model, material, SummaryKind::Overview, SUMMARY_TIMEOUT)
     })
     .await
     .map_err(|e| AppError::new("summary_failed", e.to_string()))??;
     overview::save_summary(&project, &text, now_ms())?;
     overview::overview(&project)
+}
+
+/// The Quarto program documents render with, or the error that says why document work is
+/// blocked, from the last lookup.
+async fn require_quarto(state: &AppState) -> AppResult<PathBuf> {
+    let known = Arc::clone(&state.quarto);
+    tauri::async_runtime::spawn_blocking(move || known.require())
+        .await
+        .map_err(|e| AppError::new("quarto_failed", e.to_string()))?
+}
+
+/// Looks Quarto up again when a render found that it can no longer be started, so the notice
+/// shows from then on; `result` is returned as it is.
+fn looked_again<T>(known: &quarto::Known, result: AppResult<T>) -> AppResult<T> {
+    if result.as_ref().is_err_and(|e| e.code == quarto::NOT_STARTED) {
+        known.refresh();
+    }
+    result
+}
+
+/// Whether Quarto is usable, its version and where it is, as of the last lookup, which is made
+/// when the app starts, when the user asks, and when its location changes.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn quarto_status(state: State<'_, AppState>) -> AppResult<quarto::Status> {
+    let known = Arc::clone(&state.quarto);
+    tauri::async_runtime::spawn_blocking(move || known.status())
+        .await
+        .map_err(|e| AppError::new("quarto_failed", e.to_string()))
+}
+
+/// Looks for Quarto again, as when it was installed after the app started.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn recheck_quarto(state: State<'_, AppState>) -> AppResult<quarto::Status> {
+    let known = Arc::clone(&state.quarto);
+    tauri::async_runtime::spawn_blocking(move || known.refresh())
+        .await
+        .map_err(|e| AppError::new("quarto_failed", e.to_string()))
+}
+
+/// Sets the Quarto program to use, or clears it with `None` or an empty path so the app looks
+/// for one again; returns the status that results.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_quarto_path(
+    state: State<'_, AppState>,
+    path: Option<String>,
+) -> AppResult<quarto::Status> {
+    let chosen = path.map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
+    {
+        // Saved before it takes effect, so a failed save leaves the old location in use.
+        let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+        let mut updated = settings.clone();
+        updated.quarto_path = chosen.clone();
+        updated.save(&state.config_dir)?;
+        *settings = updated;
+    }
+    let known = Arc::clone(&state.quarto);
+    tauri::async_runtime::spawn_blocking(move || known.set_setting(chosen))
+        .await
+        .map_err(|e| AppError::new("quarto_failed", e.to_string()))
 }
 
 /// Creates an empty document titled `title`, with the user's name as author when they have one.
@@ -772,6 +934,7 @@ pub async fn create_document(
     project_id: Uuid,
     title: String,
 ) -> AppResult<AssetRef> {
+    require_quarto(&state).await?;
     let author = state.profile.current().name;
     documents::create(&*state.project(project_id)?, &title, author.as_deref(), &state.user())
 }
@@ -788,6 +951,7 @@ pub async fn draft_document(
     draft_id: Uuid,
     on_event: Channel<DraftEvent>,
 ) -> AppResult<()> {
+    require_quarto(&state).await?;
     let model = state
         .settings()
         .ai
@@ -824,12 +988,21 @@ pub async fn stop_draft(state: State<'_, AppState>, draft_id: Uuid) -> AppResult
     Ok(())
 }
 
-/// The document text `source` as it would export, one SVG image per page.
+/// The document text `source` as Quarto renders it, one SVG image per page. Project files the
+/// text names are available to the render.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn preview_document(state: State<'_, AppState>, source: String) -> AppResult<Vec<String>> {
-    let runs = Arc::clone(&state.runs);
-    tauri::async_runtime::spawn_blocking(move || runs.preview(source, EXPORT_TIMEOUT))
-        .await
+pub async fn preview_document(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    source: String,
+) -> AppResult<Vec<String>> {
+    let program = require_quarto(&state).await?;
+    let project = state.project(project_id)?;
+    let known = Arc::clone(&state.quarto);
+    tauri::async_runtime::spawn_blocking(move || {
+        looked_again(&known, quarto::preview_pages(&project, &program, &source))
+    })
+    .await
         .map_err(|e| AppError::new("preview_failed", e.to_string()))?
 }
 
@@ -840,13 +1013,14 @@ pub async fn export_document_pdf(
     project_id: Uuid,
     asset_id: Uuid,
 ) -> AppResult<AssetRef> {
+    let program = require_quarto(&state).await?;
     let project = state.project(project_id)?;
     let name = assets::find(&project.lock(), asset_id)?.name;
     let source = documents::read(&project, asset_id)?;
-    let runs = Arc::clone(&state.runs);
-    let export_name = name.clone();
+    let rendered = Arc::clone(&project);
+    let known = Arc::clone(&state.quarto);
     let pdf = tauri::async_runtime::spawn_blocking(move || {
-        runs.export_pdf(export_name, source, EXPORT_TIMEOUT)
+        looked_again(&known, quarto::export_pdf(&rendered, &program, &source))
     })
     .await
     .map_err(|e| AppError::new("export_failed", e.to_string()))??;
@@ -871,6 +1045,51 @@ pub async fn save_document(
     anchors: Vec<comments::Anchor>,
 ) -> AppResult<()> {
     documents::save(&*state.project(project_id)?, asset_id, &text, &anchors)
+}
+
+/// Renames the file `asset_id`, keeping its extension.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn rename_asset(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+    name: String,
+) -> AppResult<AssetRef> {
+    assets::rename(&*state.project(project_id)?, asset_id, &name)
+}
+
+/// Adds a copy of the file `asset_id` named "<name> copy".
+#[tauri::command(rename_all = "snake_case")]
+pub async fn duplicate_asset(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<AssetRef> {
+    assets::duplicate(&*state.project(project_id)?, asset_id, &state.user())
+}
+
+/// Deletes the file `asset_id` from the Project.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_asset(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<()> {
+    assets::delete(&*state.project(project_id)?, asset_id)
+}
+
+/// Shows the file `asset_id` in the system's file manager.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn reveal_asset(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<()> {
+    let path = assets::file_path(&*state.project(project_id)?, asset_id)?;
+    app.opener()
+        .reveal_item_in_dir(path)
+        .map_err(|e| AppError::new("open_failed", e.to_string()))
 }
 
 #[tauri::command(rename_all = "snake_case")]

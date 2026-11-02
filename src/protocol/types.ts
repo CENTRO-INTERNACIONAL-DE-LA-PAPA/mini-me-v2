@@ -446,6 +446,19 @@ export interface AiSettings {
   show_answers: boolean;
 }
 
+/** What the app knows about the user's Quarto, which documents are edited and rendered with. */
+export interface QuartoStatus {
+  state: "found" | "missing" | "too_old" | "broken";
+  version: string | null;
+  /** The program in use, or the location the user chose when it cannot be run. */
+  path: string | null;
+  /** Whether `path` is the location the user chose in Settings, not one the app found. */
+  chosen: boolean;
+  /** The oldest version the app renders with, such as "1.10". */
+  minimum: string;
+  install_url: string;
+}
+
 /** The Ai2 account Asta's services sign in with. */
 export type Ai2Status =
   | { state: "signed_out"; error: string | null }

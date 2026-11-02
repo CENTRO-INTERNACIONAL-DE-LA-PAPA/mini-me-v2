@@ -67,7 +67,7 @@ fn deliver(queue: Receiver<Event>, active: Arc<AtomicBool>, sink: Box<dyn EventS
 
 pub struct Project {
     pub id: Uuid,
-    pub name: String,
+    name: Mutex<String>,
     pub paths: ProjectPaths,
     inner: Mutex<ProjectState>,
 }
@@ -83,7 +83,7 @@ impl Project {
     pub fn new(id: Uuid, name: String, paths: ProjectPaths, conn: Connection, origin: Origin) -> Self {
         Self {
             id,
-            name,
+            name: Mutex::new(name),
             paths,
             inner: Mutex::new(ProjectState {
                 conn,
@@ -92,6 +92,20 @@ impl Project {
                 subscribers: HashMap::new(),
             }),
         }
+    }
+
+    /// The Project's name as it is now.
+    pub fn name(&self) -> String {
+        self.name.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    /// Gives the Project a new name, stored in its database through this open Project; no folder
+    /// is renamed or moved. Returns the name as trimmed.
+    pub fn rename(&self, name: &str) -> AppResult<String> {
+        let name = crate::projects::validate_name(name)?;
+        self.lock().conn.execute("UPDATE project SET name = ?1", rusqlite::params![name])?;
+        *self.name.lock().unwrap_or_else(|p| p.into_inner()) = name.clone();
+        Ok(name)
     }
 
     pub fn lock(&self) -> MutexGuard<'_, ProjectState> {

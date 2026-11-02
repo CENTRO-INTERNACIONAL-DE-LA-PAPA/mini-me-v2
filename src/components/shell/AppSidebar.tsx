@@ -31,7 +31,7 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { initials } from "../../lib/names";
@@ -45,6 +45,7 @@ import { formatRelative } from "../../lib/format";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { RoutingWarningLine } from "./RoutingWarningLine";
 import { SidecarStatusLine, sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
+import { ItemMenu } from "./ItemMenu";
 import { UpdateStatusLine } from "./UpdateStatusLine";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import type { View } from "./view";
@@ -61,6 +62,8 @@ interface Props {
   onNavigate: (view: View) => void;
   onNewConversation: () => void;
   onOpenConversation: (projectId: Uuid, conversationId: Uuid) => void;
+  onRenameConversation: (id: Uuid, title: string) => Promise<unknown>;
+  onDeleteConversation: (id: Uuid) => Promise<unknown>;
 }
 
 export function AppSidebar({
@@ -73,24 +76,20 @@ export function AppSidebar({
   onNavigate,
   onNewConversation,
   onOpenConversation,
+  onRenameConversation,
+  onDeleteConversation,
 }: Props) {
   const sidecar = useSidecarStatus();
   const name = useUserProfile()?.name;
   const onHome = !project && view.kind === "home";
   const [recent, setRecent] = useState<RecentConversation[]>([]);
 
+  const loadRecent = useCallback(() => api.listRecentConversations().then(setRecent), []);
+
   // Fetched each time Home is shown, so it follows activity in any Project.
   useEffect(() => {
-    if (!onHome) return;
-    let active = true;
-    api
-      .listRecentConversations()
-      .then((list) => active && setRecent(list))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [onHome]);
+    if (onHome) loadRecent().catch(() => {});
+  }, [onHome, loadRecent]);
 
   return (
     <Sidebar variant="floating">
@@ -169,6 +168,24 @@ export function AppSidebar({
                       {conversation.project_name} · {formatRelative(conversation.last_activity_at)}
                     </span>
                   </SidebarMenuButton>
+                  <ItemMenu
+                    name={conversation.title}
+                    className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100"
+                    rename={{
+                      current: conversation.title,
+                      onRename: (title) =>
+                        api
+                          .renameConversation(conversation.project_id, conversation.conversation_id, title)
+                          .then(loadRecent),
+                    }}
+                    remove={{
+                      question: `Delete "${conversation.title}" and its messages? This can't be undone.`,
+                      onDelete: () =>
+                        api
+                          .deleteConversation(conversation.project_id, conversation.conversation_id)
+                          .then(loadRecent),
+                    }}
+                  />
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
@@ -206,6 +223,18 @@ export function AppSidebar({
                         {formatRelative(conversation.last_activity_at)}
                       </span>
                     </SidebarMenuButton>
+                    <ItemMenu
+                      name={conversation.title}
+                      className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100"
+                      rename={{
+                        current: conversation.title,
+                        onRename: (title) => onRenameConversation(conversation.id, title),
+                      }}
+                      remove={{
+                        question: `Delete "${conversation.title}" and its messages? This can't be undone.`,
+                        onDelete: () => onDeleteConversation(conversation.id),
+                      }}
+                    />
                   </SidebarMenuItem>
                 );
               })}

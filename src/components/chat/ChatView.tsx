@@ -8,6 +8,8 @@ import { chatColumn, Composer, type ComposerHandle } from "./Composer";
 import { MessageItem } from "./MessageItem";
 import type { MessageView } from "../../protocol/eventStore";
 import { MiniMePill } from "../minime/MiniMePill";
+import { ItemMenu } from "../shell/ItemMenu";
+import { ExistingFilesProvider } from "./existingFiles";
 import { MainSheet, SheetHeader, ToolSwitch, type ToolOption } from "../shell/Sheet";
 import { FeaturingProvider } from "../interactive/featuring";
 import { OpenDocumentProvider } from "../documents/openDocument";
@@ -28,6 +30,8 @@ interface Props {
   /** A message to scroll to once the Conversation has loaded, instead of the latest one. */
   messageId?: string;
   onActivity: () => void;
+  onRename: (title: string) => Promise<unknown>;
+  onDelete: () => Promise<unknown>;
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
   /** Opens a document: to be drafted from this Conversation, with its Comments sheet showing,
    * or as it is. */
@@ -40,6 +44,8 @@ export function ChatView({
   title,
   messageId,
   onActivity,
+  onRename,
+  onDelete,
   onOpenReply,
   onOpenDocument,
 }: Props) {
@@ -75,13 +81,19 @@ export function ChatView({
     },
     { id: "report", label: "Report", icon: FileTextIcon },
   ];
-  const bottom = useRef<HTMLDivElement>(null);
+  // The scrolling list and the column inside it, and whether the user is at the bottom, which is
+  // when new text is followed.
+  const scroller = useRef<HTMLDivElement>(null);
+  const column = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+  const messageCount = useRef(0);
   // The message sent from this view, until Mini-Me decides who answers it. Kept in memory
   // only, so reopening a Conversation never shows a stale "Choosing" status.
   const [routing, setRouting] = useState<string | null>(null);
   const decided = routing !== null && state.messages.some((m) => m.reply_to === routing);
   const choosing = routing !== null && !decided;
   const replying = state.messages.some((m) => m.status === "streaming" || m.status === "paused");
+
   const composer = useRef<ComposerHandle>(null);
   const names = useMemo(() => componentNames(state.messages), [state.messages]);
   const used = useMemo(() => outline(state.messages, names), [state.messages, names]);
@@ -132,6 +144,8 @@ export function ChatView({
   // Follows new messages and the latest one as it streams, but not changes to earlier
   // messages, such as a reaction, which would pull the user away from what they read.
   const last = state.messages[state.messages.length - 1];
+  // What a chip's file lists depend on: a new message, or a file attached to one.
+  const filesKey = `${state.messages.length}:${state.messages.reduce((n, m) => n + m.attachments.length, 0)}`;
   // The message the Conversation was opened at, until it has been scrolled to.
   const target = useRef(messageId);
   useEffect(() => {
@@ -140,16 +154,38 @@ export function ChatView({
       target.current = undefined;
       if (element) {
         element.scrollIntoView({ block: "center" });
+        pinned.current = false;
         return;
       }
     } else if (target.current) {
       return;
     }
-    bottom.current?.scrollIntoView({ block: "end" });
+    // A new message, such as the one just sent, always brings the view to the bottom; a reply
+    // that grows is followed only while the user is there.
+    if (state.messages.length !== messageCount.current) {
+      messageCount.current = state.messages.length;
+      pinned.current = true;
+    }
+    if (pinned.current) scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [state.messages.length, last, choosing]);
+
+  // A reply keeps growing after its text arrives: Markdown re-renders, Interactive Components
+  // appear when a Step finishes and the progress card grows. Following the column's height keeps
+  // the view at the bottom through all of it.
+  useEffect(() => {
+    const box = scroller.current;
+    const content = column.current;
+    if (!box || !content) return;
+    const observer = new ResizeObserver(() => {
+      if (pinned.current && !target.current) box.scrollTop = box.scrollHeight;
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <FeaturingProvider projectId={projectId}>
+      <ExistingFilesProvider projectId={projectId} refreshKey={filesKey}>
       <OpenDocumentProvider open={openDocument}>
         <ComponentReferencesProvider names={names} append={appendReference}>
           <div className="flex min-h-0 min-w-0 flex-1 gap-3">
@@ -169,6 +205,16 @@ export function ChatView({
               )}
               <SheetHeader
                 title={title}
+                titleAction={
+                  <ItemMenu
+                    name={title}
+                    rename={{ current: title, onRename }}
+                    remove={{
+                      question: `Delete "${title}" and its messages? This can't be undone.`,
+                      onDelete,
+                    }}
+                  />
+                }
                 compact={panel !== null}
                 actions={
                   <ToolSwitch
@@ -183,7 +229,14 @@ export function ChatView({
               </SheetHeader>
               {/* A gutter on both sides keeps the column centred like the composer whether or
                   not a scrollbar shows. */}
-              <div className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
+              <div
+                ref={scroller}
+                onScroll={(event) => {
+                  const box = event.currentTarget;
+                  pinned.current = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+                }}
+                className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]"
+              >
                 {/* The list's top edge fades into the sheet. */}
                 <div
                   aria-hidden
@@ -191,6 +244,7 @@ export function ChatView({
                 />
                 {/* The bottom padding lets the last reply clear the floating composer. */}
                 <div
+                  ref={column}
                   className={cn(
                     "flex flex-col gap-[22px] pt-8 pb-[150px]",
                     chatColumn(panel !== null, "messages"),
@@ -213,7 +267,6 @@ export function ChatView({
                   {state.messages.length === 0 && (
                     <p className="p-8 text-center text-muted-foreground">No messages yet.</p>
                   )}
-                  <div ref={bottom} />
                 </div>
               </div>
               {error && <p className="px-8 py-2 text-meta text-destructive">{error}</p>}
@@ -228,6 +281,13 @@ export function ChatView({
                 onSent={(message) => {
                   setRouting(message.id);
                   onActivity();
+                  // A new Conversation is named from its first message while the reply is still
+                  // being written; the core ignores any other message, and a failure leaves the
+                  // default title.
+                  void api
+                    .nameConversation(projectId, conversationId)
+                    .then((named) => named && onActivity())
+                    .catch(() => {});
                 }}
               />
             </MainSheet>
@@ -271,6 +331,7 @@ export function ChatView({
           </div>
         </ComponentReferencesProvider>
       </OpenDocumentProvider>
+      </ExistingFilesProvider>
     </FeaturingProvider>
   );
 }

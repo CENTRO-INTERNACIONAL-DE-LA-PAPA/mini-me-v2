@@ -79,10 +79,6 @@ async def _main(link: Link, test_adapters: bool) -> None:
                 documents.start_draft(frame)
             case "draft.cancel":
                 documents.cancel_draft(frame.get("draft_id"))
-            case "document.export":
-                documents.start_export(frame)
-            case "document.preview":
-                documents.start_preview(frame)
             case "run.cancel":
                 runs.cancel(frame.get("run_id"))
             case "core.response":
