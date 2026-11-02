@@ -33,7 +33,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "packages"))
 
 from mini_me_sidecar.__main__ import main
 
-main()
+# A spawned data worker runs this file again as `__mp_main__` while it starts; without the
+# guard it would start a second sidecar on the same stdin.
+if __name__ == "__main__":
+    main()
 '''
 
 
