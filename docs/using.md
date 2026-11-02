@@ -73,7 +73,10 @@ source as text, including
 the title and author in its header; the buttons add bold, italic, headings, quotes and lists,
 and changes are saved as you type. The preview shows the pages exactly as **Export PDF** will
 make them, rendered by Quarto, which takes a few seconds; click **Render** to update it after
-editing. Files in the Project that the document names, such as figures, are included.
+editing. Files in the Project that the document names, such as figures, are included. For safety,
+Mini-Me does not render a document that includes other files (`{{< include >}}`, `{{< embed >}}`),
+reads environment variables (`{{< env >}}`), refers to a file outside its own folder with `../`, or
+sets `filters`, `shortcodes`, `template` or the `include-` header keys; it says which.
 **Export PDF** saves a PDF of the document next to it in Files and offers to open it; both are
 made on your computer, and code in the document is shown, never run.
 

@@ -31,6 +31,18 @@ const RENDER_LIMIT: Duration = Duration::from_secs(120);
 const PAGES_LIMIT: Duration = Duration::from_secs(60);
 /// The file names a render uses, which a Project file of the same name must not replace.
 const RESERVED: [&str; 3] = ["document.qmd", "document.pdf", "document.typ"];
+/// Shortcodes that read files or the environment, which `--no-execute` does not stop.
+const REFUSED_SHORTCODES: [&str; 3] = ["include", "embed", "env"];
+/// Header keys that run filters or insert whole files into the output.
+const REFUSED_KEYS: [&str; 7] = [
+    "filters",
+    "shortcodes",
+    "include-in-header",
+    "include-before-body",
+    "include-after-body",
+    "template",
+    "template-partials",
+];
 /// The program names looked for in each folder of the PATH.
 const NAMES: &[&str] = if cfg!(windows) { &["quarto.exe", "quarto.cmd"] } else { &["quarto"] };
 
@@ -186,22 +198,25 @@ impl Known {
         self.state.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// The status as last looked up, looking it up first if it never was.
+    /// The status as last looked up, looking it up first if it never was. The lookup runs
+    /// without the lock, since it can take seconds and others only want the kept result.
     pub fn status(&self) -> Status {
-        let mut state = self.lock();
-        if let Some(found) = &state.1 {
-            return found.clone();
-        }
-        let found = (self.lookup)(state.0.as_deref());
-        state.1 = Some(found.clone());
-        found
+        let setting = {
+            let state = self.lock();
+            if let Some(found) = &state.1 {
+                return found.clone();
+            }
+            state.0.clone()
+        };
+        let found = (self.lookup)(setting.as_deref());
+        self.lock().1.get_or_insert(found).clone()
     }
 
     /// Looks Quarto up again, as when the user asks or a render could not start it.
     pub fn refresh(&self) -> Status {
-        let mut state = self.lock();
-        let found = (self.lookup)(state.0.as_deref());
-        state.1 = Some(found.clone());
+        let setting = self.lock().0.clone();
+        let found = (self.lookup)(setting.as_deref());
+        self.lock().1 = Some(found.clone());
         found
     }
 
@@ -303,13 +318,15 @@ fn last_lines(output: &str, count: usize) -> String {
 /// A render's temporary folder inside the Project, removed when this is dropped.
 struct RenderFolder {
     path: PathBuf,
+    /// The Project files copied in, which are not what Quarto made.
+    copied: Vec<String>,
 }
 
 impl RenderFolder {
     fn create(project: &Project) -> AppResult<Self> {
         let path = project.paths.resolve(&format!("render/{}", new_id()))?;
         std::fs::create_dir_all(&path)?;
-        Ok(Self { path })
+        Ok(Self { path, copied: Vec::new() })
     }
 }
 
@@ -323,24 +340,96 @@ impl Drop for RenderFolder {
     }
 }
 
+/// The header of `source`, between its opening and closing `---` lines.
+fn front_matter(source: &str) -> Option<&str> {
+    let rest = source.strip_prefix("---\n").or_else(|| source.strip_prefix("---\r\n"))?;
+    let end = rest.find("\n---")?;
+    Some(&rest[..end])
+}
+
+/// Refuses a source that makes Quarto read files outside the render folder or run code, which
+/// `--no-execute` does not stop: a path that leaves the folder, shortcodes that include files or
+/// read the environment, and header keys that run filters or insert files.
+fn check_source(source: &str) -> AppResult<()> {
+    let refuse = |what: String| {
+        Err(AppError::new(
+            "document_refused",
+            format!("Quarto is not run on this document: {what}. Remove it and try again."),
+        ))
+    };
+    if source.contains("../") || source.contains("..\\") {
+        return refuse("it refers to a file outside its own folder (`../`)".into());
+    }
+    let mut rest = source;
+    while let Some(start) = rest.find("{{<") {
+        let after = &rest[start + 3..];
+        let name: String = after
+            .trim_start()
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+            .collect();
+        if REFUSED_SHORTCODES.contains(&name.as_str()) {
+            return refuse(format!("its `{{{{< {name} >}}}}` shortcode reads files or the environment"));
+        }
+        rest = after;
+    }
+    for line in front_matter(source).unwrap_or("").lines() {
+        let key = line.split(':').next().unwrap_or("").trim();
+        if REFUSED_KEYS.contains(&key) {
+            return refuse(format!("its header sets `{key}`, which runs filters or inserts files"));
+        }
+    }
+    Ok(())
+}
+
+/// Whether a Project file of this name must stay out of a render: the files the render makes,
+/// files that change how Quarto renders (`_quarto.yml`, `_metadata.yml`, `_extensions`), Lua
+/// filters, and the preview's page images.
+fn is_reserved(name: &str) -> bool {
+    RESERVED.contains(&name)
+        || name.starts_with('_')
+        || name.to_lowercase().ends_with(".lua")
+        || page_number(name).is_some()
+}
+
 /// The assets whose names appear in `source`, which a document refers to as files.
 fn named_assets(source: &str, assets: Vec<AssetRef>) -> Vec<AssetRef> {
     assets
         .into_iter()
-        .filter(|a| !a.name.is_empty() && !RESERVED.contains(&a.name.as_str()))
+        .filter(|a| !a.name.is_empty() && !is_reserved(&a.name))
         .filter(|a| source.contains(&a.name))
         .collect()
 }
 
 /// Writes `source` as `document.qmd` in a new render folder with the Project files it names.
 fn prepare(project: &Project, source: &str) -> AppResult<RenderFolder> {
-    let folder = RenderFolder::create(project)?;
+    check_source(source)?;
+    let mut folder = RenderFolder::create(project)?;
     std::fs::write(folder.path.join("document.qmd"), source)?;
     for asset in named_assets(source, assets::list(project, None)?) {
         let from = assets::file_path(project, asset.id)?;
         std::fs::copy(from, folder.path.join(&asset.name))?;
+        folder.copied.push(asset.name);
     }
     Ok(folder)
+}
+
+/// The file with extension `ext` that Quarto made in `folder`: `document.<ext>`, or the name the
+/// document's `output-file` gave it. Files copied from the Project are not Quarto's.
+fn output_file(folder: &RenderFolder, ext: &str) -> AppResult<PathBuf> {
+    let expected = folder.path.join(format!("document.{ext}"));
+    if expected.is_file() {
+        return Ok(expected);
+    }
+    for entry in std::fs::read_dir(&folder.path)? {
+        let path = entry?.path();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+        let right_kind = path.extension().is_some_and(|e| e == ext);
+        if right_kind && path.is_file() && !folder.copied.contains(&name) {
+            return Ok(path);
+        }
+    }
+    Err(AppError::new("quarto_failed", format!("Quarto made no .{ext} file for this document.")))
 }
 
 /// Renders `document.qmd` in `folder` to `document.pdf` and keeps its Typst source, without
@@ -358,14 +447,16 @@ fn render(quarto: &Path, folder: &Path) -> AppResult<()> {
 pub fn export_pdf(project: &Project, quarto: &Path, source: &str) -> AppResult<Vec<u8>> {
     let folder = prepare(project, source)?;
     render(quarto, &folder.path)?;
-    Ok(std::fs::read(folder.path.join("document.pdf"))?)
+    Ok(std::fs::read(output_file(&folder, "pdf")?)?)
 }
 
 /// The document `source` rendered by `quarto` as SVG images, one per page.
 pub fn preview_pages(project: &Project, quarto: &Path, source: &str) -> AppResult<Vec<String>> {
     let folder = prepare(project, source)?;
     render(quarto, &folder.path)?;
-    let args = ["typst", "compile", "--format", "svg", "document.typ", "page-{p}.svg"];
+    let typ = output_file(&folder, "typ")?;
+    let typ_name = typ.file_name().and_then(|n| n.to_str()).unwrap_or("document.typ");
+    let args = ["typst", "compile", "--format", "svg", typ_name, "page-{p}.svg"];
     let finished = run_limited(command(quarto, &args, Some(&folder.path)), PAGES_LIMIT)?;
     if !finished.success {
         return Err(AppError::new("quarto_failed", last_lines(&finished.output, 12)));
@@ -489,6 +580,65 @@ mod tests {
         assert_eq!(after.path.as_deref(), Some("/chosen/quarto"));
         assert!(known.status().chosen);
         assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn a_document_that_reads_files_or_runs_filters_is_refused() {
+        let refused = [
+            "text\n\n{{< include ../notes.qmd >}}\n",
+            "{{<env HOME>}}",
+            "{{< embed analysis.ipynb >}}",
+            "see ../secret.txt",
+            "---\ntitle: t\nfilters:\n  - a.lua\n---\n\ntext",
+            "---\ntitle: t\nformat:\n  typst:\n    template: mine.typ\n---\n",
+            "---\ntitle: t\ninclude-in-header: head.typ\n---\n",
+        ];
+        for source in refused {
+            let error = check_source(source).unwrap_err();
+            assert_eq!(error.code, "document_refused", "{source}");
+        }
+    }
+
+    #[test]
+    fn an_ordinary_document_is_not_refused() {
+        let source = "---\ntitle: \"A\"\ndate: 2026-11-02\nformat:\n  typst:\n    toc: true\n---\n\n\
+                      ## Intro\n\n![Sites](sites.png)\n\n{{< pagebreak >}}\n\n\
+                      | a | b |\n|---|---|\n| 1 | 2 |\n\nPress {{< kbd Ctrl-C >}}.\n";
+        check_source(source).unwrap();
+    }
+
+    #[test]
+    fn files_that_change_how_quarto_renders_stay_out_of_a_render() {
+        for name in ["_quarto.yml", "_metadata.yml", "page-1.svg", "Filter.LUA", "document.pdf"] {
+            assert!(is_reserved(name), "{name}");
+        }
+        assert!(!is_reserved("sites.png") && !is_reserved("field-trial.csv"));
+    }
+
+    #[test]
+    fn the_output_is_found_under_the_name_the_document_gave_it() {
+        let (_dir, project) = temp_project();
+        let mut folder = RenderFolder::create(&project).unwrap();
+        std::fs::write(folder.path.join("data.pdf"), "copied").unwrap();
+        folder.copied.push("data.pdf".into());
+        assert!(output_file(&folder, "pdf").is_err());
+        std::fs::write(folder.path.join("report.pdf"), "made").unwrap();
+        assert_eq!(output_file(&folder, "pdf").unwrap(), folder.path.join("report.pdf"));
+        std::fs::write(folder.path.join("document.pdf"), "made").unwrap();
+        assert_eq!(output_file(&folder, "pdf").unwrap(), folder.path.join("document.pdf"));
+    }
+
+    #[test]
+    fn a_document_that_names_its_output_still_exports() {
+        let found = status(None);
+        if found.state != State::Found {
+            return;
+        }
+        let program = PathBuf::from(found.path.unwrap());
+        let (_dir, project) = temp_project();
+        let source = "---\ntitle: \"A\"\nformat:\n  typst:\n    output-file: report\n---\n\nText\n";
+        assert!(export_pdf(&project, &program, source).unwrap().starts_with(b"%PDF"));
+        assert!(!preview_pages(&project, &program, source).unwrap().is_empty());
     }
 
     #[test]

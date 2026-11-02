@@ -95,6 +95,10 @@ in the document's source, under that name. A file the document does not name SHA
 - **WHEN** the Project holds `field-trial.csv` and the source does not name it
 - **THEN** the file is not copied into the temporary folder
 
+#### Scenario: Files that change how Quarto renders
+- **WHEN** the Project holds `_quarto.yml` or `filter.lua` and the source names it
+- **THEN** the file is not copied into the temporary folder
+
 ### Requirement: Rendering confinement
 A render SHALL run Quarto with code execution turned off, so no code cell runs. Quarto SHALL run only
 in the render's temporary folder, and a render that runs longer than a fixed time limit SHALL be
@@ -115,3 +119,20 @@ SHALL keep its last good pages, and an export SHALL save nothing.
 #### Scenario: A broken chunk
 - **WHEN** the document has a YAML header that Quarto cannot read
 - **THEN** the view shows Quarto's message, and the preview keeps its last pages
+
+### Requirement: Documents that read outside their folder are refused
+Before running Quarto, the core SHALL refuse a document that includes or embeds files, reads
+environment variables, refers to a file with `../`, or sets a header key that runs filters or inserts
+files, and SHALL say which was refused.
+
+#### Scenario: An include
+- **WHEN** the source contains `{{< include ../notes.qmd >}}`
+- **THEN** no render starts, and the view says the document refers to a file outside its folder
+
+#### Scenario: The environment
+- **WHEN** the source contains `{{< env HOME >}}`
+- **THEN** no render starts, and the view says the shortcode reads the environment
+
+#### Scenario: A filter
+- **WHEN** the header sets `filters`
+- **THEN** no render starts, and the view says the header runs filters
