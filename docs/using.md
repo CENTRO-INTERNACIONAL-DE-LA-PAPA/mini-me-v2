@@ -49,8 +49,13 @@ document (`.qmd`) opens in Mini-Me's document view rather than another app.
 ## Documents
 
 A **document** is a report you edit in Mini-Me and keep in the Project's Files, as a Quarto
-(`.qmd`) file that Quarto, RStudio and other editors also open. To start one, pick **Report**
-next to Outline and Jobs in a Conversation:
+(`.qmd`) file that Quarto, RStudio and other editors also open. Editing documents needs
+[Quarto](https://quarto.org/docs/download/) version 1.10 or later on your computer: Mini-Me
+finds it by itself when it starts, and if it is somewhere unusual, set where it is in
+**Settings → General → Documents**. If you install Quarto while Mini-Me is running, click
+**Check again** there or in the notice a document shows. Without Quarto, Mini-Me shows how to get
+it and does not create, open, edit or export documents; they stay in Files as files. To start
+one, pick **Report** next to Outline and Jobs in a Conversation:
 
 - **Draft from this conversation** creates a document titled after the Conversation and opens
   it while Scribe writes a report from the Conversation's messages, which appears in the
@@ -67,9 +72,13 @@ The document view shows the document's Quarto source beside a preview of its pag
 source as text, including
 the title and author in its header; the buttons add bold, italic, headings, quotes and lists,
 and changes are saved as you type. The preview shows the pages exactly as **Export PDF** will
-make them; click **Render** to update it after editing. **Export PDF** saves a PDF of the
-document next to it in Files and offers to open it; both are made on your computer, and code in
-the document is shown, never run.
+make them, rendered by Quarto, which takes a few seconds; click **Render** to update it after
+editing. Files in the Project that the document names, such as figures, are included. For safety,
+Mini-Me does not render a document that includes other files (`{{< include >}}`, `{{< embed >}}`),
+reads environment variables (`{{< env >}}`), refers to a file outside its own folder with `../`, or
+sets `filters`, `shortcodes`, `template` or the `include-` header keys; it says which.
+**Export PDF** saves a PDF of the document next to it in Files and offers to open it; both are
+made on your computer, and code in the document is shown, never run.
 
 ### Comments and suggestions
 

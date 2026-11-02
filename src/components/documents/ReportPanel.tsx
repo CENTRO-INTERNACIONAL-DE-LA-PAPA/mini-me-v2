@@ -4,13 +4,16 @@ import { FilePlusIcon, FileTextIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../../api";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { useQuarto } from "../../hooks/useQuarto";
 import { formatRelative } from "../../lib/format";
 import type { FileEntry, MiniMe } from "../../protocol/types";
 import type { MessageView } from "../../protocol/eventStore";
 import { FileMark } from "../files/FileMark";
 import { isDocument } from "../files/files";
+import { openLink } from "../interactive/links";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { ToolSheet } from "../shell/Sheet";
+import { documentsBlocked, quartoNotice } from "./quarto";
 
 /** The Mini-Mes that replied in `messages`, in the order they first replied. */
 export function draftSources(messages: MessageView[], miniMes: MiniMe[]): MiniMe[] {
@@ -55,6 +58,8 @@ export function ReportPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sources = draftSources(messages, miniMes);
+  const quarto = useQuarto();
+  const blocked = documentsBlocked(quarto);
 
   useEffect(() => {
     let active = true;
@@ -100,7 +105,7 @@ export function ReportPanel({
           </p>
           <span>
             <Button
-              disabled={busy || replying || sources.length === 0}
+              disabled={busy || replying || sources.length === 0 || blocked}
               onClick={() => run(onDraft)}
             >
               Draft report
@@ -113,7 +118,9 @@ export function ReportPanel({
           )}
         </Card>
         <Card
-          render={<button type="button" disabled={busy} onClick={() => run(onStartBlank)} />}
+          render={
+            <button type="button" disabled={busy || blocked} onClick={() => run(onStartBlank)} />
+          }
           className="flex-row items-center gap-3 p-4 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
         >
           <FilePlusIcon aria-hidden className="size-4 shrink-0" />
@@ -122,6 +129,18 @@ export function ReportPanel({
             <span className="text-meta text-muted-foreground">An empty document in Files</span>
           </span>
         </Card>
+        {blocked && quarto && (
+          <p className="text-meta text-muted-foreground">
+            {quartoNotice(quarto)}{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => openLink(quarto.install_url)}
+            >
+              Get Quarto
+            </button>
+          </p>
+        )}
         {error && <p className="text-meta text-destructive">{error}</p>}
       </div>
       <h3 className="mt-6 mb-2.5 font-serif text-section text-foreground">Open from Files</h3>

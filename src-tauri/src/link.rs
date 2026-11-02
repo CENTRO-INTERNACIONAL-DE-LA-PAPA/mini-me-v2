@@ -12,7 +12,7 @@ use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 13;
+pub const SIDECAR_PROTOCOL: u32 = 14;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -185,16 +185,6 @@ pub enum CoreFrame {
     /// Stops a draft; the sidecar ends it with `draft.done`.
     #[serde(rename = "draft.cancel")]
     DraftCancel { draft_id: Uuid },
-    /// Asks for a document's text as PDF.
-    #[serde(rename = "document.export")]
-    DocumentExport {
-        export_id: Uuid,
-        name: String,
-        source: String,
-    },
-    /// Asks for a document's pages as SVG images, for its preview.
-    #[serde(rename = "document.preview")]
-    DocumentPreview { preview_id: Uuid, source: String },
     /// Exactly one of `result` and `error` is set.
     #[serde(rename = "core.response")]
     CoreResponse {
@@ -277,16 +267,6 @@ pub enum SidecarFrame {
     DraftDone { draft_id: Uuid },
     #[serde(rename = "draft.error")]
     DraftError { draft_id: Uuid, error: ErrorInfo },
-    /// `data` is the PDF, base64-encoded.
-    #[serde(rename = "document.exported")]
-    DocumentExported { export_id: Uuid, data: String },
-    #[serde(rename = "document.export_error")]
-    DocumentExportError { export_id: Uuid, error: ErrorInfo },
-    /// One SVG image per page.
-    #[serde(rename = "document.previewed")]
-    DocumentPreviewed { preview_id: Uuid, pages: Vec<String> },
-    #[serde(rename = "document.preview_error")]
-    DocumentPreviewError { preview_id: Uuid, error: ErrorInfo },
     #[serde(rename = "core.request")]
     CoreRequest {
         request_id: String,

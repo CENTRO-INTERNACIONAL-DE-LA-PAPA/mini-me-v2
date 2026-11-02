@@ -1,9 +1,8 @@
 """Document requests from the core outside any reply: drafting a report from a Conversation,
-streamed as it is written, previewing a document's pages, and exporting it as PDF. Like the Overview summary, each
-request gets exactly one ending frame, and nothing is read from or written to disk."""
+streamed as it is written. Like the Overview summary, each request gets exactly one ending frame,
+and nothing is read from or written to disk."""
 
 import asyncio
-import base64
 import sys
 import traceback
 from typing import Any
@@ -13,7 +12,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from mini_me_sidecar.adapters.prompt import REFUSED, RESEARCH_CONTEXT
 from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, chat_model, provider_error
 from mini_me_sidecar.context import Model, Requests, TraitError
-from mini_me_sidecar.document_pdf import export_pdf, preview_pages
 from mini_me_sidecar.link import Link, log
 
 DRAFT_RULE = (
@@ -117,60 +115,6 @@ class Documents:
     def _draft_error(self, draft_id: str, code: str, message: str) -> None:
         error = {"code": code, "message": message}
         self._link.send({"type": "draft.error", "draft_id": draft_id, "error": error})
-
-    def start_export(self, frame: dict[str, Any]) -> None:
-        export_id = frame.get("export_id")
-        if not isinstance(export_id, str):
-            log(f"ignoring document.export without an export_id: {frame!r}")
-            return
-        self._spawn(self._export(export_id, str(frame.get("source") or "")))
-
-    async def _export(self, export_id: str, source: str) -> None:
-        try:
-            # Compiling is CPU work; a thread keeps the link answering meanwhile.
-            pdf = await asyncio.to_thread(export_pdf, source)
-        except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            message = f"The PDF could not be made: {error}"[:500]
-            self._link.send(
-                {
-                    "type": "document.export_error",
-                    "export_id": export_id,
-                    "error": {"code": "export_failed", "message": message},
-                }
-            )
-            return
-        self._link.send(
-            {
-                "type": "document.exported",
-                "export_id": export_id,
-                "data": base64.b64encode(pdf).decode("ascii"),
-            }
-        )
-
-    def start_preview(self, frame: dict[str, Any]) -> None:
-        preview_id = frame.get("preview_id")
-        if not isinstance(preview_id, str):
-            log(f"ignoring document.preview without a preview_id: {frame!r}")
-            return
-        self._spawn(self._preview(preview_id, str(frame.get("source") or "")))
-
-    async def _preview(self, preview_id: str, source: str) -> None:
-        try:
-            # Compiling is CPU work; a thread keeps the link answering meanwhile.
-            pages = await asyncio.to_thread(preview_pages, source)
-        except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            message = f"The preview could not be made: {error}"[:500]
-            self._link.send(
-                {
-                    "type": "document.preview_error",
-                    "preview_id": preview_id,
-                    "error": {"code": "preview_failed", "message": message},
-                }
-            )
-            return
-        self._link.send({"type": "document.previewed", "preview_id": preview_id, "pages": pages})
 
     async def close(self) -> None:
         for task in list(self._tasks):

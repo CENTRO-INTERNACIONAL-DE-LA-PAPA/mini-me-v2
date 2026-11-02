@@ -24,10 +24,17 @@ import { getName, getVersion } from "@tauri-apps/api/app";
 import { api, errorMessage } from "../../api";
 import ai2Logo from "../../assets/logos/ai2-logo.png";
 import cipLogo from "../../assets/logos/cip-logo.png";
-import type { Ai2Status, AiSettings, KeyAccount, ProviderId } from "../../protocol/types";
+import type {
+  Ai2Status,
+  AiSettings,
+  KeyAccount,
+  ProviderId,
+  QuartoStatus,
+} from "../../protocol/types";
 import { openLink } from "../interactive/links";
 import { SectionPage, type Section } from "../shell/SectionPage";
 import { refreshDeveloperMode, useDeveloperMode } from "../../hooks/useDeveloperMode";
+import { recheckQuarto, showQuarto, useQuarto } from "../../hooks/useQuarto";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
 
 const PROVIDERS: { id: ProviderId; name: string }[] = [
@@ -186,6 +193,12 @@ function GeneralPage({
       <Section title="Home">
         <HomeMiniMesRow />
       </Section>
+      <Section
+        title="Documents"
+        description="Documents are edited and rendered with the Quarto installed on this computer."
+      >
+        <QuartoRow />
+      </Section>
       {developer && (
         <Section
           title="Developer"
@@ -204,6 +217,84 @@ function GeneralPage({
         </Section>
       )}
     </>
+  );
+}
+
+/** What Settings says about the user's Quarto. */
+function quartoSummary(status: QuartoStatus): string {
+  switch (status.state) {
+    case "found":
+      return `Quarto ${status.version} is installed at ${status.path}.`;
+    case "too_old":
+      return `Quarto ${status.version} at ${status.path} is too old; version ${status.minimum} or later is needed.`;
+    case "broken":
+      return `Quarto could not be run at ${status.path}.`;
+    case "missing":
+      return "Quarto was not found. Install it from quarto.org to edit documents, or set where it is.";
+  }
+}
+
+function QuartoRow() {
+  const status = useQuarto();
+  if (!status) return null;
+  // Keyed by the chosen location so the field starts from it again after each change.
+  return <QuartoForm key={status.chosen ? (status.path ?? "") : ""} status={status} />;
+}
+
+function QuartoForm({ status }: { status: QuartoStatus }) {
+  const chosen = status.chosen ? (status.path ?? "") : "";
+  const [path, setPath] = useState(chosen);
+  const [error, setError] = useState<string | null>(null);
+
+  async function change(next: string | null) {
+    try {
+      showQuarto(await api.setQuartoPath(next));
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void change(path);
+      }}
+    >
+      <SettingRow
+        label="Quarto"
+        htmlFor="quarto-path"
+        description={
+          <>
+            {quartoSummary(status)}
+            {error && <span className="mt-1 block text-destructive">{error}</span>}
+          </>
+        }
+      >
+        <Input
+          id="quarto-path"
+          className="w-56"
+          value={path}
+          onChange={(e) => {
+            setPath(e.target.value);
+            setError(null);
+          }}
+          placeholder="Where Quarto is"
+        />
+        <Button type="submit" disabled={path.trim() === chosen}>
+          Save
+        </Button>
+        {status.chosen && (
+          <Button type="button" variant="outline" onClick={() => void change(null)}>
+            Clear
+          </Button>
+        )}
+        <Button type="button" variant="outline" onClick={recheckQuarto}>
+          Check
+        </Button>
+      </SettingRow>
+    </form>
   );
 }
 
