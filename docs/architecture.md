@@ -411,7 +411,7 @@ The core and the sidecar speak newline-delimited JSON frames (`link.rs`, `link.p
 sidecar keeps the original stdout for frames and sends all other output to stderr, which the
 core writes to `sidecar.log`.
 
-- **Handshake:** the sidecar sends `hello` with its protocol version, currently **14**. A
+- **Handshake:** the sidecar sends `hello` with its protocol version, currently **15**. A
   different version on either side shows the sidecar as incompatible, naming both; in
   development the message also says which side is stale.
 - **Core → sidecar:** `adapters.list`, `run.start`, `run.cancel`, `route.start`,

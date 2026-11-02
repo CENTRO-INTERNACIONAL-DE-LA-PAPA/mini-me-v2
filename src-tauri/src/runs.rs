@@ -26,7 +26,7 @@ use crate::routing::explain;
 use crate::user_library::LibraryStore;
 use crate::link::{
     AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, RouteFile, RouteMiniMe, RunContext,
-    RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame,
+    RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
 };
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
@@ -560,11 +560,12 @@ impl Runs {
         &self,
         model: CallModel,
         material: String,
+        kind: SummaryKind,
         timeout: Duration,
     ) -> AppResult<String> {
         let summary_id = new_id();
         self.lock().key_providers.insert(summary_id, model.provider.clone());
-        let frame = CoreFrame::SummaryStart { summary_id, model, material };
+        let frame = CoreFrame::SummaryStart { summary_id, model, material, kind };
         let no_answer = NoAnswer {
             not_ready: "Mini-Me's runtime is not ready.",
             timeout: ("summary_timeout", "The AI model did not finish the summary in time. Try again."),
@@ -2319,7 +2320,7 @@ mod tests {
         let runs = Arc::clone(&f.runs);
         let handle = std::thread::spawn(move || {
             let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
-            runs.summarize(model, "## Trial\nYou: plot yield".into(), timeout)
+            runs.summarize(model, "## Trial\nYou: plot yield".into(), SummaryKind::Overview, timeout)
         });
         let summary_id = loop {
             let found = f.sink.frames().into_iter().find_map(|frame| match frame {

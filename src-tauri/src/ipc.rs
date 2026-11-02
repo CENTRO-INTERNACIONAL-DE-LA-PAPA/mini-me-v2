@@ -30,6 +30,7 @@ use crate::routing::{REACTION_CHANCE, ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
 use crate::settings::{AiSettings, HomeSettings, Settings};
+use crate::link::SummaryKind;
 use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
 use crate::updates::{UpdateStatus, Updates};
@@ -40,6 +41,9 @@ const SUMMARY_BUDGET_CHARS: usize = HISTORY_BUDGET_CHARS * 4;
 
 /// How long a summary may take; long material can keep the model writing for a while.
 const SUMMARY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// How long naming a Conversation may take; its title is a few words.
+const TITLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// How long a draft may go without new text before it is stopped.
 const DRAFT_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
@@ -224,6 +228,37 @@ pub async fn list_conversations(
     project_id: Uuid,
 ) -> AppResult<Vec<ConversationSummary>> {
     conversations::list(&*state.project(project_id)?)
+}
+
+/// Names a new Conversation from its first message, as soon as it is sent and while the reply is
+/// still being written, with the AI model chosen in Settings, and returns the title. Returns
+/// `None`, and changes nothing, when the Conversation is already titled or has had more than one
+/// message, when no model is set, or when the model cannot answer, so a missing key never fails
+/// anything.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn name_conversation(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    conversation_id: Uuid,
+) -> AppResult<Option<String>> {
+    let project = state.project(project_id)?;
+    let Some(material) = conversations::first_message_to_name(&project, conversation_id)? else {
+        return Ok(None);
+    };
+    let Some(model) = state.settings().ai.model() else {
+        return Ok(None);
+    };
+    let runs = Arc::clone(&state.runs);
+    let written = tauri::async_runtime::spawn_blocking(move || {
+        runs.summarize(model, material, SummaryKind::Title, TITLE_TIMEOUT)
+    })
+    .await
+    .map_err(|e| AppError::new("title_failed", e.to_string()))?;
+    let Ok(title) = written else {
+        return Ok(None);
+    };
+    let named = conversations::set_title_if_default(&project, conversation_id, &title)?;
+    Ok(named.then(|| title.trim().to_string()))
 }
 
 /// Gives the Conversation a new title.
@@ -825,7 +860,7 @@ pub async fn update_overview_summary(
     }
     let runs = Arc::clone(&state.runs);
     let text = tauri::async_runtime::spawn_blocking(move || {
-        runs.summarize(model, material, SUMMARY_TIMEOUT)
+        runs.summarize(model, material, SummaryKind::Overview, SUMMARY_TIMEOUT)
     })
     .await
     .map_err(|e| AppError::new("summary_failed", e.to_string()))??;
