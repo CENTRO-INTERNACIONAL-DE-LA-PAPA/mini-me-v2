@@ -165,6 +165,10 @@ export const api = {
    * files that the text names are available to the render. */
   previewDocument: (project_id: Uuid, source: string) =>
     invoke<string[]>("preview_document", { project_id, source }),
+  /** Names a new Conversation after its first message and returns the title, or null when it was
+   * not named: already titled, no AI model set, or the model could not answer. */
+  nameConversation: (project_id: Uuid, conversation_id: Uuid) =>
+    invoke<string | null>("name_conversation", { project_id, conversation_id }),
   renameConversation: (project_id: Uuid, conversation_id: Uuid, title: string) =>
     invoke<void>("rename_conversation", { project_id, conversation_id, title }),
   /** Stops the Conversation's running reply, then removes it with its messages. */

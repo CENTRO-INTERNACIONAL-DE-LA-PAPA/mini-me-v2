@@ -53,6 +53,10 @@ show it as "file removed".
 
 ## Conversations and Projects
 
+A new Conversation is named after your first message, with the AI model chosen in Settings, while
+the reply is still being written. It is named once, a name you set yourself is never replaced, and
+without a model or key it keeps its default name.
+
 Each Conversation has a **…** menu, in its sidebar row and in its header, to **Rename** it or
 **Delete** it, which asks first and removes its messages; files its replies saved stay in Files. The
 open Project has a **…** menu on its name in the sidebar to **Rename** it or **Delete** it, which

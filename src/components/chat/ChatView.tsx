@@ -93,6 +93,7 @@ export function ChatView({
   const decided = routing !== null && state.messages.some((m) => m.reply_to === routing);
   const choosing = routing !== null && !decided;
   const replying = state.messages.some((m) => m.status === "streaming" || m.status === "paused");
+
   const composer = useRef<ComposerHandle>(null);
   const names = useMemo(() => componentNames(state.messages), [state.messages]);
   const used = useMemo(() => outline(state.messages, names), [state.messages, names]);
@@ -280,6 +281,13 @@ export function ChatView({
                 onSent={(message) => {
                   setRouting(message.id);
                   onActivity();
+                  // A new Conversation is named from its first message while the reply is still
+                  // being written; the core ignores any other message, and a failure leaves the
+                  // default title.
+                  void api
+                    .nameConversation(projectId, conversationId)
+                    .then((named) => named && onActivity())
+                    .catch(() => {});
                 }}
               />
             </MainSheet>
