@@ -398,7 +398,8 @@ summary.
 
 ## Secrets and accounts
 
-API keys, the Typesafe key and the Ai2 tokens live in the OS keychain (`secrets.rs`), never
+API keys, the Typesafe key and the Ai2 tokens live in the OS keychain (`secrets.rs`: Windows
+Credential Manager, macOS Keychain, or the Secret Service on Linux), never
 in Project folders, logs or events. The sidecar gets a secret per request with `secret.get`,
 and only for a provider its adapter declares; routing may only get the Typesafe key. The core
 refreshes the Ai2 access token before it expires (`ai2.rs`), so adapters always get a
