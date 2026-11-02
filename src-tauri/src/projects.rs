@@ -91,26 +91,17 @@ pub fn folder_name(name: &str) -> String {
     folder
 }
 
-/// Picks a folder inside `data_root` that does not exist yet, adding " (2)", " (3)"… on
-/// collision.
-fn unique_folder(data_root: &Path, base: &str) -> PathBuf {
-    let mut candidate = data_root.join(base);
-    let mut counter = 2;
-    while candidate.exists() {
-        candidate = data_root.join(format!("{base} ({counter})"));
-        counter += 1;
-    }
-    candidate
-}
-
+/// Creates a Project named `name` in a folder named by its ID, so the folder never changes when
+/// the Project is renamed and never collides with another.
 pub fn create(data_root: &Path, name: &str) -> AppResult<ProjectSummary> {
     let name = validate_name(name)?;
-    let folder = unique_folder(data_root, &folder_name(&name));
+    let id = new_id();
+    let folder = data_root.join(id.to_string());
     std::fs::create_dir(&folder)?;
     std::fs::create_dir(folder.join("assets"))?;
 
     let summary = ProjectSummary {
-        id: new_id(),
+        id,
         name,
         created_at: now_ms(),
         folder: folder.clone(),
@@ -121,6 +112,21 @@ pub fn create(data_root: &Path, name: &str) -> AppResult<ProjectSummary> {
         params![summary.id.to_string(), summary.name, summary.created_at],
     )?;
     Ok(summary)
+}
+
+/// Gives the Project in `folder` the name `name`, which only its database holds, and returns it.
+/// No folder is renamed or moved.
+pub fn rename(folder: &Path, name: &str) -> AppResult<String> {
+    let name = validate_name(name)?;
+    let conn = db::open(&folder.join("project.sqlite"))?;
+    conn.execute("UPDATE project SET name = ?1", params![name])?;
+    Ok(name)
+}
+
+/// Removes the Project in `folder` with everything in it. Its running replies must be stopped
+/// and the Project closed first.
+pub fn delete(folder: &Path) -> AppResult<()> {
+    Ok(std::fs::remove_dir_all(folder)?)
 }
 
 /// Reads a folder's Project metadata without migrating or writing anything.
@@ -266,13 +272,36 @@ mod tests {
     }
 
     #[test]
-    fn same_name_gets_separate_folders() {
+    fn same_name_gets_separate_folders_named_by_id() {
         let dir = tempfile::tempdir().unwrap();
         let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
-        let first = create(&root, "Trials").unwrap();
-        let second = create(&root, "Trials").unwrap();
+        let first = create(&root, "Trials: 2026/27").unwrap();
+        let second = create(&root, "Trials: 2026/27").unwrap();
         assert_ne!(first.folder, second.folder);
+        assert_eq!(first.folder.file_name().unwrap().to_string_lossy(), first.id.to_string());
         assert_eq!(list(&root, &HashMap::new()).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn renaming_changes_the_name_and_moves_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
+        let project = create(&root, "Trial design").unwrap();
+        assert_eq!(rename(&project.folder, "  Huancayo 2025 ").unwrap(), "Huancayo 2025");
+        let listed = list(&root, &HashMap::new()).unwrap();
+        assert_eq!(listed[0].name, "Huancayo 2025");
+        assert_eq!(listed[0].folder, project.folder);
+        assert!(rename(&project.folder, "   ").is_err());
+    }
+
+    #[test]
+    fn deleting_removes_the_folder_and_the_listing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
+        let project = create(&root, "Trial design").unwrap();
+        delete(&project.folder).unwrap();
+        assert!(!project.folder.exists());
+        assert!(list(&root, &HashMap::new()).unwrap().is_empty());
     }
 
     #[test]
