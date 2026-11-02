@@ -16,6 +16,7 @@ mod paths;
 mod projects;
 mod recent;
 mod protocol;
+mod quarto;
 mod routing;
 mod runs;
 mod secrets;
@@ -97,6 +98,9 @@ pub fn run() {
             ipc::stop_draft,
             ipc::export_document_pdf,
             ipc::preview_document,
+            ipc::quarto_status,
+            ipc::recheck_quarto,
+            ipc::set_quarto_path,
             ipc::subscribe_sidecar_status,
             ipc::subscribe_routing_warning,
             ipc::restart_sidecar,

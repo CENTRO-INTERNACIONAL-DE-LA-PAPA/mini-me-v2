@@ -67,7 +67,8 @@ context: |
     configurable confidence threshold, or when Jev cannot be asked, Assistant answers.
   - The sidecar's Python runtime and dependencies are pinned and shipped with the app; the
     app refuses to run against a mismatched sidecar version. No WSL, Docker or other
-    system-level prerequisites.
+    system-level prerequisites. The one exception is Quarto, an optional add-on that the user
+    installs themselves and that is needed only to edit documents; the app never downloads it.
   - Asta (allenai/asta-plugins) is vendored as a Python package in the sidecar and called as
     a library. Anything requiring Linux-only tooling is out of scope.
 

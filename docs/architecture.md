@@ -410,17 +410,15 @@ The core and the sidecar speak newline-delimited JSON frames (`link.rs`, `link.p
 sidecar keeps the original stdout for frames and sends all other output to stderr, which the
 core writes to `sidecar.log`.
 
-- **Handshake:** the sidecar sends `hello` with its protocol version, currently **9**. A
+- **Handshake:** the sidecar sends `hello` with its protocol version, currently **14**. A
   different version on either side shows the sidecar as incompatible, naming both; in
   development the message also says which side is stale.
 - **Core → sidecar:** `adapters.list`, `run.start`, `run.cancel`, `route.start`,
-  `summary.start`, `draft.start`, `draft.cancel`, `document.export`, `document.preview`,
-  `core.response`.
+  `summary.start`, `draft.start`, `draft.cancel`, `core.response`.
 - **Sidecar → core:** `hello`, `adapters`, `run.delta`, `run.progress`, `step.started`,
   `step.completed`, `run.paused`, `run.done`, `run.error`, `run.cancelled`, `route.done`,
   `route.error`, `summary.done`, `summary.error`, `draft.delta`, `draft.done`, `draft.error`,
-  `document.exported`, `document.export_error`, `document.previewed`,
-  `document.preview_error`, `core.request`.
+  `core.request`.
 - `src-tauri/fixtures/sidecar-frames.json` holds an example of every frame, and
   `src-tauri/fixtures/events.json` one of every event; tests on both sides parse them.
 
@@ -449,7 +447,7 @@ Every tool acts through `ctx`, so the core's checks and Project-folder confineme
 | `read_table` | reads a table file into a DataFrame (data Traits) | no |
 | `save_file` | saves a file and attaches it to the reply | as text files (CSV, TSV, TXT, Markdown, JSON) up to 2 MiB |
 | `show_table` | adds a `table`, from a DataFrame, from given rows or from a file | yes |
-| `write_document` | saves a Quarto (`.qmd`) document, attaches it and adds a `document` card | yes, up to 2 MiB |
+| `write_document` | saves a Quarto (`.qmd`) document, attaches it and adds a `document` card; needs Quarto | yes, up to 2 MiB |
 | `show_chart`, `show_papers`, `show_theories` | add a `chart`, `paper-sources` or `theories` | no |
 
 - `tools/__init__.py` names the tools; `files.py`, `tables.py`, `components.py` and

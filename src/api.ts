@@ -18,6 +18,7 @@ import type {
   MiniMe,
   MiniMeDefinition,
   OpenedDocument,
+  QuartoStatus,
   Overview,
   PausedApproval,
   ProjectSummary,
@@ -160,8 +161,17 @@ export const api = {
     });
   },
   stopDraft: (draft_id: Uuid) => invoke<void>("stop_draft", { draft_id }),
-  /** The document text `source` as it would export, one SVG image per page. */
-  previewDocument: (source: string) => invoke<string[]>("preview_document", { source }),
+  /** The document text `source` as Quarto renders it, one SVG image per page. The Project's
+   * files that the text names are available to the render. */
+  previewDocument: (project_id: Uuid, source: string) =>
+    invoke<string[]>("preview_document", { project_id, source }),
+  /** Whether Quarto is usable, its version and where it is, as last looked up: when the app
+   * started, when asked again, or when its location changed. */
+  quartoStatus: () => invoke<QuartoStatus>("quarto_status"),
+  /** Looks for Quarto again, as when it was installed after the app started. */
+  recheckQuarto: () => invoke<QuartoStatus>("recheck_quarto"),
+  /** Sets the Quarto program to use, or clears it with null so the app looks for one. */
+  setQuartoPath: (path: string | null) => invoke<QuartoStatus>("set_quarto_path", { path }),
   /** Saves the document as a PDF Asset named after it, and returns that Asset. */
   exportDocumentPdf: (project_id: Uuid, asset_id: Uuid) =>
     invoke<AssetRef>("export_document_pdf", { project_id, asset_id }),
