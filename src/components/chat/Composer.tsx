@@ -18,7 +18,7 @@ import {
   type ReferenceKind,
   type ReferenceTarget,
 } from "../../protocol/references";
-import type { AssetRef, Message, MiniMe } from "../../protocol/types";
+import type { AssetRef, FileEntry, Message, MiniMe } from "../../protocol/types";
 import { AttachmentTray } from "./AttachmentTray";
 import type { ComponentName } from "../interactive/component-names";
 import { surfaceStyle } from "../minime/miniMeColors";
@@ -26,6 +26,7 @@ import { MiniMePill } from "../minime/MiniMePill";
 import { ReferenceNode } from "./ReferenceNode";
 import { sidecarReady, useSidecarStatus } from "../shell/SidecarStatusLine";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { fileDetail, sharedNames } from "./fileDetail";
 import { Button } from "@/components/ui/button";
 import {
   ArrowUpIcon,
@@ -80,6 +81,8 @@ interface Suggestion {
   miniMe?: MiniMe;
   /** For a `$` entry, what the component is. */
   kind?: ComponentName["kind"];
+  /** For a `#` entry whose name another listed file shares, when and by whom it was added. */
+  detail?: string;
 }
 
 /** The list being typed: its kind, the text after its sign, and how to insert a pick. */
@@ -120,7 +123,7 @@ export function Composer({
 }: Props) {
   const [attachments, setAttachments] = useState<AssetRef[]>([]);
   const [query, setQuery] = useState<Query | null>(null);
-  const [assetSuggestions, setAssetSuggestions] = useState<AssetRef[]>([]);
+  const [files, setFiles] = useState<FileEntry[]>([]);
   const [highlight, setHighlight] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const sidecar = useSidecarStatus();
@@ -195,20 +198,25 @@ export function Composer({
 
   useEffect(() => {
     if (query?.kind !== "asset") {
-      setAssetSuggestions([]);
+      setFiles([]);
       return;
     }
+    // The Project's files are listed once while a `#` is being typed, and filtered as it grows.
     let current = true;
     api
-      .listAssets(projectId, query.query)
-      .then((assets) => current && setAssetSuggestions(assets))
-      .catch(() => current && setAssetSuggestions([]));
+      .listProjectFiles(projectId)
+      .then((listed) => current && setFiles(listed))
+      .catch(() => current && setFiles([]));
     return () => {
       current = false;
     };
-  }, [projectId, query?.kind, query?.query]);
+  }, [projectId, query?.kind]);
 
   useEffect(() => setHighlight(0), [query?.kind, query?.query]);
+
+  const assetSuggestions =
+    query?.kind === "asset" ? files.filter((f) => fold(f.name).includes(fold(query.query))) : [];
+  const shared = sharedNames(assetSuggestions);
 
   const componentSuggestions: Suggestion[] =
     query?.kind === "component"
@@ -229,7 +237,16 @@ export function Composer({
           ? [{ heading: "", entries: componentSuggestions }]
           : []
         : query?.kind === "asset" && assetSuggestions.length > 0
-          ? [{ heading: "", entries: assetSuggestions.map((a) => ({ target: assetTarget(a) })) }]
+          ? [
+              {
+                heading: "",
+                entries: assetSuggestions.map((a) => ({
+                  target: assetTarget(a),
+                  // Only a name that more than one listed file has needs telling apart.
+                  detail: shared.has(a.name) ? fileDetail(a, miniMes) : undefined,
+                })),
+              },
+            ]
           : [];
   const suggestions = sections.flatMap((section) => section.entries);
 
@@ -538,7 +555,12 @@ function SuggestionRow({
           {suggestion.target.label}
         </span>
       ) : (
-        <span className="text-ui">{suggestion.target.label}</span>
+        <>
+          <span className="text-ui">{suggestion.target.label}</span>
+          {suggestion.detail && (
+            <span className="text-meta text-muted-foreground">{suggestion.detail}</span>
+          )}
+        </>
       )}
     </button>
   );
