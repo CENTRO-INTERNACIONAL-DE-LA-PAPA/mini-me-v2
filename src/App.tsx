@@ -71,6 +71,32 @@ export default function App() {
     setView(next);
   }
 
+  async function renameConversation(id: string, title: string) {
+    if (!project) return;
+    await api.renameConversation(project.id, id, title);
+    await refreshConversations();
+  }
+
+  async function deleteConversation(id: string) {
+    if (!project) return;
+    await api.deleteConversation(project.id, id);
+    // Leaving the deleted Conversation's view for the Project's Overview.
+    if (view.kind === "conversation" && view.id === id) setView({ kind: "overview" });
+    await refreshConversations();
+  }
+
+  async function renameProject(target: ProjectSummary, name: string) {
+    const renamed = await api.renameProject(target.id, name);
+    setProjects(await api.listProjects());
+    if (project?.id === target.id) setProject(renamed);
+  }
+
+  async function deleteProject(target: ProjectSummary) {
+    await api.deleteProject(target.id);
+    setProjects(await api.listProjects());
+    if (project?.id === target.id) navigate({ kind: "home" });
+  }
+
   /** Opens a Project, then shows `next` in it. */
   async function openProject(summary: ProjectSummary, next: View = { kind: "overview" }) {
     try {
@@ -128,6 +154,8 @@ export default function App() {
         onNavigate={navigate}
         onNewConversation={newConversation}
         onOpenConversation={openConversation}
+        onRenameConversation={renameConversation}
+        onDeleteConversation={deleteConversation}
       />
       {/* The desk: the open view's sheets float on it, 12px from the window and each other. */}
       <SidebarInset className="h-svh min-w-0 flex-row gap-3 overflow-hidden bg-transparent p-3">
@@ -148,6 +176,10 @@ export default function App() {
           onOpenProject={openProject}
           onCreateProject={createProject}
           onConversationActivity={refreshConversations}
+          onRenameConversation={renameConversation}
+          onDeleteConversation={deleteConversation}
+          onRenameProject={renameProject}
+          onDeleteProject={deleteProject}
           onNavigate={navigate}
           onOpenReply={openConversation}
         />
@@ -164,6 +196,10 @@ function Main({
   onOpenProject,
   onCreateProject,
   onConversationActivity,
+  onRenameConversation,
+  onDeleteConversation,
+  onRenameProject,
+  onDeleteProject,
   onNavigate,
   onOpenReply,
 }: {
@@ -174,6 +210,10 @@ function Main({
   onOpenProject: (project: ProjectSummary) => void;
   onCreateProject: (name: string) => Promise<void>;
   onConversationActivity: () => void;
+  onRenameConversation: (id: string, title: string) => Promise<unknown>;
+  onDeleteConversation: (id: string) => Promise<unknown>;
+  onRenameProject: (project: ProjectSummary, name: string) => Promise<unknown>;
+  onDeleteProject: (project: ProjectSummary) => Promise<unknown>;
   onNavigate: (view: View) => void;
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
 }) {
@@ -222,6 +262,10 @@ function Main({
                 onNavigate({ kind: "conversation", id, messageId })
               }
               onOpenFiles={() => onNavigate({ kind: "files" })}
+              onChanged={onConversationActivity}
+              onOpenDocument={(assetId) => onNavigate({ kind: "document", assetId, from: view })}
+              onRenameProject={(name) => onRenameProject(project, name)}
+              onDeleteProject={() => onDeleteProject(project)}
             />,
           )
         : null;
@@ -245,6 +289,8 @@ function Main({
           messageId={view.messageId}
           title={conversations.find((c) => c.id === view.id)?.title ?? "Conversation"}
           onActivity={onConversationActivity}
+          onRename={(newTitle) => onRenameConversation(view.id, newTitle)}
+          onDelete={() => onDeleteConversation(view.id)}
           onOpenReply={onOpenReply}
           onOpenDocument={(assetId, how) =>
             onNavigate({

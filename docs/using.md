@@ -46,6 +46,19 @@ Reference a file with `#` or attach it to a message. Mini-Mes read text files, a
 Mini-Mes read CSV, TSV and Excel (`.xlsx`) tables; PDFs and images are not read yet. A
 document (`.qmd`) opens in Mini-Me's document view rather than another app.
 
+Each file has a **…** menu, in Files and in the Overview's outputs, to **Open** it, **Show in
+folder**, **Duplicate** it ("<name> copy"), **Rename** it (the extension stays) or **Delete** it,
+which asks first and removes it from the Project's folder. Messages that mentioned a deleted file
+show it as "file removed".
+
+## Conversations and Projects
+
+Each Conversation has a **…** menu, in its sidebar row and in its header, to **Rename** it or
+**Delete** it, which asks first and removes its messages; files its replies saved stay in Files. The
+open Project has a **…** menu on its name in the sidebar to **Rename** it or **Delete** it, which
+warns that its Conversations and files are removed for good. A Project's name is kept inside the
+Project, so renaming never moves its folder; new Projects are folders named by an ID.
+
 ## Documents
 
 A **document** is a report you edit in Mini-Me and keep in the Project's Files, as a Quarto
