@@ -99,8 +99,9 @@ impl SecretSource for NoSecrets {
     }
 }
 
-/// API keys in the OS keychain (Windows Credential Manager, macOS Keychain). Read on every
-/// request and never cached, so a key removed in Settings stops working at once.
+/// API keys in the OS keychain (Windows Credential Manager, macOS Keychain, the Secret Service on
+/// Linux). Read on every request and never cached, so a key removed in Settings stops working at
+/// once.
 pub struct KeychainSecrets;
 
 impl KeychainSecrets {

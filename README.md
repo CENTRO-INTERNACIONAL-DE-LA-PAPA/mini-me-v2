@@ -125,7 +125,10 @@ The installers are not code-signed, so each system warns the first time:
   `xattr -dr com.apple.quarantine /Applications/Mini-Me.app` in Terminal once, then open it.
 - **Linux** (x86-64): `Mini-Me_<version>_amd64.AppImage` runs on most distributions; make it
   executable (`chmod +x Mini-Me_*.AppImage`) and run it. On Ubuntu and Debian you can install
-  `Mini-Me_<version>_amd64.deb` instead.
+  `Mini-Me_<version>_amd64.deb` instead, with `sudo apt install ./Mini-Me_<version>_amd64.deb`
+  so that its dependencies come with it. Mini-Me keeps your API keys in the desktop's keyring
+  (GNOME Keyring or KWallet), which Ubuntu's desktop already runs; without one, keys cannot be
+  saved.
 
 Mini-Me updates itself: it downloads new versions in the background, shows the progress in
 the sidebar and offers **Restart**, or installs the update when you close it. Your Projects
