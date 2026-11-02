@@ -110,7 +110,8 @@
       "type": "summary.start",
       "summary_id": "0199d0a0-0000-7000-8000-000000000501",
       "model": { "provider": "anthropic", "model": "claude-sonnet-5-5" },
-      "material": "## Huancayo 2025 trial data\nYou: plot yield by altitude"
+      "material": "## Huancayo 2025 trial data\nYou: plot yield by altitude",
+      "kind": "overview"
     },
     {
       "type": "draft.start",

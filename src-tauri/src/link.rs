@@ -12,7 +12,7 @@ use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 14;
+pub const SIDECAR_PROTOCOL: u32 = 15;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -137,6 +137,16 @@ pub struct ChoiceAnswer {
 }
 
 /// Frames the core sends to the sidecar.
+/// What a `summary.start` asks the sidecar to write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SummaryKind {
+    /// The summary at the top of a Project's Overview.
+    Overview,
+    /// A short title for a Conversation, from its first message.
+    Title,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum CoreFrame {
@@ -166,12 +176,14 @@ pub enum CoreFrame {
         /// The question IDs to ask: `mini_me`, `reaction`, `needs_context`, `file`.
         ask: Vec<String>,
     },
-    /// Asks for a summary of a Project's Conversations; `material` is their text.
+    /// Asks for a short text written from `material`: a summary of a Project's Conversations,
+    /// or a title for a Conversation, by `kind`.
     #[serde(rename = "summary.start")]
     SummaryStart {
         summary_id: Uuid,
         model: CallModel,
         material: String,
+        kind: SummaryKind,
     },
     /// Asks for a report drafted from one Conversation; `material` is its messages. The
     /// text streams back in `draft.delta` frames.

@@ -822,17 +822,17 @@ mod tests {
     }
 
     #[test]
-    fn a_version_13_sidecar_is_refused_naming_both_versions() {
-        assert_eq!(SIDECAR_PROTOCOL, 14);
+    fn a_version_14_sidecar_is_refused_naming_both_versions() {
+        assert_eq!(SIDECAR_PROTOCOL, 15);
         let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(hello(13)).unwrap();
+        tx.send(hello(14)).unwrap();
         let err = handshake(&rx, &Recorder::default(), soon(), false, &SidecarLog::disabled())
             .err()
             .unwrap();
         let HandshakeError::Incompatible(detail) = err else {
             panic!("expected Incompatible, got {err:?}");
         };
-        assert!(detail.contains("13") && detail.contains("14"), "{detail}");
+        assert!(detail.contains("14") && detail.contains("15"), "{detail}");
     }
 
     #[test]

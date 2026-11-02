@@ -90,6 +90,7 @@ pub fn run() {
             ipc::delete_asset,
             ipc::reveal_asset,
             ipc::rename_conversation,
+            ipc::name_conversation,
             ipc::delete_conversation,
             ipc::rename_project,
             ipc::delete_project,

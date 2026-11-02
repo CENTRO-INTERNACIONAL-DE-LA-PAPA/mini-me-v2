@@ -112,6 +112,43 @@ pub fn delete(project: &Project, conversation_id: Uuid) -> AppResult<()> {
     Ok(())
 }
 
+/// The text to name Conversation `conversation_id` from: its first message, cut to a sensible
+/// length. Only while the title is still the default and the user has sent exactly one message, so
+/// a Conversation is named once.
+pub fn first_message_to_name(project: &Project, conversation_id: Uuid) -> AppResult<Option<String>> {
+    let state = project.lock();
+    state.require_conversation(conversation_id)?;
+    let id = conversation_id.to_string();
+    let title: String =
+        state.conn.query_row("SELECT title FROM conversations WHERE id = ?1", params![id], |r| r.get(0))?;
+    if title != DEFAULT_TITLE {
+        return Ok(None);
+    }
+    let mut stmt = state.conn.prepare(
+        "SELECT content FROM messages WHERE conversation_id = ?1 AND author_kind = 'user' \
+         ORDER BY created_at, rowid LIMIT 2",
+    )?;
+    let contents: Vec<String> = stmt.query_map(params![id], |r| r.get(0))?.collect::<Result<_, _>>()?;
+    Ok(match contents.as_slice() {
+        [only] => Some(only.chars().take(2000).collect()),
+        _ => None,
+    })
+}
+
+/// Gives the Conversation `title` only while it still has the default title, so a title the user
+/// set in the meantime is kept. Returns whether it was set.
+pub fn set_title_if_default(project: &Project, conversation_id: Uuid, title: &str) -> AppResult<bool> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Ok(false);
+    }
+    let changed = project.lock().conn.execute(
+        "UPDATE conversations SET title = ?1 WHERE id = ?2 AND title = ?3",
+        params![title, conversation_id.to_string(), DEFAULT_TITLE],
+    )?;
+    Ok(changed > 0)
+}
+
 /// Conversations ordered by most recent activity first.
 pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
     let state = project.lock();
@@ -708,6 +745,40 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(5));
         send_message(&project, older.id, text("hello"), new_id()).unwrap();
         assert_eq!(list(&project).unwrap()[0].id, older.id);
+    }
+
+    #[test]
+    fn a_conversation_is_named_from_its_first_message_once() {
+        let (_dir, project) = temp_project();
+        let id = create(&project).unwrap().id;
+        assert_eq!(first_message_to_name(&project, id).unwrap(), None);
+        send_message(&project, id, text("translate this"), new_id()).unwrap();
+        // The reply is not needed: naming starts as soon as the message is sent.
+        assert_eq!(first_message_to_name(&project, id).unwrap().as_deref(), Some("translate this"));
+
+        assert!(set_title_if_default(&project, id, "  Translating a greeting ").unwrap());
+        assert_eq!(title(&project, id).unwrap(), "Translating a greeting");
+        // Titled now, so it is not named again.
+        assert_eq!(first_message_to_name(&project, id).unwrap(), None);
+        assert!(!set_title_if_default(&project, id, "Another").unwrap());
+    }
+
+    #[test]
+    fn a_title_the_user_set_is_never_replaced_and_later_messages_do_not_name() {
+        let (_dir, project) = temp_project();
+        let renamed = create(&project).unwrap().id;
+        send_message(&project, renamed, text("hello"), new_id()).unwrap();
+        rename(&project, renamed, "My title").unwrap();
+        assert!(!set_title_if_default(&project, renamed, "Generated").unwrap());
+        assert_eq!(title(&project, renamed).unwrap(), "My title");
+
+        let second = create(&project).unwrap().id;
+        let first = send_message(&project, second, text("one"), new_id()).unwrap();
+        let reply = start_reply(&project, second, first.id, echo()).unwrap();
+        append_delta(&project, reply, "answer").unwrap();
+        complete_reply(&project, reply).unwrap();
+        send_message(&project, second, text("two"), new_id()).unwrap();
+        assert_eq!(first_message_to_name(&project, second).unwrap(), None);
     }
 
     #[test]
