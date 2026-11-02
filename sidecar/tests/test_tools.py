@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from mini_me_sidecar.adapters.data.tables import Table
-from mini_me_sidecar.tools import MODEL_TOOL_NAMES, READ_TOOLS, TOOL_NAMES, tables
+from mini_me_sidecar.tools import DEFAULT_TOOLS, MODEL_TOOL_NAMES, TOOL_NAMES, tables
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import component_result, read_component
 from mini_me_sidecar.tools.files import READ_CHARS, check_file, read_file, text_result
@@ -133,7 +133,7 @@ def test_a_file_read_in_parts_is_fetched_once_per_call():
 
 
 def test_model_tools_are_known_and_their_schemas_match_their_functions():
-    assert set(MODEL_TOOLS) == set(READ_TOOLS) | set(MODEL_TOOL_NAMES)
+    assert set(MODEL_TOOLS) == set(DEFAULT_TOOLS) | set(MODEL_TOOL_NAMES)
     assert set(MODEL_TOOLS) <= set(TOOL_NAMES)
     for tool in MODEL_TOOLS.values():
         assert tool.parameters["type"] == "object"

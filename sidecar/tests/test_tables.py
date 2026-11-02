@@ -3,7 +3,13 @@ import io
 import pandas as pd
 import pytest
 
-from mini_me_sidecar.adapters.data.tables import TableSource, parse_table, table_file, table_sources
+from mini_me_sidecar.adapters.data.tables import (
+    TableSource,
+    fallback_source,
+    parse_table,
+    table_file,
+    table_sources,
+)
 from mini_me_sidecar.context import TraitError
 
 
@@ -62,3 +68,20 @@ def test_written_csv_keeps_delimiter_and_plain_dates():
     name, media, data = table_file(table, table.frame, "cleaned")
     assert (name, media) == ("t-cleaned.csv", "text/csv")
     assert data.decode() == "a;d\n1;2024-05-01\n"
+
+
+def test_fallback_reads_the_picked_table_then_the_newest_table():
+    assets = [
+        {"id": "a3", "name": "notes.txt"},
+        {"id": "a2", "name": "harvest.csv"},
+        {"id": "a1", "name": "field-trial.csv"},
+    ]
+    picked = {"asset_id": "a1", "name": "field-trial.csv"}
+    source, note = fallback_source(picked, assets)
+    assert source == TableSource(asset_id="a1", name="field-trial.csv")
+    assert "seems to mean" in note
+    source, note = fallback_source({"asset_id": "a3", "name": "notes.txt"}, assets)
+    assert source == TableSource(asset_id="a2", name="harvest.csv")
+    assert "newest table" in note
+    assert fallback_source(None, [{"id": "a3", "name": "notes.txt"}]) is None
+

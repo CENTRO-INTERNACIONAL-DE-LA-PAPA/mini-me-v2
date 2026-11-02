@@ -310,15 +310,18 @@ pub fn attach_generated(
     Ok(asset)
 }
 
-pub fn complete_reply(project: &Project, message_id: Uuid) -> AppResult<()> {
+/// Completes the streaming reply `message_id` and returns it as completed.
+pub fn complete_reply(project: &Project, message_id: Uuid) -> AppResult<Message> {
     let mut state = project.lock();
     let conversation = streaming_reply(&state, message_id)?;
-    let content = state
+    let mut message = state
         .load_message_with(message_id, false)?
-        .map(|(_, message)| message.content)
-        .unwrap_or_default();
+        .map(|(_, message)| message)
+        .ok_or_else(|| AppError::not_found("Reply not found"))?;
+    let content = message.content.clone();
     state.persist(conversation, EventKind::MessageCompleted { message_id, content })?;
-    Ok(())
+    message.status = MessageStatus::Complete;
+    Ok(message)
 }
 
 pub fn fail_reply(project: &Project, message_id: Uuid, code: &str, message: &str) -> AppResult<()> {

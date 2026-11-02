@@ -1,6 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "../../api";
 import type { MessageView } from "../../protocol/eventStore";
 import { segments } from "../../protocol/references";
@@ -173,7 +173,11 @@ export const MessageItem = memo(function MessageItem({
   const notes = (
     <>
       {developer && message.jev && (
-        <JevAnswersBlock jev={message.jev} label={(id) => miniMe(id)?.name ?? id} />
+        <JevAnswersBlock
+          jev={message.jev}
+          projectId={projectId}
+          miniMeName={(id) => miniMe(id)?.name}
+        />
       )}
       {message.failure && (
         <p className="text-meta text-destructive">{message.failure.message}</p>
@@ -281,8 +285,31 @@ export const MessageItem = memo(function MessageItem({
   );
 });
 
-/** Jev's raw answers, for the "Show Jev's answers" developer setting. */
-function JevAnswersBlock({ jev, label }: { jev: JevAnswers; label: (option: string) => string }) {
+/** Jev's raw answers, for the "Show Jev's answers" developer setting. Options are shown by
+ * their Mini-Me's or file's name; the file names are fetched only when Jev answered `file`. */
+function JevAnswersBlock({
+  jev,
+  projectId,
+  miniMeName,
+}: {
+  jev: JevAnswers;
+  projectId: string;
+  miniMeName: (id: string) => string | undefined;
+}) {
+  const [fileNames, setFileNames] = useState<Map<string, string>>(new Map());
+  const asksFile = Boolean(jev.answers?.file);
+  useEffect(() => {
+    if (!asksFile) return;
+    let active = true;
+    api
+      .listAssets(projectId, "")
+      .then((assets) => active && setFileNames(new Map(assets.map((a) => [a.id, a.name]))))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [projectId, asksFile]);
+  const label = (option: string) => miniMeName(option) ?? fileNames.get(option) ?? option;
   const percent = (value: number) => `${Math.round(value * 100)}%`;
   return (
     <details className="text-meta text-muted-foreground">

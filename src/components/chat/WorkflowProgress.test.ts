@@ -62,10 +62,19 @@ describe("componentPlaces", () => {
   const chart = added("chart", 2);
   const plain = added("plain");
 
-  it("keeps every component under a reply that is still running", () => {
-    const places = componentPlaces(steps, [sources, chart, plain], "streaming");
-    expect(places.own).toEqual([sources, chart, plain]);
-    expect(places.byStep.size).toBe(0);
+  it("draws a done Step's components with that Step while the reply runs", () => {
+    const running = [step("find", "trait"), step("ask", "approval"), step("summarize", "trait", false)];
+    const streaming = componentPlaces(running, [sources, chart, plain], "streaming");
+    expect(streaming.own).toEqual([]);
+    expect([...streaming.byStep]).toEqual([[0, [sources]]]);
+  });
+
+  it("keeps a done Step's components with it while an approval waits under the reply", () => {
+    const asking = [step("find", "trait"), step("ask", "approval", false)];
+    const approval = { ...added("approval", 1), kind: "approval" };
+    const paused = componentPlaces(asking, [sources, approval], "paused");
+    expect(paused.own).toEqual([approval]);
+    expect([...paused.byStep]).toEqual([[0, [sources]]]);
   });
 
   it("moves an earlier Step's components to that Step once the reply ends", () => {

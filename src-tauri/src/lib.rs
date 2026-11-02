@@ -98,6 +98,7 @@ pub fn run() {
             ipc::export_document_pdf,
             ipc::preview_document,
             ipc::subscribe_sidecar_status,
+            ipc::subscribe_routing_warning,
             ipc::restart_sidecar,
             ipc::list_mini_mes,
             ipc::list_library,

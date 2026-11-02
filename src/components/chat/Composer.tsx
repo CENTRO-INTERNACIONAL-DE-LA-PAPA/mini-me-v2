@@ -201,7 +201,7 @@ export function Composer({
     let current = true;
     api
       .listAssets(projectId, query.query)
-      .then((assets) => current && setAssetSuggestions(assets.slice(0, 8)))
+      .then((assets) => current && setAssetSuggestions(assets))
       .catch(() => current && setAssetSuggestions([]));
     return () => {
       current = false;

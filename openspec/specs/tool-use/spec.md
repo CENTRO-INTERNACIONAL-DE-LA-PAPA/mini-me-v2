@@ -10,7 +10,8 @@ results and continues before writing its answer.
 ### Requirement: Prompt Traits know the Conversation's results
 Every call of a prompt-based Trait SHALL tell the model the name and ID of each Asset and
 the kind, author and ID of each Interactive Component of the Conversation, newest first, at
-most 50 of each, marking the current message's files. It SHALL also tell the model each `$`
+most 50 of each, marking the current message's files and the reply's picked file, which it
+SHALL describe as the file the user probably means. It SHALL also tell the model each `$`
 reference of the current message: its label, its component's kind and its component's ID.
 It SHALL NOT include their content; the model reads content with the read tools.
 
@@ -18,6 +19,12 @@ It SHALL NOT include their content; the model reads content with the read tools.
 - **WHEN** the user sends "@Scribe summarize #notes.txt"
 - **THEN** the first request names `notes.txt` and its ID as a file of the message, without
   its content, and the model reads it before summarizing
+
+#### Scenario: Picked file
+- **WHEN** the user sends "@Scribe summarize the field notes" and Jev picks
+  `field-notes.txt`
+- **THEN** the first request lists `field-notes.txt` marked as the file the user probably
+  means, without its content
 
 #### Scenario: Earlier table
 - **WHEN** the user sends "@Assistant what is in the third row of the last table?" without
@@ -31,16 +38,16 @@ It SHALL NOT include their content; the model reads content with the read tools.
   without its data, and the model reads the chart with read-a-component before explaining
 
 ### Requirement: Tools offered to the model
-A prompt-based Trait's model SHALL be offered read-a-file and read-a-component on every
-call, plus the tools its Trait definition lists. A prompt-based Trait SHALL list only tools
-that have a form for models: save-a-file, show-a-table, write-a-document, suggest-an-edit and
-edit-a-document. Suggest-an-edit SHALL be offered only to a call answering a comment thread, and
-edit-a-document only to a call outside one.
+A prompt-based Trait's model SHALL be offered read-a-file, read-a-component and hand-off on
+every call, plus the tools its Trait definition lists. A prompt-based Trait SHALL list only
+tools that have a form for models: save-a-file, show-a-table, write-a-document, suggest-an-edit
+and edit-a-document. Suggest-an-edit SHALL be offered only to a call answering a comment thread,
+and edit-a-document only to a call outside one.
 
 #### Scenario: Assistant's tools
 - **WHEN** Assistant answers in a Conversation
-- **THEN** its model is offered read-a-file, read-a-component, save-a-file, show-a-table,
-  write-a-document and edit-a-document
+- **THEN** its model is offered read-a-file, read-a-component, hand-off, save-a-file,
+  show-a-table, write-a-document and edit-a-document
 
 #### Scenario: Assistant in a comment thread
 - **WHEN** Assistant answers "@Assistant is this clear?" in a comment thread
@@ -48,7 +55,7 @@ edit-a-document only to a call outside one.
 
 #### Scenario: Scout's tools
 - **WHEN** Explorer answers with *Scout*, which lists no tools
-- **THEN** its model is offered only read-a-file and read-a-component
+- **THEN** its model is offered read-a-file, read-a-component and hand-off
 
 ### Requirement: Answering in tool rounds
 In each round the model either asks for one or more tool calls, which run in the order

@@ -47,10 +47,11 @@ export function approvalAnswers(
 }
 
 /**
- * Where a reply's components are drawn. While the reply streams or waits, all of them are
- * its own, below its text. Once it has ended, its own are those no Trait Step added and
- * those of its last Trait Step run; each other component goes with the Step run that added
- * it, under `byStep` at that run's index in `steps`.
+ * Where a reply's components are drawn, whatever the reply's status, so that none is pushed
+ * down by text still arriving: each shows once the Step run that added it is done, with that
+ * run, under `byStep` at its index in `steps`. Once the reply has ended, the last Trait Step's,
+ * and those no Step added, are the reply's own instead, below its text. An approval is the
+ * reply's own while the reply waits on it.
  */
 export function componentPlaces(
   steps: MessageStep[],
@@ -58,16 +59,16 @@ export function componentPlaces(
   replyStatus: MessageStatus,
 ): { own: Component[]; byStep: Map<number, Component[]> } {
   const byStep = new Map<number, Component[]>();
-  if (replyStatus === "streaming" || replyStatus === "paused") {
-    return { own: components, byStep };
-  }
-  const last = steps.map((s) => s.type).lastIndexOf("trait");
   const own: Component[] = [];
+  const ended = replyStatus !== "streaming" && replyStatus !== "paused";
+  const last = steps.map((s) => s.type).lastIndexOf("trait");
   for (const component of components) {
     const index = component.step_index;
-    if (index == null || index === last) {
+    if (component.kind === "approval" && replyStatus === "paused") {
       own.push(component);
-    } else {
+    } else if (ended && (index == null || index === last)) {
+      own.push(component);
+    } else if (index != null && steps[index]?.done) {
       byStep.set(index, [...(byStep.get(index) ?? []), component]);
     }
   }

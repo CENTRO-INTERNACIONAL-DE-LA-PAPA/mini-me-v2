@@ -4,6 +4,7 @@ import * as approval from "./approval";
 import * as chart from "./chart";
 import * as document from "./document";
 import * as documentEdits from "./document-edits";
+import * as handOff from "./hand-off";
 import * as paperSources from "./paper-sources";
 import * as suggestion from "./suggestion";
 import * as table from "./table";
@@ -42,6 +43,7 @@ export const catalogue = new Map<string, Renderers>([
   ["document", document.renderers],
   ["document-edits", documentEdits.renderers],
   ["suggestion", suggestion.renderers],
+  ["hand-off", handOff.renderers],
 ]);
 
 /** The renderer for a kind and version, or null when this version of the app has none. */

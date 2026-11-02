@@ -11,6 +11,7 @@ TOOL_NAMES = (
     "read_file",
     "read_table",
     "read_component",
+    "hand_off",
     "save_file",
     "write_document",
     "suggest_edit",
@@ -21,8 +22,9 @@ TOOL_NAMES = (
     "show_theories",
 )
 
-# Offered to the model of every prompt-based Trait, which therefore does not list them.
-READ_TOOLS = ("read_file", "read_component")
+# Offered to the model of every prompt-based Trait, which therefore does not list them: reading
+# the Conversation's files and components, and handing off to another Mini-Me.
+DEFAULT_TOOLS = ("read_file", "read_component", "hand_off")
 
 # The tools with a form for models, which a prompt-based Trait may list.
 MODEL_TOOL_NAMES = ("save_file", "show_table", "write_document", "suggest_edit", "edit_document")
