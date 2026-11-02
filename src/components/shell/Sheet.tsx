@@ -65,11 +65,14 @@ export function CloseButton({ label, onClick }: { label: string; onClick: () => 
  * meta), with actions such as a tab switch on the right. */
 export function SheetHeader({
   title,
+  titleAction,
   children,
   actions,
   compact = false,
 }: {
   title: ReactNode;
+  /** Shown right after the title, such as its "…" menu. */
+  titleAction?: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
   /** A tool sheet is open beside this one, so the title is smaller. */
@@ -78,14 +81,17 @@ export function SheetHeader({
   return (
     <header className="flex items-start justify-between gap-4 pt-6 pr-6 pl-8">
       <div className="flex min-w-0 flex-col gap-3">
-        <h1
-          className={cn(
-            "truncate font-serif font-medium text-foreground",
-            compact ? "text-column-title" : "text-sheet-title",
-          )}
-        >
-          {title}
-        </h1>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h1
+            className={cn(
+              "truncate font-serif font-medium text-foreground",
+              compact ? "text-column-title" : "text-sheet-title",
+            )}
+          >
+            {title}
+          </h1>
+          {titleAction}
+        </div>
         {children}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
@@ -137,12 +143,15 @@ export function ToolSwitch<Id extends string>({
  * such as a tab switch and a primary button on the right, then the content. */
 export function SheetPage({
   title,
+  titleAction,
   description,
   actions,
   className,
   children,
 }: {
   title: ReactNode;
+  /** Shown right after the title, such as its "…" menu. */
+  titleAction?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   className?: string;
@@ -152,7 +161,10 @@ export function SheetPage({
     <main className={cn("flex w-full flex-col gap-6 px-8 pt-7 pb-10", className)}>
       <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div className="flex min-w-0 flex-col gap-1.5">
-          <h1 className="font-serif text-sheet-title font-medium text-foreground">{title}</h1>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <h1 className="font-serif text-sheet-title font-medium text-foreground">{title}</h1>
+            {titleAction}
+          </div>
           {description && (
             <p className="max-w-[560px] text-ui text-pretty text-muted-foreground">{description}</p>
           )}

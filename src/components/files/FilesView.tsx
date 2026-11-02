@@ -11,6 +11,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileIcon, FileTextIcon, ImageIcon, SearchIcon, Table2Icon, UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { FileMenu } from "./FileMenu";
 import { api, errorMessage } from "../../api";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { initials } from "../../lib/names";
@@ -147,22 +148,28 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
               <TableHead>Used in</TableHead>
               <TableHead>Added</TableHead>
               <TableHead className="text-right">Size</TableHead>
+              <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {shown.map((entry) => (
               <FileRow
                 key={entry.id}
+                projectId={project.id}
                 entry={entry}
                 onOpen={() =>
                   isDocument(entry.name) ? onOpenDocument(entry.id) : open(entry.id)
                 }
+                onChanged={() => {
+                  void refresh();
+                  onChanged();
+                }}
                 onOpenConversation={onOpenConversation}
               />
             ))}
             {shown.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                   {entries.length === 0
                     ? "No files yet. Upload one, or attach it to a message."
                     : "No files match."}
@@ -182,12 +189,16 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
 }
 
 function FileRow({
+  projectId,
   entry,
   onOpen,
+  onChanged,
   onOpenConversation,
 }: {
   entry: FileEntry;
+  projectId: string;
   onOpen: () => void;
+  onChanged: () => void;
   onOpenConversation: (id: string) => void;
 }) {
   const miniMes = useMiniMes();
@@ -248,6 +259,9 @@ function FileRow({
       <TableCell className="text-muted-foreground">{formatRelative(entry.created_at)}</TableCell>
       <TableCell className="text-right text-muted-foreground">
         {formatSize(entry.size_bytes)}
+      </TableCell>
+      <TableCell className="text-right">
+        <FileMenu projectId={projectId} file={entry} onOpen={onOpen} onChanged={onChanged} />
       </TableCell>
     </TableRow>
   );

@@ -8,6 +8,8 @@ import { chatColumn, Composer, type ComposerHandle } from "./Composer";
 import { MessageItem } from "./MessageItem";
 import type { MessageView } from "../../protocol/eventStore";
 import { MiniMePill } from "../minime/MiniMePill";
+import { ItemMenu } from "../shell/ItemMenu";
+import { ExistingFilesProvider } from "./existingFiles";
 import { MainSheet, SheetHeader, ToolSwitch, type ToolOption } from "../shell/Sheet";
 import { FeaturingProvider } from "../interactive/featuring";
 import { OpenDocumentProvider } from "../documents/openDocument";
@@ -28,6 +30,8 @@ interface Props {
   /** A message to scroll to once the Conversation has loaded, instead of the latest one. */
   messageId?: string;
   onActivity: () => void;
+  onRename: (title: string) => Promise<unknown>;
+  onDelete: () => Promise<unknown>;
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
   /** Opens a document: to be drafted from this Conversation, with its Comments sheet showing,
    * or as it is. */
@@ -40,6 +44,8 @@ export function ChatView({
   title,
   messageId,
   onActivity,
+  onRename,
+  onDelete,
   onOpenReply,
   onOpenDocument,
 }: Props) {
@@ -137,6 +143,8 @@ export function ChatView({
   // Follows new messages and the latest one as it streams, but not changes to earlier
   // messages, such as a reaction, which would pull the user away from what they read.
   const last = state.messages[state.messages.length - 1];
+  // What a chip's file lists depend on: a new message, or a file attached to one.
+  const filesKey = `${state.messages.length}:${state.messages.reduce((n, m) => n + m.attachments.length, 0)}`;
   // The message the Conversation was opened at, until it has been scrolled to.
   const target = useRef(messageId);
   useEffect(() => {
@@ -176,6 +184,7 @@ export function ChatView({
 
   return (
     <FeaturingProvider projectId={projectId}>
+      <ExistingFilesProvider projectId={projectId} refreshKey={filesKey}>
       <OpenDocumentProvider open={openDocument}>
         <ComponentReferencesProvider names={names} append={appendReference}>
           <div className="flex min-h-0 min-w-0 flex-1 gap-3">
@@ -195,6 +204,16 @@ export function ChatView({
               )}
               <SheetHeader
                 title={title}
+                titleAction={
+                  <ItemMenu
+                    name={title}
+                    rename={{ current: title, onRename }}
+                    remove={{
+                      question: `Delete "${title}" and its messages? This can't be undone.`,
+                      onDelete,
+                    }}
+                  />
+                }
                 compact={panel !== null}
                 actions={
                   <ToolSwitch
@@ -304,6 +323,7 @@ export function ChatView({
           </div>
         </ComponentReferencesProvider>
       </OpenDocumentProvider>
+      </ExistingFilesProvider>
     </FeaturingProvider>
   );
 }

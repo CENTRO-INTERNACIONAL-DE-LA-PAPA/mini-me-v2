@@ -226,6 +226,63 @@ pub async fn list_conversations(
     conversations::list(&*state.project(project_id)?)
 }
 
+/// Gives the Conversation a new title.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn rename_conversation(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    conversation_id: Uuid,
+    title: String,
+) -> AppResult<()> {
+    conversations::rename(&*state.project(project_id)?, conversation_id, &title)
+}
+
+/// Deletes the Conversation after stopping its running reply.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_conversation(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    conversation_id: Uuid,
+) -> AppResult<()> {
+    let project = state.project(project_id)?;
+    for message_id in conversations::stop_reply(&project, conversation_id)? {
+        state.runs.cancel_message(message_id);
+    }
+    conversations::delete(&project, conversation_id)
+}
+
+/// Renames the Project; only its name changes, never its folder.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn rename_project(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    name: String,
+) -> AppResult<ProjectSummary> {
+    let summary = state.find_summary(project_id)?;
+    // Through the open Project, so running replies and every other holder share one instance.
+    let name = state.project(project_id)?.rename(&name)?;
+    Ok(ProjectSummary { name, ..summary })
+}
+
+/// Deletes the Project with its folder, after stopping every running reply in it.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_project(state: State<'_, AppState>, project_id: Uuid) -> AppResult<()> {
+    let summary = state.find_summary(project_id)?;
+    {
+        let project = state.project(project_id)?;
+        for conversation in conversations::list(&project)? {
+            for message_id in conversations::stop_reply(&project, conversation.id)? {
+                state.runs.cancel_message(message_id);
+            }
+        }
+    }
+    state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).remove(&project_id);
+    projects::delete(&summary.folder)?;
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.recent_projects.remove(&project_id);
+    settings.save(&state.config_dir)
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn create_conversation(
     state: State<'_, AppState>,
@@ -953,6 +1010,51 @@ pub async fn save_document(
     anchors: Vec<comments::Anchor>,
 ) -> AppResult<()> {
     documents::save(&*state.project(project_id)?, asset_id, &text, &anchors)
+}
+
+/// Renames the file `asset_id`, keeping its extension.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn rename_asset(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+    name: String,
+) -> AppResult<AssetRef> {
+    assets::rename(&*state.project(project_id)?, asset_id, &name)
+}
+
+/// Adds a copy of the file `asset_id` named "<name> copy".
+#[tauri::command(rename_all = "snake_case")]
+pub async fn duplicate_asset(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<AssetRef> {
+    assets::duplicate(&*state.project(project_id)?, asset_id, &state.user())
+}
+
+/// Deletes the file `asset_id` from the Project.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn delete_asset(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<()> {
+    assets::delete(&*state.project(project_id)?, asset_id)
+}
+
+/// Shows the file `asset_id` in the system's file manager.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn reveal_asset(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<()> {
+    let path = assets::file_path(&*state.project(project_id)?, asset_id)?;
+    app.opener()
+        .reveal_item_in_dir(path)
+        .map_err(|e| AppError::new("open_failed", e.to_string()))
 }
 
 #[tauri::command(rename_all = "snake_case")]

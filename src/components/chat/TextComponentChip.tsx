@@ -4,6 +4,7 @@ import type { MiniMe, TextComponent } from "../../protocol/types";
 import { useComponentName } from "../interactive/component-references";
 import { MiniMePill } from "../minime/MiniMePill";
 import { ReferenceChip } from "./ReferenceChip";
+import { useFileExists } from "./existingFiles";
 
 /** A Text Component: a Mini-Me's pill, a `$` table or chart chip, or a file chip that opens
  * the file when `onOpenAsset` is given. */
@@ -18,11 +19,19 @@ export function TextComponentChip({
   onOpenAsset?: (assetId: string) => void;
   children: ReactNode;
 }) {
+  const exists = useFileExists(component.kind === "asset" ? component.id : null);
   if (component.kind === "mini_me") {
     return <MiniMePill miniMe={miniMes.find((m) => m.id === component.id)}>{children}</MiniMePill>;
   }
   if (component.kind === "component") {
     return <ComponentChip componentId={component.id}>{children}</ComponentChip>;
+  }
+  if (!exists) {
+    return (
+      <ReferenceChip title="This file was deleted" className="text-muted-foreground">
+        {children} · file removed
+      </ReferenceChip>
+    );
   }
   return (
     <ReferenceChip

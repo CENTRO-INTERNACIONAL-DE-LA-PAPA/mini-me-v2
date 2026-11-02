@@ -793,7 +793,7 @@ impl Runs {
             })
             .map(|(_, project, conversation_id, message_id, mini_me, step)| RunningReply {
                 project_id: project.id,
-                project_name: project.name.clone(),
+                project_name: project.name(),
                 conversation_id,
                 conversation_title: conversations::title(&project, conversation_id)
                     .unwrap_or_default(),

@@ -66,6 +66,52 @@ pub fn title(project: &Project, conversation_id: Uuid) -> AppResult<String> {
     )?)
 }
 
+/// Gives Conversation `conversation_id` the title `title`, trimmed and not empty.
+pub fn rename(project: &Project, conversation_id: Uuid, title: &str) -> AppResult<()> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(AppError::invalid_input("A Conversation needs a title."));
+    }
+    let state = project.lock();
+    state.require_conversation(conversation_id)?;
+    state.conn.execute(
+        "UPDATE conversations SET title = ?1 WHERE id = ?2",
+        params![title, conversation_id.to_string()],
+    )?;
+    Ok(())
+}
+
+/// Removes Conversation `conversation_id` with its messages, events, reactions, components and
+/// steps in one transaction. Files its replies saved stay in the Project. Its running reply must
+/// be stopped first.
+pub fn delete(project: &Project, conversation_id: Uuid) -> AppResult<()> {
+    let state = project.lock();
+    state.require_conversation(conversation_id)?;
+    let id = conversation_id.to_string();
+    let messages = "SELECT id FROM messages WHERE conversation_id = ?1";
+    let tx = state.conn.unchecked_transaction()?;
+    let statements = [
+        format!(
+            "UPDATE overview SET featured_component = NULL WHERE featured_component IN \
+             (SELECT id FROM components WHERE message_id IN ({messages}))"
+        ),
+        format!("DELETE FROM paused_runs WHERE message_id IN ({messages})"),
+        format!("DELETE FROM reactions WHERE message_id IN ({messages})"),
+        format!("DELETE FROM components WHERE message_id IN ({messages})"),
+        format!("DELETE FROM message_steps WHERE message_id IN ({messages})"),
+        "DELETE FROM messages WHERE conversation_id = ?1".to_string(),
+        "DELETE FROM events WHERE conversation_id = ?1".to_string(),
+        "UPDATE comment_threads SET opened_from = NULL WHERE opened_from = ?1".to_string(),
+        "DELETE FROM comment_threads WHERE conversation_id = ?1".to_string(),
+        "DELETE FROM conversations WHERE id = ?1".to_string(),
+    ];
+    for statement in &statements {
+        tx.execute(statement, params![id])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 /// Conversations ordered by most recent activity first.
 pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
     let state = project.lock();
@@ -662,6 +708,44 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(5));
         send_message(&project, older.id, text("hello"), new_id()).unwrap();
         assert_eq!(list(&project).unwrap()[0].id, older.id);
+    }
+
+    #[test]
+    fn a_conversation_can_be_renamed() {
+        let (_dir, project) = temp_project();
+        let conversation = create(&project).unwrap().id;
+        rename(&project, conversation, "  Yield by altitude ").unwrap();
+        assert_eq!(title(&project, conversation).unwrap(), "Yield by altitude");
+        assert!(rename(&project, conversation, "   ").is_err());
+        assert!(rename(&project, new_id(), "Other").is_err());
+    }
+
+    #[test]
+    fn deleting_a_conversation_removes_it_with_its_messages_and_events() {
+        let (_dir, project) = temp_project();
+        let kept = create(&project).unwrap().id;
+        let gone = create(&project).unwrap().id;
+        send_message(&project, kept, text("keep"), new_id()).unwrap();
+        let message = send_message(&project, gone, text("remove"), new_id()).unwrap();
+        delete(&project, gone).unwrap();
+
+        let ids: Vec<_> = list(&project).unwrap().into_iter().map(|c| c.id).collect();
+        assert_eq!(ids, [kept]);
+        let state = project.lock();
+        let count = |table: &str, column: &str, id: Uuid| -> i64 {
+            state
+                .conn
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM {table} WHERE {column} = ?1"),
+                    params![id.to_string()],
+                    |row| row.get(0),
+                )
+                .unwrap()
+        };
+        assert_eq!(count("messages", "id", message.id), 0);
+        assert_eq!(count("events", "conversation_id", gone), 0);
+        assert_eq!(count("messages", "conversation_id", kept), 1);
+        assert!(count("events", "conversation_id", kept) > 0);
     }
 
     #[test]
