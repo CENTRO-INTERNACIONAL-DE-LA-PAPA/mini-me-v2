@@ -143,6 +143,8 @@ export function ChatView({
   // Follows new messages and the latest one as it streams, but not changes to earlier
   // messages, such as a reaction, which would pull the user away from what they read.
   const last = state.messages[state.messages.length - 1];
+  // What a chip's file lists depend on: a new message, or a file attached to one.
+  const filesKey = `${state.messages.length}:${state.messages.reduce((n, m) => n + m.attachments.length, 0)}`;
   // The message the Conversation was opened at, until it has been scrolled to.
   const target = useRef(messageId);
   useEffect(() => {
@@ -182,7 +184,7 @@ export function ChatView({
 
   return (
     <FeaturingProvider projectId={projectId}>
-      <ExistingFilesProvider projectId={projectId} refreshKey={state.messages.length}>
+      <ExistingFilesProvider projectId={projectId} refreshKey={filesKey}>
       <OpenDocumentProvider open={openDocument}>
         <ComponentReferencesProvider names={names} append={appendReference}>
           <div className="flex min-h-0 min-w-0 flex-1 gap-3">

@@ -48,16 +48,18 @@ export default function App() {
     api.listProjects().then(setProjects).catch(fail);
   }, []);
 
+  // Depends on the open Project's ID, not the object, so renaming it does not reload the lists.
+  const projectId = project?.id;
   const refreshConversations = useCallback(async () => {
-    if (!project) return;
+    if (!projectId) return;
     try {
-      setConversations(await api.listConversations(project.id));
+      setConversations(await api.listConversations(projectId));
       // A reply can save files, so the file count follows Conversation activity.
-      setFileCount((await api.listProjectFiles(project.id)).length);
+      setFileCount((await api.listProjectFiles(projectId)).length);
     } catch (e) {
       fail(e);
     }
-  }, [project]);
+  }, [projectId]);
 
   useEffect(() => {
     setConversations([]);

@@ -4,7 +4,8 @@ import { api } from "../../api";
 const ExistingFiles = createContext<ReadonlySet<string> | null>(null);
 
 /** Tells the chips inside which of the Project's files still exist. The list is read again when
- * `refreshKey` changes, such as when a message arrives. */
+ * `refreshKey` changes, such as when a message or an attachment arrives, and until it has been
+ * read again every file is taken to exist, so a new file is never shown as removed. */
 export function ExistingFilesProvider({
   projectId,
   refreshKey,
@@ -17,6 +18,7 @@ export function ExistingFilesProvider({
   const [ids, setIds] = useState<ReadonlySet<string> | null>(null);
   useEffect(() => {
     let current = true;
+    setIds(null);
     api
       .listProjectFiles(projectId)
       .then((files) => current && setIds(new Set(files.map((f) => f.id))))

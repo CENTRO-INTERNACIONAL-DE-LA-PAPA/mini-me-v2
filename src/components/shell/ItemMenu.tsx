@@ -56,7 +56,9 @@ export function ItemMenu({ name, actions = [], rename, remove, className }: Prop
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (rename && typed.trim()) void run(() => rename.onRename(typed.trim()));
+    if (rename && typed.trim() && typed.trim() !== rename.current) {
+      void run(() => rename.onRename(typed.trim()));
+    }
   }
 
   return (
