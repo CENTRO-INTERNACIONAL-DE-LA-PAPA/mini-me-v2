@@ -208,7 +208,8 @@ to open it. A failed export SHALL say why and save nothing.
 Creating, drafting, opening, editing, previewing, exporting and commenting on a document SHALL be
 available only while a Quarto that meets the `quarto-rendering` requirements is found. Without one,
 each of these actions SHALL be disabled, and the document view SHALL say that Quarto is needed and
-link to Quarto's install page. Documents already in the Project SHALL still be listed in Files.
+link to Quarto's install page. Documents already in the Project SHALL still be listed in Files, and
+text already typed SHALL still be saved to its document.
 
 #### Scenario: No Quarto
 - **WHEN** no Quarto is found and the user clicks Start blank
@@ -217,6 +218,10 @@ link to Quarto's install page. Documents already in the Project SHALL still be l
 #### Scenario: Existing document without Quarto
 - **WHEN** no Quarto is found and the user clicks "Huancayo 2025 report.qmd" in Files
 - **THEN** the document view opens showing the Quarto notice, and its source cannot be edited
+
+#### Scenario: Saving after Quarto stops being usable
+- **WHEN** the user has typed a sentence and Quarto is then no longer found
+- **THEN** the sentence is still saved to the document
 
 #### Scenario: Quarto installed later
 - **WHEN** the user installs Quarto and clicks Check again in the Quarto notice

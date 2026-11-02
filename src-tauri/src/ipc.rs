@@ -822,9 +822,12 @@ pub async fn set_quarto_path(
 ) -> AppResult<quarto::Status> {
     let chosen = path.map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
     {
+        // Saved before it takes effect, so a failed save leaves the old location in use.
         let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
-        settings.quarto_path = chosen.clone();
-        settings.save(&state.config_dir)?;
+        let mut updated = settings.clone();
+        updated.quarto_path = chosen.clone();
+        updated.save(&state.config_dir)?;
+        *settings = updated;
     }
     let known = Arc::clone(&state.quarto);
     tauri::async_runtime::spawn_blocking(move || known.set_setting(chosen))
@@ -949,7 +952,6 @@ pub async fn save_document(
     text: String,
     anchors: Vec<comments::Anchor>,
 ) -> AppResult<()> {
-    require_quarto(&state).await?;
     documents::save(&*state.project(project_id)?, asset_id, &text, &anchors)
 }
 
