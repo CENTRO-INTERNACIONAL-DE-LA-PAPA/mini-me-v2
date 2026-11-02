@@ -70,7 +70,8 @@ pub fn validate_name(name: &str) -> AppResult<String> {
     Ok(trimmed.to_string())
 }
 
-/// Turns a Project name into a folder name that is valid on Windows, macOS and Linux.
+/// Turns a title into a name that is valid for a file or folder on Windows, macOS and Linux, as
+/// documents are named after theirs.
 pub fn folder_name(name: &str) -> String {
     let replaced: String = name
         .chars()
@@ -112,15 +113,6 @@ pub fn create(data_root: &Path, name: &str) -> AppResult<ProjectSummary> {
         params![summary.id.to_string(), summary.name, summary.created_at],
     )?;
     Ok(summary)
-}
-
-/// Gives the Project in `folder` the name `name`, which only its database holds, and returns it.
-/// No folder is renamed or moved.
-pub fn rename(folder: &Path, name: &str) -> AppResult<String> {
-    let name = validate_name(name)?;
-    let conn = db::open(&folder.join("project.sqlite"))?;
-    conn.execute("UPDATE project SET name = ?1", params![name])?;
-    Ok(name)
 }
 
 /// Removes the Project in `folder` with everything in it. Its running replies must be stopped
@@ -287,11 +279,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
         let project = create(&root, "Trial design").unwrap();
-        assert_eq!(rename(&project.folder, "  Huancayo 2025 ").unwrap(), "Huancayo 2025");
+        let opened = open(&project, test_support::origin()).unwrap();
+        assert_eq!(opened.rename("  Huancayo 2025 ").unwrap(), "Huancayo 2025");
+        assert_eq!(opened.name(), "Huancayo 2025");
         let listed = list(&root, &HashMap::new()).unwrap();
         assert_eq!(listed[0].name, "Huancayo 2025");
         assert_eq!(listed[0].folder, project.folder);
-        assert!(rename(&project.folder, "   ").is_err());
+        assert!(opened.rename("   ").is_err());
     }
 
     #[test]

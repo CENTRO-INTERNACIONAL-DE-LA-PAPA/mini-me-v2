@@ -192,6 +192,10 @@ fn renamed(current: &str, typed: &str) -> String {
 pub fn rename(project: &Project, id: Uuid, typed: &str) -> AppResult<AssetRef> {
     let current = find(&project.lock(), id)?;
     let name = renamed(&current.name, typed);
+    // Nothing typed, or only the extension, would leave a hidden file with no name.
+    if typed.trim().is_empty() || (name.starts_with('.') && !current.name.starts_with('.')) {
+        return Err(AppError::invalid_input("A file needs a name."));
+    }
     if name == current.name {
         return Ok(current);
     }
@@ -504,6 +508,8 @@ mod tests {
         assert!(path.ends_with("trial-2025.csv"));
         assert_eq!(std::fs::read(path).unwrap(), b"a,b");
         assert!(rename(&project, asset.id, "a/b").is_err());
+        assert!(rename(&project, asset.id, "   ").is_err());
+        assert!(rename(&project, asset.id, ".csv").is_err());
     }
 
     #[test]

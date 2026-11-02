@@ -259,9 +259,8 @@ pub async fn rename_project(
     name: String,
 ) -> AppResult<ProjectSummary> {
     let summary = state.find_summary(project_id)?;
-    let name = projects::rename(&summary.folder, &name)?;
-    // Closed, so that it opens again with its new name.
-    state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).remove(&project_id);
+    // Through the open Project, so running replies and every other holder share one instance.
+    let name = state.project(project_id)?.rename(&name)?;
     Ok(ProjectSummary { name, ..summary })
 }
 
