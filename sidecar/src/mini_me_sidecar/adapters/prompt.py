@@ -5,7 +5,6 @@ when it needs their content, and may use the tools its Trait lists; its text str
 the reply."""
 
 import json
-import re
 import sys
 import traceback
 from typing import Any, AsyncIterator
@@ -86,13 +85,6 @@ MAX_LISTED = 50
 # Finish reasons with which a provider's safety filter declines to answer; asking again gets
 # the same verdict.
 REFUSED = {"content_filter", "refusal"}
-
-# How providers word an error for a model that cannot call tools, such as OpenRouter's "No
-# endpoints found that support tool use".
-NO_TOOLS = re.compile(
-    r"support(s|ing)? tool|tool use|tool_use|tools? (are|is) not supported|function call",
-    re.IGNORECASE,
-)
 
 
 class Prompt(Adapter):
@@ -254,7 +246,7 @@ async def _answer(
         except TraitError:
             raise
         except Exception as error:
-            raise _tools_error(error, model) or provider_error(error, model) from None
+            raise provider_error(error, model) from None
         if wrote and _filtered(ending):
             print(f"[prompt] {name} stopped an answer: {ending}", file=sys.stderr, flush=True)
             raise TraitError(
@@ -300,17 +292,6 @@ async def _run_tool(ctx: CallContext, offered: dict[str, Any], call: dict[str, A
         traceback.print_exc(file=sys.stderr)
         return json.dumps({"error": f"{tool.name} failed unexpectedly."})
     return json.dumps(result, ensure_ascii=False, default=str)
-
-
-def _tools_error(error: Exception, model: Model) -> TraitError | None:
-    """The error for a model that cannot call tools, or None for any other failure."""
-    if not NO_TOOLS.search(str(error)):
-        return None
-    return TraitError(
-        "tools_unsupported",
-        f"{model.model} cannot use tools, which this Mini-Me needs. Choose another model in "
-        "Settings.",
-    )
 
 
 def _material(
