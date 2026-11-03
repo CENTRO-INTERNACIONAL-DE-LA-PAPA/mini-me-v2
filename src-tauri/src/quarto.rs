@@ -7,7 +7,7 @@
 use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -265,10 +265,33 @@ fn drain<R: Read + Send + 'static>(mut stream: R) -> JoinHandle<Vec<u8>> {
     })
 }
 
-/// Runs `command` and waits at most `limit`, then ends it. Its output is read as it runs, so a
-/// program that writes a lot cannot stall.
+/// Ends `child` and every process it started. Quarto is a launcher that starts Deno, Typst and
+/// Pandoc, so ending it alone leaves them running, with the output pipes open.
+fn kill_tree(child: &mut Child) {
+    #[cfg(unix)]
+    // SAFETY: `kill` with a negative PID only signals the process group `run_limited` made.
+    unsafe {
+        libc::kill(-(child.id() as i32), libc::SIGKILL);
+    }
+    #[cfg(windows)]
+    let _ = command(Path::new("taskkill"), &["/PID", &child.id().to_string(), "/T", "/F"], None)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Runs `command` and waits at most `limit`, then ends it and everything it started. Its output
+/// is read as it runs, so a program that writes a lot cannot stall.
 fn run_limited(mut command: Command, limit: Duration) -> AppResult<Finished> {
     command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        // Its own process group, so that the whole tree can be ended at once.
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let mut child = command
         .spawn()
         .map_err(|e| AppError::new(NOT_STARTED, format!("Quarto could not be started: {e}")))?;
@@ -279,8 +302,8 @@ fn run_limited(mut command: Command, limit: Duration) -> AppResult<Finished> {
         match child.try_wait()? {
             Some(status) => break status.success(),
             None if started.elapsed() >= limit => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_tree(&mut child);
+                // The pipes close with the processes, which ends the reader threads.
                 return Err(AppError::new(
                     "render_timeout",
                     format!("Quarto took longer than {} seconds. Try again.", limit.as_secs()),
@@ -715,6 +738,27 @@ mod tests {
         remove_stale_renders(&project);
         assert!(!project.paths.resolve("render").unwrap().exists());
         remove_stale_renders(&project);
+    }
+
+    /// A program that starts another and waits, like Quarto starting Typst: on a timeout both end.
+    #[cfg(unix)]
+    #[test]
+    fn a_timeout_ends_the_programs_a_program_started() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_file = dir.path().join("child.pid");
+        let script = format!("sleep 60 & echo $! > {}; wait", pid_file.display());
+        let started = command(Path::new("sh"), &["-c", &script], None);
+        let error = run_limited(started, Duration::from_millis(500)).err().unwrap();
+        assert_eq!(error.code, "render_timeout");
+
+        let child: i32 = std::fs::read_to_string(&pid_file).unwrap().trim().parse().unwrap();
+        // A killed process stays in the table until init collects it.
+        let ended = (0..100).any(|_| {
+            std::thread::sleep(Duration::from_millis(20));
+            // SAFETY: signal 0 only checks whether the process exists.
+            unsafe { libc::kill(child, 0) == -1 }
+        });
+        assert!(ended, "the started program is still running");
     }
 
     #[test]
