@@ -1,5 +1,16 @@
+import asyncio
+
+import pytest
+
 from mini_me_sidecar.adapters.prompt import RESEARCH_CONTEXT
-from mini_me_sidecar.summary import MAX_TITLE_CHARS, Summarizer, clean_title, system_prompt
+from mini_me_sidecar.context import Model, TraitError
+from mini_me_sidecar.summary import (
+    MAX_TITLE_CHARS,
+    Summarizer,
+    _test_model,
+    clean_title,
+    system_prompt,
+)
 
 
 class FakeLink:
@@ -43,3 +54,31 @@ def test_a_title_is_the_first_line_without_quotes_or_a_full_stop():
     assert long[len(cut)] == " "  # cut after a whole word
     assert clean_title("Short title") == "Short title"
     assert len(clean_title("x" * 100)) == MAX_TITLE_CHARS
+
+
+class ToolChat:
+    """A chat model that calls the tool it is forced to use, or answers in text instead."""
+
+    def __init__(self, calls_tool: bool):
+        self.calls_tool = calls_tool
+
+    def with_structured_output(self, schema, method):
+        chat = self
+
+        class Forced:
+            async def ainvoke(self, turns):
+                return schema(ok=True) if chat.calls_tool else None
+
+        return Forced()
+
+
+def test_a_model_that_calls_the_tool_passes_the_model_test():
+    model = Model(provider="openai", model="fake")
+    assert asyncio.run(_test_model(ToolChat(True), model)) == "ok"
+
+
+def test_a_model_that_does_not_call_the_tool_fails_the_model_test():
+    model = Model(provider="openai", model="fake")
+    with pytest.raises(TraitError) as raised:
+        asyncio.run(_test_model(ToolChat(False), model))
+    assert raised.value.code == "tools_unsupported" and "fake" in str(raised.value)

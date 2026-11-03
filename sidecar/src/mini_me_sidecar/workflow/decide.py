@@ -6,7 +6,12 @@ from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, Field, ValidationError, create_model
 
-from mini_me_sidecar.adapters.providers import chat_model, log_error, provider_error
+from mini_me_sidecar.adapters.providers import (
+    chat_model,
+    log_error,
+    provider_error,
+    structured_answer,
+)
 from mini_me_sidecar.context import CallContext, Model, TraitError
 
 SYSTEM = (
@@ -48,10 +53,9 @@ async def decide(
     schema = decision_schema(choices)
     try:
         # Tool calling works with every provider and with OpenRouter's models.
-        chat = make_chat(model, key.reveal()).with_structured_output(
-            schema, method="function_calling"
+        answer = await structured_answer(
+            make_chat(model, key.reveal()), schema, [("system", SYSTEM), ("human", material)]
         )
-        answer = await chat.ainvoke([("system", SYSTEM), ("human", material)])
     except TraitError:
         raise
     except ValidationError:

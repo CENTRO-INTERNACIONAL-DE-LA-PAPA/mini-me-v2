@@ -8,9 +8,15 @@ import traceback
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel, Field
 
 from mini_me_sidecar.adapters.prompt import REFUSED, RESEARCH_CONTEXT
-from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, chat_model, provider_error
+from mini_me_sidecar.adapters.providers import (
+    PROVIDER_NAMES,
+    chat_model,
+    provider_error,
+    structured_answer,
+)
 from mini_me_sidecar.context import Model, Requests, TraitError
 from mini_me_sidecar.link import Link, log
 
@@ -58,6 +64,25 @@ def clean_title(text: str) -> str:
     return line
 
 
+class ModelTest(BaseModel):
+    """The one tool a model test offers."""
+
+    ok: bool = Field(description="Always true.")
+
+
+async def _test_model(chat: Any, model: Model) -> str:
+    """"ok" when `model` calls the tool it is offered, which Mini-Mes need of every model;
+    otherwise raises why it did not."""
+    turns = [("system", "Call the tool you are given."), ("human", "Call it now with ok true.")]
+    if not isinstance(await structured_answer(chat, ModelTest, turns), ModelTest):
+        raise TraitError(
+            "tools_unsupported",
+            f"{model.model} did not call the tool it was offered, which Mini-Mes need. Choose "
+            "another model in Settings.",
+        )
+    return "ok"
+
+
 class Summarizer:
     def __init__(self, link: Link, requests: Requests) -> None:
         self._link = link
@@ -76,7 +101,7 @@ class Summarizer:
     async def _summarize(self, summary_id: str, frame: dict[str, Any]) -> None:
         raw = frame.get("model") or {}
         model = Model(provider=str(raw.get("provider", "")), model=str(raw.get("model", "")))
-        kind = "title" if frame.get("kind") == "title" else "overview"
+        kind = frame.get("kind") if frame.get("kind") in ("title", "test") else "overview"
         try:
             text = await self._write(summary_id, model, str(frame.get("material") or ""), kind)
         except TraitError as error:
@@ -87,14 +112,19 @@ class Summarizer:
             if mapped:
                 self._error(summary_id, mapped.code, str(mapped))
             else:
-                what = "title" if kind == "title" else "summary"
-                self._error(summary_id, "summary_failed", f"The {what} could not be written.")
+                failed = {
+                    "title": "The title could not be written.",
+                    "test": "The model could not be tested.",
+                }.get(kind, "The summary could not be written.")
+                self._error(summary_id, "summary_failed", failed)
         else:
             self._link.send({"type": "summary.done", "summary_id": summary_id, "text": text})
 
     async def _write(self, summary_id: str, model: Model, material: str, kind: str) -> str:
         key = await self._requests.send(summary_id, "secret.get", {"provider": model.provider})
         chat = chat_model(model, key["value"])
+        if kind == "test":
+            return await _test_model(chat, model)
         reply = await chat.ainvoke([SystemMessage(system_prompt(kind)), HumanMessage(material)])
         ending = getattr(reply, "response_metadata", None) or {}
         name = PROVIDER_NAMES[model.provider]

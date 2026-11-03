@@ -5,6 +5,8 @@ import re
 import sys
 from typing import Any
 
+from pydantic import BaseModel, ValidationError
+
 from mini_me_sidecar.context import Model, TraitError
 
 PROVIDER_NAMES = {
@@ -63,6 +65,23 @@ def chat_model(model: Model, key: str) -> Any:
 
             return ChatGoogleGenerativeAI(model=model.model, google_api_key=key)
     raise TraitError("provider_unavailable", f"Unknown provider {model.provider!r}.")
+
+
+async def structured_answer(chat: Any, schema: type[BaseModel], turns: list[Any]) -> Any:
+    """The model's answer as an instance of `schema`, or None when it gave none. The call forces
+    the model to use `schema`'s tool, which some models refuse, such as those that run with
+    thinking on; those are then offered the tool and left to call it."""
+    try:
+        return await chat.with_structured_output(schema, method="function_calling").ainvoke(turns)
+    except Exception as error:
+        if not NO_FORCED_TOOL.search(str(error)):
+            raise
+    reply = await chat.bind_tools([schema], tool_choice="auto").ainvoke(turns)
+    calls = getattr(reply, "tool_calls", None) or []
+    try:
+        return schema(**calls[0]["args"]) if calls else None
+    except ValidationError:
+        return None
 
 
 def provider_error(error: Exception, model: Model) -> TraitError:

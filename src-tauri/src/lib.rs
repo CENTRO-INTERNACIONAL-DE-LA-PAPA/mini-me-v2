@@ -84,6 +84,7 @@ pub fn run() {
             ipc::get_overview,
             ipc::feature_component,
             ipc::update_overview_summary,
+            ipc::test_model,
             ipc::open_asset,
             ipc::rename_asset,
             ipc::duplicate_asset,

@@ -45,6 +45,7 @@ const SUMMARY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120)
 
 /// How long naming a Conversation may take; its title is a few words.
 const TITLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+const MODEL_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// How long a draft may go without new text before it is stopped.
 const DRAFT_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
@@ -562,6 +563,26 @@ pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettings
         threshold: settings.routing.threshold,
         show_answers: settings.routing.show_answers,
     })
+}
+
+/// Tests `model` of `provider` with one small request that needs a tool call, which Mini-Mes
+/// depend on, so that a model can be checked before it is used. Fails with why it did not pass.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn test_model(
+    state: State<'_, AppState>,
+    provider: String,
+    model: String,
+) -> AppResult<()> {
+    let model = AiSettings::new(&provider, &model)?
+        .model()
+        .ok_or_else(|| AppError::invalid_input("Type a model ID first."))?;
+    let runs = Arc::clone(&state.runs);
+    tauri::async_runtime::spawn_blocking(move || {
+        runs.summarize(model, String::new(), SummaryKind::Test, MODEL_TEST_TIMEOUT)
+    })
+    .await
+    .map_err(|e| AppError::new("summary_failed", e.to_string()))??;
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]

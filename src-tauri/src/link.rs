@@ -145,6 +145,8 @@ pub enum SummaryKind {
     Overview,
     /// A short title for a Conversation, from its first message.
     Title,
+    /// A test of the model, which Mini-Mes need to call a tool: the text is "ok" when it did.
+    Test,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
