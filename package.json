@@ -12,6 +12,7 @@
     "tauri:release": "tauri build --config src-tauri/tauri.release.conf.json",
     "bundle-sidecar": "uv run --project sidecar --frozen python -I sidecar/scripts/bundle.py",
     "check-version": "node scripts/check-version.mjs",
+    "release": "node scripts/release.mjs",
     "test": "vitest run"
   },
   "dependencies": {

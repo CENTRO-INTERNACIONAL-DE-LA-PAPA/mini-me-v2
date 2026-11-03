@@ -52,23 +52,36 @@ every pull request into `dev` or `main`.
 
 ## Cutting a release
 
-Releases are built by GitHub Actions ([`release.yml`](../.github/workflows/release.yml))
-from a version tag.
+A release is a version that `main` carries and no tag has yet. You prepare it on `dev` with one
+command, and merging the pull request does the rest
+([`release.yml`](../.github/workflows/release.yml)).
 
-1. Set the new version in `package.json`, `src-tauri/tauri.conf.json` and
-   `src-tauri/Cargo.toml`.
-2. Replace `CHANGELOG.md` with the new version's notes: a first line `# Mini-Me 0.2.0`, then
-   "New", "Improved" and "Fixed" sections (leave out an empty one), in plain language for
-   users. It holds only this release's notes. The app bundles it for its "What's new" page,
-   and the draft release shows the same text. Then run `npm run check-version -- v0.2.0`, which
-   checks the versions and that the changelog is for 0.2.0.
-3. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
-4. Wait for the workflow to finish. It creates a **draft** release, with the changelog as its
-   notes, holding the Windows installer, the macOS `.dmg` and `.app.tar.gz`, the Linux
-   AppImage and `.deb`, each update file's `.sig`, and `latest.json` with an entry per
-   platform.
-5. Try the installers from the draft, then click **Publish release**. Installed apps only
-   see published releases.
+1. Write `CHANGELOG.md` for the new version and leave it uncommitted. Its first line, `# Mini-Me 0.6.0`,
+   is where the version comes from; then come "New", "Improved" and "Fixed" sections (leave out an
+   empty one), in plain language for users. It holds only this release's notes: the app bundles it
+   for its "What's new" page, and the draft release shows the same text.
+2. On `dev`, run `npm run release`. It checks that `dev` is not behind `origin/dev`, that nothing is
+   changed but the changelog, and that its version is new, then sets the version in `package.json`
+   and `package-lock.json`, commits `chore(release): 0.6.0`, pushes `dev` and opens the pull request
+   from `dev` into `main` with the changelog as its body. `npm run release -- --dry-run` says what it
+   would do without doing it. If a step fails, run it again: it skips what is done.
+3. Wait for CI on the pull request, then merge it into `main`. It never merges for you.
+4. The Release workflow starts when `main` changes. If the version has no tag, it tags the merge
+   commit `v0.6.0`, creates a **draft** release with the changelog as its notes, and builds the
+   Windows installer, the macOS `.dmg` and `.app.tar.gz`, the Linux AppImage and `.deb`, each update
+   file's `.sig`, and `latest.json` with an entry per platform. A merge into `main` whose version is
+   already tagged builds nothing.
+5. Try the installers from the draft, then click **Publish release**. Installed apps only see
+   published releases.
+
+If a platform's build fails, re-run the failed jobs of that run in Actions; they upload into the same
+draft. To start again from scratch, delete the draft release and the tag, then run the Release workflow
+on `main` by hand (Actions → Release → Run workflow).
+
+The app version is set in `package.json` only. `package-lock.json` follows it through `npm version`,
+and `src-tauri/tauri.conf.json` reads it from `../package.json`, so the app, its installers and its
+update files carry it. The version in `src-tauri/Cargo.toml` is a fixed `0.0.0` that nothing reads.
+`npm run check-version` checks that everything agrees, and CI runs it on every pull request.
 
 The update files are signed with the key in the `TAURI_SIGNING_PRIVATE_KEY` repository
 secret. Its password is in `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The maintainer keeps a
