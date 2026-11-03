@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +13,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
+  FlaskConicalIcon,
   InfoIcon,
   KeyRoundIcon,
   SlidersHorizontalIcon,
@@ -601,17 +603,19 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
   const [model, setModel] = useState(settings.model);
   const [status, setStatus] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  /** How testing the model went, shown in a popover over its button; null while closed. */
+  const [tested, setTested] = useState<string | null>(null);
   const changed = provider !== settings.provider || model.trim() !== settings.model;
 
   /** Tests the model in the fields, saved or not, and says how it went. */
   async function testModel() {
     setTesting(true);
-    setStatus("Testing the model…");
+    setTested("Testing the model…");
     try {
       await api.testModel(provider, model);
-      setStatus("This model works with Mini-Me.");
+      setTested("This model works with Mini-Me.");
     } catch (e) {
-      setStatus(errorMessage(e));
+      setTested(errorMessage(e));
     } finally {
       setTesting(false);
     }
@@ -674,14 +678,27 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
           <Button type="submit" disabled={!changed}>
             Save
           </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={testing || !model.trim()}
-            onClick={testModel}
-          >
-            Test model
-          </Button>
+          {/* Says how the test went; clicking outside closes it. */}
+          <Popover open={tested !== null} onOpenChange={(open) => !open && setTested(null)}>
+            <PopoverTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  aria-label="Test model"
+                  title="Test model"
+                  disabled={testing || !model.trim()}
+                />
+              }
+              onClick={testModel}
+            >
+              <FlaskConicalIcon />
+            </PopoverTrigger>
+            <PopoverContent align="end">
+              <p>{tested}</p>
+            </PopoverContent>
+          </Popover>
         </div>
       </SettingRow>
     </form>
