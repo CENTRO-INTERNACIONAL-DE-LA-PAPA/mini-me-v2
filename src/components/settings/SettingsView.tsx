@@ -410,7 +410,6 @@ function AboutPage({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
       </div>
       <div className="mt-6">
         <AboutRow onOpenWhatsNew={onOpenWhatsNew} />
-        <DeveloperModeRow />
         <SettingRow label="GitHub Repository">
           <span className="text-ui text-muted-foreground tabular-nums">
             {/* The webview opens no new windows; the link opens in the system's browser. */}
@@ -425,6 +424,7 @@ function AboutPage({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
             </a>
           </span>
         </SettingRow>
+        <DeveloperModeRow />
       </div>
       <Collaboration />
     </>
