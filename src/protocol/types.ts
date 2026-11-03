@@ -274,11 +274,19 @@ export interface ProjectSummary {
   created_at: number;
 }
 
+/** What a Conversation's latest reply is doing, and which Mini-Me is doing it. Only a running
+ * reply and one paused at an approval have a status. */
+export interface ConversationStatus {
+  kind: "running" | "needs_approval";
+  mini_me: { id: Uuid; name: string };
+}
+
 export interface ConversationSummary {
   id: Uuid;
   title: string;
   created_at: number;
   last_activity_at: number;
+  status: ConversationStatus | null;
 }
 
 export interface SendMessageInput {
@@ -403,6 +411,7 @@ export interface RecentConversation {
   title: string;
   /** Unix ms. */
   last_activity_at: number;
+  status: ConversationStatus | null;
 }
 
 /** What arrives while Scribe drafts a document: some text, or the draft's end. */

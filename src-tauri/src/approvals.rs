@@ -1,6 +1,7 @@
 //! Replies paused at an approval, gathered across every Project for Home. Each Project's
 //! database is only read, so listing never migrates a Project or changes its files.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use rusqlite::Connection;
@@ -24,6 +25,33 @@ pub struct PausedApproval {
     pub prompt: String,
     /// When the reply paused (Unix ms).
     pub paused_at: i64,
+}
+
+/// The Mini-Me a saved run belongs to. The saved run is a `RunSpec` under `spec`, which names it.
+fn mini_me_of(run: &Value) -> Option<RunMiniMe> {
+    serde_json::from_value(run.pointer("/spec/mini_me")?.clone()).ok()
+}
+
+/// The Mini-Me of the reply paused in each Conversation of the Project behind `conn`.
+pub fn paused_mini_mes(conn: &Connection) -> AppResult<HashMap<Uuid, RunMiniMe>> {
+    let mut statement = conn.prepare(
+        "SELECT m.conversation_id, p.run FROM paused_runs p JOIN messages m ON m.id = p.message_id",
+    )?;
+    let rows = statement
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+    let mut paused = HashMap::new();
+    for row in rows {
+        let (conversation_id, run) = row?;
+        let (Ok(conversation_id), Ok(run)) =
+            (Uuid::parse_str(&conversation_id), serde_json::from_str::<Value>(&run))
+        else {
+            continue;
+        };
+        if let Some(mini_me) = mini_me_of(&run) {
+            paused.insert(conversation_id, mini_me);
+        }
+    }
+    Ok(paused)
 }
 
 /// Every paused approval in the Projects of `data_root`, newest pause first. A Project that
@@ -58,11 +86,7 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<PausedAppr
         let (message_id, run, paused_at, conversation_id, title, data) = row?;
         let run: Value = serde_json::from_str(&run)?;
         let data: Value = serde_json::from_str(&data)?;
-        // The saved run is a `RunSpec` under `spec`, which names the Mini-Me.
-        let Some(mini_me) = run
-            .pointer("/spec/mini_me")
-            .and_then(|m| serde_json::from_value::<RunMiniMe>(m.clone()).ok())
-        else {
+        let Some(mini_me) = mini_me_of(&run) else {
             continue;
         };
         let (Ok(message_id), Ok(conversation_id)) =
@@ -143,6 +167,20 @@ mod tests {
                 ("Late blight resistance", "Investigator", "Design an experiment?"),
             ]
         );
+    }
+
+    #[test]
+    fn the_paused_mini_me_of_each_conversation_is_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
+        let (project, run) = paused(&root, "Trials", "Investigator", "Go on?", 1);
+        let (conversation, _) = project.lock().message_place(run.message_id).unwrap().unwrap();
+        let found = paused_mini_mes(&project.lock().conn).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[&conversation].name, "Investigator");
+
+        conversations::answer_approval(&project, run.message_id, run.component_id, false).unwrap();
+        assert!(paused_mini_mes(&project.lock().conn).unwrap().is_empty());
     }
 
     #[test]

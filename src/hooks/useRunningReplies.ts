@@ -35,3 +35,12 @@ export function useRunningReplies(): RunningReply[] {
 
   return running;
 }
+
+/** Changes whenever a reply starts, resumes or stops running, and not when a running reply moves
+ * to its next Step: what the lists of Conversations reload on, to keep their statuses current. */
+export function useRunningKey(): string {
+  return useRunningReplies()
+    .map((reply) => reply.message_id)
+    .sort()
+    .join(",");
+}

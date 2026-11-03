@@ -18,7 +18,7 @@ use uuid::Uuid;
 use crate::assets;
 use crate::comments;
 use crate::components;
-use crate::conversations::{self, PausedRun};
+use crate::conversations::{self, ConversationStatus, PausedRun};
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
@@ -170,6 +170,19 @@ pub struct RunningReply {
     pub mini_me: RunMiniMe,
     /// The name of the Step the run last started; none before its first Step.
     pub step: Option<String>,
+}
+
+/// The status of Conversation `conversation_id` of Project `project_id` given the replies
+/// `running`: `running` with the Mini-Me of its reply, or none when no reply of it is running.
+pub fn running_status(
+    running: &[RunningReply],
+    project_id: Uuid,
+    conversation_id: Uuid,
+) -> Option<ConversationStatus> {
+    running
+        .iter()
+        .find(|r| r.project_id == project_id && r.conversation_id == conversation_id)
+        .map(|r| ConversationStatus::Running { mini_me: r.mini_me.clone() })
 }
 
 /// Receives the whole list of running replies; returns `false` when it is gone.
@@ -828,12 +841,19 @@ impl Runs {
     }
 
     fn finish(&self, run_id: Uuid) -> Option<Run> {
+        let run = self.take(run_id);
+        if run.is_some() {
+            self.notify();
+        }
+        run
+    }
+
+    /// Removes the run `run_id` without telling anyone, for a caller that stores what became of
+    /// it before the running list changes.
+    fn take(&self, run_id: Uuid) -> Option<Run> {
         let run = self.lock().runs.remove(&run_id);
-        match run {
-            Some(_) => self.notify(),
-            None => self
-                .log
-                .line(&format!("ignoring the end of run {run_id}, which is not open")),
+        if run.is_none() {
+            self.log.line(&format!("ignoring the end of run {run_id}, which is not open"));
         }
         run
     }
@@ -886,9 +906,15 @@ impl Runs {
 
     /// Saves a run that reached an approval, so the reply waits for the user's answer.
     fn paused(&self, run_id: Uuid, step_id: String, output: Option<String>, state: String) {
-        let Some(run) = self.finish(run_id) else {
+        let Some(run) = self.take(run_id) else {
             return;
         };
+        self.save_pause(run, step_id, output, state);
+        // After the pause is stored: the sidebar reloads on this and reads the paused reply.
+        self.notify();
+    }
+
+    fn save_pause(&self, run: Run, step_id: String, output: Option<String>, state: String) {
         if state.len() > MAX_STATE_BYTES {
             let _ = conversations::fail_reply(
                 &run.project,
@@ -1629,6 +1655,53 @@ mod tests {
             true
         }));
         lists
+    }
+
+    #[test]
+    fn the_running_list_changes_only_after_a_pause_is_stored() {
+        let f = quick();
+        let (run_id, _reply) = f.start_spec(approving_spec(), None);
+        f.runs.handle(SidecarFrame::StepStarted { run_id, step_id: "ask".into(), call_id: None });
+        // What the sidebar would see each time the list changes: the Conversation's status.
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let (project, sent) = (Arc::clone(&f.project), Arc::clone(&seen));
+        f.runs.subscribe(Box::new(move |running| {
+            let status = conversations::list(&project).unwrap()[0].status.clone();
+            sent.lock().unwrap().push((running.len(), status.is_some()));
+            true
+        }));
+        f.runs.handle(SidecarFrame::RunPaused {
+            run_id,
+            step_id: "ask".into(),
+            output: None,
+            state: "opaque".into(),
+        });
+        // The Conversation had no status while running, and none is missing when the reply
+        // leaves the running list.
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(seen.last(), Some(&(0, true)), "{seen:?}");
+    }
+
+    #[test]
+    fn a_running_reply_gives_its_conversation_the_running_status() {
+        let (project_id, conversation_id) = (new_id(), new_id());
+        let reply = |project_id, conversation_id| RunningReply {
+            project_id,
+            project_name: "Trials".into(),
+            conversation_id,
+            conversation_title: "Plan".into(),
+            message_id: new_id(),
+            mini_me: RunMiniMe { id: new_id(), name: "Researcher".into() },
+            step: None,
+        };
+        let running = [reply(project_id, conversation_id)];
+        assert_eq!(
+            running_status(&running, project_id, conversation_id),
+            Some(ConversationStatus::Running { mini_me: running[0].mini_me.clone() })
+        );
+        assert_eq!(running_status(&running, project_id, new_id()), None);
+        assert_eq!(running_status(&running, new_id(), conversation_id), None);
+        assert_eq!(running_status(&[], project_id, conversation_id), None);
     }
 
     #[test]
