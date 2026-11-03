@@ -13,6 +13,7 @@ import { LibraryView } from "./components/library/LibraryView";
 import { MiniMeEditor } from "./components/library/MiniMeEditor";
 import { OverviewView } from "./components/overview/OverviewView";
 import { SettingsView } from "./components/settings/SettingsView";
+import { WhatsNewView } from "./components/shell/WhatsNewView";
 import { AppSidebar } from "./components/shell/AppSidebar";
 import { MainSheet } from "./components/shell/Sheet";
 import type { View } from "./components/shell/view";
@@ -73,6 +74,14 @@ export default function App() {
   useEffect(() => {
     refreshConversations();
   }, [runningKey, refreshConversations]);
+
+  // The first start after an update opens What's new once, over Home.
+  useEffect(() => {
+    api
+      .takeWhatsNew()
+      .then((show) => show && setView((from) => ({ kind: "whats-new", from })))
+      .catch(() => {});
+  }, []);
 
   function navigate(next: View) {
     setError(null);
@@ -234,7 +243,17 @@ function Main({
   );
   switch (view.kind) {
     case "settings":
-      return scrolling(<SettingsView onOpenAvatars={() => onNavigate({ kind: "avatars" })} />);
+      return scrolling(
+        <SettingsView
+          initialPage={view.page}
+          onOpenAvatars={() => onNavigate({ kind: "avatars" })}
+          onOpenWhatsNew={() =>
+            onNavigate({ kind: "whats-new", from: { kind: "settings", page: "about" } })
+          }
+        />,
+      );
+    case "whats-new":
+      return scrolling(<WhatsNewView onClose={() => onNavigate(view.from ?? { kind: "home" })} />);
     case "avatars":
       // Opened from Settings → General, so closing it goes back there.
       return scrolling(<AvatarDebugView onClose={() => onNavigate({ kind: "settings" })} />);

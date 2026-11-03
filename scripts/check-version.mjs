@@ -1,5 +1,6 @@
 // Checks that package.json, tauri.conf.json and Cargo.toml carry the same app version and,
-// when a tag such as `v0.2.0` is given, that it matches the tag. Exits 1 on any mismatch.
+// when a tag such as `v0.2.0` is given, that it matches the tag and that CHANGELOG.md is the
+// changelog of that version. Exits 1 on any mismatch.
 //
 //   node scripts/check-version.mjs [tag]
 
@@ -28,5 +29,15 @@ if (wrong.length > 0) {
     console.error(`  ${file}: ${version ?? "no version found"}`);
   }
   process.exit(1);
+}
+
+// A release's notes are CHANGELOG.md, whose first line names its version: `# Mini-Me 0.2.0`.
+if (tag) {
+  const heading = read("CHANGELOG.md").split(/\r?\n/, 1)[0];
+  const noted = heading.match(/^# Mini-Me (\S+)\s*$/)?.[1];
+  if (noted !== expected) {
+    console.error(`CHANGELOG.md is for ${noted ?? `no version (first line "${heading}")`}, not ${tag} (${expected}).`);
+    process.exit(1);
+  }
 }
 console.log(`All versions are ${expected}.`);

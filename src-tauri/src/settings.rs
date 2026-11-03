@@ -34,6 +34,10 @@ pub struct Settings {
     /// The Quarto program the user chose in Settings; when unset, the app looks for one.
     #[serde(default)]
     pub quarto_path: Option<String>,
+    /// The app version whose What's new was last shown, or that was running when the settings
+    /// were created. Settings from before this field existed hold none.
+    #[serde(default)]
+    pub last_seen_version: Option<String>,
 }
 
 /// How Home looks.
@@ -113,8 +117,9 @@ impl AiSettings {
 }
 
 impl Settings {
-    /// Loads the settings from `config_dir`, creating them with fresh IDs on first launch.
-    pub fn load_or_create(config_dir: &Path) -> AppResult<Self> {
+    /// Loads the settings from `config_dir`, creating them with fresh IDs on first launch, when
+    /// the running `version` counts as already shown, since a new install has nothing to announce.
+    pub fn load_or_create(config_dir: &Path, version: &str) -> AppResult<Self> {
         let path = config_dir.join(FILE_NAME);
         if path.exists() {
             let raw = std::fs::read_to_string(&path)?;
@@ -129,6 +134,7 @@ impl Settings {
             home: HomeSettings::default(),
             developer_mode: None,
             quarto_path: None,
+            last_seen_version: Some(version.to_string()),
         };
         settings.save(config_dir)?;
         Ok(settings)
@@ -141,6 +147,16 @@ impl Settings {
         std::fs::write(&tmp, serde_json::to_string_pretty(self)?)?;
         std::fs::rename(&tmp, config_dir.join(FILE_NAME))?;
         Ok(())
+    }
+
+    /// Whether to open What's new for the running `version`: it is not the version last shown,
+    /// and this is not Mini-Me Dev (`dev_app`). Records `version` as shown, so the caller saves.
+    pub fn take_whats_new(&mut self, version: &str, dev_app: bool) -> bool {
+        if dev_app || self.last_seen_version.as_deref() == Some(version) {
+            return false;
+        }
+        self.last_seen_version = Some(version.to_string());
+        true
     }
 
     /// Whether developer options are shown, for an app that is (`dev_app`) or is not
@@ -164,8 +180,8 @@ mod tests {
     #[test]
     fn ids_are_stable_across_loads() {
         let dir = tempfile::tempdir().unwrap();
-        let first = Settings::load_or_create(dir.path()).unwrap();
-        let second = Settings::load_or_create(dir.path()).unwrap();
+        let first = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
+        let second = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
         assert_eq!(first.installation_id, second.installation_id);
         assert_eq!(first.user_id, second.user_id);
     }
@@ -173,12 +189,35 @@ mod tests {
     #[test]
     fn recent_projects_persist() {
         let dir = tempfile::tempdir().unwrap();
-        let mut settings = Settings::load_or_create(dir.path()).unwrap();
+        let mut settings = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
         let project = new_id();
         settings.recent_projects.insert(project, 42);
         settings.save(dir.path()).unwrap();
-        let loaded = Settings::load_or_create(dir.path()).unwrap();
+        let loaded = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
         assert_eq!(loaded.recent_projects.get(&project), Some(&42));
+    }
+
+    #[test]
+    fn whats_new_opens_once_after_an_update_and_never_on_a_new_install_or_in_dev() {
+        // A new install records the running version, so there is nothing to announce.
+        let dir = tempfile::tempdir().unwrap();
+        let mut fresh = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
+        assert!(!fresh.take_whats_new("0.5.2", false));
+
+        // Settings from before the version was remembered count as updated, once.
+        let old = r#"{ "installation_id": "0199d0a0-0000-7000-8000-0000000000e1",
+                      "user_id": "0199d0a0-0000-7000-8000-0000000000e2" }"#;
+        let other = tempfile::tempdir().unwrap();
+        std::fs::write(other.path().join(FILE_NAME), old).unwrap();
+        let mut settings = Settings::load_or_create(other.path(), "0.5.2").unwrap();
+        assert!(settings.take_whats_new("0.5.2", false));
+        assert!(!settings.take_whats_new("0.5.2", false));
+
+        // A different version shows once, and Mini-Me Dev never shows or records.
+        assert!(!settings.take_whats_new("0.6.0", true));
+        assert_eq!(settings.last_seen_version.as_deref(), Some("0.5.2"));
+        assert!(settings.take_whats_new("0.6.0", false));
+        assert!(!settings.take_whats_new("0.6.0", false));
     }
 
     #[test]
@@ -187,7 +226,7 @@ mod tests {
         let old = r#"{ "installation_id": "0199d0a0-0000-7000-8000-0000000000e1",
                       "user_id": "0199d0a0-0000-7000-8000-0000000000e2" }"#;
         std::fs::write(dir.path().join(FILE_NAME), old).unwrap();
-        let settings = Settings::load_or_create(dir.path()).unwrap();
+        let settings = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
         assert_eq!(settings.ai, AiSettings::default());
         assert_eq!(settings.routing, RoutingSettings::default());
         assert!(!settings.home.show_mini_mes);
@@ -199,12 +238,12 @@ mod tests {
     #[test]
     fn the_model_is_saved_without_any_key() {
         let dir = tempfile::tempdir().unwrap();
-        let mut settings = Settings::load_or_create(dir.path()).unwrap();
+        let mut settings = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
         settings.ai = AiSettings::new("anthropic", "  example-model ").unwrap();
         settings.save(dir.path()).unwrap();
         let saved = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
         assert!(!saved.to_lowercase().contains("key"));
-        let loaded = Settings::load_or_create(dir.path()).unwrap();
+        let loaded = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
         assert_eq!(
             loaded.ai.model(),
             Some(CallModel {

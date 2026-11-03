@@ -130,6 +130,7 @@ pub fn run() {
             ipc::set_routing_threshold,
             ipc::set_show_jev_answers,
             ipc::get_developer_mode,
+            ipc::take_whats_new,
             ipc::set_developer_mode,
             ipc::get_home_settings,
             ipc::set_show_home_mini_mes,

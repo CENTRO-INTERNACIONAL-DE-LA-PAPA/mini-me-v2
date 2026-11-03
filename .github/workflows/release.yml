@@ -18,14 +18,16 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: node scripts/check-version.mjs "$GITHUB_REF_NAME"
-      # Created here, once, so both build jobs upload to the same draft.
+      # Created here, once, so both build jobs upload to the same draft. Its notes are
+      # CHANGELOG.md without its first line, which is the title GitHub already shows.
       - id: create
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          notes=$(tail -n +2 CHANGELOG.md | sed '/./,$!d')
           id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
             -f tag_name="$GITHUB_REF_NAME" -f name="Mini-Me ${GITHUB_REF_NAME#v}" \
-            -F draft=true --jq .id)
+            -f body="$notes" -F draft=true --jq .id)
           test -n "$id"
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
 

@@ -56,12 +56,18 @@ Releases are built by GitHub Actions ([`release.yml`](../.github/workflows/relea
 from a version tag.
 
 1. Set the new version in `package.json`, `src-tauri/tauri.conf.json` and
-   `src-tauri/Cargo.toml`, then run `npm run check-version`.
-2. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
-3. Wait for the workflow to finish. It creates a **draft** release with the Windows
-   installer, the macOS `.dmg` and `.app.tar.gz`, the Linux AppImage and `.deb`, each update
-   file's `.sig`, and `latest.json` with an entry per platform.
-4. Try the installers from the draft, then click **Publish release**. Installed apps only
+   `src-tauri/Cargo.toml`.
+2. Replace `CHANGELOG.md` with the new version's notes: a first line `# Mini-Me 0.2.0`, then
+   "New", "Improved" and "Fixed" sections (leave out an empty one), in plain language for
+   users. It holds only this release's notes. The app bundles it for its "What's new" page,
+   and the draft release shows the same text. Then run `npm run check-version -- v0.2.0`, which
+   checks the versions and that the changelog is for 0.2.0.
+3. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
+4. Wait for the workflow to finish. It creates a **draft** release, with the changelog as its
+   notes, holding the Windows installer, the macOS `.dmg` and `.app.tar.gz`, the Linux
+   AppImage and `.deb`, each update file's `.sig`, and `latest.json` with an entry per
+   platform.
+5. Try the installers from the draft, then click **Publish release**. Installed apps only
    see published releases.
 
 The update files are signed with the key in the `TAURI_SIGNING_PRIVATE_KEY` repository
