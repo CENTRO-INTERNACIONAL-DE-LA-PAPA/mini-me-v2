@@ -16,6 +16,7 @@ import {
   FlaskConicalIcon,
   InfoIcon,
   KeyRoundIcon,
+  RefreshCwIcon,
   SlidersHorizontalIcon,
   UserRoundIcon,
   WrenchIcon,
@@ -317,8 +318,15 @@ function QuartoForm({ status }: { status: QuartoStatus }) {
             Clear
           </Button>
         )}
-        <Button type="button" variant="outline" onClick={recheckQuarto}>
-          Check
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Check again"
+          title="Check again"
+          onClick={recheckQuarto}
+        >
+          <RefreshCwIcon />
         </Button>
       </SettingRow>
     </form>
