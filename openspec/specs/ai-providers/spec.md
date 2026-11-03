@@ -70,20 +70,21 @@ can act on and that contains no secret:
   rejected and can be replaced in Settings
 
 ### Requirement: Testing the model
-Settings' Models & keys page SHALL have a "Test model" button beside Save. It SHALL send the
-provider and model in the fields, saved or not, one small request that needs a tool call, which
-every Mini-Me depends on, and SHALL show that the model works with Mini-Me, or why it did not
-pass, with the same messages as a failed reply. The button SHALL be unavailable while the model
-field is empty or a test is running. The result SHALL be shown only: it is not stored, and it
-clears when the provider or model changes.
+Settings' Models & keys page SHALL have a "Test model" icon button, a flask with that name as its
+label, beside Save. It SHALL send the provider and model in the fields, saved or not, one small
+request that needs a tool call, which every Mini-Me depends on, and SHALL show that the model
+works with Mini-Me, or why it did not pass, with the same messages as a failed reply, in a small
+popover that opens over the button, and not in the row's description. The button SHALL be
+unavailable while the model field is empty or a test is running. The result SHALL be shown only:
+it is not stored, and clicking outside the popover closes it.
 
 #### Scenario: A model that calls tools
 - **WHEN** the user types a model that supports tool calls and presses "Test model"
-- **THEN** the page says "Testing the model…" and then that the model works with Mini-Me
+- **THEN** the popover says "Testing the model…" and then that the model works with Mini-Me
 
 #### Scenario: A model that does not
 - **WHEN** the user tests a model that does not call the tool it is offered
-- **THEN** the page says the model did not call the tool, which Mini-Mes need, and to choose
+- **THEN** the popover says the model did not call the tool, which Mini-Mes need, and to choose
   another model in Settings
 
 #### Scenario: Untested changes

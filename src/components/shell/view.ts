@@ -19,4 +19,4 @@ export type View =
 export type LibraryTab = "mini-mes" | "traits";
 
 /** A page of Settings; Settings opens at `general` unless a view says otherwise. */
-export type SettingsPageId = "general" | "models" | "accounts" | "about";
+export type SettingsPageId = "general" | "models" | "accounts" | "developer" | "about";

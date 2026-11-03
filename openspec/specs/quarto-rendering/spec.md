@@ -50,7 +50,7 @@ older than that as too old, with its version.
 
 ### Requirement: Quarto in Settings
 Settings SHALL show whether Quarto was found, its version and its location, and SHALL let the user
-set the location of the Quarto program or clear it, and SHALL have a Check again button. Changing the
+set the location of the Quarto program or clear it, and SHALL have an icon button labelled Check again. Changing the
 setting or clicking Check again SHALL make the core look for Quarto again at once.
 
 #### Scenario: Setting the location
