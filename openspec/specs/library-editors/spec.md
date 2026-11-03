@@ -175,7 +175,7 @@ held when it started.
 - **THEN** that reply finishes with the old instructions, and the next one uses the new ones
 
 ### Requirement: User-made definitions are stored app-wide
-The Rust core SHALL store user-made Mini-Mes and Traits in `user-library.json` in the
+The Rust core SHALL store user-made Mini-Mes and Traits in `library.json` in the
 Mini-Me Data folder, as `{ "traits": [...], "mini_mes": [...] }` in the built-in library's
 format. It SHALL write the file atomically on each save or delete. No Project folder SHALL
 be read or written, and no Trait SHALL be able to reach the file, so Project-folder
@@ -187,7 +187,7 @@ confinement holds.
 - **THEN** "Field Translator" is in the `@` list
 
 #### Scenario: No file yet
-- **WHEN** the app starts and `user-library.json` does not exist
+- **WHEN** the app starts and `library.json` does not exist
 - **THEN** the library holds only the built-in definitions, and the first save creates the
   file
 
@@ -203,19 +203,19 @@ delete a built-in definition.
 - **THEN** the save is refused, naming the Step
 
 ### Requirement: Broken user entries are skipped
-When the app loads `user-library.json`, the Rust core SHALL skip each user-made entry that
+When the app loads `library.json`, the Rust core SHALL skip each user-made entry that
 breaks a rule, and each Mini-Me whose Workflow references a skipped Trait. It SHALL start
 with the remaining definitions and show the skipped entries and their problems in the Library
 view. Saves SHALL keep skipped entries in the file unchanged.
 
 #### Scenario: One broken Trait
-- **WHEN** `user-library.json` holds a Trait listing the tool `show_chart` on the prompt
+- **WHEN** `library.json` holds a Trait listing the tool `show_chart` on the prompt
   adapter, and a Mini-Me that runs it
 - **THEN** the app starts, both entries are missing from the `@` list, and the Library view
   names them with the reason
 
 #### Scenario: Unreadable file
-- **WHEN** `user-library.json` is not valid JSON
+- **WHEN** `library.json` is not valid JSON
 - **THEN** the app starts with the built-in definitions, the Library view says the file could
   not be read, and creating, editing or deleting user-made definitions is refused, so the
   file is not overwritten

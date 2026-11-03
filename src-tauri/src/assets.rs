@@ -215,16 +215,36 @@ pub fn rename(project: &Project, id: Uuid, typed: &str) -> AppResult<AssetRef> {
     Ok(AssetRef { name, ..current })
 }
 
-/// Adds a copy of the file `id` named "<name> copy" before its extension, added by `user`.
+/// The first of "<stem> copy", "<stem> copy 2", ... that no name in `taken` has, with
+/// `extension` after it. A stem that already ends in " copy" or " copy N" is not extended again.
+fn copy_name(stem: &str, extension: Option<&str>, taken: &[String]) -> String {
+    let base = match stem.rsplit_once(" copy") {
+        Some((base, rest)) if rest.is_empty() || rest.trim().parse::<u32>().is_ok() => base,
+        _ => stem,
+    };
+    let with_extension = |label: String| match extension {
+        Some(extension) => format!("{label}.{extension}"),
+        None => label,
+    };
+    (1..)
+        .map(|n| match n {
+            1 => with_extension(format!("{base} copy")),
+            _ => with_extension(format!("{base} copy {n}")),
+        })
+        .find(|name| !taken.contains(name))
+        .expect("an unbounded range always yields a free name")
+}
+
+/// Adds a copy of the file `id` named "<name> copy" before its extension, numbered when that name
+/// is taken, added by `user`. Only the bytes are copied: a document's comment threads stay with
+/// the original.
 pub fn duplicate(project: &Project, id: Uuid, user: &Author) -> AppResult<AssetRef> {
     let asset = find(&project.lock(), id)?;
     let bytes = std::fs::read(file_path(project, id)?)?;
     let path = Path::new(&asset.name);
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or(&asset.name);
-    let name = match path.extension().and_then(|e| e.to_str()) {
-        Some(extension) => format!("{stem} copy.{extension}"),
-        None => format!("{stem} copy"),
-    };
+    let taken: Vec<String> = list(project, None)?.into_iter().map(|a| a.name).collect();
+    let name = copy_name(stem, path.extension().and_then(|e| e.to_str()), &taken);
     import_bytes(project, &name, &asset.media_type, &bytes, user)
 }
 
@@ -520,6 +540,11 @@ mod tests {
         assert_ne!(copy.id, asset.id);
         assert_eq!(copy.name, "field-trial copy.csv");
         assert_eq!(std::fs::read(file_path(&project, copy.id).unwrap()).unwrap(), b"a,b");
+
+        let second = duplicate(&project, asset.id, &user()).unwrap();
+        assert_eq!(second.name, "field-trial copy 2.csv");
+        let of_copy = duplicate(&project, copy.id, &user()).unwrap();
+        assert_eq!(of_copy.name, "field-trial copy 3.csv");
     }
 
     #[test]

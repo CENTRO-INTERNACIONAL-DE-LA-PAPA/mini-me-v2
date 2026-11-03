@@ -820,6 +820,62 @@ mod tests {
     }
 
     #[test]
+    fn deleting_a_conversation_clears_every_table_that_points_at_it() {
+        let (_dir, project) = temp_project();
+        let gone = create(&project).unwrap().id;
+        send_message(&project, gone, text("remove"), new_id()).unwrap();
+        let state = project.lock();
+        let conn = &state.conn;
+
+        // Foreign keys are off while the rows are made, so the columns that point elsewhere
+        // (such as a thread's asset) need no parent.
+        conn.pragma_update(None, "foreign_keys", false).unwrap();
+        let names = |sql: &str, arg: &str| -> Vec<String> {
+            let mut stmt = conn.prepare(sql).unwrap();
+            let rows = stmt.query_map(params![arg], |row| row.get(0)).unwrap();
+            rows.collect::<Result<_, _>>().unwrap()
+        };
+        // Parents in the order their dependents are made: a component needs its message.
+        for parent in ["conversations", "messages", "components"] {
+            let tables = names(
+                "SELECT m.name FROM sqlite_master m, pragma_foreign_key_list(m.name) f \
+                 WHERE m.type = 'table' AND f.\"table\" = ?1",
+                parent,
+            );
+            let parent_id: String = conn
+                .query_row(&format!("SELECT id FROM {parent} LIMIT 1"), [], |row| row.get(0))
+                .unwrap();
+            for table in tables {
+                let column: String = conn
+                    .query_row(
+                        "SELECT \"from\" FROM pragma_foreign_key_list(?1) WHERE \"table\" = ?2",
+                        params![table, parent],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+                let rows: i64 =
+                    conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+                if rows > 0 {
+                    conn.execute(&format!("UPDATE {table} SET {column} = ?1"), params![parent_id])
+                        .unwrap();
+                    continue;
+                }
+                let columns = names("SELECT name FROM pragma_table_info(?1)", &table);
+                let values: Vec<String> = columns
+                    .iter()
+                    .map(|name| if *name == column { format!("'{parent_id}'") } else { "0".into() })
+                    .collect();
+                let sql = format!("INSERT INTO {table} VALUES ({})", values.join(", "));
+                conn.execute(&sql, []).unwrap();
+            }
+        }
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        drop(state);
+
+        delete(&project, gone).unwrap();
+    }
+
+    #[test]
     fn rejects_empty_messages() {
         let (_dir, project) = temp_project();
         let conversation = create(&project).unwrap().id;

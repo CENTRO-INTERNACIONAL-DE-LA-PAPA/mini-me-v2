@@ -12,6 +12,7 @@ use crate::db;
 use crate::error::{AppError, AppResult};
 use crate::paths::ProjectPaths;
 use crate::protocol::{Origin, new_id, now_ms};
+use crate::quarto;
 use crate::store::Project;
 
 pub const DATA_FOLDER_NAME: &str = "Mini-Me Data";
@@ -191,6 +192,7 @@ pub fn open(summary: &ProjectSummary, origin: Origin) -> AppResult<Project> {
     let conn = db::open(&paths.database())?;
     let project = Project::new(summary.id, summary.name.clone(), paths, conn, origin);
     conversations::recover_interrupted(&project)?;
+    quarto::remove_stale_renders(&project);
     Ok(project)
 }
 

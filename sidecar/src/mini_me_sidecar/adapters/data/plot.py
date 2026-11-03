@@ -88,8 +88,8 @@ def build_chart(frame: pd.DataFrame, chart: Chart, types: dict[str, str]) -> Cha
 
 def _fit(result: ChartResult, sampled: list[tuple[dict[str, Any], pd.DataFrame]]) -> None:
     """Fits the chart in `MAX_BYTES`: leaves out the alternative views that would not fit
-    even without points, then samples the points of line and scatter views, halving the
-    largest view's sample, and notes each view that was left out or sampled. The same table
+    even without points, then samples the points of line and scatter views until the chart
+    fits, and notes each view that was left out or sampled. The same table
     always gives the same sample. A chart whose own view does not fit is marked so."""
     views = result.data["views"]
     budget = MAX_BYTES - len(json.dumps({**result.data, "views": []}))
@@ -112,24 +112,32 @@ def _fit(result: ChartResult, sampled: list[tuple[dict[str, Any], pd.DataFrame]]
             used += size
     result.data["views"] = kept
     sampled = [(view, points) for view, points in sampled if any(view is k for k in kept)]
-    while sampled and len(json.dumps(result.data)) > MAX_BYTES:
-        view, points = max(sampled, key=lambda s: len(s[0]["points"]))
-        if len(view["points"]) <= 1:
+    # Each pass cuts every sample by the share of the points' bytes that is over the limit, so
+    # the chart is serialised once per pass instead of once per halving.
+    while sampled and any(len(view["points"]) > 1 for view, _ in sampled):
+        total = len(json.dumps(result.data))
+        if total <= MAX_BYTES:
             break
-        _set_points(view, points, len(view["points"]) // 2)
+        point_bytes = sum(len(json.dumps(view["points"])) for view, _ in sampled)
+        scale = max(MAX_BYTES - (total - point_bytes), 0) / point_bytes
+        for view, points in sampled:
+            _set_points(view, points, max(1, int(len(view["points"]) * scale)))
     for view, points in sampled:
-        if len(view["points"]) < len(points):
-            view["sample"] = {"shown": len(view["points"]), "total": len(points)}
+        if "sample" in view:
             note = f"a sample of {len(view['points']):,} of {len(points):,} points is shown"
             if note not in result.notes:
                 result.notes.append(note)
 
 
 def _set_points(view: dict[str, Any], points: pd.DataFrame, size: int) -> None:
+    """Sets the view's points to a sample of `size` of `points`, or all of them, and records
+    the sample in the view, so that its bytes count when the chart's size is measured."""
     shown = points.sample(size, random_state=0) if size < len(points) else points
     if view["type"] == "line":
         shown = shown.sort_values("x", kind="stable")
     view["points"] = [_point(row) for row in shown.itertuples(False)]
+    if len(shown) < len(points):
+        view["sample"] = {"shown": len(shown), "total": len(points)}
 
 
 def chart_text(data: dict[str, Any]) -> str:
@@ -155,7 +163,7 @@ def _view(
     dropped = len(frame) - len(rows)
     if dropped:
         notes.append(
-            f"1 row with missing values was left out"
+            "1 row with missing values was left out"
             if dropped == 1
             else f"{dropped:,} rows with missing values were left out"
         )
@@ -255,7 +263,8 @@ def _bars(rows: pd.DataFrame, chart: Chart, series: pd.Series | None) -> list[di
         if name is not None:
             entry["series"] = name
         bars.append(entry)
-    bars.sort(key=lambda b: order.index(b["x"]))
+    rank = {category: position for position, category in enumerate(order)}
+    bars.sort(key=lambda b: rank[b["x"]])
     return bars
 
 
@@ -314,9 +323,14 @@ def _heatmap(frame: pd.DataFrame, chart: Chart) -> dict[str, Any]:
 
 def _default_title(chart: Chart) -> str:
     return _view_title(
-        {"type": chart.type, "x": {"name": chart.x}, "y": {"name": chart.y},
-         "series_column": chart.series, "columns": chart.columns,
-         "aggregate": chart.aggregate}
+        {
+            "type": chart.type,
+            "x": {"name": chart.x},
+            "y": {"name": chart.y},
+            "series_column": chart.series,
+            "columns": chart.columns,
+            "aggregate": chart.aggregate,
+        }
     )
 
 

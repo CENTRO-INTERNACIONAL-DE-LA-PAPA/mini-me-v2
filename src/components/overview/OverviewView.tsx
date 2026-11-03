@@ -17,6 +17,7 @@ import type { MiniMe, Overview, OverviewOutput, ProjectSummary } from "../../pro
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
 import { FileMark } from "../files/FileMark";
 import { FileMenu } from "../files/FileMenu";
+import { DOTS_HOVER } from "../shell/ItemMenu";
 import { isDocument } from "../files/files";
 import { MiniMePill } from "../minime/MiniMePill";
 import { ItemMenu } from "../shell/ItemMenu";
@@ -205,7 +206,10 @@ export function OverviewView({
                     <FileMenu
                       projectId={project.id}
                       file={{ id: output.id, name: output.title }}
-                      className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/output:opacity-100 group-hover/output:opacity-100 aria-expanded:opacity-100"
+                      className={cn(
+                        "absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/output:opacity-100 group-hover/output:opacity-100 aria-expanded:opacity-100",
+                        DOTS_HOVER,
+                      )}
                       onOpen={() =>
                         isDocument(output.title)
                           ? onOpenDocument(output.id)

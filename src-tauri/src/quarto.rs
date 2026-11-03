@@ -330,13 +330,20 @@ impl RenderFolder {
     }
 }
 
+/// Removes the render folders that an earlier run left in the Project, such as after a crash.
+/// Only for when no render is running: a Project is opened once per run, before its first render.
+/// A folder that cannot be removed is left for the next run.
+pub fn remove_stale_renders(project: &Project) {
+    if let Ok(folder) = project.paths.resolve("render") {
+        let _ = std::fs::remove_dir_all(folder);
+    }
+}
+
 impl Drop for RenderFolder {
     fn drop(&mut self) {
+        // The shared `render/` folder stays: removing it could break a render that is just
+        // creating its own folder inside it.
         let _ = std::fs::remove_dir_all(&self.path);
-        if let Some(parent) = self.path.parent() {
-            // Only succeeds once no other render is using the shared folder.
-            let _ = std::fs::remove_dir(parent);
-        }
     }
 }
 
@@ -432,10 +439,11 @@ fn output_file(folder: &RenderFolder, ext: &str) -> AppResult<PathBuf> {
     Err(AppError::new("quarto_failed", format!("Quarto made no .{ext} file for this document.")))
 }
 
-/// Renders `document.qmd` in `folder` to `document.pdf` and keeps its Typst source, without
-/// running any code cell.
-fn render(quarto: &Path, folder: &Path) -> AppResult<()> {
-    let args = ["render", "document.qmd", "--to", "typst", "--no-execute", "-M", "keep-typ:true"];
+/// Renders `document.qmd` in `folder` to Typst, without running any code cell. `metadata` is a
+/// `key:value` option for the render: `keep-typ:true` makes the PDF and keeps the Typst source,
+/// `output-ext:typ` stops at the Typst source.
+fn render(quarto: &Path, folder: &Path, metadata: &str) -> AppResult<()> {
+    let args = ["render", "document.qmd", "--to", "typst", "--no-execute", "-M", metadata];
     let finished = run_limited(command(quarto, &args, Some(folder)), RENDER_LIMIT)?;
     if finished.success {
         return Ok(());
@@ -446,14 +454,14 @@ fn render(quarto: &Path, folder: &Path) -> AppResult<()> {
 /// The document `source` rendered by `quarto` as PDF bytes.
 pub fn export_pdf(project: &Project, quarto: &Path, source: &str) -> AppResult<Vec<u8>> {
     let folder = prepare(project, source)?;
-    render(quarto, &folder.path)?;
+    render(quarto, &folder.path, "keep-typ:true")?;
     Ok(std::fs::read(output_file(&folder, "pdf")?)?)
 }
 
 /// The document `source` rendered by `quarto` as SVG images, one per page.
 pub fn preview_pages(project: &Project, quarto: &Path, source: &str) -> AppResult<Vec<String>> {
     let folder = prepare(project, source)?;
-    render(quarto, &folder.path)?;
+    render(quarto, &folder.path, "output-ext:typ")?;
     let typ = output_file(&folder, "typ")?;
     let typ_name = typ.file_name().and_then(|n| n.to_str()).unwrap_or("document.typ");
     let args = ["typst", "compile", "--format", "svg", typ_name, "page-{p}.svg"];
@@ -694,7 +702,19 @@ mod tests {
         let pages = preview_pages(&project, &program, &source).unwrap();
         assert!(!pages.is_empty() && pages[0].contains("<svg"));
         assert!(!marker.exists(), "a code cell ran");
+        let leftovers = std::fs::read_dir(project.paths.resolve("render").unwrap());
+        assert!(leftovers.is_ok_and(|mut entries| entries.next().is_none()));
+    }
+
+    #[test]
+    fn render_folders_from_an_earlier_run_are_removed() {
+        let (_dir, project) = temp_project();
+        let stale = project.paths.resolve("render/old").unwrap();
+        std::fs::create_dir_all(&stale).unwrap();
+        std::fs::write(stale.join("document.typ"), "x").unwrap();
+        remove_stale_renders(&project);
         assert!(!project.paths.resolve("render").unwrap().exists());
+        remove_stale_renders(&project);
     }
 
     #[test]

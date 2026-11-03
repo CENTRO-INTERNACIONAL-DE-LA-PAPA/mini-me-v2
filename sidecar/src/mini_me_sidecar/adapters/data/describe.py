@@ -48,6 +48,7 @@ def describe(table: Table, values: bool = True) -> dict[str, Any]:
         description["sheet"] = table.sheet
     return description
 
+
 def _may_list(name: str, distinct: int, non_null: int) -> bool:
     if PERSONAL.search(name) or distinct == 0 or distinct > MAX_LISTED_DISTINCT:
         return False

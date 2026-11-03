@@ -24,6 +24,11 @@ interface Props {
   className?: string;
 }
 
+/** The "…" button's hover: its dots turn lighter, with no fill of their own, which a hovered row
+ * or the selected row's white would hide. */
+export const DOTS_HOVER =
+  "hover:bg-transparent hover:text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground";
+
 type View = "menu" | "rename" | "delete";
 
 /** A "…" button that opens a small popover over one list item: its actions, then Rename, which

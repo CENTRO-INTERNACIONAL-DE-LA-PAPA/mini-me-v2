@@ -11,6 +11,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileIcon, FileTextIcon, ImageIcon, SearchIcon, Table2Icon, UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { DOTS_HOVER } from "../shell/ItemMenu";
 import { FileMenu } from "./FileMenu";
 import { api, errorMessage } from "../../api";
 import { useUserProfile } from "../../hooks/useUserProfile";
@@ -261,7 +262,13 @@ function FileRow({
         {formatSize(entry.size_bytes)}
       </TableCell>
       <TableCell className="text-right">
-        <FileMenu projectId={projectId} file={entry} onOpen={onOpen} onChanged={onChanged} />
+        <FileMenu
+          projectId={projectId}
+          file={entry}
+          className={DOTS_HOVER}
+          onOpen={onOpen}
+          onChanged={onChanged}
+        />
       </TableCell>
     </TableRow>
   );

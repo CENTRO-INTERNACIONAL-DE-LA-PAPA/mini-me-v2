@@ -3,6 +3,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { XIcon, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { useCollapseSidebar } from "../../hooks/useCollapseSidebar";
 
 /** The main sheet: the white, rounded area beside the navigation that holds the open view. */
 export function MainSheet({ className, children }: { className?: string; children: ReactNode }) {
@@ -33,6 +34,7 @@ export function ToolSheet({
   className?: string;
   children: ReactNode;
 }) {
+  useCollapseSidebar();
   return (
     <aside
       className={cn(

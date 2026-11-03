@@ -47,7 +47,7 @@ refusing means that Mini-Me is skipped when the library loads, and a save of it 
 - **THEN** the library is refused
 
 #### Scenario: Broken user-made Workflow
-- **WHEN** `user-library.json` holds a Mini-Me whose Workflow has no Steps
+- **WHEN** `library.json` holds a Mini-Me whose Workflow has no Steps
 - **THEN** the app starts without that Mini-Me, and the Library view names it with the
   problem
 
