@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
 import { useDeveloperMode } from "./hooks/useDeveloperMode";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
@@ -161,7 +161,6 @@ export default function App() {
       />
       {/* The desk: the open view's sheets float on it, 12px from the window and each other. */}
       <SidebarInset className="h-svh min-w-0 flex-row gap-3 overflow-hidden bg-transparent p-3">
-        <OpenSidebarButton />
         {error && (
           <p
             role="alert"
@@ -347,11 +346,4 @@ function Main({
         </MainSheet>
       );
   }
-}
-
-/** Brings the sidebar back once it has been hidden. */
-function OpenSidebarButton() {
-  const { open } = useSidebar();
-  if (open) return null;
-  return <SidebarTrigger className="fixed top-5 left-5 z-20" />;
 }

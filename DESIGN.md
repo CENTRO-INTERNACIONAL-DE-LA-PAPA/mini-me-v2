@@ -158,11 +158,11 @@ Sheet padding: 32px left, 24–28px top. Tool sheets: 22px top, 18px right, 24px
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Navigation sheet, 256px.** Wordmark and collapse button; the project block (serif name under a "Project ▾" switcher) or a dashed "No project open" card; Overview and Files; Conversations (serif heading with a + button, then rows); status lines; a bottom card with the Mini-Mes stack (opens the Library) and your initials (open Settings). The selected item is a white row.
+- **Navigation sheet, 256px.** Wordmark (it leads Home) and collapse button; the project block (serif name under a "Project ▾" switcher) or a dashed "No project open" card; Overview and Files; Conversations (serif heading with a + button, then rows); status lines; a bottom card with the Mini-Mes stack (opens the Library) and your initials (open Settings). The selected item is a white row.
 - **Main sheet, flexible.** Conversation, Overview, Files, libraries, editors, Settings and the full report.
 - **Tool sheet, 340–380px.** Outline, Jobs, Workflow steps, Report picker, the Workflow step inspector, a document's Comments. Only one at a time; a well-filled close button sits top-right.
 - **Content widths:** the chat column is 820px, or 680px with a tool sheet open. The composer spans it; the messages sit 20px inside it on each side, centred on it. Settings: a 210px column and content up to 760px, centred together.
-- **Small windows (to build):** when a tool sheet opens below ~1280px, collapse the navigation sheet to avatars and icons so the conversation keeps ≥600px.
+- **Small windows:** when a tool sheet opens below ~1280px, the navigation sheet collapses to a 64px rail of icons, each at the same distance from the edge as when open: the toggle, Overview, Files, an ink + for a new Conversation, the Mini-Mes avatar and your initials, so the conversation keeps ≥600px. Home and the Project switcher need the sidebar open. Closing the tool sheet opens it again, unless the user opened it meanwhile; the toggle at the top of the rail works at any time.
 
 ---
 
