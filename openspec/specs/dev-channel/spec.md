@@ -48,8 +48,8 @@ release.
 ### Requirement: Developer mode
 Settings → About SHALL have a "Developer mode" switch, stored in each app's own settings. Until
 the user sets it, it SHALL be on in Mini-Me Dev and off in Mini-Me. Every developer option
-SHALL be in the Developer section of Settings → General, with a name starting with "[DEBUG]",
-and SHALL be hidden while Developer mode is off.
+SHALL be on the Developer page of Settings, with a name starting with "[DEBUG]". The Developer
+page SHALL be listed, just before About, only while Developer mode is on.
 
 #### Scenario: Defaults
 - **WHEN** Mini-Me and Mini-Me Dev are opened for the first time
@@ -57,8 +57,12 @@ and SHALL be hidden while Developer mode is off.
 
 #### Scenario: Turned on in Mini-Me
 - **WHEN** the user turns Developer mode on in Mini-Me
-- **THEN** "[DEBUG] Jev's confidence threshold", "[DEBUG] Show Jev's answers" and "[DEBUG]
-  Avatars" appear in Settings → General → Developer, and stay after a restart
+- **THEN** the Developer page appears in Settings, holding "[DEBUG] Jev's confidence threshold",
+  "[DEBUG] Show Jev's answers" and "[DEBUG] Avatars", and stays after a restart
+
+#### Scenario: Turned off
+- **WHEN** Developer mode is off
+- **THEN** Settings lists General, Models & keys, Accounts and About, with no Developer page
 
 ### Requirement: Jev's answers need Developer mode
 Jev's raw answers SHALL be stored with a message, and shown under it as "[DEBUG] Jev", only
@@ -70,7 +74,7 @@ be hidden while Developer mode is off.
 - **THEN** new messages store no Jev answers, and no message shows "[DEBUG] Jev"
 
 ### Requirement: Avatars page in Settings
-The avatar parts page SHALL be opened from Settings → General as "[DEBUG] Avatars" while
+The avatar parts page SHALL be opened from Settings → Developer as "[DEBUG] Avatars" while
 Developer mode is on, and SHALL return to Settings when closed. The sidebar SHALL NOT offer it.
 
 #### Scenario: Opening the Avatars page

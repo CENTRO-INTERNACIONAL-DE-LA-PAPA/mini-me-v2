@@ -11,7 +11,13 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { InfoIcon, KeyRoundIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-react";
+import {
+  InfoIcon,
+  KeyRoundIcon,
+  SlidersHorizontalIcon,
+  UserRoundIcon,
+  WrenchIcon,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -56,6 +62,7 @@ const PAGES: Section<Page>[] = [
   { id: "general", name: "General", icon: SlidersHorizontalIcon },
   { id: "models", name: "Models & keys", icon: KeyRoundIcon },
   { id: "accounts", name: "Accounts", icon: UserRoundIcon },
+  { id: "developer", name: "Developer", icon: WrenchIcon },
   { id: "about", name: "About", icon: InfoIcon },
 ];
 
@@ -71,6 +78,10 @@ export function SettingsView({
   initialPage?: Page;
 }) {
   const [page, setPage] = useState<Page>(initialPage);
+  const developer = useDeveloperMode();
+  // The Developer page is listed only while Developer mode is on.
+  const pages = developer ? PAGES : PAGES.filter((section) => section.id !== "developer");
+  const shown = pages.some((section) => section.id === page) ? page : "general";
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,20 +100,21 @@ export function SettingsView({
   return (
     <SectionPage
       title="Settings"
-      sections={PAGES}
-      active={page}
+      sections={pages}
+      active={shown}
       onSelect={setPage}
     >
       <div className="min-w-0">
         {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
-        {page === "general" && (
-          <GeneralPage settings={settings} onChanged={refresh} onOpenAvatars={onOpenAvatars} />
-        )}
-        {settings && page === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
-        {settings && page === "accounts" && (
+        {shown === "general" && <GeneralPage />}
+        {settings && shown === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
+        {settings && shown === "accounts" && (
           <AccountsPage settings={settings} onChanged={refresh} />
         )}
-        {page === "about" && <AboutPage onOpenWhatsNew={onOpenWhatsNew} />}
+        {settings && shown === "developer" && (
+          <DeveloperPage settings={settings} onChanged={refresh} onOpenAvatars={onOpenAvatars} />
+        )}
+        {shown === "about" && <AboutPage onOpenWhatsNew={onOpenWhatsNew} />}
       </div>
     </SectionPage>
   );
@@ -180,17 +192,7 @@ function StatusDot({ on, children }: { on: boolean; children: ReactNode }) {
   );
 }
 
-function GeneralPage({
-  settings,
-  onChanged,
-  onOpenAvatars,
-}: {
-  /** Null until the AI settings, which hold Jev's developer options, have loaded. */
-  settings: AiSettings | null;
-  onChanged: () => void;
-  onOpenAvatars: () => void;
-}) {
-  const developer = useDeveloperMode();
+function GeneralPage() {
   return (
     <>
       <PageHeader title="General" lead="About you, and how Home looks." />
@@ -209,23 +211,36 @@ function GeneralPage({
       >
         <QuartoRow />
       </Section>
-      {developer && (
-        <Section
-          title="Developer"
-          description="Options for developing and testing Mini-Me, shown in Developer mode (Settings → About)."
-        >
-          {settings && <ThresholdRow settings={settings} onChanged={onChanged} />}
-          {settings && <DeveloperRow settings={settings} onChanged={onChanged} />}
-          <SettingRow
-            label="[DEBUG] Avatars"
-            description="Every avatar base, face, accessory and colour, to try combinations."
-          >
-            <Button variant="outline" onClick={onOpenAvatars}>
-              Open
-            </Button>
-          </SettingRow>
-        </Section>
-      )}
+    </>
+  );
+}
+
+/** The options for developing and testing Mini-Me. Listed only while Developer mode is on. */
+function DeveloperPage({
+  settings,
+  onChanged,
+  onOpenAvatars,
+}: {
+  settings: AiSettings;
+  onChanged: () => void;
+  onOpenAvatars: () => void;
+}) {
+  return (
+    <>
+      <PageHeader
+        title="Developer"
+        lead="Options for developing and testing Mini-Me. This page is listed while Developer mode (Settings → About) is on."
+      />
+      <ThresholdRow settings={settings} onChanged={onChanged} />
+      <DeveloperRow settings={settings} onChanged={onChanged} />
+      <SettingRow
+        label="[DEBUG] Avatars"
+        description="Every avatar base, face, accessory and colour, to try combinations."
+      >
+        <Button variant="outline" onClick={onOpenAvatars}>
+          Open
+        </Button>
+      </SettingRow>
     </>
   );
 }
