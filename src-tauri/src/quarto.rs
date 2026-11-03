@@ -330,13 +330,20 @@ impl RenderFolder {
     }
 }
 
+/// Removes the render folders that an earlier run left in the Project, such as after a crash.
+/// Only for when no render is running: a Project is opened once per run, before its first render.
+/// A folder that cannot be removed is left for the next run.
+pub fn remove_stale_renders(project: &Project) {
+    if let Ok(folder) = project.paths.resolve("render") {
+        let _ = std::fs::remove_dir_all(folder);
+    }
+}
+
 impl Drop for RenderFolder {
     fn drop(&mut self) {
+        // The shared `render/` folder stays: removing it could break a render that is just
+        // creating its own folder inside it.
         let _ = std::fs::remove_dir_all(&self.path);
-        if let Some(parent) = self.path.parent() {
-            // Only succeeds once no other render is using the shared folder.
-            let _ = std::fs::remove_dir(parent);
-        }
     }
 }
 
@@ -694,7 +701,19 @@ mod tests {
         let pages = preview_pages(&project, &program, &source).unwrap();
         assert!(!pages.is_empty() && pages[0].contains("<svg"));
         assert!(!marker.exists(), "a code cell ran");
+        let leftovers = std::fs::read_dir(project.paths.resolve("render").unwrap());
+        assert!(leftovers.is_ok_and(|mut entries| entries.next().is_none()));
+    }
+
+    #[test]
+    fn render_folders_from_an_earlier_run_are_removed() {
+        let (_dir, project) = temp_project();
+        let stale = project.paths.resolve("render/old").unwrap();
+        std::fs::create_dir_all(&stale).unwrap();
+        std::fs::write(stale.join("document.typ"), "x").unwrap();
+        remove_stale_renders(&project);
         assert!(!project.paths.resolve("render").unwrap().exists());
+        remove_stale_renders(&project);
     }
 
     #[test]
