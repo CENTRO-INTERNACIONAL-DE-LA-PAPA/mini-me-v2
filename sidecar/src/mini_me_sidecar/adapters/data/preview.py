@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from mini_me_sidecar.adapters.data.tables import column_type
+from mini_me_sidecar.adapters.data.tables import column_type, plain_value
 
 MAX_ROWS = 500
 
@@ -59,10 +59,7 @@ def json_value(value: Any) -> Any:
     text."""
     if value is None or value is pd.NaT:
         return None
-    if isinstance(value, pd.Timestamp):
-        return value.date().isoformat() if value == value.normalize() else value.isoformat()
-    if hasattr(value, "item"):
-        value = value.item()
+    value = plain_value(value)
     if isinstance(value, float) and not math.isfinite(value):
         return None
     if isinstance(value, (bool, int, float, str)):
