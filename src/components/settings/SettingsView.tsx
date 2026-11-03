@@ -33,6 +33,7 @@ import type {
 } from "../../protocol/types";
 import { openLink } from "../interactive/links";
 import { SectionPage, type Section } from "../shell/SectionPage";
+import type { SettingsPageId } from "../shell/view";
 import { refreshDeveloperMode, useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { recheckQuarto, showQuarto, useQuarto } from "../../hooks/useQuarto";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
@@ -49,7 +50,7 @@ const providerName = (id: KeyAccount) =>
 
 const REPOSITORY_URL = "https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2";
 
-type Page = "general" | "models" | "accounts" | "about";
+type Page = SettingsPageId;
 
 const PAGES: Section<Page>[] = [
   { id: "general", name: "General", icon: SlidersHorizontalIcon },
@@ -58,9 +59,18 @@ const PAGES: Section<Page>[] = [
   { id: "about", name: "About", icon: InfoIcon },
 ];
 
-/** `onOpenAvatars` opens the avatar parts page, a developer option. */
-export function SettingsView({ onOpenAvatars }: { onOpenAvatars: () => void }) {
-  const [page, setPage] = useState<Page>("general");
+/** `onOpenAvatars` opens the avatar parts page, a developer option, and `onOpenWhatsNew` the
+ * page of the version's changes. Settings opens at `initialPage`, General unless given. */
+export function SettingsView({
+  onOpenAvatars,
+  onOpenWhatsNew,
+  initialPage = "general",
+}: {
+  onOpenAvatars: () => void;
+  onOpenWhatsNew: () => void;
+  initialPage?: Page;
+}) {
+  const [page, setPage] = useState<Page>(initialPage);
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,7 +102,7 @@ export function SettingsView({ onOpenAvatars }: { onOpenAvatars: () => void }) {
         {settings && page === "accounts" && (
           <AccountsPage settings={settings} onChanged={refresh} />
         )}
-        {page === "about" && <AboutPage />}
+        {page === "about" && <AboutPage onOpenWhatsNew={onOpenWhatsNew} />}
       </div>
     </SectionPage>
   );
@@ -361,7 +371,7 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
   );
 }
 
-function AboutPage() {
+function AboutPage({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
   return (
     <>
       <PageHeader title="About" lead="What Mini-Me is, who makes it, and which version is running." />
@@ -374,7 +384,7 @@ function AboutPage() {
         </p>
       </div>
       <div className="mt-6">
-        <AboutRow />
+        <AboutRow onOpenWhatsNew={onOpenWhatsNew} />
         <DeveloperModeRow />
         <SettingRow label="GitHub Repository">
           <span className="text-ui text-muted-foreground tabular-nums">
@@ -447,7 +457,7 @@ function Collaboration() {
 }
 
 /** Which app and version is running, such as "Mini-Me Dev 0.4.0". */
-function AboutRow() {
+function AboutRow({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
   const [about, setAbout] = useState<string | null>(null);
 
   useEffect(() => {
@@ -463,6 +473,9 @@ function AboutRow() {
   return (
     <SettingRow label="Version">
       <span className="text-ui text-muted-foreground tabular-nums">{about ?? "…"}</span>
+      <Button variant="secondary" onClick={onOpenWhatsNew}>
+        What's new
+      </Button>
     </SettingRow>
   );
 }

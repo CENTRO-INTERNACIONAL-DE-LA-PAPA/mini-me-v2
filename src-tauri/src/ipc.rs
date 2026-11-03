@@ -57,6 +57,8 @@ pub struct AppState {
     config_dir: PathBuf,
     /// Whether this app is Mini-Me Dev, which has Developer mode on until the user turns it off.
     dev_app: bool,
+    /// The version this app is running, as its Tauri configuration says.
+    app_version: String,
     data_root: PathBuf,
     settings: Mutex<Settings>,
     /// The user's Quarto as last looked up, shared with the check that gates the document
@@ -104,7 +106,8 @@ impl AppState {
         let library = Arc::new(LibraryStore::open(&data_root));
         let profile = ProfileStore::open(&config_dir);
         let ai2 = Ai2::system();
-        let settings = Settings::load_or_create(&config_dir)?;
+        let app_version = app.package_info().version.to_string();
+        let settings = Settings::load_or_create(&config_dir, &app_version)?;
         let quarto = Arc::new(quarto::Known::new(settings.quarto_path.clone()));
         // Looked up now, in the background, so a document does not wait for it.
         let warm = Arc::clone(&quarto);
@@ -136,6 +139,7 @@ impl AppState {
         }
         Ok(Self {
             dev_app: projects::is_mini_me_dev(&identifier),
+            app_version,
             settings: Mutex::new(settings),
             quarto,
             data_root,
@@ -430,6 +434,18 @@ pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> App
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
     settings.routing.show_answers = show;
     settings.save(&state.config_dir)
+}
+
+/// Whether to open What's new now: the first start after the app updated to a new version. It
+/// answers true once per version, and never in Mini-Me Dev.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn take_whats_new(state: State<'_, AppState>) -> AppResult<bool> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    if !settings.take_whats_new(&state.app_version, state.dev_app) {
+        return Ok(false);
+    }
+    settings.save(&state.config_dir)?;
+    Ok(true)
 }
 
 #[tauri::command(rename_all = "snake_case")]
