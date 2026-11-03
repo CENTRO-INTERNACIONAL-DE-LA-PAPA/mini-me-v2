@@ -110,7 +110,7 @@ Mini-Me…" under the message and keep the composer disabled as during a reply.
 ### Requirement: Confidence threshold setting
 Settings SHALL have a confidence threshold between 0 and 1, default 0.5, stored with the
 app settings. It SHALL apply to Jev's `mini_me` answer and to its `reaction` answer. It SHALL
-be shown, as "[DEBUG] Jev's confidence threshold" in Settings → General, only while
+be shown, as "[DEBUG] Jev's confidence threshold" in Settings → Developer, only while
 Developer mode is on, and its saved
 value SHALL apply whether Developer mode is on or off.
 

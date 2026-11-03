@@ -20,14 +20,15 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
   CheckIcon,
   ChevronDownIcon,
+  CompassIcon,
   FolderIcon,
   HomeIcon,
-  LayoutGridIcon,
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
@@ -43,11 +44,13 @@ import type {
 } from "../../protocol/types";
 import { formatRelative } from "../../lib/format";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { ConversationStatusLine } from "./ConversationStatusLine";
 import { RoutingWarningLine } from "./RoutingWarningLine";
 import { SidecarStatusLine, sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
-import { ItemMenu } from "./ItemMenu";
+import { DOTS_HOVER, ItemMenu } from "./ItemMenu";
 import { UpdateStatusLine } from "./UpdateStatusLine";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { useRunningKey } from "../../hooks/useRunningReplies";
 import type { View } from "./view";
 import { Wordmark } from "./Wordmark";
 
@@ -80,61 +83,65 @@ export function AppSidebar({
   onDeleteConversation,
 }: Props) {
   const sidecar = useSidecarStatus();
+  // The navigation sheet shrinks to a rail of icons when a tool sheet opens in a small window.
+  const collapsed = useSidebar().state === "collapsed";
   const name = useUserProfile()?.name;
   const onHome = !project && view.kind === "home";
   const [recent, setRecent] = useState<RecentConversation[]>([]);
 
   const loadRecent = useCallback(() => api.listRecentConversations().then(setRecent), []);
 
-  // Fetched each time Home is shown, so it follows activity in any Project.
+  // Fetched each time Home is shown and each time a reply starts or stops running, so it follows
+  // activity, and the statuses of Conversations, in any Project.
+  const runningKey = useRunningKey();
   useEffect(() => {
     if (onHome) loadRecent().catch(() => {});
-  }, [onHome, loadRecent]);
+  }, [onHome, loadRecent, runningKey]);
 
   return (
-    <Sidebar variant="floating">
+    <Sidebar variant="floating" collapsible="icon">
       <SidebarHeader className="gap-[22px] px-3.5 pt-5 pb-0">
-        <div className="flex items-center justify-between px-2">
-          <Wordmark height={16} />
-          <SidebarTrigger />
+        <div className={cn("flex items-center", collapsed ? "justify-center" : "justify-between px-2")}>
+          {!collapsed && (
+            <button
+              type="button"
+              title="Home"
+              aria-label="Home"
+              onClick={() => onNavigate({ kind: "home" })}
+              className="cursor-pointer rounded-control outline-none focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <Wordmark height={16} />
+            </button>
+          )}
+          <SidebarTrigger title={collapsed ? "Show navigation" : undefined} />
         </div>
-        <ProjectSwitcher
-          project={project}
-          projects={projects}
-          onOpen={onOpenProject}
-          onHome={() => onNavigate({ kind: "home" })}
-        />
+        {/* Collapsed, there is no wordmark and no switcher: expanding leads Home. */}
+        {!collapsed && (
+          <ProjectSwitcher
+            project={project}
+            projects={projects}
+            onOpen={onOpenProject}
+            onHome={() => onNavigate({ kind: "home" })}
+          />
+        )}
       </SidebarHeader>
       <SidebarContent className="gap-[22px] px-1.5 pt-[22px]">
-        {!project && (
-          <SidebarGroup className="py-0">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={view.kind === "home"}
-                  onClick={() => onNavigate({ kind: "home" })}
-                >
-                  <HomeIcon />
-                  <span>Home</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroup>
-        )}
         {project && (
           <SidebarGroup className="py-0">
             <SidebarMenu className="gap-0.5">
               <SidebarMenuItem>
                 <SidebarMenuButton
+                  title="Overview"
                   isActive={view.kind === "overview"}
                   onClick={() => onNavigate({ kind: "overview" })}
                 >
-                  <LayoutGridIcon />
+                  <CompassIcon />
                   <span>Overview</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
+                  title="Files"
                   isActive={view.kind === "files"}
                   onClick={() => onNavigate({ kind: "files" })}
                 >
@@ -148,7 +155,7 @@ export function AppSidebar({
             </SidebarMenu>
           </SidebarGroup>
         )}
-        {!project && recent.length > 0 && (
+        {!project && !collapsed && recent.length > 0 && (
           <SidebarGroup className="py-0">
             <SidebarGroupLabel className="h-auto px-2.5 pt-0 pb-1.5 font-serif text-subheading font-normal text-foreground">
               Recent
@@ -158,19 +165,24 @@ export function AppSidebar({
                 <SidebarMenuItem key={conversation.conversation_id}>
                   <SidebarMenuButton
                     size="lg"
-                    className="h-auto flex-col items-start gap-0 py-[9px]"
+                    className={cn("h-auto flex-col items-start gap-0 py-[9px] pr-9", ROW_HOVER)}
                     onClick={() =>
                       onOpenConversation(conversation.project_id, conversation.conversation_id)
                     }
                   >
                     <span className="w-full truncate text-foreground">{conversation.title}</span>
-                    <span className="w-full truncate text-meta font-normal text-muted-foreground">
-                      {conversation.project_name} · {formatRelative(conversation.last_activity_at)}
-                    </span>
+                    {conversation.status ? (
+                      <ConversationStatusLine status={conversation.status} />
+                    ) : (
+                      <span className="w-full truncate text-meta font-normal text-muted-foreground">
+                        {conversation.project_name} ·{" "}
+                        {formatRelative(conversation.last_activity_at)}
+                      </span>
+                    )}
                   </SidebarMenuButton>
                   <ItemMenu
                     name={conversation.title}
-                    className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100"
+                    className={cn(ROW_MENU, DOTS_HOVER)}
                     rename={{
                       current: conversation.title,
                       onRename: (title) =>
@@ -193,12 +205,22 @@ export function AppSidebar({
         )}
         {project && (
           <SidebarGroup className="py-0">
-            <div className="flex items-center justify-between pr-1 pb-1.5 pl-2.5">
-              <SidebarGroupLabel className="h-auto p-0 font-serif text-subheading font-normal text-foreground">
+            <div
+              className={cn(
+                "flex items-center pb-1.5",
+                collapsed ? "justify-center" : "justify-between pr-1 pl-2.5",
+              )}
+            >
+              <SidebarGroupLabel
+                className={cn(
+                  "h-auto p-0 font-serif text-subheading font-normal text-foreground",
+                  collapsed && "hidden",
+                )}
+              >
                 Conversations
               </SidebarGroupLabel>
               <Button
-                variant="ghost"
+                variant={collapsed ? "default" : "ghost"}
                 size="icon-sm"
                 aria-label="New conversation"
                 title="New conversation"
@@ -207,7 +229,7 @@ export function AppSidebar({
                 <PlusIcon />
               </Button>
             </div>
-            <SidebarMenu className="gap-1">
+            <SidebarMenu className={cn("gap-1", collapsed && "hidden")}>
               {conversations.map((conversation) => {
                 const active = view.kind === "conversation" && view.id === conversation.id;
                 return (
@@ -215,17 +237,24 @@ export function AppSidebar({
                     <SidebarMenuButton
                       size="lg"
                       isActive={active}
-                      className="h-auto flex-col items-start gap-0 py-[9px]"
+                      className={cn(
+                        "h-auto flex-col items-start gap-0 py-[9px] pr-9",
+                        !active && ROW_HOVER,
+                      )}
                       onClick={() => onNavigate({ kind: "conversation", id: conversation.id })}
                     >
                       <span className="w-full truncate text-foreground">{conversation.title}</span>
-                      <span className="text-meta font-normal text-muted-foreground">
-                        {formatRelative(conversation.last_activity_at)}
-                      </span>
+                      {conversation.status ? (
+                        <ConversationStatusLine status={conversation.status} />
+                      ) : (
+                        <span className="text-meta font-normal text-muted-foreground">
+                          {formatRelative(conversation.last_activity_at)}
+                        </span>
+                      )}
                     </SidebarMenuButton>
                     <ItemMenu
                       name={conversation.title}
-                      className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100"
+                      className={cn(ROW_MENU, DOTS_HOVER)}
                       rename={{
                         current: conversation.title,
                         onRename: (title) => onRenameConversation(conversation.id, title),
@@ -245,22 +274,30 @@ export function AppSidebar({
           </SidebarGroup>
         )}
       </SidebarContent>
-      <SidebarFooter className="gap-3 px-3.5 pb-3.5">
-        <div className="grid gap-2 px-2">
-          <SidecarStatusLine status={sidecar} />
-          {sidecarReady(sidecar) && <RoutingWarningLine />}
-          <UpdateStatusLine />
-        </div>
+      <SidebarFooter className={cn("gap-3 pb-3.5", collapsed ? "px-2" : "px-3.5")}>
+        {!collapsed && (
+          <div className="grid gap-2 px-2">
+            <SidecarStatusLine status={sidecar} />
+            {sidecarReady(sidecar) && <RoutingWarningLine />}
+            <UpdateStatusLine />
+          </div>
+        )}
         {/* The Mini-Mes stack opens the Library; your avatar opens Settings. */}
-        <div className="flex items-center gap-1 rounded-well bg-card p-1">
+        <div
+          className={cn("flex items-center gap-1 rounded-well bg-card p-1", collapsed && "flex-col")}
+        >
           <Button
             variant="ghost"
+            title="Mini-Mes"
             aria-pressed={["library", "mini-me", "trait"].includes(view.kind)}
             onClick={() => onNavigate({ kind: "library" })}
-            className="h-auto min-w-0 flex-1 justify-start gap-2.5 rounded-control px-1.5 py-1.5 text-control font-normal text-foreground aria-pressed:bg-accent aria-pressed:font-medium aria-pressed:text-foreground"
+            className={cn(
+              "h-auto min-w-0 rounded-control px-1.5 py-1.5 text-control font-normal text-foreground aria-pressed:bg-accent aria-pressed:font-medium aria-pressed:text-foreground",
+              collapsed ? "w-full justify-center" : "flex-1 justify-start gap-2.5",
+            )}
           >
-            <AvatarStack />
-            <span className="truncate">Mini-Mes</span>
+            <AvatarStack limit={collapsed ? 1 : STACKED.length} />
+            {!collapsed && <span className="truncate">Mini-Mes</span>}
           </Button>
           <Button
             size="icon"
@@ -278,12 +315,20 @@ export function AppSidebar({
   );
 }
 
+/** Where a row's "…" button sits and when it shows. It is beside the row's button, not in it. */
+const ROW_MENU =
+  "absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100";
+
+/** Keeps a row's hover while the pointer is on its "…" button or its menu is open. */
+const ROW_HOVER =
+  "group-hover/menu-item:bg-sidebar-accent group-has-aria-expanded/menu-item:bg-sidebar-accent";
+
 /** Mini-Mes the Library entry shows, one per group, overlapping by about a third. */
 const STACKED = ["Researcher", "Curator", "Planner"];
 
-function AvatarStack() {
+function AvatarStack({ limit }: { limit: number }) {
   const miniMes = useMiniMes();
-  const shown = STACKED.map((name) => miniMes.find((m) => m.name === name)).filter(
+  const shown = STACKED.slice(0, limit).map((name) => miniMes.find((m) => m.name === name)).filter(
     (m) => m !== undefined,
   );
   return (

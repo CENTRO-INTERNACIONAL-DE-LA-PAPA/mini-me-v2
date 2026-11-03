@@ -1,6 +1,7 @@
 [package]
 name = "mini-me"
-version = "0.5.2"
+# Not the app's version, which is set in package.json and read from there by tauri.conf.json.
+version = "0.0.0"
 description = "Local-first, customizable desktop research tool for scientists at the International Potato Center (CIP)"
 authors = ["International Potato Center"]
 edition = "2024"
@@ -32,6 +33,9 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 percent-encoding = "2"
 reqwest = { version = "0.13", features = ["blocking", "json", "form"] }
 diffy = "0.5.2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

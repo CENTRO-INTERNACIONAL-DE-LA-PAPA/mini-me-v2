@@ -47,7 +47,7 @@ refusing means that Mini-Me is skipped when the library loads, and a save of it 
 - **THEN** the library is refused
 
 #### Scenario: Broken user-made Workflow
-- **WHEN** `user-library.json` holds a Mini-Me whose Workflow has no Steps
+- **WHEN** `library.json` holds a Mini-Me whose Workflow has no Steps
 - **THEN** the app starts without that Mini-Me, and the Library view names it with the
   problem
 
@@ -94,7 +94,10 @@ characters.
 A condition SHALL ask the AI model chosen in Settings its `question`, together with the
 user's message and the earlier outputs. The model SHALL answer with one branch label from a
 fixed list, and only that branch's Steps SHALL run. If the model answers with anything other
-than one of the labels, the run SHALL fail with code `invalid_decision`.
+than one of the labels, the run SHALL fail with code `invalid_decision`. The model SHALL be made
+to answer with a tool call; a model that refuses to be made to call a tool, as some do when they
+reason first, SHALL be offered the tool and left to call it, and one that then calls no tool
+fails with `invalid_decision`, naming the model.
 
 #### Scenario: Testable plan
 - **WHEN** a condition asks "Does the plan rest on a hypothesis that an experiment could

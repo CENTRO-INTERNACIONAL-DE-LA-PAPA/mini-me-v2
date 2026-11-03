@@ -487,7 +487,7 @@ export function DocumentView({
                   disabled={rendering || drafting || blocked}
                   onClick={() => void render(text)}
                 >
-                  <RefreshCwIcon />
+                  <RefreshCwIcon className={cn(rendering && "animate-spin")} />
                   {rendering ? "Rendering…" : "Render"}
                 </Button>
                 {/* Says where the PDF went once it is made; clicking outside closes it. */}

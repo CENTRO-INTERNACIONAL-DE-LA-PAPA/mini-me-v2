@@ -50,7 +50,7 @@ older than that as too old, with its version.
 
 ### Requirement: Quarto in Settings
 Settings SHALL show whether Quarto was found, its version and its location, and SHALL let the user
-set the location of the Quarto program or clear it, and SHALL have a Check again button. Changing the
+set the location of the Quarto program or clear it, and SHALL have an icon button labelled Check again. Changing the
 setting or clicking Check again SHALL make the core look for Quarto again at once.
 
 #### Scenario: Setting the location
@@ -102,7 +102,8 @@ in the document's source, under that name. A file the document does not name SHA
 ### Requirement: Rendering confinement
 A render SHALL run Quarto with code execution turned off, so no code cell runs. Quarto SHALL run only
 in the render's temporary folder, and a render that runs longer than a fixed time limit SHALL be
-stopped and report that the document took too long to render.
+stopped, together with every program Quarto started for it, and report that the document took too
+long to render.
 
 #### Scenario: A Python cell
 - **WHEN** the document holds a ```` ```{python} ```` cell and is rendered
@@ -110,7 +111,8 @@ stopped and report that the document took too long to render.
 
 #### Scenario: Too slow
 - **WHEN** a render runs past the time limit
-- **THEN** Quarto is stopped and the view says the document took too long to render
+- **THEN** Quarto and the programs it started, such as Deno, Typst and Pandoc, are stopped and the
+  view says the document took too long to render
 
 ### Requirement: Render errors
 When Quarto fails, the render SHALL report Quarto's error message for the document. The preview

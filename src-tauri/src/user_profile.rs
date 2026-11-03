@@ -1,6 +1,7 @@
-//! What Mini-Me knows about its user, stored app-wide in `user-profile.json` in the Mini-Me
-//! Data folder. The file never lives in a Project folder, no Trait tool can address it, and
-//! nothing in it is sent to the sidecar.
+//! What Mini-Me knows about its user, stored app-wide in `user-profile.json` in the app's config
+//! folder, next to `settings.json`. The file never lives in a Project folder or in Mini-Me Data,
+//! which may be synced to the cloud; no Trait tool can address it, and nothing in it is sent to
+//! the sidecar.
 
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
@@ -34,9 +35,9 @@ pub struct ProfileStore {
 }
 
 impl ProfileStore {
-    /// The profile in `data_root`; the file is created on the first save.
-    pub fn open(data_root: &Path) -> Self {
-        let path = data_root.join(FILE_NAME);
+    /// The profile in `config_dir`; the file is created on the first save.
+    pub fn open(config_dir: &Path) -> Self {
+        let path = config_dir.join(FILE_NAME);
         let state = load(&path);
         Self { path, state: RwLock::new(state) }
     }

@@ -238,6 +238,10 @@ export const api = {
   getAiSettings: () => invoke<AiSettings>("get_ai_settings"),
   setAiModel: (provider: ProviderId, model: string) =>
     invoke<void>("set_ai_model", { provider, model }),
+  /** Tests the model with one small request that needs a tool call; fails with why it did not
+   * pass. */
+  testModel: (provider: ProviderId, model: string) =>
+    invoke<void>("test_model", { provider, model }),
   /** Stores the key in the OS keychain; it is never sent back to the UI. */
   saveApiKey: (provider: KeyAccount, key: string) =>
     invoke<void>("save_api_key", { provider, key }),
@@ -245,6 +249,8 @@ export const api = {
   setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
   setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
   /** Whether developer options are shown: on in Mini-Me Dev and off in Mini-Me until set. */
+  /** Whether to open What's new now; true once after the app updated, never in Mini-Me Dev. */
+  takeWhatsNew: () => invoke<boolean>("take_whats_new"),
   getDeveloperMode: () => invoke<boolean>("get_developer_mode"),
   setDeveloperMode: (on: boolean) => invoke<void>("set_developer_mode", { on }),
   getHomeSettings: () => invoke<HomeSettings>("get_home_settings"),

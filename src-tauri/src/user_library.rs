@@ -1,4 +1,4 @@
-//! User-made Mini-Mes and Traits, stored app-wide in `user-library.json` in the Mini-Me Data
+//! User-made Mini-Mes and Traits, stored app-wide in `library.json` in the Mini-Me Data
 //! folder and merged with the built-in library. The file never lives in a Project folder, and
 //! no Trait tool can address it.
 
@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::library::{Library, MiniMe, PROMPT_ADAPTER, TraitDef};
 
-pub const FILE_NAME: &str = "user-library.json";
+pub const FILE_NAME: &str = "library.json";
 
 /// The fill every user-made Trait gets. Trait colours are not shown, but the format keeps the
 /// field.
@@ -72,7 +72,7 @@ pub struct LibraryStore {
 }
 
 impl LibraryStore {
-    /// The built-in library merged with `user-library.json` in `data_root`.
+    /// The built-in library merged with `library.json` in `data_root`.
     pub fn open(data_root: &Path) -> Self {
         let path = data_root.join(FILE_NAME);
         let state = load(&path);

@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
@@ -27,7 +28,7 @@ use crate::user_profile::{ProfileStore, UserProfile};
 use crate::overview;
 use crate::quarto;
 use crate::routing::{REACTION_CHANCE, ROUTE_TIMEOUT, RouteSettings, Routing};
-use crate::runs::{CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
+use crate::runs::{self, CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
 use crate::settings::{AiSettings, HomeSettings, Settings};
 use crate::link::SummaryKind;
@@ -44,6 +45,7 @@ const SUMMARY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120)
 
 /// How long naming a Conversation may take; its title is a few words.
 const TITLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+const MODEL_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// How long a draft may go without new text before it is stopped.
 const DRAFT_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
@@ -55,6 +57,8 @@ pub struct AppState {
     config_dir: PathBuf,
     /// Whether this app is Mini-Me Dev, which has Developer mode on until the user turns it off.
     dev_app: bool,
+    /// The version this app is running, as its Tauri configuration says.
+    app_version: String,
     data_root: PathBuf,
     settings: Mutex<Settings>,
     /// The user's Quarto as last looked up, shared with the check that gates the document
@@ -100,9 +104,10 @@ impl AppState {
         let data_root =
             projects::ensure_data_root(&documents, projects::data_folder_name(&identifier))?;
         let library = Arc::new(LibraryStore::open(&data_root));
-        let profile = ProfileStore::open(&data_root);
+        let profile = ProfileStore::open(&config_dir);
         let ai2 = Ai2::system();
-        let settings = Settings::load_or_create(&config_dir)?;
+        let app_version = app.package_info().version.to_string();
+        let settings = Settings::load_or_create(&config_dir, &app_version)?;
         let quarto = Arc::new(quarto::Known::new(settings.quarto_path.clone()));
         // Looked up now, in the background, so a document does not wait for it.
         let warm = Arc::clone(&quarto);
@@ -134,6 +139,7 @@ impl AppState {
         }
         Ok(Self {
             dev_app: projects::is_mini_me_dev(&identifier),
+            app_version,
             settings: Mutex::new(settings),
             quarto,
             data_root,
@@ -227,7 +233,12 @@ pub async fn list_conversations(
     state: State<'_, AppState>,
     project_id: Uuid,
 ) -> AppResult<Vec<ConversationSummary>> {
-    conversations::list(&*state.project(project_id)?)
+    let mut list = conversations::list(&*state.project(project_id)?)?;
+    let running = state.runs.running();
+    for conversation in list.iter_mut().filter(|c| c.status.is_none()) {
+        conversation.status = runs::running_status(&running, project_id, conversation.id);
+    }
+    Ok(list)
 }
 
 /// Names a new Conversation from its first message, as soon as it is sent and while the reply is
@@ -299,19 +310,36 @@ pub async fn rename_project(
     Ok(ProjectSummary { name, ..summary })
 }
 
+/// How long a Project's delete waits for its stopped replies to let go of it: the cancel timeout,
+/// which closes a run that does not end, and a margin.
+const RELEASE_WAIT: Duration = Duration::from_secs(CANCEL_TIMEOUT.as_secs() + 3);
+
 /// Deletes the Project with its folder, after stopping every running reply in it.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn delete_project(state: State<'_, AppState>, project_id: Uuid) -> AppResult<()> {
     let summary = state.find_summary(project_id)?;
-    {
-        let project = state.project(project_id)?;
-        for conversation in conversations::list(&project)? {
-            for message_id in conversations::stop_reply(&project, conversation.id)? {
-                state.runs.cancel_message(message_id);
-            }
+    let project = state.project(project_id)?;
+    for conversation in conversations::list(&project)? {
+        for message_id in conversations::stop_reply(&project, conversation.id)? {
+            state.runs.cancel_message(message_id);
         }
     }
     state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).remove(&project_id);
+    // A stopped run holds the Project, and its database, until it ends or the cancel timeout
+    // closes it; removing the folder before then fails on Windows.
+    let (project, released) = tauri::async_runtime::spawn_blocking(move || {
+        let released = projects::wait_until_alone(&project, RELEASE_WAIT);
+        (project, released)
+    })
+    .await
+    .map_err(|e| AppError::storage(e.to_string()))?;
+    if !released {
+        state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).insert(project_id, project);
+        return Err(AppError::storage(
+            "The Project is still stopping its replies, so it was not deleted. Try again in a moment.",
+        ));
+    }
+    drop(project);
     projects::delete(&summary.folder)?;
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
     settings.recent_projects.remove(&project_id);
@@ -408,6 +436,18 @@ pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> App
     settings.save(&state.config_dir)
 }
 
+/// Whether to open What's new now: the first start after the app updated to a new version. It
+/// answers true once per version, and never in Mini-Me Dev.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn take_whats_new(state: State<'_, AppState>) -> AppResult<bool> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    if !settings.take_whats_new(&state.app_version, state.dev_app) {
+        return Ok(false);
+    }
+    settings.save(&state.config_dir)?;
+    Ok(true)
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_developer_mode(state: State<'_, AppState>) -> AppResult<bool> {
     Ok(state.developer_mode())
@@ -444,7 +484,7 @@ pub struct LibraryView {
     traits: Vec<TraitSummary>,
     /// User-made entries left out because they break a rule.
     skipped: Vec<Skipped>,
-    /// Why `user-library.json` could not be read; user-made definitions cannot be changed
+    /// Why `library.json` could not be read; user-made definitions cannot be changed
     /// while it is set.
     unreadable: Option<String>,
 }
@@ -544,6 +584,26 @@ pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettings
         threshold: settings.routing.threshold,
         show_answers: settings.routing.show_answers,
     })
+}
+
+/// Tests `model` of `provider` with one small request that needs a tool call, which Mini-Mes
+/// depend on, so that a model can be checked before it is used. Fails with why it did not pass.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn test_model(
+    state: State<'_, AppState>,
+    provider: String,
+    model: String,
+) -> AppResult<()> {
+    let model = AiSettings::new(&provider, &model)?
+        .model()
+        .ok_or_else(|| AppError::invalid_input("Type a model ID first."))?;
+    let runs = Arc::clone(&state.runs);
+    tauri::async_runtime::spawn_blocking(move || {
+        runs.summarize(model, String::new(), SummaryKind::Test, MODEL_TEST_TIMEOUT)
+    })
+    .await
+    .map_err(|e| AppError::new("summary_failed", e.to_string()))??;
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -669,7 +729,13 @@ pub async fn list_paused_approvals(state: State<'_, AppState>) -> AppResult<Vec<
 pub async fn list_recent_conversations(
     state: State<'_, AppState>,
 ) -> AppResult<Vec<RecentConversation>> {
-    recent::list(&state.data_root)
+    let mut list = recent::list(&state.data_root)?;
+    let running = state.runs.running();
+    for conversation in list.iter_mut().filter(|c| c.status.is_none()) {
+        conversation.status =
+            runs::running_status(&running, conversation.project_id, conversation.conversation_id);
+    }
+    Ok(list)
 }
 
 /// Sends the running replies now and the whole list again each time it changes.

@@ -59,12 +59,37 @@ can act on and that contains no secret:
 - `provider_model`: the model ID was not found;
 - `provider_rate_limit`: the provider is rate-limiting or the account is out of credit;
 - `provider_unavailable`: the provider could not be reached or failed;
+- `provider_context`: the request is longer than the model reads at once;
+- `tools_unsupported`: the model cannot call tools, or cannot be made to call one, which
+  Mini-Mes need;
 - `input_too_large`: the material exceeds 400,000 characters.
 
 #### Scenario: Wrong key
 - **WHEN** the stored OpenAI key is invalid and the user asks Scribe for a summary
 - **THEN** the reply fails with code `provider_auth` and a message saying the OpenAI key was
   rejected and can be replaced in Settings
+
+### Requirement: Testing the model
+Settings' Models & keys page SHALL have a "Test model" icon button, a flask with that name as its
+label, beside Save. It SHALL send the provider and model in the fields, saved or not, one small
+request that needs a tool call, which every Mini-Me depends on, and SHALL show that the model
+works with Mini-Me, or why it did not pass, with the same messages as a failed reply, in a small
+popover that opens over the button, and not in the row's description. The button SHALL be
+unavailable while the model field is empty or a test is running. The result SHALL be shown only:
+it is not stored, and clicking outside the popover closes it.
+
+#### Scenario: A model that calls tools
+- **WHEN** the user types a model that supports tool calls and presses "Test model"
+- **THEN** the popover says "Testing the model…" and then that the model works with Mini-Me
+
+#### Scenario: A model that does not
+- **WHEN** the user tests a model that does not call the tool it is offered
+- **THEN** the popover says the model did not call the tool, which Mini-Mes need, and to choose
+  another model in Settings
+
+#### Scenario: Untested changes
+- **WHEN** the user presses "Test model" with a model they have not saved
+- **THEN** that model is tested, and the saved model is unchanged
 
 ### Requirement: Provider calls stay out of Projects
 The prompt adapter SHALL read Project content only through `asset.read` for Assets of the

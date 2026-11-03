@@ -7,10 +7,8 @@ from mini_me_sidecar.adapters.prompt import (
     _offered,
     _merged,
     _system_prompt,
-    _tools_error,
     _turns,
 )
-from mini_me_sidecar.context import Model
 
 
 def test_earlier_step_outputs_come_after_history_and_before_the_material():
@@ -102,11 +100,3 @@ def test_the_messages_references_are_listed_with_their_kind():
         "- $trial: the table with ID c1\n"
         "- $Yield-by-variety: the chart with ID c2"
     )
-
-
-def test_a_model_without_tool_calling_gets_its_own_error():
-    model = Model(provider="openrouter", model="some/model")
-    error = _tools_error(Exception("No endpoints found that support tool use"), model)
-    assert error is not None and error.code == "tools_unsupported"
-    assert "some/model" in str(error)
-    assert _tools_error(Exception("rate limited"), model) is None

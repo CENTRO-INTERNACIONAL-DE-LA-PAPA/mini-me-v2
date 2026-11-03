@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
 import { useDeveloperMode } from "./hooks/useDeveloperMode";
+import { useRunningKey } from "./hooks/useRunningReplies";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/chat/ChatView";
 import { DocumentView } from "./components/documents/DocumentView";
@@ -12,6 +13,7 @@ import { LibraryView } from "./components/library/LibraryView";
 import { MiniMeEditor } from "./components/library/MiniMeEditor";
 import { OverviewView } from "./components/overview/OverviewView";
 import { SettingsView } from "./components/settings/SettingsView";
+import { WhatsNewView } from "./components/shell/WhatsNewView";
 import { AppSidebar } from "./components/shell/AppSidebar";
 import { MainSheet } from "./components/shell/Sheet";
 import type { View } from "./components/shell/view";
@@ -66,6 +68,20 @@ export default function App() {
     setFileCount(0);
     refreshConversations();
   }, [refreshConversations]);
+
+  // A Conversation's status, shown in the sidebar, follows its reply as it runs, pauses and ends.
+  const runningKey = useRunningKey();
+  useEffect(() => {
+    refreshConversations();
+  }, [runningKey, refreshConversations]);
+
+  // The first start after an update opens What's new once, over Home.
+  useEffect(() => {
+    api
+      .takeWhatsNew()
+      .then((show) => show && setView((from) => ({ kind: "whats-new", from })))
+      .catch(() => {});
+  }, []);
 
   function navigate(next: View) {
     setError(null);
@@ -161,7 +177,6 @@ export default function App() {
       />
       {/* The desk: the open view's sheets float on it, 12px from the window and each other. */}
       <SidebarInset className="h-svh min-w-0 flex-row gap-3 overflow-hidden bg-transparent p-3">
-        <OpenSidebarButton />
         {error && (
           <p
             role="alert"
@@ -228,7 +243,17 @@ function Main({
   );
   switch (view.kind) {
     case "settings":
-      return scrolling(<SettingsView onOpenAvatars={() => onNavigate({ kind: "avatars" })} />);
+      return scrolling(
+        <SettingsView
+          initialPage={view.page}
+          onOpenAvatars={() => onNavigate({ kind: "avatars" })}
+          onOpenWhatsNew={() =>
+            onNavigate({ kind: "whats-new", from: { kind: "settings", page: "about" } })
+          }
+        />,
+      );
+    case "whats-new":
+      return scrolling(<WhatsNewView onClose={() => onNavigate(view.from ?? { kind: "home" })} />);
     case "avatars":
       // Opened from Settings → General, so closing it goes back there.
       return scrolling(<AvatarDebugView onClose={() => onNavigate({ kind: "settings" })} />);
@@ -347,11 +372,4 @@ function Main({
         </MainSheet>
       );
   }
-}
-
-/** Brings the sidebar back once it has been hidden. */
-function OpenSidebarButton() {
-  const { open } = useSidebar();
-  if (open) return null;
-  return <SidebarTrigger className="fixed top-5 left-5 z-20" />;
 }

@@ -5,6 +5,8 @@ import re
 import sys
 from typing import Any
 
+from pydantic import BaseModel, ValidationError
+
 from mini_me_sidecar.context import Model, TraitError
 
 PROVIDER_NAMES = {
@@ -17,6 +19,24 @@ PROVIDER_NAMES = {
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
 HTTP_STATUS = re.compile(r"\b([45]\d\d)\b")
+
+# How providers word an error for a model that cannot call tools, such as OpenRouter's "No
+# endpoints found that support tool use". Checked before the status, which is often a 404.
+NO_TOOLS = re.compile(
+    r"support(s|ing)? tool|tool use|tool_use|tools? (are|is) not supported|function call",
+    re.IGNORECASE,
+)
+
+# How providers word an error for a model that takes tools but refuses to be made to call one,
+# such as Bedrock's "tool_choice: type "tool" and "any" are not supported for this model".
+NO_FORCED_TOOL = re.compile(r"tool_choice.{0,80}not supported", re.IGNORECASE | re.DOTALL)
+
+# How providers word an error for a request longer than the model's context.
+TOO_LONG = re.compile(
+    r"context[ _](length|window)|prompt is too long|too many tokens|maximum.{0,30}tokens|"
+    r"tokens?.{0,30}exceed",
+    re.IGNORECASE,
+)
 
 # Shapes of provider API keys, removed from logged errors along with the key itself.
 KEY_LIKE = re.compile(r"\b(sk-[\w-]+|AIza[\w-]+)")
@@ -47,6 +67,23 @@ def chat_model(model: Model, key: str) -> Any:
     raise TraitError("provider_unavailable", f"Unknown provider {model.provider!r}.")
 
 
+async def structured_answer(chat: Any, schema: type[BaseModel], turns: list[Any]) -> Any:
+    """The model's answer as an instance of `schema`, or None when it gave none. The call forces
+    the model to use `schema`'s tool, which some models refuse, such as those that run with
+    thinking on; those are then offered the tool and left to call it."""
+    try:
+        return await chat.with_structured_output(schema, method="function_calling").ainvoke(turns)
+    except Exception as error:
+        if not NO_FORCED_TOOL.search(str(error)):
+            raise
+    reply = await chat.bind_tools([schema], tool_choice="auto").ainvoke(turns)
+    calls = getattr(reply, "tool_calls", None) or []
+    try:
+        return schema(**calls[0]["args"]) if calls else None
+    except ValidationError:
+        return None
+
+
 def provider_error(error: Exception, model: Model) -> TraitError:
     """Maps any SDK's exception to an error the user can act on. Provider messages are never
     passed on: some echo part of the API key."""
@@ -60,6 +97,26 @@ def provider_error(error: Exception, model: Model) -> TraitError:
     if status is None and (found := HTTP_STATUS.search(str(error))):
         status = int(found.group(1))
 
+    # The text only picks a message; it is never shown.
+    if NO_FORCED_TOOL.search(str(error)):
+        return TraitError(
+            "tools_unsupported",
+            f"{model.model} cannot be made to call a tool, which this step needs. Choose "
+            "another model in Settings.",
+        )
+    if NO_TOOLS.search(str(error)):
+        return TraitError(
+            "tools_unsupported",
+            f"{model.model} cannot use tools, which this Mini-Me needs. Choose another model in "
+            "Settings.",
+        )
+    if TOO_LONG.search(str(error)):
+        return TraitError(
+            "provider_context",
+            f"The Conversation and its files are too long for {model.model}. Start a new "
+            "Conversation or choose a model that reads more at once in Settings.",
+        )
+
     # Google answers an invalid key with 400 rather than 401.
     if status in (401, 403) or (status == 400 and "api key" in str(error).lower()):
         return TraitError(
@@ -69,7 +126,8 @@ def provider_error(error: Exception, model: Model) -> TraitError:
     if status == 404:
         return TraitError(
             "provider_model",
-            f"{name} has no model called {model.model!r}. Check the model in Settings.",
+            f"{name} has no model called {model.model!r}, or does not offer it right now. "
+            "Check the model in Settings or choose another.",
         )
     if status in (402, 429):
         return TraitError(

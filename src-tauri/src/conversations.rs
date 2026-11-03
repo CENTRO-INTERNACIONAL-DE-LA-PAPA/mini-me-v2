@@ -5,10 +5,12 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::approvals;
 use crate::assets;
 use crate::comments;
 use crate::components;
 use crate::error::{AppError, AppResult};
+use crate::link::RunMiniMe;
 use crate::protocol::{
     AssetRef, Author, AuthorKind, Component, ErrorInfo, EventKind, Message, MessageStatus,
     TextComponent, TextComponentKind, new_id, now_ms,
@@ -24,6 +26,17 @@ pub struct ConversationSummary {
     pub title: String,
     pub created_at: i64,
     pub last_activity_at: i64,
+    /// What the latest reply is doing, when it is running or waits for an approval.
+    pub status: Option<ConversationStatus>,
+}
+
+/// What a Conversation's latest reply is doing, and which Mini-Me is doing it. Only a running
+/// reply and one paused at an approval have a status.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ConversationStatus {
+    Running { mini_me: RunMiniMe },
+    NeedsApproval { mini_me: RunMiniMe },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -47,6 +60,7 @@ pub fn insert(conn: &Connection) -> AppResult<ConversationSummary> {
         title: DEFAULT_TITLE.to_string(),
         created_at: now,
         last_activity_at: now,
+        status: None,
     };
     conn.execute(
         "INSERT INTO conversations (id, title, created_at, last_activity_at) \
@@ -165,14 +179,19 @@ pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
             row.get::<_, i64>(3)?,
         ))
     })?;
+    let paused = approvals::paused_mini_mes(&state.conn)?;
     let mut conversations = Vec::new();
     for row in rows {
         let (id, title, created_at, last_activity_at) = row?;
+        let id = Uuid::parse_str(&id).map_err(|_| AppError::storage("stored ID is not readable"))?;
         conversations.push(ConversationSummary {
-            id: Uuid::parse_str(&id).map_err(|_| AppError::storage("stored ID is not readable"))?,
+            id,
             title,
             created_at,
             last_activity_at,
+            status: paused
+                .get(&id)
+                .map(|mini_me| ConversationStatus::NeedsApproval { mini_me: mini_me.clone() }),
         });
     }
     Ok(conversations)
@@ -820,6 +839,62 @@ mod tests {
     }
 
     #[test]
+    fn deleting_a_conversation_clears_every_table_that_points_at_it() {
+        let (_dir, project) = temp_project();
+        let gone = create(&project).unwrap().id;
+        send_message(&project, gone, text("remove"), new_id()).unwrap();
+        let state = project.lock();
+        let conn = &state.conn;
+
+        // Foreign keys are off while the rows are made, so the columns that point elsewhere
+        // (such as a thread's asset) need no parent.
+        conn.pragma_update(None, "foreign_keys", false).unwrap();
+        let names = |sql: &str, arg: &str| -> Vec<String> {
+            let mut stmt = conn.prepare(sql).unwrap();
+            let rows = stmt.query_map(params![arg], |row| row.get(0)).unwrap();
+            rows.collect::<Result<_, _>>().unwrap()
+        };
+        // Parents in the order their dependents are made: a component needs its message.
+        for parent in ["conversations", "messages", "components"] {
+            let tables = names(
+                "SELECT m.name FROM sqlite_master m, pragma_foreign_key_list(m.name) f \
+                 WHERE m.type = 'table' AND f.\"table\" = ?1",
+                parent,
+            );
+            let parent_id: String = conn
+                .query_row(&format!("SELECT id FROM {parent} LIMIT 1"), [], |row| row.get(0))
+                .unwrap();
+            for table in tables {
+                let column: String = conn
+                    .query_row(
+                        "SELECT \"from\" FROM pragma_foreign_key_list(?1) WHERE \"table\" = ?2",
+                        params![table, parent],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+                let rows: i64 =
+                    conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+                if rows > 0 {
+                    conn.execute(&format!("UPDATE {table} SET {column} = ?1"), params![parent_id])
+                        .unwrap();
+                    continue;
+                }
+                let columns = names("SELECT name FROM pragma_table_info(?1)", &table);
+                let values: Vec<String> = columns
+                    .iter()
+                    .map(|name| if *name == column { format!("'{parent_id}'") } else { "0".into() })
+                    .collect();
+                let sql = format!("INSERT INTO {table} VALUES ({})", values.join(", "));
+                conn.execute(&sql, []).unwrap();
+            }
+        }
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        drop(state);
+
+        delete(&project, gone).unwrap();
+    }
+
+    #[test]
     fn rejects_empty_messages() {
         let (_dir, project) = temp_project();
         let conversation = create(&project).unwrap().id;
@@ -1011,6 +1086,23 @@ mod tests {
         assert_eq!(message.components[0].kind, "approval");
         let saved = paused_run(&project, paused.message_id, paused.component_id).unwrap();
         assert_eq!(saved, paused);
+    }
+
+    #[test]
+    fn a_paused_reply_gives_its_conversation_the_needs_approval_status() {
+        let (_dir, project, conversation, paused) = paused_reply();
+        let mini_me = RunMiniMe { id: new_id(), name: "Investigator".into() };
+        let run = serde_json::json!({ "spec": { "mini_me": mini_me } });
+        project.lock().conn.execute("UPDATE paused_runs SET run = ?1", [run.to_string()]).unwrap();
+        let other = create(&project).unwrap().id;
+        let status = |project: &Project, id: Uuid| {
+            list(project).unwrap().into_iter().find(|c| c.id == id).unwrap().status
+        };
+        assert_eq!(status(&project, conversation), Some(ConversationStatus::NeedsApproval { mini_me }));
+        assert_eq!(status(&project, other), None);
+
+        answer_approval(&project, paused.message_id, paused.component_id, false).unwrap();
+        assert_eq!(status(&project, conversation), None);
     }
 
     #[test]

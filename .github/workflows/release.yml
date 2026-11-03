@@ -1,14 +1,22 @@
-# Builds the Windows, macOS and Linux installers for a version tag and uploads them, with
-# their signed update files and latest.json, to a draft GitHub Release. Installed apps see the
-# release once it is published.
+# Runs when main changes. If the version in package.json has no tag yet, tags that commit, builds
+# the Windows, macOS and Linux installers and uploads them, with their signed update files and
+# latest.json, to a draft GitHub Release. Installed apps see the release once it is published. A
+# change to main whose version is already tagged does nothing. To build again from scratch, delete
+# the draft and the tag, then run this workflow on main by hand.
 name: Release
 
 on:
   push:
-    tags: ["v*.*.*"]
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+# Two changes to main in quick succession are looked at one after the other.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   draft:
@@ -17,20 +25,36 @@ jobs:
       release_id: ${{ steps.create.outputs.release_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: node scripts/check-version.mjs "$GITHUB_REF_NAME"
-      # Created here, once, so both build jobs upload to the same draft.
+      # The tag is made here, from the version main carries, so it can only be on a commit of main
+      # that has it. The draft is created once, so both build jobs upload to the same one; its
+      # notes are CHANGELOG.md without its first line, which is the title GitHub already shows.
+      # With no release ID, nothing is built.
       - id: create
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Releases are built from main, not from $GITHUB_REF." >&2
+            exit 1
+          fi
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
+            echo "$tag already exists, so this change to main releases nothing."
+            exit 0
+          fi
+          node scripts/check-version.mjs "$tag"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA"
+          notes=$(tail -n +2 CHANGELOG.md | sed '/./,$!d')
           id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
-            -f tag_name="$GITHUB_REF_NAME" -f name="Mini-Me ${GITHUB_REF_NAME#v}" \
-            -F draft=true --jq .id)
+            -f tag_name="$tag" -f name="Mini-Me $version" \
+            -f body="$notes" -F draft=true --jq .id)
           test -n "$id"
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
 
   build:
     needs: draft
+    if: needs.draft.outputs.release_id != ''
     strategy:
       fail-fast: false
       matrix:

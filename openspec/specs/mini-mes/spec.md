@@ -48,7 +48,7 @@ placeholder Traits.
   lists none
 
 #### Scenario: User-made Traits join the library
-- **WHEN** the app starts and `user-library.json` holds a valid Trait *Translate*
+- **WHEN** the app starts and `library.json` holds a valid Trait *Translate*
 - **THEN** the library contains *Translate* next to the built-in Traits, marked as
   user-made
 

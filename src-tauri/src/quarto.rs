@@ -7,7 +7,7 @@
 use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -265,10 +265,33 @@ fn drain<R: Read + Send + 'static>(mut stream: R) -> JoinHandle<Vec<u8>> {
     })
 }
 
-/// Runs `command` and waits at most `limit`, then ends it. Its output is read as it runs, so a
-/// program that writes a lot cannot stall.
+/// Ends `child` and every process it started. Quarto is a launcher that starts Deno, Typst and
+/// Pandoc, so ending it alone leaves them running, with the output pipes open.
+fn kill_tree(child: &mut Child) {
+    #[cfg(unix)]
+    // SAFETY: `kill` with a negative PID only signals the process group `run_limited` made.
+    unsafe {
+        libc::kill(-(child.id() as i32), libc::SIGKILL);
+    }
+    #[cfg(windows)]
+    let _ = command(Path::new("taskkill"), &["/PID", &child.id().to_string(), "/T", "/F"], None)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Runs `command` and waits at most `limit`, then ends it and everything it started. Its output
+/// is read as it runs, so a program that writes a lot cannot stall.
 fn run_limited(mut command: Command, limit: Duration) -> AppResult<Finished> {
     command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        // Its own process group, so that the whole tree can be ended at once.
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let mut child = command
         .spawn()
         .map_err(|e| AppError::new(NOT_STARTED, format!("Quarto could not be started: {e}")))?;
@@ -279,8 +302,8 @@ fn run_limited(mut command: Command, limit: Duration) -> AppResult<Finished> {
         match child.try_wait()? {
             Some(status) => break status.success(),
             None if started.elapsed() >= limit => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_tree(&mut child);
+                // The pipes close with the processes, which ends the reader threads.
                 return Err(AppError::new(
                     "render_timeout",
                     format!("Quarto took longer than {} seconds. Try again.", limit.as_secs()),
@@ -330,13 +353,20 @@ impl RenderFolder {
     }
 }
 
+/// Removes the render folders that an earlier run left in the Project, such as after a crash.
+/// Only for when no render is running: a Project is opened once per run, before its first render.
+/// A folder that cannot be removed is left for the next run.
+pub fn remove_stale_renders(project: &Project) {
+    if let Ok(folder) = project.paths.resolve("render") {
+        let _ = std::fs::remove_dir_all(folder);
+    }
+}
+
 impl Drop for RenderFolder {
     fn drop(&mut self) {
+        // The shared `render/` folder stays: removing it could break a render that is just
+        // creating its own folder inside it.
         let _ = std::fs::remove_dir_all(&self.path);
-        if let Some(parent) = self.path.parent() {
-            // Only succeeds once no other render is using the shared folder.
-            let _ = std::fs::remove_dir(parent);
-        }
     }
 }
 
@@ -432,10 +462,11 @@ fn output_file(folder: &RenderFolder, ext: &str) -> AppResult<PathBuf> {
     Err(AppError::new("quarto_failed", format!("Quarto made no .{ext} file for this document.")))
 }
 
-/// Renders `document.qmd` in `folder` to `document.pdf` and keeps its Typst source, without
-/// running any code cell.
-fn render(quarto: &Path, folder: &Path) -> AppResult<()> {
-    let args = ["render", "document.qmd", "--to", "typst", "--no-execute", "-M", "keep-typ:true"];
+/// Renders `document.qmd` in `folder` to Typst, without running any code cell. `metadata` is a
+/// `key:value` option for the render: `keep-typ:true` makes the PDF and keeps the Typst source,
+/// `output-ext:typ` stops at the Typst source.
+fn render(quarto: &Path, folder: &Path, metadata: &str) -> AppResult<()> {
+    let args = ["render", "document.qmd", "--to", "typst", "--no-execute", "-M", metadata];
     let finished = run_limited(command(quarto, &args, Some(folder)), RENDER_LIMIT)?;
     if finished.success {
         return Ok(());
@@ -446,14 +477,14 @@ fn render(quarto: &Path, folder: &Path) -> AppResult<()> {
 /// The document `source` rendered by `quarto` as PDF bytes.
 pub fn export_pdf(project: &Project, quarto: &Path, source: &str) -> AppResult<Vec<u8>> {
     let folder = prepare(project, source)?;
-    render(quarto, &folder.path)?;
+    render(quarto, &folder.path, "keep-typ:true")?;
     Ok(std::fs::read(output_file(&folder, "pdf")?)?)
 }
 
 /// The document `source` rendered by `quarto` as SVG images, one per page.
 pub fn preview_pages(project: &Project, quarto: &Path, source: &str) -> AppResult<Vec<String>> {
     let folder = prepare(project, source)?;
-    render(quarto, &folder.path)?;
+    render(quarto, &folder.path, "output-ext:typ")?;
     let typ = output_file(&folder, "typ")?;
     let typ_name = typ.file_name().and_then(|n| n.to_str()).unwrap_or("document.typ");
     let args = ["typst", "compile", "--format", "svg", typ_name, "page-{p}.svg"];
@@ -694,7 +725,40 @@ mod tests {
         let pages = preview_pages(&project, &program, &source).unwrap();
         assert!(!pages.is_empty() && pages[0].contains("<svg"));
         assert!(!marker.exists(), "a code cell ran");
+        let leftovers = std::fs::read_dir(project.paths.resolve("render").unwrap());
+        assert!(leftovers.is_ok_and(|mut entries| entries.next().is_none()));
+    }
+
+    #[test]
+    fn render_folders_from_an_earlier_run_are_removed() {
+        let (_dir, project) = temp_project();
+        let stale = project.paths.resolve("render/old").unwrap();
+        std::fs::create_dir_all(&stale).unwrap();
+        std::fs::write(stale.join("document.typ"), "x").unwrap();
+        remove_stale_renders(&project);
         assert!(!project.paths.resolve("render").unwrap().exists());
+        remove_stale_renders(&project);
+    }
+
+    /// A program that starts another and waits, like Quarto starting Typst: on a timeout both end.
+    #[cfg(unix)]
+    #[test]
+    fn a_timeout_ends_the_programs_a_program_started() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_file = dir.path().join("child.pid");
+        let script = format!("sleep 60 & echo $! > {}; wait", pid_file.display());
+        let started = command(Path::new("sh"), &["-c", &script], None);
+        let error = run_limited(started, Duration::from_millis(500)).err().unwrap();
+        assert_eq!(error.code, "render_timeout");
+
+        let child: i32 = std::fs::read_to_string(&pid_file).unwrap().trim().parse().unwrap();
+        // A killed process stays in the table until init collects it.
+        let ended = (0..100).any(|_| {
+            std::thread::sleep(Duration::from_millis(20));
+            // SAFETY: signal 0 only checks whether the process exists.
+            unsafe { libc::kill(child, 0) == -1 }
+        });
+        assert!(ended, "the started program is still running");
     }
 
     #[test]

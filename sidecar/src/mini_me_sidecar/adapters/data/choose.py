@@ -6,7 +6,12 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
-from mini_me_sidecar.adapters.providers import chat_model, log_error, provider_error
+from mini_me_sidecar.adapters.providers import (
+    chat_model,
+    log_error,
+    provider_error,
+    structured_answer,
+)
 from mini_me_sidecar.context import CallContext, TraitError
 
 Plan = TypeVar("Plan", bound=BaseModel)
@@ -27,10 +32,7 @@ async def choose(
     try:
         # Tool calling works with every provider and with OpenRouter's models; the default
         # for OpenAI's client, a `json_schema` response format, is refused by many of them.
-        chat = chat_model(model, key.reveal()).with_structured_output(
-            schema, method="function_calling"
-        )
-        answer = await chat.ainvoke(turns)
+        answer = await structured_answer(chat_model(model, key.reveal()), schema, turns)
     except TraitError:
         raise
     except Exception as error:

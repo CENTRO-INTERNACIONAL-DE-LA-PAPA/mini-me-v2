@@ -292,7 +292,7 @@ function Problems({ library }: { library: Library }) {
       {library.unreadable ? (
         <p className="text-destructive">
           Your Mini-Mes and Traits could not be read, so they can't be changed until
-          user-library.json is fixed: {library.unreadable}
+          library.json is fixed: {library.unreadable}
         </p>
       ) : (
         <>

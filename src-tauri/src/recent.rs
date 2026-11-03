@@ -7,7 +7,9 @@ use rusqlite::Connection;
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::approvals;
 use crate::comments;
+use crate::conversations::ConversationStatus;
 use crate::error::AppResult;
 use crate::projects::{self, ProjectSummary};
 
@@ -22,6 +24,8 @@ pub struct RecentConversation {
     pub title: String,
     /// Unix ms.
     pub last_activity_at: i64,
+    /// What the latest reply is doing, when it is running or waits for an approval.
+    pub status: Option<ConversationStatus>,
 }
 
 /// The most recently active Conversations in the Projects of `data_root`, newest first.
@@ -41,6 +45,8 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<RecentConv
     let rows = statement.query_map([], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
     })?;
+    // A Project too old to have the table of paused replies still lists its Conversations.
+    let paused = approvals::paused_mini_mes(conn).unwrap_or_default();
     let mut recent = Vec::new();
     for row in rows {
         let (id, title, last_activity_at) = row?;
@@ -53,6 +59,9 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<RecentConv
             conversation_id,
             title,
             last_activity_at,
+            status: paused
+                .get(&conversation_id)
+                .map(|mini_me| ConversationStatus::NeedsApproval { mini_me: mini_me.clone() }),
         });
     }
     Ok(recent)
@@ -65,6 +74,7 @@ mod tests {
     use crate::comments::test_support::into_thread;
     use crate::db;
     use crate::projects::test_support::origin;
+    use crate::protocol::{Author, AuthorKind, new_id};
     use crate::store::Project;
 
     /// A Project in `root` with one Conversation per activity time in `activity`.
@@ -95,6 +105,48 @@ mod tests {
 
         let titles: Vec<String> = list(&root).unwrap().into_iter().map(|c| c.title).collect();
         assert_eq!(titles, ["Trials 8", "Survey 7", "Trials 6", "Papers 5", "Papers 4"]);
+    }
+
+    #[test]
+    fn a_paused_reply_gives_its_recent_conversation_a_status_and_a_missing_table_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
+        let trial = project(&root, "Trials", &[1, 2]);
+        project(&root, "Survey", &[3]);
+        let paused = conversations::list(&trial).unwrap()[0].id;
+        let input = conversations::SendMessageInput {
+            content: "q".into(),
+            attachments: Vec::new(),
+            text_components: Vec::new(),
+        };
+        let question = conversations::send_message(&trial, paused, input, new_id()).unwrap();
+        let author = Author { kind: AuthorKind::MiniMe, id: new_id().to_string() };
+        let reply = conversations::start_reply(&trial, paused, question.id, author).unwrap();
+        let mini_me = crate::link::RunMiniMe { id: new_id(), name: "Investigator".into() };
+        let run = conversations::PausedRun {
+            message_id: reply,
+            step_id: "ask".into(),
+            component_id: new_id(),
+            run: serde_json::json!({ "spec": { "mini_me": mini_me } }),
+            output: None,
+            state: "opaque".into(),
+        };
+        conversations::pause_reply(&trial, run, "Go on?").unwrap();
+
+        let status = |c: &RecentConversation| c.status.clone();
+        let recent = list(&root).unwrap();
+        let by_project = |name: &str| recent.iter().find(|c| c.project_name == name).unwrap();
+        assert_eq!(
+            status(by_project("Trials")),
+            Some(ConversationStatus::NeedsApproval { mini_me })
+        );
+        assert_eq!(status(by_project("Survey")), None);
+
+        // A Project from before paused replies had a table is still listed, without a status.
+        let old = Connection::open_in_memory().unwrap();
+        old.execute_batch("CREATE TABLE conversations (id TEXT, title TEXT, last_activity_at INTEGER)")
+            .unwrap();
+        assert!(approvals::paused_mini_mes(&old).is_err());
     }
 
     #[test]

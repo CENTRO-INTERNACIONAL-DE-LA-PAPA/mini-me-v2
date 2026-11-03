@@ -1,7 +1,8 @@
 //! The Mini-Me Data folder and Project folders: creating, listing and opening Projects.
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
@@ -12,6 +13,7 @@ use crate::db;
 use crate::error::{AppError, AppResult};
 use crate::paths::ProjectPaths;
 use crate::protocol::{Origin, new_id, now_ms};
+use crate::quarto;
 use crate::store::Project;
 
 pub const DATA_FOLDER_NAME: &str = "Mini-Me Data";
@@ -115,6 +117,20 @@ pub fn create(data_root: &Path, name: &str) -> AppResult<ProjectSummary> {
     Ok(summary)
 }
 
+/// Waits until nothing but `project` holds the Project, so that its database is closed once
+/// `project` is dropped: a run that was cancelled still holds it until it ends. Returns whether
+/// that happened within `limit`.
+pub fn wait_until_alone(project: &Arc<Project>, limit: Duration) -> bool {
+    let started = Instant::now();
+    while Arc::strong_count(project) > 1 {
+        if started.elapsed() >= limit {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    true
+}
+
 /// Removes the Project in `folder` with everything in it. Its running replies must be stopped
 /// and the Project closed first.
 pub fn delete(folder: &Path) -> AppResult<()> {
@@ -191,6 +207,7 @@ pub fn open(summary: &ProjectSummary, origin: Origin) -> AppResult<Project> {
     let conn = db::open(&paths.database())?;
     let project = Project::new(summary.id, summary.name.clone(), paths, conn, origin);
     conversations::recover_interrupted(&project)?;
+    quarto::remove_stale_renders(&project);
     Ok(project)
 }
 
@@ -224,6 +241,21 @@ pub mod test_support {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    #[test]
+    fn a_delete_waits_until_nothing_else_holds_the_project() {
+        let (_dir, project) = test_support::temp_project();
+        let project = Arc::new(project);
+        assert!(wait_until_alone(&project, Duration::ZERO));
+
+        let holder = Arc::clone(&project);
+        assert!(!wait_until_alone(&project, Duration::from_millis(60)));
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(60));
+            drop(holder);
+        });
+        assert!(wait_until_alone(&project, Duration::from_secs(5)));
+    }
 
     #[test]
     fn mini_me_dev_keeps_its_projects_in_its_own_folder() {

@@ -1,6 +1,6 @@
 """The fixed lists the AI model chooses from: data checks, cleaning actions, how to join two
-tables and which charts to draw. The model fills these schemas; entries that don't fit the tables are dropped before
-anything runs."""
+tables and which charts to draw. The model fills these schemas; entries that don't fit the
+tables are dropped before anything runs."""
 
 import re
 from typing import Literal, Union
@@ -208,7 +208,6 @@ class JoinPlan(BaseModel):
 
 
 ChartType = Literal["histogram", "bar", "line", "scatter", "box", "heatmap"]
-
 
 
 class Chart(BaseModel):

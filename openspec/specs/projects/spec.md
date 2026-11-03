@@ -113,11 +113,23 @@ stored in the Project's database, trimmed and not empty, and SHALL NOT move or r
 
 ### Requirement: Deleting a Project
 The "…" menu SHALL offer Delete. Deleting SHALL first warn that the Project's Conversations and files
-will be removed for good, and after confirmation SHALL stop its running replies and remove its folder.
+will be removed for good, and after confirmation SHALL stop its running replies, wait until they have
+ended and let go of the Project, and then remove its folder. If they have not ended within a fixed
+time, nothing SHALL be removed: the Project stays listed and whole, and a message says to try again.
 
 #### Scenario: Delete
 - **WHEN** the user confirms deleting "Trial design"
 - **THEN** the Project is gone from the switcher and Home, and its folder no longer exists
+
+#### Scenario: A reply is running
+- **WHEN** the user confirms deleting a Project while a reply is running in it
+- **THEN** the reply is stopped, and the folder is removed once the reply has let go of the
+  Project's database
+
+#### Scenario: A reply does not end
+- **WHEN** a stopped reply has not ended within the time limit
+- **THEN** the Project's folder is untouched, the Project is still listed, and a message says it
+  is still stopping its replies
 
 #### Scenario: Cancel
 - **WHEN** the user dismisses the warning

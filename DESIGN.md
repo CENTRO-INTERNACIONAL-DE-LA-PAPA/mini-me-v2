@@ -158,11 +158,12 @@ Sheet padding: 32px left, 24–28px top. Tool sheets: 22px top, 18px right, 24px
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Navigation sheet, 256px.** Wordmark and collapse button; the project block (serif name under a "Project ▾" switcher) or a dashed "No project open" card; Overview and Files; Conversations (serif heading with a + button, then rows); status lines; a bottom card with the Mini-Mes stack (opens the Library) and your initials (open Settings). The selected item is a white row.
+- **Navigation sheet, 256px.** Wordmark (it leads Home) and collapse button; the project block (serif name under a "Project ▾" switcher) or a dashed "No project open" card; Overview and Files; Conversations (serif heading with a + button, then rows; while a row's reply runs or waits for an approval, its time is replaced by the working Mini-Me's 16px avatar and "Running" or "Needs your approval" in that Mini-Me's ink); status lines; a bottom card with the Mini-Mes stack (opens the Library) and your initials (open Settings). The selected item is a white row.
 - **Main sheet, flexible.** Conversation, Overview, Files, libraries, editors, Settings and the full report.
+- **What's new:** a column up to 760px, centred in the sheet like Settings' content, with the serif title "What's new" and "Mini-Me <version>" under it, a solid Close button on the right, and the version's notes in the Markdown style below. It opens once after an update, over Home, and from the secondary "What's new" button beside the version in Settings → About, where closing it returns.
 - **Tool sheet, 340–380px.** Outline, Jobs, Workflow steps, Report picker, the Workflow step inspector, a document's Comments. Only one at a time; a well-filled close button sits top-right.
 - **Content widths:** the chat column is 820px, or 680px with a tool sheet open. The composer spans it; the messages sit 20px inside it on each side, centred on it. Settings: a 210px column and content up to 760px, centred together.
-- **Small windows (to build):** when a tool sheet opens below ~1280px, collapse the navigation sheet to avatars and icons so the conversation keeps ≥600px.
+- **Small windows:** when a tool sheet opens below ~1280px, the navigation sheet collapses to a 64px rail of icons, each at the same distance from the edge as when open: the toggle, Overview, Files, an ink + for a new Conversation, the Mini-Mes avatar and your initials, so the conversation keeps ≥600px. Home and the Project switcher need the sidebar open. Closing the tool sheet opens it again, unless the user opened it meanwhile; the toggle at the top of the rail works at any time.
 
 ---
 
@@ -198,7 +199,7 @@ Input, Textarea and Select: `--well` fill, no visible border, radius 12, 13.5px;
 ### Home
 - **Content:** the `text-greeting` greeting, then "Waiting on you" and the Projects grid, scrolling over the playground.
 - **Mini-Me playground:** every Mini-Me as a 64px avatar with physics (Matter.js), drawn on one canvas filling the main sheet behind the content. Off by default: they appear when Home opens only with Settings → General → "Show Mini-Mes on Home", or whenever Up, Up, Down, Down, Left, Right, Left, Right is pressed on Home, which adds another batch on top of any already there. They drop in from random points across the width, pile along the bottom and can be grabbed where no card, button or field covers them; the cursor turns to a grab hand over one. A click shows the Mini-Me's name as a tag pill above it for three seconds. With reduced motion the pile appears already settled. No outline or fill on the layer: the Mini-Mes sit on the sheet's white.
-- **Sidebar:** with no Project open, a "Recent" group under Home lists the 5 most recently active Conversations across Projects, each with its Project's name and when it was last active, styled like the Conversations list.
+- **Sidebar:** with no Project open, a "Recent" group under Home lists the 5 most recently active Conversations across Projects, each with its Project's name and when it was last active, styled like the Conversations list, and with the same status line in place of that line while its reply runs or waits.
 
 ### Conversation
 - **Reply:** a Mini-Me card, padding 16×18. Header: 28px avatar, serif name (`text-name`), time and status in `ink`. Body 15px. Tables, paper sources and the Workflow progress card are white, with no outline on the wash. Action pills are `mini-me` buttons; an active one is solid ink.

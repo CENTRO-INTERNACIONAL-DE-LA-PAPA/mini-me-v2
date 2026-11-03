@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +12,15 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { InfoIcon, KeyRoundIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-react";
+import {
+  FlaskConicalIcon,
+  InfoIcon,
+  KeyRoundIcon,
+  RefreshCwIcon,
+  SlidersHorizontalIcon,
+  UserRoundIcon,
+  WrenchIcon,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -33,6 +42,7 @@ import type {
 } from "../../protocol/types";
 import { openLink } from "../interactive/links";
 import { SectionPage, type Section } from "../shell/SectionPage";
+import type { SettingsPageId } from "../shell/view";
 import { refreshDeveloperMode, useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { recheckQuarto, showQuarto, useQuarto } from "../../hooks/useQuarto";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
@@ -49,18 +59,32 @@ const providerName = (id: KeyAccount) =>
 
 const REPOSITORY_URL = "https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2";
 
-type Page = "general" | "models" | "accounts" | "about";
+type Page = SettingsPageId;
 
 const PAGES: Section<Page>[] = [
   { id: "general", name: "General", icon: SlidersHorizontalIcon },
   { id: "models", name: "Models & keys", icon: KeyRoundIcon },
   { id: "accounts", name: "Accounts", icon: UserRoundIcon },
+  { id: "developer", name: "Developer", icon: WrenchIcon },
   { id: "about", name: "About", icon: InfoIcon },
 ];
 
-/** `onOpenAvatars` opens the avatar parts page, a developer option. */
-export function SettingsView({ onOpenAvatars }: { onOpenAvatars: () => void }) {
-  const [page, setPage] = useState<Page>("general");
+/** `onOpenAvatars` opens the avatar parts page, a developer option, and `onOpenWhatsNew` the
+ * page of the version's changes. Settings opens at `initialPage`, General unless given. */
+export function SettingsView({
+  onOpenAvatars,
+  onOpenWhatsNew,
+  initialPage = "general",
+}: {
+  onOpenAvatars: () => void;
+  onOpenWhatsNew: () => void;
+  initialPage?: Page;
+}) {
+  const [page, setPage] = useState<Page>(initialPage);
+  const developer = useDeveloperMode();
+  // The Developer page is listed only while Developer mode is on.
+  const pages = developer ? PAGES : PAGES.filter((section) => section.id !== "developer");
+  const shown = pages.some((section) => section.id === page) ? page : "general";
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,20 +103,21 @@ export function SettingsView({ onOpenAvatars }: { onOpenAvatars: () => void }) {
   return (
     <SectionPage
       title="Settings"
-      sections={PAGES}
-      active={page}
+      sections={pages}
+      active={shown}
       onSelect={setPage}
     >
       <div className="min-w-0">
         {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
-        {page === "general" && (
-          <GeneralPage settings={settings} onChanged={refresh} onOpenAvatars={onOpenAvatars} />
-        )}
-        {settings && page === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
-        {settings && page === "accounts" && (
+        {shown === "general" && <GeneralPage />}
+        {settings && shown === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
+        {settings && shown === "accounts" && (
           <AccountsPage settings={settings} onChanged={refresh} />
         )}
-        {page === "about" && <AboutPage />}
+        {settings && shown === "developer" && (
+          <DeveloperPage settings={settings} onChanged={refresh} onOpenAvatars={onOpenAvatars} />
+        )}
+        {shown === "about" && <AboutPage onOpenWhatsNew={onOpenWhatsNew} />}
       </div>
     </SectionPage>
   );
@@ -170,17 +195,7 @@ function StatusDot({ on, children }: { on: boolean; children: ReactNode }) {
   );
 }
 
-function GeneralPage({
-  settings,
-  onChanged,
-  onOpenAvatars,
-}: {
-  /** Null until the AI settings, which hold Jev's developer options, have loaded. */
-  settings: AiSettings | null;
-  onChanged: () => void;
-  onOpenAvatars: () => void;
-}) {
-  const developer = useDeveloperMode();
+function GeneralPage() {
   return (
     <>
       <PageHeader title="General" lead="About you, and how Home looks." />
@@ -199,23 +214,36 @@ function GeneralPage({
       >
         <QuartoRow />
       </Section>
-      {developer && (
-        <Section
-          title="Developer"
-          description="Options for developing and testing Mini-Me, shown in Developer mode (Settings → About)."
-        >
-          {settings && <ThresholdRow settings={settings} onChanged={onChanged} />}
-          {settings && <DeveloperRow settings={settings} onChanged={onChanged} />}
-          <SettingRow
-            label="[DEBUG] Avatars"
-            description="Every avatar base, face, accessory and colour, to try combinations."
-          >
-            <Button variant="outline" onClick={onOpenAvatars}>
-              Open
-            </Button>
-          </SettingRow>
-        </Section>
-      )}
+    </>
+  );
+}
+
+/** The options for developing and testing Mini-Me. Listed only while Developer mode is on. */
+function DeveloperPage({
+  settings,
+  onChanged,
+  onOpenAvatars,
+}: {
+  settings: AiSettings;
+  onChanged: () => void;
+  onOpenAvatars: () => void;
+}) {
+  return (
+    <>
+      <PageHeader
+        title="Developer"
+        lead="Options for developing and testing Mini-Me. This page is listed while Developer mode (Settings → About) is on."
+      />
+      <ThresholdRow settings={settings} onChanged={onChanged} />
+      <DeveloperRow settings={settings} onChanged={onChanged} />
+      <SettingRow
+        label="[DEBUG] Avatars"
+        description="Every avatar base, face, accessory and colour, to try combinations."
+      >
+        <Button variant="outline" onClick={onOpenAvatars}>
+          Open
+        </Button>
+      </SettingRow>
     </>
   );
 }
@@ -290,8 +318,15 @@ function QuartoForm({ status }: { status: QuartoStatus }) {
             Clear
           </Button>
         )}
-        <Button type="button" variant="outline" onClick={recheckQuarto}>
-          Check
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Check again"
+          title="Check again"
+          onClick={recheckQuarto}
+        >
+          <RefreshCwIcon />
         </Button>
       </SettingRow>
     </form>
@@ -334,7 +369,7 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
             Shown in Home's greeting and on your files. Leave it empty to show no name.
             {unreadable && (
               <span className="mt-1 block text-destructive">
-                user-profile.json in Mini-Me Data could not be read ({unreadable}), so it is
+                user-profile.json in the app's config folder could not be read ({unreadable}), so it is
                 left unchanged. Fix or remove it, then restart Mini-Me.
               </span>
             )}
@@ -361,7 +396,7 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
   );
 }
 
-function AboutPage() {
+function AboutPage({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
   return (
     <>
       <PageHeader title="About" lead="What Mini-Me is, who makes it, and which version is running." />
@@ -374,8 +409,7 @@ function AboutPage() {
         </p>
       </div>
       <div className="mt-6">
-        <AboutRow />
-        <DeveloperModeRow />
+        <AboutRow onOpenWhatsNew={onOpenWhatsNew} />
         <SettingRow label="GitHub Repository">
           <span className="text-ui text-muted-foreground tabular-nums">
             {/* The webview opens no new windows; the link opens in the system's browser. */}
@@ -390,6 +424,7 @@ function AboutPage() {
             </a>
           </span>
         </SettingRow>
+        <DeveloperModeRow />
       </div>
       <Collaboration />
     </>
@@ -447,7 +482,7 @@ function Collaboration() {
 }
 
 /** Which app and version is running, such as "Mini-Me Dev 0.4.0". */
-function AboutRow() {
+function AboutRow({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
   const [about, setAbout] = useState<string | null>(null);
 
   useEffect(() => {
@@ -463,6 +498,9 @@ function AboutRow() {
   return (
     <SettingRow label="Version">
       <span className="text-ui text-muted-foreground tabular-nums">{about ?? "…"}</span>
+      <Button variant="secondary" onClick={onOpenWhatsNew}>
+        What's new
+      </Button>
     </SettingRow>
   );
 }
@@ -572,7 +610,24 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
   const [provider, setProvider] = useState<ProviderId>(settings.provider);
   const [model, setModel] = useState(settings.model);
   const [status, setStatus] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  /** How testing the model went, shown in a popover over its button; null while closed. */
+  const [tested, setTested] = useState<string | null>(null);
   const changed = provider !== settings.provider || model.trim() !== settings.model;
+
+  /** Tests the model in the fields, saved or not, and says how it went. */
+  async function testModel() {
+    setTesting(true);
+    setTested("Testing the model…");
+    try {
+      await api.testModel(provider, model);
+      setTested("This model works with Mini-Me.");
+    } catch (e) {
+      setTested(errorMessage(e));
+    } finally {
+      setTesting(false);
+    }
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -627,9 +682,32 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
           placeholder="Model ID"
           spellCheck={false}
         />
-        <Button type="submit" disabled={!changed}>
-          Save
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="submit" disabled={!changed}>
+            Save
+          </Button>
+          {/* Says how the test went; clicking outside closes it. */}
+          <Popover open={tested !== null} onOpenChange={(open) => !open && setTested(null)}>
+            <PopoverTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  aria-label="Test model"
+                  title="Test model"
+                  disabled={testing || !model.trim()}
+                />
+              }
+              onClick={testModel}
+            >
+              <FlaskConicalIcon />
+            </PopoverTrigger>
+            <PopoverContent align="end">
+              <p>{tested}</p>
+            </PopoverContent>
+          </Popover>
+        </div>
       </SettingRow>
     </form>
   );
