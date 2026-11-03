@@ -568,8 +568,8 @@ impl Runs {
         let frame = CoreFrame::SummaryStart { summary_id, model, material, kind };
         let no_answer = NoAnswer {
             not_ready: "Mini-Me's runtime is not ready.",
-            timeout: ("summary_timeout", "The AI model did not finish the summary in time. Try again."),
-            stopped: "Mini-Me's runtime stopped before the summary was written.",
+            timeout: ("summary_timeout", "The AI model did not answer in time. Try again."),
+            stopped: "Mini-Me's runtime stopped before the AI model answered.",
         };
         let summary = self.request(|inner| &mut inner.summaries, summary_id, frame, timeout, no_answer);
         self.lock().key_providers.remove(&summary_id);

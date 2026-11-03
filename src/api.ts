@@ -238,6 +238,10 @@ export const api = {
   getAiSettings: () => invoke<AiSettings>("get_ai_settings"),
   setAiModel: (provider: ProviderId, model: string) =>
     invoke<void>("set_ai_model", { provider, model }),
+  /** Tests the model with one small request that needs a tool call; fails with why it did not
+   * pass. */
+  testModel: (provider: ProviderId, model: string) =>
+    invoke<void>("test_model", { provider, model }),
   /** Stores the key in the OS keychain; it is never sent back to the UI. */
   saveApiKey: (provider: KeyAccount, key: string) =>
     invoke<void>("save_api_key", { provider, key }),

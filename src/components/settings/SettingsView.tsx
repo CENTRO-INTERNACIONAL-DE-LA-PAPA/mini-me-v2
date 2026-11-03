@@ -572,7 +572,22 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
   const [provider, setProvider] = useState<ProviderId>(settings.provider);
   const [model, setModel] = useState(settings.model);
   const [status, setStatus] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
   const changed = provider !== settings.provider || model.trim() !== settings.model;
+
+  /** Tests the model in the fields, saved or not, and says how it went. */
+  async function testModel() {
+    setTesting(true);
+    setStatus("Testing the model…");
+    try {
+      await api.testModel(provider, model);
+      setStatus("This model works with Mini-Me.");
+    } catch (e) {
+      setStatus(errorMessage(e));
+    } finally {
+      setTesting(false);
+    }
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -627,9 +642,19 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
           placeholder="Model ID"
           spellCheck={false}
         />
-        <Button type="submit" disabled={!changed}>
-          Save
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="submit" disabled={!changed}>
+            Save
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={testing || !model.trim()}
+            onClick={testModel}
+          >
+            Test model
+          </Button>
+        </div>
       </SettingRow>
     </form>
   );
