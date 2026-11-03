@@ -28,7 +28,7 @@ use crate::user_profile::{ProfileStore, UserProfile};
 use crate::overview;
 use crate::quarto;
 use crate::routing::{REACTION_CHANCE, ROUTE_TIMEOUT, RouteSettings, Routing};
-use crate::runs::{CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
+use crate::runs::{self, CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
 use crate::settings::{AiSettings, HomeSettings, Settings};
 use crate::link::SummaryKind;
@@ -229,7 +229,12 @@ pub async fn list_conversations(
     state: State<'_, AppState>,
     project_id: Uuid,
 ) -> AppResult<Vec<ConversationSummary>> {
-    conversations::list(&*state.project(project_id)?)
+    let mut list = conversations::list(&*state.project(project_id)?)?;
+    let running = state.runs.running();
+    for conversation in list.iter_mut().filter(|c| c.status.is_none()) {
+        conversation.status = runs::running_status(&running, project_id, conversation.id);
+    }
+    Ok(list)
 }
 
 /// Names a new Conversation from its first message, as soon as it is sent and while the reply is
@@ -708,7 +713,13 @@ pub async fn list_paused_approvals(state: State<'_, AppState>) -> AppResult<Vec<
 pub async fn list_recent_conversations(
     state: State<'_, AppState>,
 ) -> AppResult<Vec<RecentConversation>> {
-    recent::list(&state.data_root)
+    let mut list = recent::list(&state.data_root)?;
+    let running = state.runs.running();
+    for conversation in list.iter_mut().filter(|c| c.status.is_none()) {
+        conversation.status =
+            runs::running_status(&running, conversation.project_id, conversation.conversation_id);
+    }
+    Ok(list)
 }
 
 /// Sends the running replies now and the whole list again each time it changes.

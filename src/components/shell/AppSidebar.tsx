@@ -44,11 +44,13 @@ import type {
 } from "../../protocol/types";
 import { formatRelative } from "../../lib/format";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { ConversationStatusLine } from "./ConversationStatusLine";
 import { RoutingWarningLine } from "./RoutingWarningLine";
 import { SidecarStatusLine, sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
 import { DOTS_HOVER, ItemMenu } from "./ItemMenu";
 import { UpdateStatusLine } from "./UpdateStatusLine";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { useRunningKey } from "../../hooks/useRunningReplies";
 import type { View } from "./view";
 import { Wordmark } from "./Wordmark";
 
@@ -89,10 +91,12 @@ export function AppSidebar({
 
   const loadRecent = useCallback(() => api.listRecentConversations().then(setRecent), []);
 
-  // Fetched each time Home is shown, so it follows activity in any Project.
+  // Fetched each time Home is shown and each time a reply starts or stops running, so it follows
+  // activity, and the statuses of Conversations, in any Project.
+  const runningKey = useRunningKey();
   useEffect(() => {
     if (onHome) loadRecent().catch(() => {});
-  }, [onHome, loadRecent]);
+  }, [onHome, loadRecent, runningKey]);
 
   return (
     <Sidebar variant="floating" collapsible="icon">
@@ -167,9 +171,14 @@ export function AppSidebar({
                     }
                   >
                     <span className="w-full truncate text-foreground">{conversation.title}</span>
-                    <span className="w-full truncate text-meta font-normal text-muted-foreground">
-                      {conversation.project_name} · {formatRelative(conversation.last_activity_at)}
-                    </span>
+                    {conversation.status ? (
+                      <ConversationStatusLine status={conversation.status} />
+                    ) : (
+                      <span className="w-full truncate text-meta font-normal text-muted-foreground">
+                        {conversation.project_name} ·{" "}
+                        {formatRelative(conversation.last_activity_at)}
+                      </span>
+                    )}
                   </SidebarMenuButton>
                   <ItemMenu
                     name={conversation.title}
@@ -235,9 +244,13 @@ export function AppSidebar({
                       onClick={() => onNavigate({ kind: "conversation", id: conversation.id })}
                     >
                       <span className="w-full truncate text-foreground">{conversation.title}</span>
-                      <span className="text-meta font-normal text-muted-foreground">
-                        {formatRelative(conversation.last_activity_at)}
-                      </span>
+                      {conversation.status ? (
+                        <ConversationStatusLine status={conversation.status} />
+                      ) : (
+                        <span className="text-meta font-normal text-muted-foreground">
+                          {formatRelative(conversation.last_activity_at)}
+                        </span>
+                      )}
                     </SidebarMenuButton>
                     <ItemMenu
                       name={conversation.title}

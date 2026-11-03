@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
 import { useDeveloperMode } from "./hooks/useDeveloperMode";
+import { useRunningKey } from "./hooks/useRunningReplies";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/chat/ChatView";
 import { DocumentView } from "./components/documents/DocumentView";
@@ -66,6 +67,12 @@ export default function App() {
     setFileCount(0);
     refreshConversations();
   }, [refreshConversations]);
+
+  // A Conversation's status, shown in the sidebar, follows its reply as it runs, pauses and ends.
+  const runningKey = useRunningKey();
+  useEffect(() => {
+    refreshConversations();
+  }, [runningKey, refreshConversations]);
 
   function navigate(next: View) {
     setError(null);
