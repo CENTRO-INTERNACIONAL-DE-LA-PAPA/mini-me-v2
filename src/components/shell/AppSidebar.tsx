@@ -46,7 +46,7 @@ import { formatRelative } from "../../lib/format";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { RoutingWarningLine } from "./RoutingWarningLine";
 import { SidecarStatusLine, sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
-import { ItemMenu } from "./ItemMenu";
+import { DOTS_HOVER, ItemMenu } from "./ItemMenu";
 import { UpdateStatusLine } from "./UpdateStatusLine";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import type { View } from "./view";
@@ -161,7 +161,7 @@ export function AppSidebar({
                 <SidebarMenuItem key={conversation.conversation_id}>
                   <SidebarMenuButton
                     size="lg"
-                    className="h-auto flex-col items-start gap-0 py-[9px]"
+                    className={cn("h-auto flex-col items-start gap-0 py-[9px] pr-9", ROW_HOVER)}
                     onClick={() =>
                       onOpenConversation(conversation.project_id, conversation.conversation_id)
                     }
@@ -173,7 +173,7 @@ export function AppSidebar({
                   </SidebarMenuButton>
                   <ItemMenu
                     name={conversation.title}
-                    className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100"
+                    className={cn(ROW_MENU, DOTS_HOVER)}
                     rename={{
                       current: conversation.title,
                       onRename: (title) =>
@@ -228,7 +228,10 @@ export function AppSidebar({
                     <SidebarMenuButton
                       size="lg"
                       isActive={active}
-                      className="h-auto flex-col items-start gap-0 py-[9px]"
+                      className={cn(
+                        "h-auto flex-col items-start gap-0 py-[9px] pr-9",
+                        !active && ROW_HOVER,
+                      )}
                       onClick={() => onNavigate({ kind: "conversation", id: conversation.id })}
                     >
                       <span className="w-full truncate text-foreground">{conversation.title}</span>
@@ -238,7 +241,7 @@ export function AppSidebar({
                     </SidebarMenuButton>
                     <ItemMenu
                       name={conversation.title}
-                      className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100"
+                      className={cn(ROW_MENU, DOTS_HOVER)}
                       rename={{
                         current: conversation.title,
                         onRename: (title) => onRenameConversation(conversation.id, title),
@@ -298,6 +301,14 @@ export function AppSidebar({
     </Sidebar>
   );
 }
+
+/** Where a row's "…" button sits and when it shows. It is beside the row's button, not in it. */
+const ROW_MENU =
+  "absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100";
+
+/** Keeps a row's hover while the pointer is on its "…" button or its menu is open. */
+const ROW_HOVER =
+  "group-hover/menu-item:bg-sidebar-accent group-has-aria-expanded/menu-item:bg-sidebar-accent";
 
 /** Mini-Mes the Library entry shows, one per group, overlapping by about a third. */
 const STACKED = ["Researcher", "Curator", "Planner"];
