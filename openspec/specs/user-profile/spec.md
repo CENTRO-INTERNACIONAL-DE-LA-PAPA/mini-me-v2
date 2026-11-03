@@ -7,14 +7,14 @@ lets the user edit it in Settings, and defines where the UI shows it.
 ## Requirements
 
 ### Requirement: The profile file
-The Rust core SHALL keep the user's profile in `user-profile.json` directly in the Mini-Me
-Data folder, next to `user-library.json`. The file SHALL hold the user's name, or no name. A
+The Rust core SHALL keep the user's profile in `user-profile.json` directly in the app's
+config folder, next to `settings.json`. The file SHALL hold the user's name, or no name. A
 missing file SHALL mean no name and SHALL NOT be created until the user saves one. The file
-SHALL never be written inside a Project folder, and no Trait tool SHALL be able to address
-it.
+SHALL never be written inside a Project folder or the Mini-Me Data folder, which may be
+synced to the cloud, and no Trait tool SHALL be able to address it.
 
 #### Scenario: First launch
-- **WHEN** the app starts and Mini-Me Data has no `user-profile.json`
+- **WHEN** the app starts and the config folder has no `user-profile.json`
 - **THEN** the user has no name and no file is created
 
 #### Scenario: Name kept across restarts

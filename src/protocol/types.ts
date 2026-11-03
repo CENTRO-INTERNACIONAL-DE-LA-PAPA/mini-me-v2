@@ -356,7 +356,7 @@ export interface TraitDraft {
   tools: string[];
 }
 
-/** A user-made entry of `user-library.json` left out because it breaks a rule. */
+/** A user-made entry of `library.json` left out because it breaks a rule. */
 export interface SkippedEntry {
   kind: "trait" | "mini_me";
   name: string | null;
@@ -367,7 +367,7 @@ export interface LibraryView {
   mini_mes: MiniMe[];
   traits: TraitSummary[];
   skipped: SkippedEntry[];
-  /** Why `user-library.json` could not be read; user-made definitions cannot change then. */
+  /** Why `library.json` could not be read; user-made definitions cannot change then. */
   unreadable: string | null;
 }
 

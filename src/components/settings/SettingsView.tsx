@@ -334,7 +334,7 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
             Shown in Home's greeting and on your files. Leave it empty to show no name.
             {unreadable && (
               <span className="mt-1 block text-destructive">
-                user-profile.json in Mini-Me Data could not be read ({unreadable}), so it is
+                user-profile.json in the app's config folder could not be read ({unreadable}), so it is
                 left unchanged. Fix or remove it, then restart Mini-Me.
               </span>
             )}

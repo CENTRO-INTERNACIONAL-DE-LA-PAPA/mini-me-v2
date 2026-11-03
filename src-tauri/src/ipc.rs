@@ -100,7 +100,7 @@ impl AppState {
         let data_root =
             projects::ensure_data_root(&documents, projects::data_folder_name(&identifier))?;
         let library = Arc::new(LibraryStore::open(&data_root));
-        let profile = ProfileStore::open(&data_root);
+        let profile = ProfileStore::open(&config_dir);
         let ai2 = Ai2::system();
         let settings = Settings::load_or_create(&config_dir)?;
         let quarto = Arc::new(quarto::Known::new(settings.quarto_path.clone()));
@@ -444,7 +444,7 @@ pub struct LibraryView {
     traits: Vec<TraitSummary>,
     /// User-made entries left out because they break a rule.
     skipped: Vec<Skipped>,
-    /// Why `user-library.json` could not be read; user-made definitions cannot be changed
+    /// Why `library.json` could not be read; user-made definitions cannot be changed
     /// while it is set.
     unreadable: Option<String>,
 }
