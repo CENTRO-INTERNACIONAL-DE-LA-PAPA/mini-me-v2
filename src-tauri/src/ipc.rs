@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
@@ -299,19 +300,36 @@ pub async fn rename_project(
     Ok(ProjectSummary { name, ..summary })
 }
 
+/// How long a Project's delete waits for its stopped replies to let go of it: the cancel timeout,
+/// which closes a run that does not end, and a margin.
+const RELEASE_WAIT: Duration = Duration::from_secs(CANCEL_TIMEOUT.as_secs() + 3);
+
 /// Deletes the Project with its folder, after stopping every running reply in it.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn delete_project(state: State<'_, AppState>, project_id: Uuid) -> AppResult<()> {
     let summary = state.find_summary(project_id)?;
-    {
-        let project = state.project(project_id)?;
-        for conversation in conversations::list(&project)? {
-            for message_id in conversations::stop_reply(&project, conversation.id)? {
-                state.runs.cancel_message(message_id);
-            }
+    let project = state.project(project_id)?;
+    for conversation in conversations::list(&project)? {
+        for message_id in conversations::stop_reply(&project, conversation.id)? {
+            state.runs.cancel_message(message_id);
         }
     }
     state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).remove(&project_id);
+    // A stopped run holds the Project, and its database, until it ends or the cancel timeout
+    // closes it; removing the folder before then fails on Windows.
+    let (project, released) = tauri::async_runtime::spawn_blocking(move || {
+        let released = projects::wait_until_alone(&project, RELEASE_WAIT);
+        (project, released)
+    })
+    .await
+    .map_err(|e| AppError::storage(e.to_string()))?;
+    if !released {
+        state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).insert(project_id, project);
+        return Err(AppError::storage(
+            "The Project is still stopping its replies, so it was not deleted. Try again in a moment.",
+        ));
+    }
+    drop(project);
     projects::delete(&summary.folder)?;
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
     settings.recent_projects.remove(&project_id);
