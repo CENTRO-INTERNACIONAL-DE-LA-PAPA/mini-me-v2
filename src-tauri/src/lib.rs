@@ -29,6 +29,12 @@ mod user_profile;
 
 use tauri::{DragDropEvent, Manager, RunEvent, WindowEvent};
 
+/// The app's build-time context. `generate_context!` can be expanded once per crate, so the app
+/// and the test of its version both come here.
+fn app_context() -> tauri::Context {
+    tauri::generate_context!()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -140,7 +146,7 @@ pub fn run() {
             ipc::subscribe_update_status,
             ipc::restart_to_update,
         ])
-        .build(tauri::generate_context!())
+        .build(app_context())
         .expect("error while building tauri application")
         .run(|app, event| {
             if let RunEvent::Exit = event {
@@ -151,4 +157,20 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::app_context;
+
+    /// The app's version is set in package.json, which tauri.conf.json reads; Cargo.toml's is not it.
+    #[test]
+    fn the_app_version_is_the_one_in_package_json() {
+        let package: serde_json::Value =
+            serde_json::from_str(include_str!("../../package.json")).unwrap();
+        assert_eq!(
+            app_context().package_info().version.to_string(),
+            package["version"].as_str().unwrap()
+        );
+    }
 }

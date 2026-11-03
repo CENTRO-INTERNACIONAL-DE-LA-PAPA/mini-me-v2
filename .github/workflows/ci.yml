@@ -25,6 +25,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx tsc --noEmit
+      # The version files and the changelog must agree before anything merges, not on release day.
+      - run: npm run check-version
       - run: npm test
 
   sidecar:
