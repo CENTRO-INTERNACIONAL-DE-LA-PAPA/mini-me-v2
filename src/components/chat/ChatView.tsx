@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { cn } from "@/lib/utils";
-import { ActivityIcon, FileTextIcon, ListTreeIcon, PaperclipIcon } from "lucide-react";
+import { SportShoeIcon, NotebookPenIcon, SummaryIcon, PaperclipIcon } from "lucide-react";
 import { api } from "../../api";
 import type { Uuid } from "../../protocol/types";
 import { chatColumn, Composer, type ComposerHandle } from "./Composer";
@@ -72,14 +72,14 @@ export function ChatView({
     ...running.filter((reply) => reply.conversation_id !== conversationId),
   ];
   const tools: ToolOption<"outline" | "jobs" | "report">[] = [
-    { id: "outline", label: "Outline", icon: ListTreeIcon },
+    { id: "outline", label: "Outline", icon: SummaryIcon },
     {
       id: "jobs",
       label: "Jobs",
-      icon: ActivityIcon,
+      icon: SportShoeIcon,
       count: jobs.length > 0 ? jobs.length : undefined,
     },
-    { id: "report", label: "Report", icon: FileTextIcon },
+    { id: "report", label: "Report", icon: NotebookPenIcon },
   ];
   // The scrolling list and the column inside it, and whether the user is at the bottom, which is
   // when new text is followed.
