@@ -156,6 +156,16 @@ Profiler, Validator, Curator, Linker and Plotter work on your tables on your com
 pandas and pointblank compute every number, check and chart; the AI model only chooses what
 to run. Cleaned and joined tables are saved as new files; the original is never changed.
 
+## Datasets from CIP's Dataverse
+
+Ask CIP's Archivist for datasets ("@CIP's Archivist late blight trials in Peru since 2020"). The
+AI model turns your message into a search of CIP's Dataverse, and the reply lists the datasets
+it finds, 20 at a time with **Show more**. Open a dataset's **Files** to see them with their
+sizes, tick the ones you want and click **Download**: they are saved straight into the
+Project's Files, without the AI model, and show "From Dataverse" there, which opens the dataset.
+Files already in the Project show **In Files**. Public datasets need nothing more; for
+restricted files, add your Dataverse API token in Settings → Accounts.
+
 ## Mini-Mes with several Steps
 
 Some Mini-Mes work in several Steps. Investigator explores a question, plans, tests its plan

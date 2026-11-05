@@ -17,13 +17,14 @@ pub const PROVIDERS: [(&str, &str); 4] = [
 
 /// Every key the keychain holds: the AI providers, Typesafe for routing, and the Ai2
 /// account's tokens for Asta.
-const KEY_ACCOUNTS: [(&str, &str); 6] = [
+const KEY_ACCOUNTS: [(&str, &str); 7] = [
     PROVIDERS[0],
     PROVIDERS[1],
     PROVIDERS[2],
     PROVIDERS[3],
     ("typesafe", "Typesafe"),
     ("ai2", "Ai2"),
+    ("dataverse", "CIP Dataverse"),
 ];
 
 /// The keychain service Mini-Me's entries are stored under, one per key account, used until

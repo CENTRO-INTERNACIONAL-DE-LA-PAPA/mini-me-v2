@@ -19,6 +19,7 @@ use crate::assets;
 use crate::comments;
 use crate::components;
 use crate::conversations::{self, ConversationStatus, PausedRun};
+use crate::dataverse;
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
@@ -1111,6 +1112,10 @@ impl Runs {
                 let features = self.features.lock().unwrap_or_else(|p| p.into_inner()).clone();
                 Ok(json!({ "features": features }))
             }
+            "dataverse.search" => {
+                let search: dataverse::Search = parse_params(params)?;
+                Ok(serde_json::to_value(dataverse::search(&search)?)?)
+            }
             "secret.get" => self.secret(&adapter, place.provider.as_deref(), parse_params(params)?),
             "asset.write" => {
                 let p: AssetWriteParams = parse_params(params)?;
@@ -1312,7 +1317,9 @@ impl Runs {
             .adapters
             .get(adapter)
             .is_some_and(|info| info.providers.iter().any(|p| *p == params.provider));
-        let allowed = !is_provider(&params.provider) || provider == Some(params.provider.as_str());
+        // The CIP Dataverse token is the core's own, for its requests to Dataverse.
+        let allowed = params.provider != dataverse::ACCOUNT
+            && (!is_provider(&params.provider) || provider == Some(params.provider.as_str()));
         if !declared || !allowed {
             return Err(AppError::new(
                 "secret_not_allowed",
@@ -1513,7 +1520,7 @@ mod tests {
             Arc::clone(&sink) as Arc<dyn FrameSink>,
             vec![
                 info("echo", &[]),
-                info("test-use-secret", &["dummy"]),
+                info("test-use-secret", &["dummy", "dataverse"]),
                 info("prompt", &["dummy", "openai"]),
             ],
         );
@@ -2174,6 +2181,24 @@ mod tests {
         let (call, _) = g.start_call("test-use-secret");
         let response = g.runs.respond("r".into(), call, "secret.get", json!({ "provider": "dummy" }));
         assert_eq!(error_code(response).as_deref(), Some("secret_unavailable"));
+    }
+
+    #[test]
+    fn a_dataverse_search_needs_a_query() {
+        let f = quick();
+        let (call, _) = f.start_call("echo");
+        let response = f.runs.respond("r".into(), call, "dataverse.search", json!({ "start": 0 }));
+        assert_eq!(error_code(response).as_deref(), Some("invalid_input"));
+    }
+
+    #[test]
+    fn the_dataverse_token_goes_to_no_trait() {
+        let secrets = MemorySecrets(HashMap::from([("dataverse".into(), "dv-token".into())]));
+        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        let (call, _) = f.start_call("test-use-secret");
+        let params = json!({ "provider": "dataverse" });
+        let response = f.runs.respond("r".into(), call, "secret.get", params);
+        assert_eq!(error_code(response).as_deref(), Some("secret_not_allowed"));
     }
 
     #[test]

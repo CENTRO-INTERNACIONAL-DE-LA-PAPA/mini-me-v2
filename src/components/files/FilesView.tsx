@@ -22,6 +22,7 @@ import { formatRelative, formatSize } from "../../lib/format";
 import { FileMark } from "./FileMark";
 import { surfaceStyle } from "../minime/miniMeColors";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { openLink, webUrl } from "../interactive/links";
 import { SheetPage } from "../shell/Sheet";
 import { useMiniMes } from "../../hooks/useMiniMes";
 
@@ -212,7 +213,19 @@ function FileRow({
         </span>
       </TableCell>
       <TableCell>
-        {by?.kind === "user" ? (
+        {entry.origin?.kind === "dataverse" ? (
+          <button
+            title={entry.origin.title}
+            className="cursor-pointer truncate hover:opacity-70"
+            onClick={(e) => {
+              e.stopPropagation();
+              const url = webUrl(entry.origin?.url);
+              if (url) openLink(url);
+            }}
+          >
+            From Dataverse
+          </button>
+        ) : by?.kind === "user" ? (
           <span className="flex items-center gap-2">
             {name && (
               <span className="flex size-4 items-center justify-center rounded-full bg-muted text-[7px] font-semibold">

@@ -8,6 +8,11 @@ import type {
   Anchor,
   CommentThread,
   AssetRef,
+  Dataset,
+  DatasetFile,
+  DataversePage,
+  DataverseSearch,
+  Downloaded,
   KeyAccount,
   ConversationSummary,
   DraftEvent,
@@ -112,6 +117,14 @@ export const api = {
   listProjectFiles: (project_id: Uuid) => invoke<FileEntry[]>("list_project_files", { project_id }),
   openAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("open_asset", { project_id, asset_id }),
+  /** A page of CIP Dataverse's datasets matching `search`. */
+  dataverseSearch: (search: DataverseSearch) => invoke<DataversePage>("dataverse_search", { search }),
+  /** A dataset's files, with the Asset each already is in the Project. */
+  dataverseFiles: (project_id: Uuid, dataset_id: string) =>
+    invoke<DatasetFile[]>("dataverse_files", { project_id, dataset_id }),
+  /** Downloads `files` of `dataset` into the Project's Files, one at a time. */
+  dataverseDownload: (project_id: Uuid, dataset: Dataset, files: { id: number; name: string }[]) =>
+    invoke<Downloaded[]>("dataverse_download", { project_id, dataset, files }),
   /** Creates an empty `.qmd` document titled `title`, with the user's name as author. */
   createDocument: (project_id: Uuid, title: string) =>
     invoke<AssetRef>("create_document", { project_id, title }),

@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 9;
+pub const SCHEMA_VERSION: i32 = 10;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -155,6 +155,10 @@ CREATE INDEX comment_threads_by_asset ON comment_threads(asset_id);
 -- The Conversation a thread was opened from, when a Mini-Me opened it there by suggesting an
 -- edit; null for a thread the user started.
 ALTER TABLE comment_threads ADD COLUMN opened_from TEXT;
+"#,
+    r#"
+-- Where a downloaded Asset came from, as JSON (`AssetOrigin`); null for every other Asset.
+ALTER TABLE assets ADD COLUMN origin TEXT;
 "#,
 ];
 
@@ -365,6 +369,29 @@ mod tests {
         let conn = open(&path).unwrap();
         assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
         conn.prepare("SELECT opened_from FROM comment_threads").unwrap();
+    }
+
+    #[test]
+    fn a_version_9_database_keeps_its_assets_and_gains_their_origin() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..9] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 9).unwrap();
+            conn.execute_batch(
+                "INSERT INTO assets (id, name, media_type, size_bytes, source, rel_path, \
+                 created_at) VALUES ('a', 'trial.csv', 'text/csv', 1, 'upload', 'assets/a/t', 1);",
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        let sql = "SELECT origin FROM assets WHERE id = 'a'";
+        let origin: Option<String> = conn.query_row(sql, [], |row| row.get(0)).unwrap();
+        assert_eq!(origin, None);
     }
 
     #[test]

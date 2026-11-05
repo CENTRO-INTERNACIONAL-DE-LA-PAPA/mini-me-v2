@@ -55,8 +55,13 @@ const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "openrouter", name: "OpenRouter" },
 ];
 
+const ACCOUNT_NAMES: Partial<Record<KeyAccount, string>> = {
+  typesafe: "Typesafe",
+  dataverse: "CIP Dataverse",
+};
+
 const providerName = (id: KeyAccount) =>
-  id === "typesafe" ? "Typesafe" : (PROVIDERS.find((p) => p.id === id)?.name ?? id);
+  ACCOUNT_NAMES[id] ?? PROVIDERS.find((p) => p.id === id)?.name ?? id;
 
 const REPOSITORY_URL = "https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2";
 
@@ -688,6 +693,19 @@ function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged
             account="typesafe"
             saved={settings.saved_keys.includes("typesafe")}
             hint="Add a key so Mini-Me can choose who answers"
+            onChanged={onChanged}
+          />
+        </ul>
+      </Section>
+      <Section
+        title="CIP Dataverse"
+        description="CIP's Archivist finds datasets in CIP's Dataverse. Public datasets need no token; add your Dataverse API token to download restricted files you have access to. The token stays on this computer and is sent only to CIP's Dataverse."
+      >
+        <ul className="grid gap-2">
+          <KeyRow
+            account="dataverse"
+            saved={settings.saved_keys.includes("dataverse")}
+            hint="Add a token for restricted datasets"
             onChanged={onChanged}
           />
         </ul>

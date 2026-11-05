@@ -5,6 +5,7 @@ import {
   BookOpenIcon,
   ChartColumnIcon,
   ChevronRightIcon,
+  DatabaseIcon,
   FileIcon,
   LightbulbIcon,
   RefreshCwIcon,
@@ -41,6 +42,7 @@ const KINDS: Record<string, { label: string; icon: typeof FileIcon }> = {
   table: { label: "Table", icon: Table2Icon },
   "paper-sources": { label: "Papers", icon: BookOpenIcon },
   theories: { label: "Theories", icon: LightbulbIcon },
+  "dataset-results": { label: "Datasets", icon: DatabaseIcon },
   file: { label: "File", icon: FileIcon },
 };
 

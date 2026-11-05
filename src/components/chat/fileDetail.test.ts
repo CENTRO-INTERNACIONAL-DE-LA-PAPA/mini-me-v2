@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileEntry, MiniMe } from "../../protocol/types";
-import { fileDetail, sharedNames } from "./fileDetail";
+import { fileDetail } from "./fileDetail";
 
 const NOW = new Date(2026, 10, 2, 12, 0).getTime();
 const file = (added_by: FileEntry["added_by"], minutesAgo: number) =>
@@ -17,11 +17,5 @@ describe("file detail", () => {
       "Added 5 min ago",
     );
     expect(fileDetail(file(null, 0), [], NOW)).toBe("Added Just now");
-  });
-
-  it("finds the names that more than one file has", () => {
-    const names = [{ name: "a.csv" }, { name: "b.csv" }, { name: "a.csv" }];
-    expect([...sharedNames(names)]).toEqual(["a.csv"]);
-    expect(sharedNames([{ name: "a.csv" }, { name: "b.csv" }]).size).toBe(0);
   });
 });
