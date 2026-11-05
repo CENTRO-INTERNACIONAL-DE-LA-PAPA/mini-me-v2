@@ -44,6 +44,7 @@ import { openLink } from "../interactive/links";
 import { SectionPage, type Section } from "../shell/SectionPage";
 import type { SettingsPageId } from "../shell/view";
 import { refreshDeveloperMode, useDeveloperMode } from "../../hooks/useDeveloperMode";
+import { reloadFeatureFlags, useFeatureFlags } from "../../hooks/useFeatureFlags";
 import { recheckQuarto, showQuarto, useQuarto } from "../../hooks/useQuarto";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
 
@@ -244,7 +245,96 @@ function DeveloperPage({
           Open
         </Button>
       </SettingRow>
+      <FeatureFlagsSection />
     </>
+  );
+}
+
+/** Turns feature flags on with their keys and lists the ones that are on, each of which can be
+ * turned off again. */
+function FeatureFlagsSection() {
+  const flags = useFeatureFlags();
+  const [key, setKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function enable(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await api.unlockFeatureFlag(key);
+      setKey("");
+      reloadFeatureFlags();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  async function turnOff(id: string) {
+    try {
+      await api.lockFeatureFlag(id);
+      reloadFeatureFlags();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  return (
+    <Section
+      title="[DEBUG] Feature flags"
+      description="Experimental features this version carries switched off."
+    >
+      <form onSubmit={enable}>
+        <SettingRow
+          label="Key"
+          htmlFor="feature-key"
+          description={
+            <>
+              Enter a feature's key to turn it on.
+              {error && <span className="mt-1 block text-destructive">{error}</span>}
+            </>
+          }
+        >
+          <Input
+            id="feature-key"
+            className="w-56"
+            value={key}
+            onChange={(e) => {
+              setKey(e.target.value);
+              setError(null);
+            }}
+            placeholder="Feature key"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <Button type="submit" disabled={key.trim() === ""}>
+            Enable
+          </Button>
+        </SettingRow>
+      </form>
+      {flags.length === 0 ? (
+        <p className="py-4 text-meta text-muted-foreground">No feature flags are on.</p>
+      ) : (
+        <>
+          <h4 className="mt-5 mb-2 text-meta font-medium text-muted-foreground">Active</h4>
+          <AccountCard render={<ul />}>
+            {flags.map((flag) => (
+              <li
+                key={flag.id}
+                className="flex items-center gap-3 border-b border-border py-3 first:pt-0 last:border-b-0 last:pb-0"
+              >
+                <span className="grid flex-1 gap-0.5">
+                  <span className="font-medium">{flag.name}</span>
+                  <span className="text-meta text-muted-foreground">{flag.description}</span>
+                </span>
+                <StatusDot on>On</StatusDot>
+                <Button variant="outline" onClick={() => void turnOff(flag.id)}>
+                  Turn off
+                </Button>
+              </li>
+            ))}
+          </AccountCard>
+        </>
+      )}
+    </Section>
   );
 }
 

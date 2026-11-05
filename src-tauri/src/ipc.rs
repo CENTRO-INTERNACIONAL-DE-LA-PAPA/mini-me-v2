@@ -18,6 +18,7 @@ use crate::comments;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
 use crate::documents;
 use crate::error::{AppError, AppResult};
+use crate::features::{self, FEATURES, FeatureFlag};
 use crate::projects::{self, ProjectSummary};
 use crate::recent::{self, RecentConversation};
 use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, OpenedConversation, now_ms};
@@ -114,6 +115,7 @@ impl AppState {
         std::thread::spawn(move || {
             warm.status();
         });
+        let dev_app = projects::is_mini_me_dev(&identifier);
         let runs = Arc::new(Runs::new(
             Box::new(AppSecrets {
                 ai2: Arc::clone(&ai2),
@@ -124,6 +126,7 @@ impl AppState {
         ));
         let gate = Arc::clone(&quarto);
         runs.set_document_gate(Arc::new(move || gate.require().map(|_| ())));
+        runs.set_active_features(active_feature_ids(&settings, dev_app));
         let sidecar = Supervisor::new(
             launch,
             false,
@@ -138,7 +141,7 @@ impl AppState {
             updates.spawn(app.clone());
         }
         Ok(Self {
-            dev_app: projects::is_mini_me_dev(&identifier),
+            dev_app,
             app_version,
             settings: Mutex::new(settings),
             quarto,
@@ -167,6 +170,16 @@ impl AppState {
     /// Whether developer options and the web inspector are available.
     pub fn developer_mode(&self) -> bool {
         self.settings().developer_mode(self.dev_app)
+    }
+
+    /// Applies `change` to the stored feature flags and saves them, then tells running Traits
+    /// which flags are on.
+    fn change_features(&self, change: impl FnOnce(&mut Settings)) -> AppResult<()> {
+        let mut settings = self.settings.lock().unwrap_or_else(|p| p.into_inner());
+        change(&mut settings);
+        settings.save(&self.config_dir)?;
+        self.runs.set_active_features(active_feature_ids(&settings, self.dev_app));
+        Ok(())
     }
 
     fn settings(&self) -> Settings {
@@ -458,6 +471,33 @@ pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResu
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
     settings.developer_mode = Some(on);
     settings.save(&state.config_dir)
+}
+
+fn active_feature_ids(settings: &Settings, dev_app: bool) -> Vec<String> {
+    let active = settings.active_features(dev_app);
+    active.iter().map(|feature| feature.id.to_string()).collect()
+}
+
+/// The feature flags that are on.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn list_feature_flags(state: State<'_, AppState>) -> AppResult<Vec<FeatureFlag>> {
+    let active = state.settings().active_features(state.dev_app);
+    Ok(active.into_iter().map(FeatureFlag::from).collect())
+}
+
+/// Turns on the feature flag that `key` belongs to; fails with `wrong_key` when it is none.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn unlock_feature_flag(state: State<'_, AppState>, key: String) -> AppResult<FeatureFlag> {
+    let feature = features::matching(FEATURES, &key)
+        .ok_or_else(|| AppError::new("wrong_key", "This key doesn't match any feature flag."))?;
+    state.change_features(|settings| settings.unlock_feature(feature.id))?;
+    Ok(FeatureFlag::from(feature))
+}
+
+/// Turns off the feature flag `id`, so only its key turns it on again.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn lock_feature_flag(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.change_features(|settings| settings.lock_feature(&id))
 }
 
 #[tauri::command(rename_all = "snake_case")]

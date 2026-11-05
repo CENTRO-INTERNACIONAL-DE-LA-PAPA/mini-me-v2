@@ -58,7 +58,8 @@ page SHALL be listed, just before About, only while Developer mode is on.
 #### Scenario: Turned on in Mini-Me
 - **WHEN** the user turns Developer mode on in Mini-Me
 - **THEN** the Developer page appears in Settings, holding "[DEBUG] Jev's confidence threshold",
-  "[DEBUG] Show Jev's answers" and "[DEBUG] Avatars", and stays after a restart
+  "[DEBUG] Show Jev's answers", "[DEBUG] Avatars" and "[DEBUG] Feature flags", and stays after a
+  restart
 
 #### Scenario: Turned off
 - **WHEN** Developer mode is off
