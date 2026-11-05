@@ -11,7 +11,7 @@ describe("file detail", () => {
   it("says when a file was added, and which Mini-Me saved it", () => {
     expect(fileDetail(file({ kind: "user", id: "u" }, 120), [curator], NOW)).toBe("Added 2 h ago");
     expect(fileDetail(file({ kind: "mini_me", id: "c1" }, 5), [curator], NOW)).toBe(
-      "Saved by Curator · 5 min ago",
+      "Saved by Curator 5 min ago",
     );
     expect(fileDetail(file({ kind: "mini_me", id: "gone" }, 5), [curator], NOW)).toBe(
       "Added 5 min ago",

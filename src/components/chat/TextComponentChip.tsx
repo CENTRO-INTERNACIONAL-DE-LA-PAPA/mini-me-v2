@@ -29,7 +29,7 @@ export function TextComponentChip({
   if (!exists) {
     return (
       <ReferenceChip title="This file was deleted" className="text-muted-foreground">
-        {children} · file removed
+        {children} (Deleted)
       </ReferenceChip>
     );
   }

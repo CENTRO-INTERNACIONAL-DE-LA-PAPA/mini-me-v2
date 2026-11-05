@@ -1,26 +1,8 @@
 # Mini-Me — Design Guide
 
-Local-first desktop research tool (Windows, macOS, Linux) for CIP scientists studying potato late blight. Users talk to **Mini-Mes**: small scientists built from **Traits** and **Workflows** (Step graphs).
+Local-first desktop research tool (Windows, macOS, Linux) for CIP scientists. Users talk to **Mini-Mes**: small scientists built from **Traits** and **Workflows**.
 
-The visual direction is **Floating sheets**: rounded white sheets on a soft grey desk, serif names, and colour that only ever belongs to a Mini-Me.
-
-Reference files (Claude Design project):
-- `Mini-Me Screens.dc.html`, section **Floating sheets**, screens F01–F15
-- `Mini-Me Glyph.dc.html`: the Mini-Me avatar component (solid style)
-- `Mini-Me Brand.dc.html`: app icon ideas, wordmark and default Mini-Mes, banners
-
-| # | Screen | # | Screen |
-|---|---|---|---|
-| F01 | Home (no project) | F09 | Report (always full width) |
-| F02 | Overview | F10 | Files |
-| F03 | Conversation | F11 | Settings |
-| F04 | Conversation · Review | F12 | Mini-Mes library |
-| F05 | Conversation · To-do | F13 | Traits library |
-| F06 | Conversation · Background jobs | F14 | Mini-Me editor |
-| F07 | Conversation · Workflow | F15 | Trait editor |
-| F08 | Conversation · Report, pick a document | | |
-
-Design files are a reference, not the source of names: the app's own names win (the design's "Drive" is **Files**).
+The visual direction is **Floating sheets**: rounded white sheets on a soft grey desk, serif names, and colour that only ever belongs to a Mini-Me. This guide holds the rules for every screen.
 
 ---
 
@@ -28,235 +10,213 @@ Design files are a reference, not the source of names: the app's own names win (
 
 1. **Sheets on a desk.** The window is a soft grey desk. Every area of the app (navigation, the main view, a tool) is a rounded sheet floating on it with a 12px gap. No full-height dividers, no edge-to-edge panels.
 2. **The interface is neutral; colour belongs to Mini-Mes.** Chrome is near-black ink, greys and white. Every bit of colour on screen identifies a Mini-Me: its replies, its files, its tasks, its running jobs. If something isn't tied to a Mini-Me, it isn't coloured.
-3. **Serif for names, sans for work.** Titles, section headings and names (projects, Mini-Mes, documents) are set in the serif. Everything users read or type in bulk is in Schibsted Grotesk.
-4. **Fills and outlines, never shadows.** Group things with soft fills and whitespace. An element gets a 1px outline only when its fill is the same colour as what is behind it, such as a white card on the white sheet; a fill that differs from its background is enough on its own. Dividers between rows and panes, dashed placeholders and focus rings are not outlines and stay. No box shadows anywhere.
-5. **One tab-switch style everywhere.** A grey well with a white pill for the selected option: tool tabs, filters, library tabs, editor tabs, avatar part tabs and the Settings column.
-6. **One card per job.** Each kind of card in §6 has exactly one look. Don't invent another.
+3. **Serif for names, sans for work.** Titles, section headings and names (Projects, Mini-Mes, documents) are set in the serif. Everything users read or type in bulk is in the sans.
+4. **Fills and outlines, never shadows.** Group things with soft fills and whitespace. An element gets a 1px outline only when its fill is the same colour as what is behind it, such as a white card on a white sheet; a fill that differs from its background is enough on its own. Dividers between rows and panes, dashed placeholders and focus rings are not outlines and stay.
+5. **One tab-switch style everywhere.** A grey well with a white pill for the selected option, for every set of tabs, filters and vertical page lists.
+6. **One card per job.** Each kind of card in §7 has exactly one look. Don't invent another.
 7. **Personality lives in the potatoes.** Avatars carry the warmth; everything else stays quiet and precise.
-8. **Plain, short copy.** Sentence case, no jargon, no exclamation marks. Talk like a helpful lab colleague: "Needs your approval", "Changes apply to both."
+8. **Reuse before you build.** Every repeated piece (a card, a chip, a sheet, a row) exists once and is changed in one place, never restyled per use.
 
 ---
 
-## 2. Colour
+## 2. Writing
 
-All UI colours come from one palette at the top of `:root` in `src/index.css`: eleven neutrals
-and two status colours. Every other token names a role and points at a palette entry, so a theme
-only redefines the palette (and the Mini-Me colours derive from each Mini-Me). Add a role by
-pointing a new token at the palette, never by adding a value.
+- **Plain and short.** Sentence case, no jargon, no exclamation marks. Talk like a helpful lab colleague: "Needs your approval", "Changes apply to both."
+- **Only what the screen doesn't already say.** Leave out what the user can see or already knows where they are: the Project they are in, the name of the view they are looking at, a count that a tab or heading already shows, a kind that an icon already shows. "50 files (7.4 MB)", not "50 files in Test, 18 made by Mini-Mes, 7.4 MB".
+- **Every part reads on its own.** A detail without context needs a word that says what it is: "From Trial design", "Edited Nov 2", not a bare name or date.
+- **Capital first letter.** Every label, status, note and action starts with a capital letter: "Edited Nov 2", "Passage not found", "Duplicate to customise".
+- **Secondary detail in parentheses.** A detail that qualifies the main text follows it in parentheses: "data.csv (2.1 MB)", "Trial design (Huancayo)", "Searching papers (42%)".
+- **No separator characters.** Never join parts with a middle dot, bullet or slash. Two independent details on one line, such as a time and a status, are kept apart by a small gap.
+- **Names are the app's own.** Use the glossary's terms (Project, Conversation, Mini-Me, Trait, Workflow, Step, Files) everywhere.
+
+---
+
+## 3. Colour
+
+All UI colours come from one palette of eleven neutrals and two status colours. Every other token names a role and points at a palette entry, so a theme only redefines the palette (and the Mini-Me colours derive from each Mini-Me). Add a role by pointing a new token at the palette, never by adding a value.
 
 ### Palette
 | Entry | Hex | Roles |
 |---|---|---|
-| `--white` | `#FFFFFF` | `--background`, `--card`, `--popover`: sheets, tool sheets, popovers, composer, selected tab pill and sidebar row |
+| `--white` | `#FFFFFF` | `--background`, `--card`, `--popover`: sheets, tool sheets, popovers, the composer, the selected tab pill and navigation row |
 | `--fill-soft` | `#F7F7F4` | `--bubble`: your message bubble |
-| `--fill` | `#F4F4F1` | `--muted`, `--well`, `--accent`, `--secondary`, `--sidebar`: neutral cards, the Workflow board, tab-switch tracks, inputs, secondary buttons, hover on white, the navigation sheet |
+| `--fill` | `#F4F4F1` | `--muted`, `--well`, `--accent`, `--secondary`, `--sidebar`: neutral cards, boards, tab-switch tracks, inputs, secondary buttons, hover on white, the navigation sheet |
 | `--fill-strong` | `#ECECE8` | `--well-hover`, `--sidebar-accent`: hover on a fill |
-| `--desk` | `#E9E9E5` | Window background behind all sheets |
+| `--desk` | `#E9E9E5` | The window background behind all sheets |
 | `--line` | `#E7E7E4` | `--border`, `--input`: every outline, on white things on white |
-| `--line-strong` | `#D3D3CE` | `--border-strong`, `--dash`, `--canvas-dot`, `--off`: dashed "new" tiles, empty states, the Workflow board's dots, switches when off |
+| `--line-strong` | `#D3D3CE` | `--border-strong`, `--dash`, `--canvas-dot`, `--off`: dashed "new" tiles, empty states, a board's dots, switches when off |
 | `--ink` | `#191B1E` | `--foreground`, `--primary`: titles, primary text, primary buttons, checked boxes |
 | `--ink-2` | `#3A3E44` | `--document-ink`: icons, unselected tab labels, secondary copy, long-form text |
 | `--ink-muted` | `#6A6E74` | `--muted-foreground`: meta text, timestamps, placeholders (≥4.5:1 on white and on `--fill`) |
-| `--ink-faint` | `#B8B8B3` | `--chev`, `--connector`: row chevrons, Workflow connectors |
+| `--ink-faint` | `#B8B8B3` | `--chev`, `--connector`: row chevrons, connectors between Steps |
 | `--destructive` | `#B3300F` | Destructive text only ("Remove step") |
-| `--success` | `#2FA36B` | Connected / running status dots only |
+| `--success` | `#2FA36B` | Connected and running status dots only |
 
-The chart palette's neutral fallbacks also point at these; its categorical series stay their own
-colours.
+Charts take their neutrals from the same palette. Their categorical series have their own colours, and series beyond them get generated colours of the same lightness and chroma.
 
 ### Mini-Me colours
 Each Mini-Me stores three colours; the UI derives two more.
 
 | Role | Stored? | Use |
 |---|---|---|
-| `tint` | stored | Avatar background, chips and name tags, report highlights |
+| `tint` | stored | Avatar background, chips and name tags, highlights |
 | `solid` | stored | Avatar body, chart series, spinners |
-| `ink` | stored | Text and icons on its surfaces, progress fill, send button when addressed (≥4.5:1 on wash and tint) |
-| `wash` | derived | Very light background of its cards: replies, tasks, jobs, library cards |
-| `edge` | derived | The 1px outline of white cards and buttons on white, in the Mini-Me's colour; `border-card-edge` drops it on a surface of another colour |
+| `ink` | stored | Text and icons on its surfaces, progress fill, the send button when addressed (≥4.5:1 on wash and tint) |
+| `wash` | derived | The very light background of its cards: replies, tasks, jobs, library cards |
+| `edge` | derived | The 1px outline of its white cards and buttons on white; dropped on a surface of another colour |
 
-`wash` and `edge` are computed in `src/components/minime/miniMeColors.ts` from the hue of `solid`, in OKLCH: **wash** L 0.985 C 0.015, **edge** L 0.86 C 0.07. New colour families pick a hue; tint L≈0.94 C≈0.04, solid L≈0.6–0.68 C≈0.1–0.19, ink L≈0.42–0.48. Check ink on wash and on tint before shipping.
-
-**Using them in code.** `surfaceStyle(colors)` sets `--mm-tint`, `--mm-solid`, `--mm-ink`, `--mm-wash` and `--mm-edge` on an element. Inside it, use the theme classes `bg-wash`, `bg-tint`, `border-edge` and `text-mm-ink`; outside any Mini-Me they fall back to the neutral values, so the same component works in both places.
+`wash` and `edge` come from the hue of `solid`, in OKLCH: **wash** L 0.985 C 0.015, **edge** L 0.86 C 0.07. A new colour family picks a hue; tint L≈0.94 C≈0.04, solid L≈0.6–0.68 C≈0.1–0.19, ink L≈0.42–0.48. Check ink on wash and on tint before shipping. Outside any Mini-Me, the same roles fall back to the neutral values, so one component works in both places.
 
 ### Colour rules
 - Never use a Mini-Me colour for anything the user did. Your bubbles, files and tasks are neutral.
 - A composer addressed to a Mini-Me is outlined in its `edge` and sends with its `ink`. With no Mini-Me picked it is neutral.
 - Warnings inside a reply (review suggestions, flagged values) use that Mini-Me's `tint` and `ink`, not a global warning colour. Passed checks stay neutral.
 - Only one Mini-Me's colour per surface. A tile with several Mini-Mes shows overlapping avatars, not mixed colours.
-- Never use Mini-Me colour for page backgrounds, generic buttons or Workflow start/end nodes.
+- Never use Mini-Me colour for page backgrounds, generic buttons or a Workflow's start and end.
 
 ---
 
-## 3. Typography
+## 4. Typography
 
-Two bundled families, never loaded from the web.
+Two families, bundled with the app and never loaded from the web.
 
 | Role | Family |
 |---|---|
-| Titles, headings, names | `'Plantin', 'Plantin MT Pro', 'Source Serif 4 Variable', Georgia, serif` (`font-serif`). Plantin needs a Monotype licence, so **Source Serif 4** (OFL, opsz axis) is bundled with the app |
-| Everything else | **Schibsted Grotesk** (`font-sans`) |
-| Wordmark | `Mini-Me Wordmark.svg`; never retype it |
+| Titles, headings, names | Plantin, falling back to **Source Serif 4** (bundled, since Plantin needs a licence), then Georgia |
+| Everything else | **Schibsted Grotesk** |
+| Wordmark | Always the wordmark artwork; never retype it |
 
 ### Scale
-Use the theme's text tokens, never arbitrary pixel sizes. New tokens must also be registered in `src/lib/utils.ts`, or `cn()` drops them.
+Use the text tokens, never arbitrary pixel sizes.
 
 | Token | Family | Size / weight | Use |
 |---|---|---|---|
 | `text-greeting` | serif | 44 / 500, −0.015em | Home greeting |
 | `text-sheet-title` | serif | 34 / 500, −0.01em | Sheet titles |
-| `text-identity` | serif | 32 / 500 | Editor identity name |
-| `text-column-title` | serif | 28 / 500 | Settings column title; sheet title while a tool sheet is open |
-| `text-nav-project` | serif | 24 / 500 | Project name in the navigation |
-| `text-tool-title` | serif | 24 / 500 | Tool sheet title |
-| `text-card-title` | serif | 23 / 500 | Project and library card names |
-| `text-heading` | serif | 20 / 400 | Section headings: "Waiting on you", "Projects", "Providers" |
-| `text-name` | serif | 17 / 500 | Mini-Me name in a reply |
-| `text-subheading` | serif | 15 / 400 | Sub-sections: "Conversations" in the navigation, groups in tool sheets |
+| `text-identity` | serif | 32 / 500 | An editor's identity name |
+| `text-column-title` | serif | 28 / 500 | A column page's title; a sheet title while a tool sheet is open |
+| `text-nav-project` | serif | 24 / 500 | The Project name in the navigation |
+| `text-tool-title` | serif | 24 / 500 | Tool sheet titles |
+| `text-card-title` | serif | 23 / 500 | Card names |
+| `text-heading` | serif | 20 / 400 | Section headings |
+| `text-name` | serif | 17 / 500 | A Mini-Me's name in a reply |
+| `text-subheading` | serif | 15 / 400 | Sub-sections and groups |
 | `text-body` | sans | 15 / 400, lh 1.6 | Messages and paragraphs |
 | `text-document` | sans | 14.5 / 400, lh 1.75 | Document body |
-| `text-ui` | sans | 13.5 / 400–500 | Rows, buttons, nav items, inputs |
+| `text-ui` | sans | 13.5 / 400–500 | Rows, buttons, navigation items, inputs |
 | `text-control` | sans | 13 / 500 | Tab-switch options, small buttons, name tags |
 | `text-meta` | sans | 12.5 / 400 | Timestamps, counts, captions |
 
 - The serif is never bold (max 500), never uppercase, never below 15px.
 - No uppercase labels or letter-spaced eyebrows. Section labels are serif headings in sentence case.
-- Tabular numerals (`tabular-nums`) in tables, counts and durations.
-- `text-wrap: balance` on titles, `pretty` on paragraphs.
+- Tabular numerals in tables, counts and durations.
+- Titles balance their lines; paragraphs wrap prettily.
 
 ---
 
-## 4. Shape, spacing, depth
+## 5. Shape, spacing, depth
 
 | Token | Value | Use |
 |---|---|---|
 | desk gap | 12px | Around and between sheets |
 | `rounded-sheet` | 18px | Sheets, library cards |
-| `rounded-card` | 16px | Cards: replies, tasks, jobs, project cards, the Workflow board |
-| `rounded-2xl` | 14px | Provider rows, Workflow nodes, inspector cards |
-| `rounded-well` | 12px | Tab-switch track, inputs, search fields, popovers |
-| `rounded-control` | 9px | Tab-switch pill, icon buttons |
-| `rounded-full` | 999px | Buttons, chips, name tags, Workflow start/end and marker pills |
-| `rounded-composer` | 20px | Floating composer |
+| `rounded-card` | 16px | Cards and boards |
+| `rounded-2xl` | 14px | Rows inside cards, Workflow nodes, inspector cards |
+| `rounded-well` | 12px | Tab-switch tracks, inputs, search fields, popovers |
+| `rounded-control` | 9px | Tab-switch pills, icon buttons |
+| `rounded-full` | 999px | Buttons, chips, name tags, a Workflow's start and end, marker pills |
+| `rounded-composer` | 20px | The floating composer |
 | bubble | `14 14 4 14` | Your messages |
 
-**Depth: none.** No box shadows: not on sheets, pills, popovers, the composer or Workflow nodes. Sheets stand out by sitting on the grey desk; everything else is told apart by fills, and by 1px outlines where a fill matches its background. The selected Workflow step gets an ink border and a 4px outline in its Mini-Me's tint.
+**Depth: none.** No box shadows, on anything. Sheets stand out by sitting on the grey desk; everything else is told apart by fills, and by 1px outlines where a fill matches its background. A selected node gets an ink border and a 4px outline in its Mini-Me's tint.
 
-Option tiles (avatar parts, swatches) are either circles or rounded squares, never pill-stretched ovals.
+Option tiles (avatar parts, swatches) are circles or rounded squares, never pill-stretched ovals.
 
 Sheet padding: 32px left, 24–28px top. Tool sheets: 22px top, 18px right, 24px left. Base unit 2px; common steps 4, 6, 8, 10, 12, 14, 16, 20, 24, 32.
 
 ---
 
-## 5. Layout
+## 6. Layout
 
 ```
-┌ desk #E9E9E5 ───────────────────────────────────────────────┐
+┌ desk ───────────────────────────────────────────────────────┐
 │ ┌ nav 256 ┐ ┌ main sheet (flex) ──────────┐ ┌ tool 340–380 ┐ │
 │ │         │ │                             │ │              │ │
 │ └─────────┘ └─────────────────────────────┘ └──────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Navigation sheet, 256px.** Wordmark (it leads Home) and collapse button; the project block (serif name under a "Project ▾" switcher) or a dashed "No project open" card; Overview and Files; Conversations (serif heading with a + button, then rows; while a row's reply runs or waits for an approval, its time is replaced by the working Mini-Me's 16px avatar and "Running" or "Needs your approval" in that Mini-Me's ink); status lines; a bottom card with the Mini-Mes stack (opens the Library) and your initials (open Settings). The selected item is a white row.
-- **Main sheet, flexible.** Conversation, Overview, Files, libraries, editors, Settings and the full report.
-- **What's new:** a column up to 760px, centred in the sheet like Settings' content, with the serif title "What's new" and "Mini-Me <version>" under it, a solid Close button on the right, and the version's notes in the Markdown style below. It opens once after an update, over Home, and from the secondary "What's new" button beside the version in Settings → About, where closing it returns.
-- **Tool sheet, 340–380px.** Outline, Jobs, Workflow steps, Report picker, the Workflow step inspector, a document's Comments. Only one at a time; a well-filled close button sits top-right.
-- **Content widths:** the chat column is 820px, or 680px with a tool sheet open. The composer spans it; the messages sit 20px inside it on each side, centred on it. Settings: a 210px column and content up to 760px, centred together.
-- **Small windows:** when a tool sheet opens below ~1280px, the navigation sheet collapses to a 64px rail of icons, each at the same distance from the edge as when open: the toggle, Overview, Files, an ink + for a new Conversation, the Mini-Mes avatar and your initials, so the conversation keeps ≥600px. Home and the Project switcher need the sidebar open. Closing the tool sheet opens it again, unless the user opened it meanwhile; the toggle at the top of the rail works at any time.
+- **Navigation sheet, 256px.** The wordmark (it leads Home), the open Project or a dashed placeholder when none is open, the Project's views, its Conversations, status lines, and a bottom card with the Mini-Mes and your initials. The selected item is a white row.
+- **Main sheet, flexible.** The view being worked on.
+- **Tool sheet, 340–380px.** A tool beside the main sheet. Only one at a time; a well-filled close button sits top-right.
+- **Content widths.** A chat column is 820px, or 680px with a tool sheet open; its composer spans it and its messages sit 20px inside. A column page (settings, notes) is a 210px list and content up to 760px, centred together.
+- **Small windows.** When a tool sheet opens below ~1280px, the navigation collapses to a 64px rail of icons, each at the same distance from the edge as when open, so the main view keeps ≥600px. Closing the tool sheet opens it again, unless the user opened it meanwhile.
 
 ---
 
-## 6. Components
+## 7. Components
 
-Build from the shadcn/ui components in `src/components/ui`, restyled to this guide; add missing ones with the shadcn CLI. Repeated pieces live in shared components; reuse them rather than repeating class strings.
+Always build from shadcn/ui components. Add a missing one from shadcn/ui rather than writing it from scratch, and change its styling wherever it differs from this guide.
 
 ### Cards
-- **Neutral card** (`Card`): `--muted` fill, 1px `--border`, `rounded-card`. Project cards, problem boxes, the avatar preview.
-- **White card**: a `Card` with a white fill, for rows that hold well-filled buttons or inputs, so they don't sink into the fill: Settings accounts and keys (`AccountCard`).
-- **Mini-Me card** (`MiniMeSurface`): `wash` fill, 1px `edge`, `rounded-card`, with the Mini-Me's `--mm-*` variables set for its content. Without a Mini-Me it renders as a neutral card. Replies, handed-back tasks, running jobs, library cards, "Waiting on you", "Used by".
-- White things (tables, paper sources, the Workflow progress card, buttons) use `border-card-edge`: outlined on the white sheet, as on the Overview, and not inside a card or reply, whose own fill sets them apart.
+- **Neutral card:** `--muted` fill, 1px `--border`, `rounded-card`. For things that belong to no Mini-Me.
+- **White card:** a white fill with an outline, for rows that hold well-filled buttons or inputs, so they don't sink into the fill. Related items share one white card, divided by hairlines, rather than a card each.
+- **Mini-Me card:** `wash` fill, 1px `edge`, `rounded-card`, with the Mini-Me's colours available to its content. Without a Mini-Me it renders as a neutral card. For anything a Mini-Me made or is doing.
+- White things on the sheet (tables, paper sources, progress cards, buttons) are outlined on the white sheet and not inside a card or reply, whose own fill sets them apart.
 
 ### Tab switch
-`Tabs` / `ToggleGroup` (`variant="switch"`): track `--well`, radius 12, padding 4, gap 4. Option: 13/500, padding 7×12, radius 9, optional 15px icon. Selected: white fill, 1px `--border`, ink text. Unselected: `--ink-2`, no fill. Vertical in Settings (padding 5, options 9×11).
+Track `--well`, radius 12, padding 4, gap 4. Option: 13/500, padding 7×12, radius 9, optional 15px icon. Selected: white fill, 1px `--border`, ink text. Unselected: `--ink-2`, no fill. Vertical lists use padding 5 and options 9×11.
 
 ### Buttons
-- `default`: ink fill, white text, pill, 13.5/500.
-- `secondary` / `outline`: `--well` fill, ink text, pill.
-- `mini-me`: white, with a 1px `edge` outline only on white.
-- `ghost`: no fill; icon buttons 30×30, radius 9.
-- `destructive`: red text only, no fill. Only one ink button per header.
+- **Default:** ink fill, white text, pill, 13.5/500. Only one ink button per header.
+- **Secondary / outline:** `--well` fill, ink text, pill.
+- **Mini-Me:** white, with a 1px `edge` outline only on white.
+- **Ghost:** no fill; icon buttons 30×30, radius 9.
+- **Destructive:** red text only, no fill.
 
 ### Inputs
-Input, Textarea and Select: `--well` fill, no visible border, radius 12, 13.5px; focus shows a 1px ink border. Put rows with inputs or well buttons on a white card, not a grey one.
+Inputs, text areas and selects: `--well` fill, no visible border, radius 12, 13.5px; focus shows a 1px ink border. Rows with inputs or well buttons sit on a white card, not a grey one.
 
 ### Name tags and chips
-`MiniMePill`: the Mini-Me's `tint` with its `ink` text and avatar. Inline chips use a 16px avatar; name tags under a Conversation title (`size="tag"`) use 24px and add "· status" at 80% opacity. `ReferenceChip` is the one chip for files, tables and charts everywhere: files attached to or referenced in a message, `#` and `$` references, the composer's attachments, and later document passages. White with an outline and an optional leading 13px icon; a button when it opens what it names. Change it there, never per use.
+- **Mini-Me name tag:** the Mini-Me's `tint` with its `ink` text and avatar; 16px avatar inline, 24px under a title, where it can add a status after a gap at 80% opacity.
+- **Reference chip:** one chip for every file, table and chart, wherever it appears: white, outlined, an optional 13px leading icon, and a button when it opens what it names.
 
-### Sheets
-`MainSheet`, `ToolSheet` (serif title, meta line, close button), `SheetPage` (a page in the main sheet: serif title, description, actions on the right), `SheetHeader` (Conversation title block), `SheetSection` (serif section heading with optional meta and actions), `SectionPage` (Settings), `EditorHeader` (both editors).
+### Sheets and headers
+Every sheet, tool sheet, page header, section heading and editor header comes from one shared set: a serif title, an optional meta line, actions on the right, and a close button on a tool sheet.
 
-### Home
-- **Content:** the `text-greeting` greeting, then "Waiting on you" and the Projects grid, scrolling over the playground.
-- **Mini-Me playground:** every Mini-Me as a 64px avatar with physics (Matter.js), drawn on one canvas filling the main sheet behind the content. Off by default: they appear when Home opens only with Settings → General → "Show Mini-Mes on Home", or whenever Up, Up, Down, Down, Left, Right, Left, Right is pressed on Home, which adds another batch on top of any already there. They drop in from random points across the width, pile along the bottom and can be grabbed where no card, button or field covers them; the cursor turns to a grab hand over one. A click shows the Mini-Me's name as a tag pill above it for three seconds. With reduced motion the pile appears already settled. No outline or fill on the layer: the Mini-Mes sit on the sheet's white.
-- **Sidebar:** with no Project open, a "Recent" group under Home lists the 5 most recently active Conversations across Projects, each with its Project's name and when it was last active, styled like the Conversations list, and with the same status line in place of that line while its reply runs or waits.
+### Rows and lists
+- Flat rows divided by hairlines, filling `--muted` on hover. A row leads with its avatar, sign or icon, then the name (truncated), with a count or time right-aligned in meta.
+- A file's icon is in its maker's `ink`, or `ink-2` for your files, with no tile.
+- A list of Mini-Mes is a grid of cards; a list of Traits is rows.
 
-### Conversation
-- **Reply:** a Mini-Me card, padding 16×18. Header: 28px avatar, serif name (`text-name`), time and status in `ink`. Body 15px. Tables, paper sources and the Workflow progress card are white, with no outline on the wash. Action pills are `mini-me` buttons; an active one is solid ink.
-- **Your message:** right-aligned, max 520px, `--bubble` fill without an outline, bubble radius. Mentioned Mini-Mes appear as tint chips; files as white chips with a hairline. Meta "You · 10:42" below.
-- **Reactions:** a small white outlined pill over the bubble's bottom-left corner: avatar + emoji.
-- **Composer:** floats 22px above the bottom of the sheet, in the chat column. White, 1px outline (the addressed Mini-Me's `edge`, else `--border`), radius 20. Text row, then @ / # / attach icons and a 34px round send button (the Mini-Me's `ink`, else ink). The message list keeps 150px bottom padding so the last reply clears it.
-- **Workflow progress:** a white card with the Steps in a row: done = ink circle with a check; running = spinner in the Mini-Me's solid; pending = white circle with a grey ring. An earlier Step opens to show its output and the components it added.
-- **Message-list fade:** the only gradient: 56px from the sheet's white to transparent at the top of the list.
+### Replies and messages
+- **Reply:** a Mini-Me card, padding 16×18. Header: 28px avatar, serif name, time and status in `ink`. Body 15px. Action pills are Mini-Me buttons; an active one is solid ink.
+- **Your message:** right-aligned, max 520px, `--bubble` fill without an outline, the bubble radius, the time below.
+- **Reactions:** a small white outlined pill over the bubble's bottom-left corner: avatar and emoji.
+- **Composer:** floats 22px above the bottom of the sheet. White, 1px outline (the addressed Mini-Me's `edge`, else `--border`), radius 20; a 34px round send button in the Mini-Me's `ink`, else ink. The list above keeps enough bottom padding for its last item to clear it.
+- **Fade:** the only gradient: 56px from the sheet's white to transparent at the top of a message list.
 
-### Tool sheet rows
-- Outline: groups for Mini-Mes, Files and Tables and charts; each entry a flat row with a 22px avatar (Mini-Mes) or its `#` / `$` sign, the name (truncated), and the number of messages it appears in, right-aligned in meta. Rows fill `--muted` on hover.
-- Jobs: each running reply is a Mini-Me card: 26px avatar, name, "Running <Step>" in `ink`, then "This conversation", or the Conversation and Project, in meta. The open Conversation's reply comes first. The whole card shows the reply.
-- Workflow steps: vertical timeline with the same marks as the progress card; connector 1.5px, ink when done.
+### Progress and timelines
+Steps share one set of marks everywhere: done is an ink circle with a check; running is a spinner in the Mini-Me's `solid`; pending is a white circle with a grey ring. A vertical timeline joins them with a 1.5px connector, ink when done.
 
-### Libraries
-- Mini-Mes: cards (`MiniMeCard`) in a grid, `rounded-sheet`, 56px avatar, "Built-in"/"Yours" tag, serif `text-card-title` name, description, "N Traits · Open →" in `ink`. Built-in cards are Mini-Me cards; yours are neutral.
-- Traits: flat rows divided by hairlines; the puzzle icon in `ink-2`, name, description, overlapping avatars of the Mini-Mes that use it.
-- Header: title and description on the left; the Mini-Mes / Traits tab switch and the New button on the right. Group filter and search below.
-
-### Files
-Flat table rows with hairlines. The icon (`FileMark`) is in the maker's `ink`, or `ink-2` for your files, with no tile. "Added by" shows avatar + name in `ink`. Filter tab switch, search on the right.
-
-### Editors
-- **Identity header** (`EditorHeader`): a back link, the Mini-Me's 48px avatar or a Trait's puzzle icon with no tile, the serif `text-identity` name and a line under it, then the tab switch and actions on the right.
-- **Mini-Me editor:** Workflow / Traits / Appearance tabs. The Workflow board is a neutral card with the dot grid; the step palette floats top-left as a white card; the inspector is a tool sheet that opens when a Step is selected.
-- **Trait editor:** form on the left (fields on wells, labels 13/500 `ink-2`), "Used by" on the right with a Mini-Me card per Mini-Me and a note on what saving changes.
+### Long-form text
+- A document's source is a white page on `--muted`, in monospace `text-ui` and `--document-ink`, with Markdown highlighted in theme colours. A rendered preview shows white pages up to 640px wide on `--muted`.
+- A passage someone commented on has a `--border-strong` underline and a number badge; the selected one fills with `--accent`. A suggested edit strikes the passage through and follows it with the new text in the Mini-Me's `ink`, underlined 2px in its `solid`.
 
 ### Popovers, tooltips, menus
-White, 1px `--border`, radius 12, no shadow. Items radius 7; the highlighted item is `--accent`, never black. A confirmation is a popover under its button, aligned to its right edge: the question, then a ghost Keep holding the focus and a destructive Delete. A popover that reports a result, such as Export PDF's, holds one solid button to act on it.
-
-### Documents
-- **Report panel** (tool sheet, from the Conversation's Report option): "Report · Choose how to start". **Draft from this conversation** is a `Card` with the avatars of the Mini-Mes it draws from and a solid "Draft report" button (not the design file's ink ring, which breaks the one-outline rule for cards); **Start blank** is a `Card` row with a plain icon, its fill darkening on hover; **Open from Files** lists documents, most recently edited first, each with a `FileTile` in the colours of the Mini-Me whose reply it is attached to.
-- **Document view** (main sheet, full width): the editors' `EditorHeader` without an avatar or icon (back link naming where it was opened from, the serif title from the YAML header, the status line "Draft · Project · edited …"), with Comments (solid while its sheet is shown), Render and Export PDF on the right. Below a hairline, the source and the preview, always side by side. Export PDF says where the PDF went in a popover under it, with an Open button.
-- **Source:** ghost formatting buttons (bold, italic, heading 1, heading 2, quote, bulleted list) in the bar; below it, on `--muted`, the CodeMirror editor as a white page filling the pane's width inside 24px margins, growing with its text while the pane scrolls: monospace `text-ui`, `--document-ink`, Markdown highlighted in theme colours (headings in ink and semibold, marks and code muted).
-- **Bar:** one white bar (44px) across both panes, with no divider: the formatting buttons on the left and, on the right, the preview's error when rendering fails. The divider between the panes starts below it.
-- **Preview:** on `--muted`, the pages as white sheets, at most 640px wide.
-- **Comments** (tool sheet beside the main sheet, "N open · M resolved" under its title): Open / Resolved tabs with counts, then rows like the Outline's: a number badge (5px radius, ink outline, semibold meta), the section in meta, the passage on one line and the time; detached threads last under a "Detached" heading. A thread replaces the list: "‹ All comments" with "N of M open" and up/down buttons; the badge with the section as a serif heading; "Opened by you · time", or "Opened by Scribe · from Trial design · time" with the Conversation's name as a link, with `mini-me` Resolve or Reopen and Delete; the messages in their compact form; and the one-line composer pinned to the bottom.
-- **Passages in the source:** an open thread's passage has a `--border-strong` underline and the same number badge right after it; the selected thread's passage fills with `--accent`. A pending suggestion strikes the passage through and follows it with the suggested text in the Mini-Me's `ink`, underlined 2px in its `solid`.
-- **Suggestion component:** in the Mini-Me's reply, a white outlined card with "Suggested edit" in meta and the text; while it waits, small solid "Accept and resolve" and ghost "Discard" buttons, with a conflict in `--destructive` meta above them. Once answered, the meta reads "Suggested edit · Accepted", "Discarded" or "Dismissed" and the buttons go.
-- **Drafting:** above the source page, a white status card with Scribe's avatar, "Scribe is drafting…" and an outline Stop button; the source fills as text arrives and can be edited once the draft ends.
-- **Document component:** in a reply, a white card with the document icon in the Mini-Me's `ink`, the title, "Document · Quarto" and a `mini-me` Open button.
-- **Document edits component:** the document component's card, with "2 of 3 suggested edits waiting" (or "All 3 suggested edits answered") in place of "Document · Quarto"; Open shows the document with its Comments.
+White, 1px `--border`, radius 12, no shadow. Items radius 7; the highlighted item is `--accent`, never black. A confirmation is a popover under its button, aligned to its right edge: the question, a ghost Keep holding the focus, and a destructive action. A popover that reports a result holds one solid button to act on it.
 
 ---
 
-## 7. Iconography
-
-### App icons
-`src-tauri/icons/app-icon.svg` (releases) and `app-icon-dev.svg` (`npm run tauri:dev` only, via `tauri.dev.conf.json`). Regenerate with `npx tauri icon src-tauri/icons/app-icon.svg` and `npx tauri icon src-tauri/icons/app-icon-dev.svg --output src-tauri/icons/dev`, keeping only the files the configs list. The release icon is full bleed (Windows); the dev icon's artwork is inset to an 824px shape on the 1024px canvas, as macOS expects, since dev builds run on macOS.
+## 8. Iconography
 
 ### UI icons
-Lucide, outlined, stroke 1.4 (set globally), 15–18px. Colour `--muted-foreground` (inactive), `--ink-2` (default) or ink (active). No filled variants.
+Lucide, outlined, stroke 1.4, 15–18px. Colour `--muted-foreground` (inactive), `--ink-2` (default) or ink (active). No filled variants.
 
 ### Mini-Me avatars (solid style)
 A flat potato in the Mini-Me's **solid** colour. No outline, no background disc. Features are near-black; freckles use the Mini-Me's **ink**. Built from base, face and accessory parts plus a colour family. Never redraw avatars by hand.
 
-Sizes: 16 (inline chip), 18–22 (stacks, Workflow start/end, Files), 24 (name tags), 28 (reply header), 40 (Waiting on you), 48 (editor header), 56 (library card). Stacks overlap by about a third.
+Sizes: 16 (inline chip), 18–22 (stacks, Workflow start and end, rows), 24 (name tags), 28 (reply header), 40 (prominent rows), 48 (editor header), 56 (library card). Stacks overlap by about a third.
 
 ### Trait icons
 Plain line icons in ink, no fill, no colour, no potato silhouette (a potato always means a Mini-Me). Icons stand on their own: never on a filled or tinted tile.
@@ -265,27 +225,28 @@ No emoji in the UI chrome. Emoji are allowed only as user reactions.
 
 ---
 
-## 8. Motion
+## 9. Motion
 
-Minimal and functional: 120–160ms ease-out for hover and selection, 200ms for sheets opening. Spinners rotate in the Mini-Me's solid colour. No bouncy or decorative animation, except optional small idle wiggles on avatars.
+Minimal and functional: 120–160ms ease-out for hover and selection, 200ms for sheets opening. Spinners rotate in the Mini-Me's solid colour. No bouncy or decorative animation, except optional small idle wiggles on avatars. Everything respects reduced motion.
 
 ---
 
-## 9. Dark mode (planned)
+## 10. Dark mode (planned)
 
 Map the stack: desk darkest, sheets one step up, cards one more, outlines just above them. Selection inverts to a light pill with dark text. Avatars keep their fills and dark features. Mini-Me tints, washes and edges need dark variants; ink on dark uses lighter versions of each Mini-Me colour.
 
 ---
 
-## 10. Don'ts
+## 11. Don'ts
 
 - No box shadows, anywhere.
-- No outline where a fill already sets an element apart, and no new kind of card beyond those in §6.
+- No outline where a fill already sets an element apart, and no new kind of card beyond those in §7.
 - No coloured UI chrome: no brand accent, no coloured links, no coloured selection. Links are ink and drop to 70% opacity on hover.
 - No uppercase labels, letter-spaced eyebrows or status pills above titles.
 - No coloured left-border accents on cards.
 - No gradients other than the message-list fade.
 - No bold serif, no serif for body text, no serif below 15px.
 - Don't use a Mini-Me's colour for anything that Mini-Me didn't make.
-- No more than one tool sheet at once; no report editor in a side sheet.
+- No more than one tool sheet at once.
 - No arbitrary font sizes or colours outside the tokens; no fonts loaded from the web; no more than two font families.
+- No separator characters between details, and no detail the screen already shows.

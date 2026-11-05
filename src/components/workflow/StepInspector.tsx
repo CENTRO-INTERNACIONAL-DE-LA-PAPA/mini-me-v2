@@ -116,7 +116,7 @@ export function StepInspector({
             {trait && (
               <Row label="Tools">
                 <p className="text-ui text-ink-2">
-                  {trait.tools.length === 0 ? "None" : trait.tools.map(toolLabel).join(" · ")}
+                  {trait.tools.length === 0 ? "None" : trait.tools.map(toolLabel).join(", ")}
                 </p>
               </Row>
             )}

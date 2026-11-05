@@ -114,7 +114,7 @@ export function SuggestionCard({
   return (
     <div className="grid gap-2 rounded-xl border border-card-edge bg-card px-4 py-3">
       <span className="text-meta text-muted-foreground">
-        Suggested edit{decision && ` · ${DECISIONS[decision]}`}
+        {decision ? DECISIONS[decision] : "Suggested edit"}
       </span>
       <p className="text-ui whitespace-pre-wrap text-foreground wrap-anywhere">{text}</p>
       {problem && <p className="text-meta text-destructive">{problem}</p>}

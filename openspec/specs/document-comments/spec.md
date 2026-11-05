@@ -71,7 +71,7 @@ and Delete, its comments and replies, and for an
 open thread a one-line field to comment with the @ list of Mini-Mes. The field SHALL start
 empty, so a comment is a note unless the user @-mentions a Mini-Me. A thread the user started
 SHALL say "Opened by you"; a thread opened from a Conversation SHALL name the Mini-Me and the
-Conversation ("Opened by Scribe · from Trial design"), and clicking the Conversation's name
+Conversation ("Opened by Scribe from Trial design"), and clicking the Conversation's name
 SHALL open it. When that Conversation has been deleted, the thread SHALL name only the Mini-Me.
 
 #### Scenario: Replying after Scribe

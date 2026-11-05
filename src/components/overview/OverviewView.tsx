@@ -247,7 +247,7 @@ function OutputRow({
   miniMe?: MiniMe;
   onOpen: () => void;
 }) {
-  const { label, icon: Icon } = kindOf(output.kind);
+  const { icon: Icon } = kindOf(output.kind);
   return (
     <Button
       variant="ghost"
@@ -258,7 +258,7 @@ function OutputRow({
       <span className="grid min-w-0 flex-1">
         <span className="truncate text-ui">{output.title}</span>
         <span className="truncate text-meta text-muted-foreground">
-          {label} · {output.conversation_title}
+          From {output.conversation_title}
         </span>
       </span>
     </Button>

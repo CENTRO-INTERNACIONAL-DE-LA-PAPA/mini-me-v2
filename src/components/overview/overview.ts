@@ -11,16 +11,12 @@ export function relativeInSentence(time: number, now: number = Date.now()): stri
   return when === "Just now" || when === "Yesterday" ? when.toLowerCase() : when;
 }
 
-/** The line above the Project's name: when it was last active and how many Conversations it
- * has. Times are in milliseconds. */
+/** The line above the Project's name: when it was last active. Times are in milliseconds. */
 export function headerLine(overview: Overview, now: number = Date.now()): string {
   if (overview.conversations === 0 || overview.last_activity_at === null) {
-    return "Overview · no conversations yet";
+    return "No conversations yet";
   }
-  const updated = relativeInSentence(overview.last_activity_at, now);
-  const n = overview.conversations;
-  const count = n === 1 ? "1 conversation" : `${n} conversations`;
-  return `Overview · updated ${updated} · ${count}`;
+  return `Updated ${relativeInSentence(overview.last_activity_at, now)}`;
 }
 
 /** The outputs shown: the first `LATEST_SHOWN`, or every one once the user asks for all. */

@@ -9,19 +9,18 @@ for results.
 ## Requirements
 
 ### Requirement: Overview header
-The Overview SHALL show the meta line "Overview · updated <time> · <n> conversations" above
-the Project's name as its title. `<time>` is the latest activity of any of its Conversations
-as a relative time, and `<n>` the number of its Conversations. A Project without
-Conversations SHALL show "Overview · no conversations yet".
+The Overview SHALL show the meta line "Updated <time>" above the Project's name as its title.
+`<time>` is the latest activity of any of its Conversations as a relative time. A Project
+without Conversations SHALL show "No conversations yet".
 
 #### Scenario: Project with three Conversations
 - **WHEN** the user opens a Project with three Conversations, the latest active 2 hours ago
-- **THEN** the Overview reads "Overview · updated 2 h ago · 3 conversations" above the
+- **THEN** the Overview reads "Updated 2 h ago" above the
   Project's name
 
 #### Scenario: New Project
 - **WHEN** the user opens a Project that has no Conversations
-- **THEN** the Overview reads "Overview · no conversations yet"
+- **THEN** the Overview reads "No conversations yet"
 
 ### Requirement: Summary written on request
 The Overview SHALL have an "Update summary" button. Clicking it SHALL ask the AI model chosen
@@ -115,13 +114,13 @@ reply except approvals, and every Asset a Mini-Me saved. It SHALL show the first
 ### Requirement: Output cards
 Each output SHALL be a card with a thumbnail for its kind (table, chart, papers, theories or
 file) tinted in the colour of the Mini-Me that made it with a bottom border in its solid
-colour, the output's title, and "<kind> · <Conversation title>". Clicking a card SHALL open
+colour, the output's title, and "From <Conversation title>". Clicking a card SHALL open
 its Conversation and scroll to the reply it came from.
 
 #### Scenario: Curator's cleaned file
 - **WHEN** Curator saved `trial-cleaned.csv` in "Huancayo 2025 trial data"
 - **THEN** its card is tinted in Curator's colour and reads "trial-cleaned.csv" and
-  "File · Huancayo 2025 trial data"
+  "From Huancayo 2025 trial data"
 
 #### Scenario: Opening a card
 - **WHEN** the user clicks a chart's card

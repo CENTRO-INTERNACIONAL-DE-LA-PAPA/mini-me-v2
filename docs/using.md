@@ -49,7 +49,7 @@ document (`.qmd`) opens in Mini-Me's document view rather than another app.
 Each file has a **…** menu, in Files and in the Overview's outputs, to **Open** it, **Show in
 folder**, **Duplicate** it ("<name> copy"), **Rename** it (the extension stays) or **Delete** it,
 which asks first and removes it from the Project's folder. Messages that mentioned a deleted file
-show it as "file removed".
+show "(Deleted)" after its name.
 
 ## Conversations and Projects
 
@@ -128,7 +128,7 @@ For another version, @-mention the Mini-Me again in the thread and say what to c
 Reference a document with `#` or attach it, and ask a Mini-Me whose Traits can edit documents,
 such as Assistant or Scribe, to change it ("@Scribe tighten the methods in #Trial report").
 The Mini-Me suggests its edits; the document itself is unchanged until you accept them. Each
-edit opens a thread on the passage it changes, saying "Opened by Scribe · from Trial design"
+edit opens a thread on the passage it changes, saying "Opened by Scribe from Trial design"
 with the Conversation's name as a link back, and holding the Mini-Me's reason and its
 suggestion, which you accept or discard as above. The reply shows a card for the document with
 how many suggested edits still wait; **Open** shows the document with its Comments.

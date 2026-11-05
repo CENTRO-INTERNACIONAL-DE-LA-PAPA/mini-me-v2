@@ -342,7 +342,6 @@ function Main({
         <DocumentView
           key={view.assetId}
           projectId={project.id}
-          projectName={project.name}
           assetId={view.assetId}
           draftFrom={view.draftFrom}
           comments={view.comments}

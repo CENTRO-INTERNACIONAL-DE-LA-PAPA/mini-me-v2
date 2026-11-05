@@ -179,7 +179,7 @@ the components that run of the Step added. A one-Step reply SHALL show no card.
 
 #### Scenario: An answered approval
 - **WHEN** the user approves Investigator's approval and the reply goes on
-- **THEN** the card shows the approval Step as done, followed by "· approved", also after
+- **THEN** the card shows the approval Step as done, followed by "Approved", also after
   the Conversation is reopened
 
 ### Requirement: An approval pauses the run

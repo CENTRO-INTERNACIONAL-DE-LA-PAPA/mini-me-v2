@@ -157,7 +157,7 @@ class Theorize(Adapter):
                 if name and name not in seen:
                     seen.add(name)
                     label = f"Got {name.replace('_', ' ')}"
-            ctx.progress(f"{label[:140]} · {minutes} min" if minutes else label[:140])
+            ctx.progress(f"{label[:140]} ({minutes} min)" if minutes else label[:140])
 
         state = (task.get("status") or {}).get("state")
         if state != "completed":
@@ -356,7 +356,7 @@ def papers_reply(papers: list[dict[str, Any]], narrative: str) -> str:
         names = ", ".join(authors[:3]) + (" et al." if len(authors) > 3 else "")
         year = f" ({paper['year']})" if paper["year"] else ""
         heading = f"{number}. **{paper['title']}**{year}"
-        details = " · ".join(str(d) for d in (names, paper["venue"], paper["url"]) if d)
+        details = ", ".join(str(d) for d in (names, paper["venue"], paper["url"]) if d)
         lines.append(heading + (f" — {details}" if details else ""))
         if paper["reason"]:
             lines.append(f"   {paper['reason']}")

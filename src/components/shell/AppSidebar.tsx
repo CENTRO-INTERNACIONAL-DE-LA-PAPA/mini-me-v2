@@ -175,8 +175,7 @@ export function AppSidebar({
                       <ConversationStatusLine status={conversation.status} />
                     ) : (
                       <span className="w-full truncate text-meta font-normal text-muted-foreground">
-                        {conversation.project_name} ·{" "}
-                        {formatRelative(conversation.last_activity_at)}
+                        {conversation.project_name} ({formatRelative(conversation.last_activity_at)})
                       </span>
                     )}
                   </SidebarMenuButton>
@@ -217,7 +216,7 @@ export function AppSidebar({
                   collapsed && "hidden",
                 )}
               >
-                Conversations
+                Conversations{conversations.length > 0 && ` (${conversations.length})`}
               </SidebarGroupLabel>
               <Button
                 variant={collapsed ? "default" : "ghost"}
@@ -302,7 +301,7 @@ export function AppSidebar({
           <Button
             size="icon"
             aria-label="Settings"
-            title={name ? `${name} · Settings` : "Settings"}
+            title={name ? `Settings (${name})` : "Settings"}
             aria-pressed={view.kind === "settings"}
             onClick={() => onNavigate({ kind: "settings" })}
             className="rounded-full text-[10px] font-semibold aria-pressed:ring-2 aria-pressed:ring-border-strong"

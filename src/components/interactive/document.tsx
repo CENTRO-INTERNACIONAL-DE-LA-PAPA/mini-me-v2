@@ -15,7 +15,7 @@ interface DocumentData {
  * note that it was removed. */
 export function DocumentCard({
   title,
-  meta = "Document · Quarto",
+  meta = "Quarto document",
   removed,
   onOpen,
 }: {

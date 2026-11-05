@@ -185,8 +185,7 @@ function NeedsYou({
                 <div className="grid min-w-0 flex-1 gap-[3px]">
                   <span className="text-body font-medium text-foreground">{approval.prompt}</span>
                   <span className="truncate text-meta text-mm-ink">
-                    {approval.mini_me.name} · {approval.project_name} ·{" "}
-                    {approval.conversation_title}
+                    {approval.conversation_title} ({approval.project_name})
                   </span>
                 </div>
                 <Button

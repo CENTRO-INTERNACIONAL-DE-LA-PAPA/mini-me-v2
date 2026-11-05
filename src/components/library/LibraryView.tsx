@@ -12,6 +12,7 @@ import { List, MiniMeCard, Row, TraitIcon } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { SheetPage } from "../shell/Sheet";
 import type { LibraryTab, View } from "../shell/view";
+import { MetaParts } from "@/components/ui/meta-parts";
 
 /** A group's heading as the `@` list shows it, or the group itself for one it doesn't know. */
 const groupLabel = (group: string) => MINI_ME_GROUPS.find((g) => g.group === group)?.label ?? group;
@@ -171,7 +172,7 @@ function MiniMeLists({
   return (
     <Origins
       entries={shown}
-      builtInNote="duplicate to customise"
+      builtInNote="Duplicate to customise"
       empty={query.trim() ? "No Mini-Me matches your search." : "No Mini-Mes in this group."}
       row={card}
       grid
@@ -262,8 +263,7 @@ function Origins<T extends { id: string; built_in: boolean }>({
             <h2 className="flex items-baseline gap-2.5">
               <span className="font-serif text-heading text-foreground">{list.name}</span>
               <span className="text-meta text-muted-foreground">
-                {list.entries.length}
-                {list.note && ` · ${list.note}`}
+                <MetaParts parts={[list.entries.length, list.note]} />
               </span>
             </h2>
             {grid ? (
@@ -303,7 +303,7 @@ function Problems({ library }: { library: Library }) {
                 <span className="font-medium">
                   {s.kind === "trait" ? "Trait" : "Mini-Me"} {s.name ?? "without a name"}
                 </span>
-                <span className="text-muted-foreground"> · {s.problems.join("; ")}</span>
+                <span className="ms-2 text-muted-foreground">{s.problems.join("; ")}</span>
               </li>
             ))}
           </ul>

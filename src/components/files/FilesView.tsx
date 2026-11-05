@@ -98,16 +98,11 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
   );
   const total = entries.reduce((sum, entry) => sum + entry.size_bytes, 0);
 
-  const made = entries.filter((entry) => entry.source === "generated").length;
-
   return (
     <SheetPage
       title="Files"
       description={
-        <>
-          {entries.length} {entries.length === 1 ? "file" : "files"} in {project.name} ·{" "}
-          {made} made by Mini-Mes · {formatSize(total)}
-        </>
+        `${entries.length} ${entries.length === 1 ? "file" : "files"} (${formatSize(total)})`
       }
       actions={
         <Button onClick={upload}>
