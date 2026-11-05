@@ -1,11 +1,10 @@
-# Spec Delta
+# feature-flags Specification
 
 ## Purpose
+Lets a release carry experimental features that stay off until a tester enters the feature's key,
+so chosen testers try them in the same build everyone else has.
 
-Lets a release carry experimental features that stay off until a tester enters the feature's own
-secret key, so chosen testers try them in the same build everyone else has.
-
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Feature flag list
 The app SHALL carry a fixed list of feature flags, each with an ID, a name, a one-line description
