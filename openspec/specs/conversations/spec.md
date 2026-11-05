@@ -86,7 +86,7 @@ of Interactive Components (each `{ id, kind, version, data, text, answer }`, wit
 `null` until answered) and a list of Steps (each `{ step_id, type, name, output, done }`).
 A message's state SHALL be fully determined by the events of its Conversation. The UI SHALL
 show each message with the time it was created, its `message.created` event's `ts`: under a
-user message as "You · 10:42", and next to the name in a reply's header.
+user message, and next to the name in a reply's header.
 
 #### Scenario: Rebuilding from events
 - **WHEN** the app replays a Conversation's events from sequence 1

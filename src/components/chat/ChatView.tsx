@@ -358,7 +358,7 @@ function Participants({ messages }: { messages: MessageView[] }) {
           <li key={miniMe.id}>
             <MiniMePill miniMe={miniMe} size="tag">
               {miniMe.name}
-              {status && <span className="font-normal opacity-80">· {status}</span>}
+              {status && <span className="ms-2 font-normal opacity-80">{status}</span>}
             </MiniMePill>
           </li>
         );

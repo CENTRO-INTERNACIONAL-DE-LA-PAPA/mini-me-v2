@@ -28,7 +28,7 @@ export function AttachmentTray({
             <ImageAttachment projectId={projectId} asset={asset} onRemove={onRemove} />
           ) : (
             <ReferenceChip>
-              {asset.name} · {formatSize(asset.size_bytes)}
+              {asset.name} ({formatSize(asset.size_bytes)})
               <RemoveButton asset={asset} onRemove={onRemove} />
             </ReferenceChip>
           )}

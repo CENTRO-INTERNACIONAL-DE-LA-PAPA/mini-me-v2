@@ -20,6 +20,7 @@ import { useMiniMes } from "../../hooks/useMiniMes";
 import { useOpenDocument } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
+import { MetaParts } from "@/components/ui/meta-parts";
 
 const STATUS_LABEL: Record<string, string | undefined> = {
   streaming: "Replying…",
@@ -189,7 +190,7 @@ export const MessageItem = memo(function MessageItem({
     return (
       <article data-message-id={message.id} className="flex flex-col gap-1">
         <p className="text-meta text-muted-foreground">
-          {name} · {time}
+          <MetaParts parts={[name, time]} />
         </p>
         {text}
         {attachments}
@@ -206,9 +207,7 @@ export const MessageItem = memo(function MessageItem({
           {attachments}
           {reactionPills}
         </div>
-        <p className={cn("text-meta text-muted-foreground", counts.size > 0 && "mt-2")}>
-          {name} · {time}
-        </p>
+        <p className={cn("text-meta text-muted-foreground", counts.size > 0 && "mt-2")}>{time}</p>
         {notes}
       </article>
     );
@@ -228,8 +227,7 @@ export const MessageItem = memo(function MessageItem({
         <MiniMeAvatar miniMe={authorMiniMe} size={compact ? 20 : 28} />
         <strong className="font-serif text-name font-medium text-foreground">{name}</strong>
         <span className="text-mm-ink">
-          {time}
-          {status && message.status !== "failed" && ` · ${status}`}
+          <MetaParts parts={[time, message.status !== "failed" && status]} />
         </span>
         {message.status === "failed" && <span className="text-destructive">{status}</span>}
       </header>
@@ -274,7 +272,7 @@ export const MessageItem = memo(function MessageItem({
       {message.status === "streaming" && message.progress && (
         <p role="status" className="text-meta text-muted-foreground">
           {message.progress.label}
-          {message.progress.fraction !== null && ` · ${Math.round(message.progress.fraction * 100)}%`}
+          {message.progress.fraction !== null && ` (${Math.round(message.progress.fraction * 100)}%)`}
         </p>
       )}
       {attachments}
@@ -321,11 +319,15 @@ function JevAnswersBlock({
       {jev.answers &&
         Object.entries(jev.answers).map(([question, answer]) => (
           <p key={question} className="mt-1 font-mono wrap-anywhere">
-            {question}: {label(answer.choice)} ({percent(answer.confidence)}) ·{" "}
-            {Object.entries(answer.probabilities)
-              .sort(([, a], [, b]) => b - a)
-              .map(([option, p]) => `${label(option)} ${percent(p)}`)
-              .join(", ")}
+            <MetaParts
+              parts={[
+                `${question}: ${label(answer.choice)} (${percent(answer.confidence)})`,
+                Object.entries(answer.probabilities)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([option, p]) => `${label(option)} ${percent(p)}`)
+                  .join(", "),
+              ]}
+            />
           </p>
         ))}
     </details>
@@ -337,13 +339,13 @@ function AttachmentChip({ asset, onOpen }: { asset: AssetRef; onOpen: () => void
   if (!useFileExists(asset.id)) {
     return (
       <ReferenceChip title="This file was deleted" className="text-muted-foreground">
-        {asset.name} · file removed
+        {asset.name} (Deleted)
       </ReferenceChip>
     );
   }
   return (
     <ReferenceChip title="Open file" onOpen={onOpen}>
-      {asset.name} · {formatSize(asset.size_bytes)}
+      {asset.name} ({formatSize(asset.size_bytes)})
     </ReferenceChip>
   );
 }

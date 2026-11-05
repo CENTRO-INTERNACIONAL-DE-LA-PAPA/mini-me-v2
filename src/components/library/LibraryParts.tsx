@@ -15,7 +15,7 @@ interface HeaderProps {
   /** What the header shows before the name: a Mini-Me's avatar or a Trait's mark. */
   icon?: ReactNode;
   /** A line under the title, such as a Mini-Me's description. */
-  subtitle?: string;
+  subtitle?: ReactNode;
   /** Where the back link returns to, such as "Mini-Mes". */
   back: string;
   /** Shown on the right before the actions, such as the editor's tab switch. */

@@ -11,10 +11,12 @@ import { useMiniMes } from "../../hooks/useMiniMes";
 import {
   StepComponents,
   StepMark,
+  ANSWER_LABELS,
   approvalAnswers,
   componentPlaces,
   stepState,
 } from "./WorkflowProgress";
+import { MetaParts } from "@/components/ui/meta-parts";
 
 /** A panel docked to the right of a Conversation. */
 export type Panel =
@@ -161,7 +163,7 @@ export function JobsPanel({
                     <span className="truncate text-meta text-muted-foreground">
                       {reply.conversation_id === conversationId
                         ? "This conversation"
-                        : `${reply.conversation_title} · ${reply.project_name}`}
+                        : `${reply.conversation_title} (${reply.project_name})`}
                     </span>
                   </span>
                 </button>
@@ -194,14 +196,22 @@ export function StepsPanel({ message, onClose }: { message: MessageView; onClose
   return (
     <SidePanel
       title={miniMe ? `${miniMe.name}'s Workflow` : "Workflow"}
-      meta={`${REPLY_STATE[message.status] ?? message.status} · ${done} of ${message.steps.length} steps done`}
+      meta={
+        <MetaParts
+          parts={[
+            REPLY_STATE[message.status] ?? message.status,
+            `${done} of ${message.steps.length} steps done`,
+          ]}
+        />
+      }
       onClose={onClose}
     >
       <ol aria-label="Workflow steps">
         {message.steps.map((step, index) => {
           const state = stepState(step, message.status);
           const decision = step.type === "condition" || step.type === "loop";
-          const outcome = step.done ? (decision ? step.output : answers[index]) : undefined;
+          const answer = answers[index];
+          const outcome = step.done ? (decision ? step.output : answer && ANSWER_LABELS[answer]) : undefined;
           const last = index === message.steps.length - 1;
           return (
             <li key={index} className="relative flex gap-3 pb-5 last:pb-0">
@@ -219,7 +229,7 @@ export function StepsPanel({ message, onClose }: { message: MessageView; onClose
                 <span className={cn("font-semibold", state === "pending" && "text-muted-foreground")}>
                   {step.name}
                   {outcome && (
-                    <span className="font-normal text-muted-foreground"> · {outcome}</span>
+                    <span className="ms-2 font-normal text-muted-foreground">{outcome}</span>
                   )}
                 </span>
                 {state === "running" && message.progress && (

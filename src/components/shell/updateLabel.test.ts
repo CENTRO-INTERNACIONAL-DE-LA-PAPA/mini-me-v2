@@ -8,7 +8,7 @@ describe("updateLabel", () => {
 
   it("shows the download percent", () => {
     expect(updateLabel({ state: "downloading", version: "0.3.0", percent: 42 })).toBe(
-      "Downloading update 0.3.0 · 42%",
+      "Downloading update 0.3.0 (42%)",
     );
   });
 

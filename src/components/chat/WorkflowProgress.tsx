@@ -23,6 +23,9 @@ export function showsProgress(steps: MessageStep[]): boolean {
   return steps.length > 1 || steps.some((s) => s.type !== "trait");
 }
 
+/** How an approval's answer reads after its Step's name. */
+export const ANSWER_LABELS = { approved: "Approved", rejected: "Rejected" } as const;
+
 /**
  * The answer to each approval Step run in `steps`, by index: the *n*-th run of an approval
  * Step asked the *n*-th `approval` component with its `step_id`, both in the order they were
@@ -117,13 +120,14 @@ export function WorkflowProgress({
             const state = stepState(step, replyStatus);
             const decision = step.type === "condition" || step.type === "loop";
             // A decision's outcome, or an approval's answer.
-            const outcome = step.done ? (decision ? step.output : answers[index]) : undefined;
+            const answer = answers[index];
+            const outcome = step.done ? (decision ? step.output : answer && ANSWER_LABELS[answer]) : undefined;
             const label = (
               <>
                 <StepMark state={state} color={color} />
                 <span className={cn("text-ui", state === "pending" && "text-muted-foreground")}>
                   {step.name}
-                  {outcome && <span className="text-muted-foreground"> · {outcome}</span>}
+                  {outcome && <span className="ms-2 text-muted-foreground">{outcome}</span>}
                 </span>
               </>
             );

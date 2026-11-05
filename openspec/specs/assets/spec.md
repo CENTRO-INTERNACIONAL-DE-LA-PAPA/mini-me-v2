@@ -179,7 +179,7 @@ change only the name stored for the file's ID. Duplicate SHALL add a copy named 
 
 ### Requirement: Deleting a file
 Delete SHALL ask first, and after confirmation SHALL remove the file's record and its folder in the
-Project. References to it in messages SHALL show as a "file removed" chip.
+Project. References to it in messages SHALL show as a chip with "(Deleted)" after its name.
 
 #### Scenario: Delete
 - **WHEN** the user confirms deleting `field-trial.csv`
@@ -187,4 +187,4 @@ Project. References to it in messages SHALL show as a "file removed" chip.
 
 #### Scenario: A reference to a deleted file
 - **WHEN** a message references a file that was deleted
-- **THEN** the reference shows as a "file removed" chip and opens nothing
+- **THEN** the reference shows as a chip with "(Deleted)" after its name and opens nothing

@@ -120,7 +120,7 @@ the Traits the Workflow runs, each opening its Trait editor. Save SHALL save eve
 
 #### Scenario: Traits tab
 - **WHEN** the user opens Investigator's Traits tab
-- **THEN** it reads "Traits · 5" and lists *Scout*, *Wonder*, *Plan*, *Refute* and
+- **THEN** it reads "Traits 5" and lists *Scout*, *Wonder*, *Plan*, *Refute* and
   *Experiment*, each opening its Trait editor
 
 ### Requirement: Picking a Mini-Me's colour

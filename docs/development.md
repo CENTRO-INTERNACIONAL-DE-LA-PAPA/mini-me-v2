@@ -38,6 +38,32 @@ npm run tauri:release
 Local release builds produce no update files and need no signing key, and a local build
 does not update itself.
 
+## Building the UI
+
+[DESIGN.md](../DESIGN.md) holds the design rules. This is where the code follows them:
+
+- **Design files.** The Claude Design project holds the reference screens: `Mini-Me Screens.dc.html`
+  (section **Floating sheets**, screens F01–F15), `Mini-Me Glyph.dc.html` (the avatar component)
+  and `Mini-Me Brand.dc.html` (app icon ideas, the wordmark, default Mini-Mes, banners). They are a
+  reference, not the source of names: the app's own names win, so the design's "Drive" is Files.
+- **Tokens.** The palette and every role token are at the top of `:root` in `src/index.css`. A new
+  text token must also be registered in `src/lib/utils.ts`, or `cn()` drops it.
+- **Mini-Me colours.** `src/components/minime/miniMeColors.ts` derives `wash` and `edge`.
+  `surfaceStyle(colors)` sets `--mm-tint`, `--mm-solid`, `--mm-ink`, `--mm-wash` and `--mm-edge` on
+  an element; inside it, use `bg-wash`, `bg-tint`, `border-edge` and `text-mm-ink`.
+- **Components.** shadcn/ui components live in `src/components/ui`; add one with the shadcn CLI,
+  then restyle it to DESIGN.md. The shared pieces DESIGN.md describes are `MiniMeSurface` (Mini-Me
+  card), `AccountCard` (white card in Settings), `MiniMePill` (name tag), `ReferenceChip` (files,
+  tables and charts), `MetaParts` (details kept apart by a gap), the sheets and headers in
+  `src/components/shell/Sheet.tsx` and `SectionPage.tsx`, and `EditorHeader` in
+  `src/components/library/LibraryParts.tsx`.
+- **App icons.** `src-tauri/icons/app-icon.svg` is the release icon and `app-icon-dev.svg` the
+  Mini-Me Dev icon (`tauri.dev.conf.json`). Regenerate them with
+  `npx tauri icon src-tauri/icons/app-icon.svg` and
+  `npx tauri icon src-tauri/icons/app-icon-dev.svg --output src-tauri/icons/dev`, keeping only the
+  files the configs list. The release icon is full bleed (Windows); the dev icon's artwork is inset
+  to an 824px shape on the 1024px canvas, as macOS expects.
+
 ## Tests
 
 ```bash
