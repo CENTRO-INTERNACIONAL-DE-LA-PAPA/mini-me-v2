@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::comments;
@@ -15,6 +15,15 @@ use crate::protocol::{
 };
 use crate::store::{Project, ProjectState};
 
+/// Where an Asset downloaded from outside the Project came from.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AssetOrigin {
+    /// A file of a dataset in CIP's Dataverse: its file ID there, the dataset's persistent ID,
+    /// title and web address.
+    Dataverse { file_id: u64, dataset_id: String, title: String, url: String },
+}
+
 /// Copies a file the user picked into the Project and registers it as added by `user`. The
 /// original file is only read.
 pub fn import(project: &Project, source: &Path, user: &Author) -> AppResult<AssetRef> {
@@ -23,10 +32,60 @@ pub fn import(project: &Project, source: &Path, user: &Author) -> AppResult<Asse
         .map(|n| n.to_string_lossy().to_string())
         .filter(|n| !n.is_empty())
         .ok_or_else(|| AppError::invalid_input("The selected item is not a file."))?;
+    copy_in(project, source, &name, ("upload", user), None)
+}
+
+/// Copies the downloaded file at `source` into the Project as `name`, added by `user`, and
+/// records where it came from.
+pub fn import_downloaded(
+    project: &Project,
+    source: &Path,
+    name: &str,
+    user: &Author,
+    origin: &AssetOrigin,
+) -> AppResult<AssetRef> {
+    check_name(name)?;
+    let kind = match origin {
+        AssetOrigin::Dataverse { .. } => "dataverse",
+    };
+    copy_in(project, source, name, (kind, user), Some(origin))
+}
+
+/// The Assets downloaded from CIP's Dataverse, by their file ID there.
+pub fn dataverse_files(state: &ProjectState) -> AppResult<HashMap<u64, AssetRef>> {
+    let mut stmt = state.conn.prepare(
+        "SELECT id, name, media_type, size_bytes, origin FROM assets \
+         WHERE source = 'dataverse' AND origin IS NOT NULL",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        let id: String = row.get(0)?;
+        Ok((id, row.get(1)?, row.get(2)?, row.get(3)?, row.get::<_, String>(4)?))
+    })?;
+    let mut found = HashMap::new();
+    for row in rows {
+        let (id, name, media_type, size_bytes, origin) = row?;
+        let (Ok(id), Ok(AssetOrigin::Dataverse { file_id, .. })) =
+            (Uuid::parse_str(&id), serde_json::from_str(&origin))
+        else {
+            continue;
+        };
+        found.insert(file_id, AssetRef { id, name, media_type, size_bytes });
+    }
+    Ok(found)
+}
+
+/// Copies the file at `source` into a new folder under `assets` as `name`, and registers it.
+fn copy_in(
+    project: &Project,
+    source: &Path,
+    name: &str,
+    (kind, author): (&str, &Author),
+    origin: Option<&AssetOrigin>,
+) -> AppResult<AssetRef> {
     if !source.is_file() {
         return Err(AppError::invalid_input("The selected item is not a file."));
     }
-
+    let name = name.to_string();
     let id = new_id();
     let rel_path = format!("assets/{id}/{name}");
     let destination = project.paths.resolve(&rel_path)?;
@@ -36,7 +95,9 @@ pub fn import(project: &Project, source: &Path, user: &Author) -> AppResult<Asse
     let size_bytes = std::fs::copy(source, &destination)? as i64;
     let media_type = media_type_of(&name);
     let asset = AssetRef { id, name, media_type, size_bytes };
-    register(project, asset, "upload", user, &rel_path)
+    register(project, asset, (kind, author), &rel_path, origin).inspect_err(|_| {
+        let _ = remove_files(project, id);
+    })
 }
 
 /// Imports the files of `paths` that the user dropped on the window. Every path must be one of
@@ -165,7 +226,7 @@ fn store(
         media_type.trim().to_string()
     };
     let asset = AssetRef { id, name: name.to_string(), media_type, size_bytes: bytes.len() as i64 };
-    register(project, asset, source, author, &rel_path).inspect_err(|_| {
+    register(project, asset, (source, author), &rel_path, None).inspect_err(|_| {
         let _ = remove_files(project, id);
     })
 }
@@ -283,17 +344,18 @@ fn media_type_of(name: &str) -> String {
     mime_guess::from_path(name).first_or_octet_stream().essence_str().to_string()
 }
 
-/// Adds a stored file to the registry; `source` is `upload` or `generated`.
+/// Adds a stored file to the registry; `source` is `upload`, `generated` or `dataverse`.
 fn register(
     project: &Project,
     asset: AssetRef,
-    source: &str,
-    author: &Author,
+    (source, author): (&str, &Author),
     rel_path: &str,
+    origin: Option<&AssetOrigin>,
 ) -> AppResult<AssetRef> {
+    let origin = origin.map(serde_json::to_string).transpose()?;
     project.lock().conn.execute(
         "INSERT INTO assets (id, name, media_type, size_bytes, source, rel_path, created_at, \
-         added_by_kind, added_by_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+         added_by_kind, added_by_id, origin) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             asset.id.to_string(),
             asset.name,
@@ -303,7 +365,8 @@ fn register(
             rel_path,
             now_ms(),
             author.kind.as_str(),
-            author.id
+            author.id,
+            origin
         ],
     )?;
     Ok(asset)
@@ -366,8 +429,11 @@ pub struct FileEntry {
     #[serde(flatten)]
     pub asset: AssetRef,
     /// `upload` for a file the user imported or started, `generated` for one the app made,
-    /// such as a Mini-Me's output or an exported PDF.
+    /// such as a Mini-Me's output or an exported PDF, `dataverse` for one downloaded from CIP's
+    /// Dataverse.
     pub source: String,
+    /// Where a downloaded file came from.
+    pub origin: Option<AssetOrigin>,
     /// When the Asset was registered, in milliseconds.
     pub created_at: i64,
     /// When its file last changed, in milliseconds; none when the file is missing.
@@ -393,10 +459,10 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     {
         let mut stmt = state.conn.prepare(
             "SELECT id, name, media_type, size_bytes, source, created_at, rel_path, \
-             added_by_kind, added_by_id FROM assets ORDER BY created_at DESC",
+             added_by_kind, added_by_id, origin FROM assets ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
-            Ok((
+            Ok(((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
@@ -406,11 +472,12 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
                 row.get::<_, String>(6)?,
                 row.get::<_, Option<String>>(7)?,
                 row.get::<_, Option<String>>(8)?,
-            ))
+            ), row.get::<_, Option<String>>(9)?))
         })?;
         for row in rows {
+            let (columns, origin) = row?;
             let (id, name, media_type, size_bytes, source, created_at, rel_path, by_kind, by_id) =
-                row?;
+                columns;
             let added_by = author(by_kind, by_id);
             let modified_at = project
                 .paths
@@ -427,6 +494,7 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
                     size_bytes,
                 },
                 source,
+                origin: origin.and_then(|o| serde_json::from_str(&o).ok()),
                 created_at,
                 modified_at,
                 added_by,
@@ -555,6 +623,27 @@ mod tests {
         delete(&project, asset.id).unwrap();
         assert!(!folder.exists());
         assert!(find(&project.lock(), asset.id).is_err());
+    }
+
+    #[test]
+    fn a_download_is_stored_under_its_name_with_where_it_came_from() {
+        let (dir, project) = temp_project();
+        let downloaded = dir.path().join("download-4311.tmp");
+        std::fs::write(&downloaded, "plot,yield\n1,20\n").unwrap();
+        let origin = AssetOrigin::Dataverse {
+            file_id: 4311,
+            dataset_id: "doi:10.21223/R694DO".into(),
+            title: "Integrated management of late blight data".into(),
+            url: "https://doi.org/10.21223/R694DO".into(),
+        };
+
+        let asset =
+            import_downloaded(&project, &downloaded, "trial.csv", &user(), &origin).unwrap();
+        assert_eq!((asset.name.as_str(), asset.media_type.as_str()), ("trial.csv", "text/csv"));
+        let entry = project_files(&project).unwrap().into_iter().next().unwrap();
+        assert_eq!((entry.source.as_str(), entry.origin.as_ref()), ("dataverse", Some(&origin)));
+        assert_eq!(dataverse_files(&project.lock()).unwrap().get(&4311), Some(&asset));
+        assert!(import_downloaded(&project, &downloaded, "../x.csv", &user(), &origin).is_err());
     }
 
     #[test]

@@ -4,6 +4,7 @@ mod assets;
 mod comments;
 mod components;
 mod conversations;
+mod dataverse;
 mod db;
 mod documents;
 mod error;
@@ -83,6 +84,9 @@ pub fn run() {
             ipc::list_recent_conversations,
             ipc::subscribe_running_replies,
             ipc::import_assets,
+            ipc::dataverse_search,
+            ipc::dataverse_files,
+            ipc::dataverse_download,
             ipc::import_pasted_image,
             ipc::import_dropped,
             ipc::read_image_asset,

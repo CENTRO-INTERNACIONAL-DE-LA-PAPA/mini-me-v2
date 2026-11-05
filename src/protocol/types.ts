@@ -195,11 +195,25 @@ export interface ConversationRef {
   title: string;
 }
 
+/** Where an Asset downloaded from outside the Project came from. */
+export type AssetOrigin = {
+  kind: "dataverse";
+  /** The file's ID in CIP's Dataverse. */
+  file_id: number;
+  /** The dataset's persistent ID, such as `doi:10.21223/R694DO`. */
+  dataset_id: string;
+  title: string;
+  url: string;
+};
+
 /** An Asset as the Project's Files screen lists it. */
 export interface FileEntry extends AssetRef {
   /** `upload` for a file the user imported or started, `generated` for one the app made,
-   * such as a Mini-Me's output or an exported PDF. */
-  source: "upload" | "generated";
+   * such as a Mini-Me's output or an exported PDF, `dataverse` for one downloaded from CIP's
+   * Dataverse. */
+  source: "upload" | "generated" | "dataverse";
+  /** Where a downloaded file came from; null for every other file. */
+  origin: AssetOrigin | null;
   created_at: number;
   /** When its file last changed (Unix ms); null when the file is missing. */
   modified_at: number | null;
@@ -207,6 +221,51 @@ export interface FileEntry extends AssetRef {
   added_by: Author | null;
   /** The Conversations that attach or reference the Asset, in the order it first appeared. */
   used_in: ConversationRef[];
+}
+
+/** A search of CIP Dataverse's datasets: keywords, optional years of publication, and how
+ * many matching datasets come before the page. */
+export interface DataverseSearch {
+  query: string;
+  from_year: number | null;
+  to_year: number | null;
+  start: number;
+}
+
+/** A dataset in CIP's Dataverse. */
+export interface Dataset {
+  /** Its persistent ID, such as `doi:10.21223/R694DO`. */
+  id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  url: string;
+  description: string;
+  /** How many files it has. */
+  files: number;
+}
+
+/** A page of CIP Dataverse's datasets, with how many match on every page. */
+export interface DataversePage {
+  total: number;
+  datasets: Dataset[];
+}
+
+/** A file of a Dataverse dataset, with the Asset it already is in the Project, if any. */
+export interface DatasetFile {
+  id: number;
+  name: string;
+  media_type: string;
+  size_bytes: number;
+  restricted: boolean;
+  asset: AssetRef | null;
+}
+
+/** What became of one file of a download: the Asset it is now, or why it failed. */
+export interface Downloaded {
+  file_id: number;
+  asset?: AssetRef;
+  error?: string;
 }
 
 /** A comment thread on a passage of a document: a Conversation shown only in the document
@@ -387,7 +446,7 @@ export interface SavedDefinition {
 export type ProviderId = "openai" | "anthropic" | "google" | "openrouter";
 
 /** Every key the keychain can hold: the AI providers and Typesafe, which routes messages. */
-export type KeyAccount = ProviderId | "typesafe";
+export type KeyAccount = ProviderId | "typesafe" | "dataverse";
 
 /** The AI and routing settings. Saved keys are only named, never sent to the UI. */
 /** A reply paused at an approval, in any Project. */

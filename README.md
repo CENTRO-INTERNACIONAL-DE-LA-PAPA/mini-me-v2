@@ -53,7 +53,7 @@ Traits; those marked *planned* are on the [Roadmap](docs/roadmap.md).
 | **Refute** | Argues that a statement is wrong, using the information it's given. |
 | **Plan** | Creates an architecture or a sequence of steps for a project. |
 | **Experiment** | Designs experiments to verify a hypothesis. |
-| **Explore Dataverse** *(planned)* | Finds information in Dataverse. |
+| **Search CIP Dataverse** | Finds datasets in CIP's Dataverse, whose files can be downloaded into the Project. |
 | **Index Sources** *(planned)* | Indexes sources so they can be referenced later. |
 | **Code** *(planned)* | Solves problems by writing and running code (Python and R). |
 

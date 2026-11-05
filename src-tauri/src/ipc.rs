@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -13,15 +14,18 @@ use uuid::Uuid;
 
 use crate::ai2::{Ai2, Ai2Status, AppSecrets};
 use crate::approvals::{self, PausedApproval};
-use crate::assets;
+use crate::assets::{self, AssetOrigin};
 use crate::comments;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
+use crate::dataverse::{self, Dataset, DataverseFile, Search, SearchPage};
 use crate::documents;
 use crate::error::{AppError, AppResult};
 use crate::features::{self, FEATURES, FeatureFlag};
 use crate::projects::{self, ProjectSummary};
 use crate::recent::{self, RecentConversation};
-use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, OpenedConversation, now_ms};
+use crate::protocol::{
+    AssetRef, Author, AuthorKind, Event, Message, OpenedConversation, new_id, now_ms,
+};
 use crate::history::HISTORY_BUDGET_CHARS;
 use crate::library::{MiniMe, MiniMeSummary, TraitSummary};
 use crate::user_library::{LibraryStore, Skipped, TraitDraft};
@@ -838,6 +842,85 @@ pub async fn restart_to_update(app: AppHandle, state: State<'_, AppState>) -> Ap
     state.sidecar.shutdown();
     state.updates.install_pending();
     app.restart()
+}
+
+/// A page of CIP Dataverse's datasets matching `search`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn dataverse_search(search: Search) -> AppResult<SearchPage> {
+    dataverse::search(&search)
+}
+
+/// A file of a CIP Dataverse dataset, with the Asset it already is in the Project, if any.
+#[derive(Debug, Serialize)]
+pub struct DatasetFile {
+    #[serde(flatten)]
+    pub file: DataverseFile,
+    pub asset: Option<AssetRef>,
+}
+
+/// The files of the CIP Dataverse dataset `dataset_id`, marking those already in the Project.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn dataverse_files(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    dataset_id: String,
+) -> AppResult<Vec<DatasetFile>> {
+    let project = state.project(project_id)?;
+    let files = dataverse::files(&dataset_id)?;
+    let mut in_project = assets::dataverse_files(&project.lock())?;
+    Ok(files
+        .into_iter()
+        .map(|file| DatasetFile { asset: in_project.remove(&file.id), file })
+        .collect())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FileToDownload {
+    pub id: u64,
+    pub name: String,
+}
+
+/// What became of one file of a download: the Asset it is now, or why it failed.
+#[derive(Debug, Serialize)]
+pub struct Downloaded {
+    pub file_id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset: Option<AssetRef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Downloads `files` of the CIP Dataverse `dataset` into the Project's Files, one at a time;
+/// a file that fails leaves the others downloaded.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn dataverse_download(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    dataset: Dataset,
+    files: Vec<FileToDownload>,
+) -> AppResult<Vec<Downloaded>> {
+    let project = state.project(project_id)?;
+    let user = state.user();
+    let mut results = Vec::new();
+    for file in files {
+        let origin = AssetOrigin::Dataverse {
+            file_id: file.id,
+            dataset_id: dataset.id.clone(),
+            title: dataset.title.clone(),
+            url: dataset.url.clone(),
+        };
+        // Downloaded outside the Project first, so a failed download leaves nothing in it.
+        let temporary = std::env::temp_dir().join(format!("mini-me-dataverse-{}", new_id()));
+        let stored = dataverse::download(file.id, &temporary).and_then(|()| {
+            assets::import_downloaded(&project, &temporary, &file.name, &user, &origin)
+        });
+        let _ = std::fs::remove_file(&temporary);
+        results.push(match stored {
+            Ok(asset) => Downloaded { file_id: file.id, asset: Some(asset), error: None },
+            Err(error) => Downloaded { file_id: file.id, asset: None, error: Some(error.message) },
+        });
+    }
+    Ok(results)
 }
 
 /// Opens the native file picker and imports every picked file. Paths come only from the

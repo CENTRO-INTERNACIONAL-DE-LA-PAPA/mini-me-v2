@@ -78,11 +78,12 @@
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a12",
-      "name": "Explore Dataverse",
-      "description": "Finds information in Dataverse.",
+      "name": "Search CIP Dataverse",
+      "description": "Finds datasets in CIP's Dataverse, whose files can be downloaded into the Project.",
       "color": "oklch(0.78 0.1 210)",
-      "adapter": "echo",
-      "instructions": null
+      "adapter": "cip-dataverse",
+      "tools": ["show_datasets"],
+      "instructions": "Turn the user's message into a search of CIP's Dataverse, the International Potato Center's research data repository. Write the query as a few keywords that datasets would contain: crops, diseases, traits, places and methods, such as 'late blight resistance Peru'. Leave out filler words, the word 'dataset' and years. Set the earliest and latest year of publication only when the message asks for them."
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a13",
@@ -296,6 +297,15 @@
       "avatar": { "base": "sweet-potato", "face": "determined", "accessory": "party-hat" },
       "group": "data",
       "workflow": { "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22" }] }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b17",
+      "name": "CIP's Archivist",
+      "description": "Finds datasets in CIP's Dataverse and downloads their files into the Project",
+      "colors": { "tint": "#FDE7CF", "solid": "#C17A00", "ink": "#784900" },
+      "avatar": { "base": "peruanita", "face": "content", "accessory": "crown" },
+      "group": "data",
+      "workflow": { "steps": [{ "id": "search", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a12" }] }
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b15",

@@ -354,7 +354,7 @@ mod tests {
     fn a_missing_file_gives_the_built_ins() {
         let dir = tempfile::tempdir().unwrap();
         let store = LibraryStore::open(dir.path());
-        assert_eq!(names(&store.current()).len(), 15);
+        assert_eq!(names(&store.current()).len(), 16);
         assert_eq!((store.skipped(), store.unreadable()), (vec![], None));
     }
 
@@ -404,7 +404,7 @@ mod tests {
             ]
         );
         assert!(store.skipped()[0].problems[0].contains("cannot list \"show_chart\""));
-        assert_eq!(names(&store.current()).len(), 15);
+        assert_eq!(names(&store.current()).len(), 16);
 
         store.save_trait(draft("Translate")).unwrap();
         let written: Value =
@@ -420,7 +420,7 @@ mod tests {
         std::fs::write(dir.path().join(FILE_NAME), "{ not json").unwrap();
         let store = LibraryStore::open(dir.path());
         assert!(store.unreadable().is_some());
-        assert_eq!(names(&store.current()).len(), 15);
+        assert_eq!(names(&store.current()).len(), 16);
         let error = store.save_trait(draft("Translate")).unwrap_err();
         assert_eq!(error.code, "storage");
         assert_eq!(std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap(), "{ not json");
