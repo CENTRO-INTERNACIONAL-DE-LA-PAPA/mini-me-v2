@@ -7,6 +7,7 @@ mod conversations;
 mod db;
 mod documents;
 mod error;
+mod features;
 mod history;
 mod ipc;
 mod library;
@@ -138,6 +139,9 @@ pub fn run() {
             ipc::get_developer_mode,
             ipc::take_whats_new,
             ipc::set_developer_mode,
+            ipc::list_feature_flags,
+            ipc::unlock_feature_flag,
+            ipc::lock_feature_flag,
             ipc::get_home_settings,
             ipc::set_show_home_mini_mes,
             ipc::ai2_start_sign_in,

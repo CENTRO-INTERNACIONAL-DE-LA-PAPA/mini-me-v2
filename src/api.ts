@@ -13,6 +13,7 @@ import type {
   DraftEvent,
   LibraryView,
   FileEntry,
+  FeatureFlag,
   HomeSettings,
   Message,
   MiniMe,
@@ -253,6 +254,12 @@ export const api = {
   takeWhatsNew: () => invoke<boolean>("take_whats_new"),
   getDeveloperMode: () => invoke<boolean>("get_developer_mode"),
   setDeveloperMode: (on: boolean) => invoke<void>("set_developer_mode", { on }),
+  /** The feature flags that are on. */
+  listFeatureFlags: () => invoke<FeatureFlag[]>("list_feature_flags"),
+  /** Turns on the flag `key` belongs to; fails with the code `wrong_key` when it is none. */
+  unlockFeatureFlag: (key: string) => invoke<FeatureFlag>("unlock_feature_flag", { key }),
+  /** Turns the flag off; only its key turns it on again. */
+  lockFeatureFlag: (id: string) => invoke<void>("lock_feature_flag", { id }),
   getHomeSettings: () => invoke<HomeSettings>("get_home_settings"),
   setShowHomeMiniMes: (show: boolean) => invoke<void>("set_show_home_mini_mes", { show }),
 

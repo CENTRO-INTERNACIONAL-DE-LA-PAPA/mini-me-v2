@@ -253,6 +253,8 @@ pub struct Runs {
     cancel_timeout: Duration,
     /// Asked before a Mini-Me writes or edits a document; none until the app sets one.
     document_gate: Mutex<Option<DocumentGate>>,
+    /// The IDs of the feature flags that are on, as the app last set them.
+    features: Mutex<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -330,7 +332,13 @@ impl Runs {
             log,
             cancel_timeout,
             document_gate: Mutex::new(None),
+            features: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Sets which feature flags are on, for Traits that ask during a call.
+    pub fn set_active_features(&self, ids: Vec<String>) {
+        *self.features.lock().unwrap_or_else(|p| p.into_inner()) = ids;
     }
 
     /// Sets the check that a Mini-Me may write or edit documents.
@@ -1098,6 +1106,10 @@ impl Runs {
                 let library = self.library.current();
                 let history = history(&messages, place.answers, &library, HISTORY_BUDGET_CHARS);
                 Ok(serde_json::to_value(history)?)
+            }
+            "features.active" => {
+                let features = self.features.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                Ok(json!({ "features": features }))
             }
             "secret.get" => self.secret(&adapter, place.provider.as_deref(), parse_params(params)?),
             "asset.write" => {
@@ -2128,6 +2140,17 @@ mod tests {
 
         let response = f.runs.respond("r".into(), call_id, "files.delete", json!({}));
         assert_eq!(error_code(response).as_deref(), Some("unknown_method"));
+    }
+
+    #[test]
+    fn a_call_gets_the_feature_flags_that_are_on() {
+        let f = fixture(Box::new(NoSecrets), CANCEL_TIMEOUT);
+        let (call, _) = f.start_call("echo");
+        let response = f.runs.respond("r".into(), call, "features.active", json!({}));
+        assert_eq!(result(response), json!({ "features": [] }));
+        f.runs.set_active_features(vec!["test-flag".into()]);
+        let response = f.runs.respond("r".into(), call, "features.active", json!({}));
+        assert_eq!(result(response), json!({ "features": ["test-flag"] }));
     }
 
     #[test]

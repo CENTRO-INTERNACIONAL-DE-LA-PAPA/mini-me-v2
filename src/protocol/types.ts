@@ -438,6 +438,13 @@ export interface HomeSettings {
   show_mini_mes: boolean;
 }
 
+/** A feature flag that is on: an experimental feature turned on by its key. */
+export interface FeatureFlag {
+  id: string;
+  name: string;
+  description: string;
+}
+
 /** The app-wide profile in `user-profile.json`. */
 export interface UserProfile {
   name: string | null;
