@@ -3,8 +3,8 @@ import asyncio
 import pytest
 
 from mini_me_sidecar.adapters.data.replies import read_tables
-from mini_me_sidecar.context import TraitError
-from mini_me_sidecar.routing import _questions
+from mini_me_sidecar.context import CoreRequestError, TraitError
+from mini_me_sidecar.routing import NEEDS_CONTEXT, Router, _asked, _questions
 
 
 def test_the_file_question_offers_each_file_and_none():
@@ -24,6 +24,46 @@ def test_the_file_question_offers_each_file_and_none():
         "table 'Field trial', chart",
         "none": "The message is not about one of these files",
     }
+
+
+def test_asked_holds_the_state_and_each_question_as_sent():
+    files = [{"id": "a1", "name": "trial.csv", "components": []}]
+    state = {"message": "check the data", "files": [], "recent": []}
+    asked = _asked(state, _questions(["needs_context", "file"], [], files))
+    assert asked["state"] == state
+    assert asked["questions"]["needs_context"] == {
+        "instructions": "Does answering this message need the earlier messages of the "
+        "conversation?",
+        "options": NEEDS_CONTEXT,
+    }
+    assert asked["questions"]["file"]["options"]["a1"] == "The file trial.csv"
+
+
+class NoKey:
+    async def send(self, call_id: str, kind: str, payload: dict) -> dict:
+        raise CoreRequestError("key_missing", "No Typesafe key is saved.")
+
+
+class SentFrames:
+    def __init__(self) -> None:
+        self.frames: list[dict] = []
+
+    def send(self, frame: dict) -> None:
+        self.frames.append(frame)
+
+
+def test_a_request_that_was_not_sent_has_nothing_asked():
+    link = SentFrames()
+    router = Router(link, NoKey())
+    asyncio.run(router._route("r1", {"state": {}, "ask": ["reaction"]}))
+    assert link.frames == [
+        {
+            "type": "route.error",
+            "route_id": "r1",
+            "error": {"code": "key_missing", "message": "No Typesafe key is saved."},
+            "asked": None,
+        }
+    ]
 
 
 class FakeContext:

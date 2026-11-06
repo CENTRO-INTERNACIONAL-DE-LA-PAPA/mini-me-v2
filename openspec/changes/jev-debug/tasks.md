@@ -7,7 +7,7 @@
 
 ## 2. What Jev was asked
 
-- [ ] 2.1 Build `asked` (`{ state, questions }` from the Choices sent) in `routing.py` and put it on `route.done` and `route.error` (`null` before the request is sent); verify with a pytest test of `asked` for the `file` and `needs_context` questions
+- [x] 2.1 Build `asked` (`{ state, questions }` from the Choices sent) in `routing.py` and put it on `route.done` and `route.error` (`null` before the request is sent); verify with a pytest test of `asked` for the `file` and `needs_context` questions
 - [ ] 2.2 Carry `asked` through `link.rs` and `Runs::route` on success and on error, add the `routing.show_asked` setting with its IPC getter and setter, and store each part of the `jev` record only while its switch is on; verify with a routing unit test using the frames fixture for both switches on, only the answers, and a timeout, and `cargo test` passes
 
 ## 3. The block and the Developer page
