@@ -113,6 +113,7 @@ pub fn delete(project: &Project, conversation_id: Uuid) -> AppResult<()> {
         format!("DELETE FROM reactions WHERE message_id IN ({messages})"),
         format!("DELETE FROM components WHERE message_id IN ({messages})"),
         format!("DELETE FROM message_steps WHERE message_id IN ({messages})"),
+        "DELETE FROM debug_records WHERE conversation_id = ?1".to_string(),
         "DELETE FROM messages WHERE conversation_id = ?1".to_string(),
         "DELETE FROM events WHERE conversation_id = ?1".to_string(),
         "UPDATE comment_threads SET opened_from = NULL WHERE opened_from = ?1".to_string(),

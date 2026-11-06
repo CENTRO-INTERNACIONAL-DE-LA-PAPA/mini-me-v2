@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 10;
+pub const SCHEMA_VERSION: i32 = 11;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -159,6 +159,22 @@ ALTER TABLE comment_threads ADD COLUMN opened_from TEXT;
     r#"
 -- Where a downloaded Asset came from, as JSON (`AssetOrigin`); null for every other Asset.
 ALTER TABLE assets ADD COLUMN origin TEXT;
+"#,
+    r#"
+-- Developer debug records, such as what Jev was asked and answered about a message. They are
+-- kept apart from `events` so that opening a Conversation never reads them, and are read one
+-- at a time when a debug block is expanded. The retired `routing.answered` events are
+-- deleted, not moved here.
+CREATE TABLE debug_records (
+    message_id       TEXT NOT NULL REFERENCES messages(id),
+    kind             TEXT NOT NULL,
+    conversation_id  TEXT NOT NULL REFERENCES conversations(id),
+    content          TEXT NOT NULL,
+    created_at       INTEGER NOT NULL,
+    PRIMARY KEY (message_id, kind)
+);
+CREATE INDEX debug_records_by_conversation ON debug_records(conversation_id);
+DELETE FROM events WHERE type = 'routing.answered';
 "#,
 ];
 
@@ -392,6 +408,34 @@ mod tests {
         let sql = "SELECT origin FROM assets WHERE id = 'a'";
         let origin: Option<String> = conn.query_row(sql, [], |row| row.get(0)).unwrap();
         assert_eq!(origin, None);
+    }
+
+    #[test]
+    fn a_version_10_database_gains_debug_records_and_drops_jev_events() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..10] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 10).unwrap();
+            conn.execute_batch(
+                "INSERT INTO conversations (id, title, created_at, last_activity_at) \
+                 VALUES ('c', 'Trial', 1, 1); \
+                 INSERT INTO events (conversation_id, seq, id, type, ts, body) VALUES \
+                 ('c', 1, 'e1', 'message.created', 1, '{}'), \
+                 ('c', 2, 'e2', 'routing.answered', 1, '{}');",
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        let sql = "SELECT group_concat(type) FROM events";
+        let types: String = conn.query_row(sql, [], |row| row.get(0)).unwrap();
+        assert_eq!(types, "message.created");
+        let columns = "message_id, kind, conversation_id, content, created_at";
+        conn.prepare(&format!("SELECT {columns} FROM debug_records")).unwrap();
     }
 
     #[test]
