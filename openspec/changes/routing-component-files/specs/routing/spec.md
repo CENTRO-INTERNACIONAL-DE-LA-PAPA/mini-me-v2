@@ -43,8 +43,8 @@ with the message as the state and these Choice questions:
 #### Scenario: A file shown as a chart
 - **WHEN** Plotter drew "Yield by variety" from `field-trial.csv` and the user sends
   "@Plotter make that chart a bar chart"
-- **THEN** the `file` option for `field-trial.csv` reads "The file field-trial.csv, shown as
-  the chart Yield by variety"
+- **THEN** the `file` option for `field-trial.csv` reads "The file field-trial.csv. Used by
+  components: chart 'Yield by variety'"
 
 ### Requirement: Routing request on the link
 The core SHALL ask for a decision with `route.start`, payload

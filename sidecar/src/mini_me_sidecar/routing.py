@@ -120,11 +120,26 @@ def _questions(
             criteria=NEEDS_CONTEXT,
         ),
         "file": lambda: Choice(
-            instructions="Which of the conversation's files does the user's message mean?",
+            instructions="Which of the conversation's files does the user's message mean, "
+            "directly or through a table or chart made from it?",
             criteria={
-                **{str(f.get("id")): f"The file {f.get('name')}" for f in files},
+                **{str(f.get("id")): _file_criterion(f) for f in files},
                 "none": "The message is not about one of these files",
             },
         ),
     }
     return {name: available[name]() for name in ask if name in available}
+
+
+def _file_criterion(file: dict[str, Any]) -> str:
+    """A `file` option as Jev reads it: the file's name and the tables and charts shown from
+    it, such as "The file trial.csv. Used by components: chart 'Yield', table 'Trial'"."""
+    used = []
+    for component in file.get("components") or []:
+        title = component.get("title")
+        kind = str(component.get("kind"))
+        used.append(f"{kind} '{title}'" if title else kind)
+    criterion = f"The file {file.get('name')}"
+    if not used:
+        return criterion
+    return f"{criterion}. Used by components: {', '.join(used)}"

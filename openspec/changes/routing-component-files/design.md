@@ -36,9 +36,11 @@ first, reading only `json_extract(data, '$.source_id')` and `'$.title'`. `file_o
 them to each `RouteFile` as `components`. No component's data is loaded.
 
 ### Jev reads it in the criterion
-`routing.py` writes a file option as "The file field-trial.csv, shown as the chart Yield by
-variety and the table Field trial" ("and" before the last, commas between the others). A
-component without a title is named by its kind alone.
+`routing.py` writes a file option as "The file field-trial.csv. Used by components: chart
+'Yield by variety', table 'Field trial'", each component as its kind and its title in single
+quotes, separated by commas. A component without a title is named by its kind alone. The
+question asks which file the message means "directly or through a table or chart made from
+it", so that a message naming only a chart still picks its file.
 
 ### No cap on the list
 A file's `components` lists every table and chart shown from it. Nothing is cut; if Typesafe ever
