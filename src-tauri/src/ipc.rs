@@ -38,7 +38,7 @@ use crate::runs::{self, CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
 use crate::settings::{AiSettings, HomeSettings, Settings};
 use crate::link::SummaryKind;
-use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
+use crate::sidecar::{LOG_FILE, Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
 use crate::updates::{UpdateStatus, Updates};
 
@@ -1276,6 +1276,25 @@ pub async fn delete_asset(
     asset_id: Uuid,
 ) -> AppResult<()> {
     assets::delete(&*state.project(project_id)?, asset_id)
+}
+
+/// Deletes every debug record of Project `project_id`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn clear_debug_records(state: State<'_, AppState>, project_id: Uuid) -> AppResult<()> {
+    state.project(project_id)?.lock().clear_debug_records()
+}
+
+/// Opens the sidecar log in the system's default app for it.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn open_sidecar_log(app: AppHandle) -> AppResult<()> {
+    let dir = app.path().app_log_dir().map_err(|e| AppError::storage(e.to_string()))?;
+    let path = dir.join(LOG_FILE);
+    if !path.exists() {
+        return Err(AppError::not_found("No sidecar log yet."));
+    }
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|e| AppError::new("open_failed", e.to_string()))
 }
 
 /// The debug record of `kind` that message `message_id` has, read when its debug block is

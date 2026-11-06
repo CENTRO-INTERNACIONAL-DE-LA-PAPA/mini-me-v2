@@ -102,6 +102,8 @@ pub fn run() {
             ipc::delete_asset,
             ipc::reveal_asset,
             ipc::get_debug_record,
+            ipc::clear_debug_records,
+            ipc::open_sidecar_log,
             ipc::rename_conversation,
             ipc::name_conversation,
             ipc::delete_conversation,

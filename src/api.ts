@@ -265,6 +265,11 @@ export const api = {
   removeApiKey: (provider: KeyAccount) => invoke<void>("remove_api_key", { provider }),
   setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
   setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
+  setShowJevAsked: (show: boolean) => invoke<void>("set_show_jev_asked", { show }),
+  /** Deletes every debug record of the Project. */
+  clearDebugRecords: (project_id: Uuid) => invoke<void>("clear_debug_records", { project_id }),
+  /** Opens the sidecar log in the system's default app for it. */
+  openSidecarLog: () => invoke<void>("open_sidecar_log"),
   /** Whether developer options are shown: on in Mini-Me Dev and off in Mini-Me until set. */
   /** Whether to open What's new now; true once after the app updated, never in Mini-Me Dev. */
   takeWhatsNew: () => invoke<boolean>("take_whats_new"),

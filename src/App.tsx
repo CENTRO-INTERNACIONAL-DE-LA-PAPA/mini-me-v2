@@ -246,6 +246,7 @@ function Main({
       return scrolling(
         <SettingsView
           initialPage={view.page}
+          projectId={project?.id}
           onOpenAvatars={() => onNavigate({ kind: "avatars" })}
           onOpenWhatsNew={() =>
             onNavigate({ kind: "whats-new", from: { kind: "settings", page: "about" } })

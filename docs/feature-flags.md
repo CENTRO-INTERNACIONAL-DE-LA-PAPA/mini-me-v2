@@ -1,7 +1,7 @@
 # Feature flags
 
 A feature flag ships an experimental feature in the normal release, switched off. A tester turns
-it on by entering the feature's key in Settings → Developer → [DEBUG] Feature flags, so they can
+it on by entering the feature's key in Settings → Developer → Feature flags, so they can
 try it without a separate build. In Mini-Me Dev every flag starts on.
 
 Keys are plain text in the code, which is open source. A flag hides unfinished work; it is not
