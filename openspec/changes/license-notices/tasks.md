@@ -6,7 +6,7 @@
 
 ## 2. Shipping
 
-- [ ] 2.1 Run `npm run third-party` in the release config's `beforeBuildCommand`, bundle the file as a resource, and document it in `docs/development.md`; verify with a local release build that the app contains it
+- [x] 2.1 Run `npm run third-party` in the release config's `beforeBuildCommand`, bundle the file as a resource, and document it in `docs/development.md`; verify with a local release build that the app contains it
 
 ## 3. The page
 
