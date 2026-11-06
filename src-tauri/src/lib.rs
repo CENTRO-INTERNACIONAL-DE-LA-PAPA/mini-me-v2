@@ -101,7 +101,7 @@ pub fn run() {
             ipc::duplicate_asset,
             ipc::delete_asset,
             ipc::reveal_asset,
-            ipc::get_debug_record,
+            ipc::get_debug_records,
             ipc::clear_debug_records,
             ipc::open_sidecar_log,
             ipc::rename_conversation,

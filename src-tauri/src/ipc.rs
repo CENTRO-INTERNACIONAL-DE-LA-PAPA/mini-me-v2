@@ -1297,16 +1297,16 @@ pub async fn open_sidecar_log(app: AppHandle) -> AppResult<()> {
         .map_err(|e| AppError::new("open_failed", e.to_string()))
 }
 
-/// The debug record of `kind` that message `message_id` has, read when its debug block is
-/// expanded; `null` when it has none.
+/// Message `message_id`'s debug records of `kind`, in the order they were written, read when
+/// its debug block is expanded.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_debug_record(
+pub async fn get_debug_records(
     state: State<'_, AppState>,
     project_id: Uuid,
     message_id: Uuid,
     kind: String,
-) -> AppResult<Option<Value>> {
-    state.project(project_id)?.lock().debug_record(message_id, &kind)
+) -> AppResult<Vec<Value>> {
+    state.project(project_id)?.lock().debug_records(message_id, &kind)
 }
 
 /// Shows the file `asset_id` in the system's file manager.

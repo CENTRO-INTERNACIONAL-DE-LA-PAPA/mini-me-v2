@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 11;
+pub const SCHEMA_VERSION: i32 = 12;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -175,6 +175,25 @@ CREATE TABLE debug_records (
 );
 CREATE INDEX debug_records_by_conversation ON debug_records(conversation_id);
 DELETE FROM events WHERE type = 'routing.answered';
+"#,
+    r#"
+-- A message may hold several debug records of one kind, such as one per model call of a reply,
+-- kept in `position` order. SQLite cannot change a table's key in place, so the table is
+-- rebuilt; Jev's records, one per message, keep position 0.
+CREATE TABLE debug_records_new (
+    message_id       TEXT NOT NULL REFERENCES messages(id),
+    kind             TEXT NOT NULL,
+    position         INTEGER NOT NULL,
+    conversation_id  TEXT NOT NULL REFERENCES conversations(id),
+    content          TEXT NOT NULL,
+    created_at       INTEGER NOT NULL,
+    PRIMARY KEY (message_id, kind, position)
+);
+INSERT INTO debug_records_new
+    SELECT message_id, kind, 0, conversation_id, content, created_at FROM debug_records;
+DROP TABLE debug_records;
+ALTER TABLE debug_records_new RENAME TO debug_records;
+CREATE INDEX debug_records_by_conversation ON debug_records(conversation_id);
 "#,
 ];
 
@@ -436,6 +455,35 @@ mod tests {
         assert_eq!(types, "message.created");
         let columns = "message_id, kind, conversation_id, content, created_at";
         conn.prepare(&format!("SELECT {columns} FROM debug_records")).unwrap();
+    }
+
+    #[test]
+    fn a_version_11_database_keeps_jevs_records_at_position_0() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..11] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 11).unwrap();
+            conn.execute_batch(
+                "INSERT INTO conversations (id, title, created_at, last_activity_at) \
+                 VALUES ('c', 'Trial', 1, 1); \
+                 INSERT INTO messages (id, conversation_id, author_kind, author_id, content, \
+                 status, attachments, text_components, created_at) \
+                 VALUES ('m', 'c', 'user', 'u', 'hi', 'sent', '[]', '[]', 1); \
+                 INSERT INTO debug_records \
+                 (message_id, kind, conversation_id, content, created_at) VALUES ('m', 'jev', 'c', '{}', 1);",
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        let sql = "SELECT kind, position, content FROM debug_records WHERE message_id = 'm'";
+        let row: (String, i64, String) =
+            conn.query_row(sql, [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).unwrap();
+        assert_eq!(row, ("jev".into(), 0, "{}".into()));
     }
 
     #[test]

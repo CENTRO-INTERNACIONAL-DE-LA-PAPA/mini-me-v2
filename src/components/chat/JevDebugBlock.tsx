@@ -26,7 +26,7 @@ export function JevDebugBlock({
   async function load() {
     setNote(null);
     try {
-      const found = await api.getDebugRecord<JevRecord>(projectId, messageId, "jev");
+      const [found = null] = await api.getDebugRecords<JevRecord>(projectId, messageId, "jev");
       setRecord(found);
       if (found?.answers?.file || found?.asked?.questions.file) {
         const assets = await api.listAssets(projectId, "");

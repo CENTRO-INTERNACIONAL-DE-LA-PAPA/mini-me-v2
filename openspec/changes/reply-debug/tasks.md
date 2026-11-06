@@ -2,7 +2,7 @@
 
 ## 1. Ordered debug records
 
-- [ ] 1.1 Add migration 11 → 12 (rebuild `debug_records` with `position` in its key, keeping Jev's records at 0), `ProjectState::append_debug_record` and `debug_records(message_id, kind)` in order, replace the `get_debug_record` IPC with `get_debug_records`, and make `JevDebugBlock` read the list; verify with the migration test, a store test that appended records come back in order next to Jev's, `cargo test` and `npm test`
+- [x] 1.1 Add migration 11 → 12 (rebuild `debug_records` with `position` in its key, keeping Jev's records at 0), `ProjectState::append_debug_record` and `debug_records(message_id, kind)` in order, replace the `get_debug_record` IPC with `get_debug_records`, and make `JevDebugBlock` read the list; verify with the migration test, a store test that appended records come back in order next to Jev's, `cargo test` and `npm test`
 
 ## 2. The switches and the link
 

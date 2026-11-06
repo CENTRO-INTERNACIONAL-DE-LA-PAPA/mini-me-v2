@@ -1088,7 +1088,7 @@ mod tests {
         });
         let deadline = Instant::now() + Duration::from_secs(5);
         let record = loop {
-            if let Some(record) = f.project.lock().debug_record(sent.id, "jev").unwrap() {
+            if let Some(record) = f.project.lock().debug_records(sent.id, "jev").unwrap().pop() {
                 break record;
             }
             assert!(Instant::now() < deadline, "no jev record was stored");
