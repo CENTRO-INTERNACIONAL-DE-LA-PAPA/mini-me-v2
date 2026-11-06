@@ -71,7 +71,11 @@ function crates() {
 
 /** The npm packages built into the interface: production dependencies only. */
 function npmPackages() {
-  const listing = run("npm", ["ls", "--omit=dev", "--all", "--parseable"]);
+  // npm is a `.cmd` script on Windows, which execFileSync cannot start without a shell, so npm's
+  // own entry file is run with Node. `npm run` sets npm_execpath.
+  if (!process.env.npm_execpath) throw new Error("Run this with `npm run third-party`.");
+  const args = [process.env.npm_execpath, "ls", "--omit=dev", "--all", "--parseable"];
+  const listing = run(process.execPath, args);
   // The first folder is Mini-Me itself.
   const folders = listing.trim().split(/\r?\n/).slice(1);
   folders.push(...BUILT_IN.map((name) => join(ROOT, "node_modules", name)));
