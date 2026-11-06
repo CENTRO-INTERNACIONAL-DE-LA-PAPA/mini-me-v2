@@ -10,7 +10,7 @@
 
 ## 3. The page
 
-- [ ] 3.1 Add `get_third_party` to the core, and the "Third-party Software" row and page to Settings → About, with Mini-Me's notice and license, the table of contents by part going to each section, and the line for builds without the file; verify with `cargo test`, `npm test`, and in the app that a development build shows that line
+- [x] 3.1 Add `get_third_party` to the core, and the "Third-party Software" row and page to Settings → About, with Mini-Me's notice and license, the table of contents by part going to each section, and the line for builds without the file; verify with `cargo test`, `npm test`, and in the app that a development build shows that line
 
 ## Workflow follow-up
 

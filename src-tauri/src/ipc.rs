@@ -1312,6 +1312,19 @@ pub async fn open_sidecar_log(app: AppHandle) -> AppResult<()> {
         .map_err(|e| AppError::new("open_failed", e.to_string()))
 }
 
+/// The third-party software a release build collected (`scripts/third-party.mjs`), as the
+/// "Third-party Software" page shows it; `null` in a build without it, such as a development
+/// build.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_third_party(app: AppHandle) -> AppResult<Option<Value>> {
+    let dir = app.path().resource_dir().map_err(|e| AppError::storage(e.to_string()))?;
+    let path = dir.join("third-party.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    Ok(Some(serde_json::from_str(&std::fs::read_to_string(path)?)?))
+}
+
 /// Message `message_id`'s debug records of `kind`, in the order they were written, read when
 /// its debug block is expanded.
 #[tauri::command(rename_all = "snake_case")]

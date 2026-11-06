@@ -26,6 +26,7 @@ import type {
   OpenedDocument,
   QuartoStatus,
   ReplyDebugSettings,
+  ThirdParty,
   Overview,
   PausedApproval,
   ProjectSummary,
@@ -272,6 +273,8 @@ export const api = {
   clearDebugRecords: (project_id: Uuid) => invoke<void>("clear_debug_records", { project_id }),
   /** Opens the sidecar log in the system's default app for it. */
   openSidecarLog: () => invoke<void>("open_sidecar_log"),
+  /** The third-party software this build ships; null in a build without it, such as dev. */
+  getThirdParty: () => invoke<ThirdParty | null>("get_third_party"),
   /** Whether developer options are shown: on in Mini-Me Dev and off in Mini-Me until set. */
   /** Whether to open What's new now; true once after the app updated, never in Mini-Me Dev. */
   takeWhatsNew: () => invoke<boolean>("take_whats_new"),
