@@ -120,11 +120,20 @@ pub struct RouteMiniMe {
     pub description: String,
 }
 
-/// An option of Jev's `file` question: an Asset of the Conversation.
+/// An option of Jev's `file` question: an Asset of the Conversation, with the tables and
+/// charts of the Conversation shown from it, newest first.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RouteFile {
     pub id: Uuid,
     pub name: String,
+    pub components: Vec<RouteComponent>,
+}
+
+/// A `table` or `chart` component shown from a file: its kind and its title, if it has one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouteComponent {
+    pub kind: String,
+    pub title: Option<String>,
 }
 
 /// Jev's answer to one Choice question.

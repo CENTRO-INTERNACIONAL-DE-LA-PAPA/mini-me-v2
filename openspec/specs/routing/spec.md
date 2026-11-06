@@ -40,7 +40,8 @@ with the message as the state and these Choice questions:
 - `needs_context`: options `yes`, `no`;
 - `file`: only when the message references and attaches no Asset and its Conversation has
   at least one; one option per Asset of the Conversation, keyed by its ID and described by
-  its name, plus `none`.
+  its name and by the tables and charts of the Conversation shown from it, newest first, each
+  by its kind and title, plus `none`.
 
 #### Scenario: Message without a mention
 - **WHEN** the user sends "summarize #field-notes.txt"
@@ -65,6 +66,12 @@ with the message as the state and these Choice questions:
 #### Scenario: Conversation without files
 - **WHEN** the Conversation holds no Asset and the user sends "check the data"
 - **THEN** the Jev request has no `file` question
+
+#### Scenario: A file shown as a chart
+- **WHEN** Plotter drew "Yield by variety" from `field-trial.csv` and the user sends
+  "@Plotter make that chart a bar chart"
+- **THEN** the `file` option for `field-trial.csv` reads "The file field-trial.csv. Used by
+  components: chart 'Yield by variety'"
 
 ### Requirement: What is sent to Jev
 The state sent to Jev SHALL be `{ message, files, recent }`:
@@ -158,8 +165,10 @@ The core SHALL ask for a decision with `route.start`, payload
 `{ route_id, state, mini_mes, files, ask }`:
 - `route_id` is a new UUIDv7;
 - `mini_mes` is `[{ id, name, description }]`;
-- `files` is `[{ id, name }]`, the options of the `file` question, newest first, and empty
-  when `ask` does not hold `file`;
+- `files` is `[{ id, name, components }]`, the options of the `file` question, newest first, and
+  empty when `ask` does not hold `file`; `components` lists the tables and charts of the
+  Conversation shown from that file, newest first, as `{ kind, title }`, and holds no rows or
+  other component data;
 - `ask` is the list of question IDs.
 
 The sidecar SHALL answer with exactly one of:

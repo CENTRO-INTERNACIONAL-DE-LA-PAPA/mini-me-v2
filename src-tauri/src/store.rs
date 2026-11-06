@@ -482,6 +482,37 @@ impl ProjectState {
         raw.map(component).transpose()
     }
 
+    /// The `table` and `chart` components of the Conversation shown from a file, by that
+    /// file's Asset ID (their `source_id`), each file's newest first, as `(kind, title)`.
+    /// Only `source_id` and `title` are read from each component's data.
+    pub fn file_components(
+        &self,
+        conversation_id: Uuid,
+    ) -> AppResult<HashMap<Uuid, Vec<(String, Option<String>)>>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT json_extract(c.data, '$.source_id'), c.kind, json_extract(c.data, '$.title') \
+             FROM components c JOIN messages m ON m.id = c.message_id \
+             WHERE m.conversation_id = ?1 AND c.kind IN ('table', 'chart') \
+             AND json_type(c.data, '$.source_id') = 'text' ORDER BY c.rowid DESC",
+        )?;
+        let rows = stmt.query_map(params![conversation_id.to_string()], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })?;
+        let mut shown: HashMap<Uuid, Vec<(String, Option<String>)>> = HashMap::new();
+        for row in rows {
+            let (source_id, kind, title) = row?;
+            // A `source_id` that is not an Asset ID names no file to offer.
+            if let Ok(asset_id) = Uuid::parse_str(&source_id) {
+                shown.entry(asset_id).or_default().push((kind, title));
+            }
+        }
+        Ok(shown)
+    }
+
     /// IDs of messages still streaming, optionally limited to one Conversation.
     pub fn streaming_messages(&self, conversation_id: Option<Uuid>) -> AppResult<Vec<(Uuid, Uuid)>> {
         self.messages_with_status(&[MessageStatus::Streaming], conversation_id)

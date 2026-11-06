@@ -8,10 +8,20 @@ from mini_me_sidecar.routing import _questions
 
 
 def test_the_file_question_offers_each_file_and_none():
-    files = [{"id": "a1", "name": "trial.csv"}]
+    components = [
+        {"kind": "chart", "title": "Yield by variety"},
+        {"kind": "table", "title": "Field trial"},
+        {"kind": "chart", "title": None},
+    ]
+    files = [
+        {"id": "a1", "name": "trial.csv", "components": []},
+        {"id": "a2", "name": "field-trial.csv", "components": components},
+    ]
     question = _questions(["file"], [], files)["file"]
     assert question.criteria == {
         "a1": "The file trial.csv",
+        "a2": "The file field-trial.csv. Used by components: chart 'Yield by variety', "
+        "table 'Field trial', chart",
         "none": "The message is not about one of these files",
     }
 
