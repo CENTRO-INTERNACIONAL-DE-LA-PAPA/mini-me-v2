@@ -19,14 +19,15 @@ use crate::assets;
 use crate::comments;
 use crate::components;
 use crate::conversations::{self, ConversationStatus, PausedRun};
+use crate::dataverse;
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
 use crate::routing::explain;
 use crate::user_library::LibraryStore;
 use crate::link::{
-    AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, RouteFile, RouteMiniMe, RunContext,
-    RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
+    AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, DebugParts, RouteFile, RouteMiniMe,
+    RunContext, RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
 };
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
@@ -49,6 +50,13 @@ const ROUTING_KEY: &str = "typesafe";
 
 /// Jev's answers to a routing request, by question ID.
 pub type RouteAnswers = BTreeMap<String, ChoiceAnswer>;
+
+/// The end of a routing request: Jev's answers or why there are none, and what was sent to
+/// Jev (`null` when nothing was).
+pub struct Routed {
+    pub answers: AppResult<RouteAnswers>,
+    pub asked: Value,
+}
 
 /// What the sidecar sends about a draft: some text, or its end.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -222,7 +230,7 @@ struct Inner {
     adapters: HashMap<String, AdapterInfo>,
     runs: HashMap<Uuid, Run>,
     /// Routing requests waiting for their `route.done` or `route.error`.
-    routes: Pending<RouteAnswers>,
+    routes: Pending<(Result<RouteAnswers, ErrorInfo>, Value)>,
     /// Summary requests waiting for their `summary.done` or `summary.error`.
     summaries: Pending<String>,
     /// Drafts being written.
@@ -253,6 +261,10 @@ pub struct Runs {
     cancel_timeout: Duration,
     /// Asked before a Mini-Me writes or edits a document; none until the app sets one.
     document_gate: Mutex<Option<DocumentGate>>,
+    /// The IDs of the feature flags that are on, as the app last set them.
+    features: Mutex<Vec<String>>,
+    /// The parts of reply debug records new runs collect, as the app last set them.
+    debug: Mutex<DebugParts>,
 }
 
 #[derive(Deserialize)]
@@ -330,7 +342,18 @@ impl Runs {
             log,
             cancel_timeout,
             document_gate: Mutex::new(None),
+            features: Mutex::new(Vec::new()),
+            debug: Mutex::new(DebugParts::default()),
         }
+    }
+
+    pub fn set_debug(&self, parts: DebugParts) {
+        *self.debug.lock().unwrap_or_else(|p| p.into_inner()) = parts;
+    }
+
+    /// Sets which feature flags are on, for Traits that ask during a call.
+    pub fn set_active_features(&self, ids: Vec<String>) {
+        *self.features.lock().unwrap_or_else(|p| p.into_inner()) = ids;
     }
 
     /// Sets the check that a Mini-Me may write or edit documents.
@@ -515,6 +538,7 @@ impl Runs {
                 file: spec.file.clone(),
                 mini_mes: mini_me_list(&self.library.current()),
                 document: comments::run_document(&project, conversation_id).ok().flatten(),
+                debug: *self.debug.lock().unwrap_or_else(|p| p.into_inner()),
             },
         };
         self.lock().runs.insert(
@@ -548,7 +572,8 @@ impl Runs {
 
     /// Asks the sidecar for Jev's answers to the `ask` questions about `state`, waiting at
     /// most `timeout`; `mini_mes` and `files` are the options of the `mini_me` and `file`
-    /// questions. Fails with the sidecar's error, `jev_timeout`, or `sidecar_stopped`.
+    /// questions. The answers fail with the sidecar's error, `jev_timeout`, or
+    /// `sidecar_stopped`.
     pub fn route(
         &self,
         state: Value,
@@ -556,7 +581,7 @@ impl Runs {
         files: Vec<RouteFile>,
         ask: Vec<String>,
         timeout: Duration,
-    ) -> AppResult<RouteAnswers> {
+    ) -> Routed {
         let route_id = new_id();
         let frame = CoreFrame::RouteStart { route_id, state, mini_mes, files, ask };
         let no_answer = NoAnswer {
@@ -564,7 +589,13 @@ impl Runs {
             timeout: ("jev_timeout", "Typesafe did not answer in time."),
             stopped: "Mini-Me's runtime stopped before choosing a Mini-Me.",
         };
-        self.request(|inner| &mut inner.routes, route_id, frame, timeout, no_answer)
+        match self.request(|inner| &mut inner.routes, route_id, frame, timeout, no_answer) {
+            Ok((answers, asked)) => Routed {
+                answers: answers.map_err(|error| AppError::new(&error.code, error.message)),
+                asked,
+            },
+            Err(err) => Routed { answers: Err(err), asked: Value::Null },
+        }
     }
 
     /// Asks the sidecar to summarise `material` with `model`, waiting at most `timeout`.
@@ -827,12 +858,13 @@ impl Runs {
         subscribers.retain(|sink| sink(&running));
     }
 
-    fn active(&self, run_id: Uuid) -> Option<(Arc<Project>, Uuid)> {
+    /// The Project, Conversation and reply of open run `run_id`.
+    fn active(&self, run_id: Uuid) -> Option<(Arc<Project>, Uuid, Uuid)> {
         let found = self
             .lock()
             .runs
             .get(&run_id)
-            .map(|run| (Arc::clone(&run.project), run.message_id));
+            .map(|run| (Arc::clone(&run.project), run.conversation_id, run.message_id));
         if found.is_none() {
             self.log
                 .line(&format!("ignoring a frame for run {run_id}, which is not open"));
@@ -953,7 +985,7 @@ impl Runs {
     pub fn handle(self: &Arc<Self>, frame: SidecarFrame) {
         match frame {
             SidecarFrame::RunDelta { run_id, text } => {
-                if let Some((project, message_id)) = self.active(run_id) {
+                if let Some((project, _, message_id)) = self.active(run_id) {
                     let _ = conversations::append_delta(&project, message_id, &text);
                 }
             }
@@ -962,8 +994,14 @@ impl Runs {
                 label,
                 fraction,
             } => {
-                if let Some((project, message_id)) = self.active(run_id) {
+                if let Some((project, _, message_id)) = self.active(run_id) {
                     let _ = conversations::append_progress(&project, message_id, &label, fraction);
+                }
+            }
+            SidecarFrame::RunDebug { run_id, entry } => {
+                if let Some((project, conversation_id, message_id)) = self.active(run_id) {
+                    let state = project.lock();
+                    let _ = state.append_debug_record(conversation_id, message_id, "reply", &entry);
                 }
             }
             SidecarFrame::StepStarted { run_id, step_id, call_id } => {
@@ -998,11 +1036,13 @@ impl Runs {
                     let _ = conversations::cancel_reply(&run.project, run.message_id);
                 }
             }
-            SidecarFrame::RouteDone { route_id, answers } => {
-                self.answered(|inner| &mut inner.routes, "route", route_id, Ok(answers));
+            SidecarFrame::RouteDone { route_id, answers, asked } => {
+                let routed = Ok((Ok(answers), asked));
+                self.answered(|inner| &mut inner.routes, "route", route_id, routed);
             }
-            SidecarFrame::RouteError { route_id, error } => {
-                self.answered(|inner| &mut inner.routes, "route", route_id, Err(error));
+            SidecarFrame::RouteError { route_id, error, asked } => {
+                let routed = Ok((Err(error), asked));
+                self.answered(|inner| &mut inner.routes, "route", route_id, routed);
             }
             SidecarFrame::SummaryDone { summary_id, text } => {
                 self.answered(|inner| &mut inner.summaries, "summary", summary_id, Ok(text));
@@ -1098,6 +1138,14 @@ impl Runs {
                 let library = self.library.current();
                 let history = history(&messages, place.answers, &library, HISTORY_BUDGET_CHARS);
                 Ok(serde_json::to_value(history)?)
+            }
+            "features.active" => {
+                let features = self.features.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                Ok(json!({ "features": features }))
+            }
+            "dataverse.search" => {
+                let search: dataverse::Search = parse_params(params)?;
+                Ok(serde_json::to_value(dataverse::search(&search)?)?)
             }
             "secret.get" => self.secret(&adapter, place.provider.as_deref(), parse_params(params)?),
             "asset.write" => {
@@ -1300,7 +1348,9 @@ impl Runs {
             .adapters
             .get(adapter)
             .is_some_and(|info| info.providers.iter().any(|p| *p == params.provider));
-        let allowed = !is_provider(&params.provider) || provider == Some(params.provider.as_str());
+        // The CIP Dataverse token is the core's own, for its requests to Dataverse.
+        let allowed = params.provider != dataverse::ACCOUNT
+            && (!is_provider(&params.provider) || provider == Some(params.provider.as_str()));
         if !declared || !allowed {
             return Err(AppError::new(
                 "secret_not_allowed",
@@ -1501,7 +1551,7 @@ mod tests {
             Arc::clone(&sink) as Arc<dyn FrameSink>,
             vec![
                 info("echo", &[]),
-                info("test-use-secret", &["dummy"]),
+                info("test-use-secret", &["dummy", "dataverse"]),
                 info("prompt", &["dummy", "openai"]),
             ],
         );
@@ -1623,6 +1673,20 @@ mod tests {
         assert!(matches!(&events[2], EventKind::MessageProgress { label, fraction: Some(_), .. } if label == "Echoing"));
         assert!(matches!(&events[4], EventKind::MessageCompleted { content, .. } if content == "late blight"));
         assert_eq!(events.len(), 5);
+    }
+
+    #[test]
+    fn debug_entries_are_stored_in_order_until_the_run_ends() {
+        let f = quick();
+        let (run_id, reply) = f.start("echo");
+        for n in 1..=2 {
+            f.runs.handle(SidecarFrame::RunDebug { run_id, entry: json!({ "n": n }) });
+        }
+        f.runs.handle(SidecarFrame::RunDone { run_id });
+        f.runs.handle(SidecarFrame::RunDebug { run_id, entry: json!({ "n": 3 }) });
+
+        let records = f.project.lock().debug_records(reply, "reply").unwrap();
+        assert_eq!(records, vec![json!({ "n": 1 }), json!({ "n": 2 })]);
     }
 
     #[test]
@@ -2131,6 +2195,17 @@ mod tests {
     }
 
     #[test]
+    fn a_call_gets_the_feature_flags_that_are_on() {
+        let f = fixture(Box::new(NoSecrets), CANCEL_TIMEOUT);
+        let (call, _) = f.start_call("echo");
+        let response = f.runs.respond("r".into(), call, "features.active", json!({}));
+        assert_eq!(result(response), json!({ "features": [] }));
+        f.runs.set_active_features(vec!["test-flag".into()]);
+        let response = f.runs.respond("r".into(), call, "features.active", json!({}));
+        assert_eq!(result(response), json!({ "features": ["test-flag"] }));
+    }
+
+    #[test]
     fn secrets_go_only_to_declared_providers() {
         let f = fixture(Box::new(MemorySecrets::dummy()), CANCEL_TIMEOUT);
         let (echo_call, _) = f.start_call("echo");
@@ -2151,6 +2226,24 @@ mod tests {
         let (call, _) = g.start_call("test-use-secret");
         let response = g.runs.respond("r".into(), call, "secret.get", json!({ "provider": "dummy" }));
         assert_eq!(error_code(response).as_deref(), Some("secret_unavailable"));
+    }
+
+    #[test]
+    fn a_dataverse_search_needs_a_query() {
+        let f = quick();
+        let (call, _) = f.start_call("echo");
+        let response = f.runs.respond("r".into(), call, "dataverse.search", json!({ "start": 0 }));
+        assert_eq!(error_code(response).as_deref(), Some("invalid_input"));
+    }
+
+    #[test]
+    fn the_dataverse_token_goes_to_no_trait() {
+        let secrets = MemorySecrets(HashMap::from([("dataverse".into(), "dv-token".into())]));
+        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        let (call, _) = f.start_call("test-use-secret");
+        let params = json!({ "provider": "dataverse" });
+        let response = f.runs.respond("r".into(), call, "secret.get", params);
+        assert_eq!(error_code(response).as_deref(), Some("secret_not_allowed"));
     }
 
     #[test]
@@ -2340,7 +2433,7 @@ mod tests {
     fn start_route(
         f: &Fixture,
         timeout: Duration,
-    ) -> (Uuid, std::thread::JoinHandle<AppResult<RouteAnswers>>) {
+    ) -> (Uuid, std::thread::JoinHandle<Routed>) {
         let runs = Arc::clone(&f.runs);
         let handle = std::thread::spawn(move || {
             let ask = vec!["reaction".into()];
@@ -2369,20 +2462,26 @@ mod tests {
             probabilities: BTreeMap::new(),
         };
         let answers = BTreeMap::from([("reaction".to_string(), answer)]);
-        f.runs.handle(SidecarFrame::RouteDone { route_id, answers: answers.clone() });
-        assert_eq!(handle.join().unwrap().unwrap(), answers);
+        let asked = json!({ "state": { "message": "hi" }, "questions": {} });
+        f.runs.handle(SidecarFrame::RouteDone {
+            route_id,
+            answers: answers.clone(),
+            asked: asked.clone(),
+        });
+        let routed = handle.join().unwrap();
+        assert_eq!((routed.answers.unwrap(), routed.asked), (answers, asked));
     }
 
     #[test]
     fn a_routing_request_times_out_or_ends_with_the_sidecar() {
         let f = quick();
         let (_, handle) = start_route(&f, Duration::from_millis(50));
-        assert_eq!(handle.join().unwrap().unwrap_err().code, "jev_timeout");
+        assert_eq!(handle.join().unwrap().answers.unwrap_err().code, "jev_timeout");
 
         let g = quick();
         let (_, handle) = start_route(&g, CANCEL_TIMEOUT);
         g.runs.disconnect();
-        assert_eq!(handle.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
+        assert_eq!(handle.join().unwrap().answers.unwrap_err().code, SIDECAR_STOPPED);
     }
 
     /// Starts a summary request on another thread; returns its summary ID and the outcome.
@@ -2566,8 +2665,9 @@ mod tests {
         f.runs.handle(SidecarFrame::RouteError {
             route_id,
             error: ErrorInfo { code: "jev_unavailable".into(), message: String::new() },
+            asked: Value::Null,
         });
-        assert_eq!(handle.join().unwrap().unwrap_err().code, "jev_unavailable");
+        assert_eq!(handle.join().unwrap().answers.unwrap_err().code, "jev_unavailable");
     }
 
     #[test]

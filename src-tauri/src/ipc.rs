@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -13,14 +15,18 @@ use uuid::Uuid;
 
 use crate::ai2::{Ai2, Ai2Status, AppSecrets};
 use crate::approvals::{self, PausedApproval};
-use crate::assets;
+use crate::assets::{self, AssetOrigin};
 use crate::comments;
 use crate::conversations::{self, ConversationSummary, SendMessageInput};
+use crate::dataverse::{self, Dataset, DataverseFile, Search, SearchPage};
 use crate::documents;
 use crate::error::{AppError, AppResult};
+use crate::features::{self, FEATURES, FeatureFlag};
 use crate::projects::{self, ProjectSummary};
 use crate::recent::{self, RecentConversation};
-use crate::protocol::{AssetRef, Author, AuthorKind, Event, Message, OpenedConversation, now_ms};
+use crate::protocol::{
+    AssetRef, Author, AuthorKind, Event, Message, OpenedConversation, new_id, now_ms,
+};
 use crate::history::HISTORY_BUDGET_CHARS;
 use crate::library::{MiniMe, MiniMeSummary, TraitSummary};
 use crate::user_library::{LibraryStore, Skipped, TraitDraft};
@@ -30,9 +36,9 @@ use crate::quarto;
 use crate::routing::{REACTION_CHANCE, ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{self, CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
-use crate::settings::{AiSettings, HomeSettings, Settings};
+use crate::settings::{AiSettings, DebugSettings, HomeSettings, Settings};
 use crate::link::SummaryKind;
-use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
+use crate::sidecar::{LOG_FILE, Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
 use crate::updates::{UpdateStatus, Updates};
 
@@ -114,6 +120,7 @@ impl AppState {
         std::thread::spawn(move || {
             warm.status();
         });
+        let dev_app = projects::is_mini_me_dev(&identifier);
         let runs = Arc::new(Runs::new(
             Box::new(AppSecrets {
                 ai2: Arc::clone(&ai2),
@@ -124,6 +131,8 @@ impl AppState {
         ));
         let gate = Arc::clone(&quarto);
         runs.set_document_gate(Arc::new(move || gate.require().map(|_| ())));
+        runs.set_active_features(active_feature_ids(&settings, dev_app));
+        runs.set_debug(settings.reply_debug(dev_app));
         let sidecar = Supervisor::new(
             launch,
             false,
@@ -138,7 +147,7 @@ impl AppState {
             updates.spawn(app.clone());
         }
         Ok(Self {
-            dev_app: projects::is_mini_me_dev(&identifier),
+            dev_app,
             app_version,
             settings: Mutex::new(settings),
             quarto,
@@ -167,6 +176,16 @@ impl AppState {
     /// Whether developer options and the web inspector are available.
     pub fn developer_mode(&self) -> bool {
         self.settings().developer_mode(self.dev_app)
+    }
+
+    /// Applies `change` to the stored feature flags and saves them, then tells running Traits
+    /// which flags are on.
+    fn change_features(&self, change: impl FnOnce(&mut Settings)) -> AppResult<()> {
+        let mut settings = self.settings.lock().unwrap_or_else(|p| p.into_inner());
+        change(&mut settings);
+        settings.save(&self.config_dir)?;
+        self.runs.set_active_features(active_feature_ids(&settings, self.dev_app));
+        Ok(())
     }
 
     fn settings(&self) -> Settings {
@@ -408,8 +427,9 @@ pub async fn send_message(
         model: settings.ai.model(),
         threshold: settings.routing.threshold,
         timeout: ROUTE_TIMEOUT,
-        // Jev's raw answers are a developer aid, kept only while Developer mode is on.
+        // Jev's debug record is a developer aid, kept only while Developer mode is on.
         show_answers: settings.routing.show_answers && state.developer_mode(),
+        show_asked: settings.routing.show_asked && state.developer_mode(),
         reaction_chance: REACTION_CHANCE,
     };
     state.routing.send(
@@ -436,6 +456,13 @@ pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> App
     settings.save(&state.config_dir)
 }
 
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_show_jev_asked(state: State<'_, AppState>, show: bool) -> AppResult<()> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.routing.show_asked = show;
+    settings.save(&state.config_dir)
+}
+
 /// Whether to open What's new now: the first start after the app updated to a new version. It
 /// answers true once per version, and never in Mini-Me Dev.
 #[tauri::command(rename_all = "snake_case")]
@@ -457,7 +484,46 @@ pub async fn get_developer_mode(state: State<'_, AppState>) -> AppResult<bool> {
 pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResult<()> {
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
     settings.developer_mode = Some(on);
-    settings.save(&state.config_dir)
+    settings.save(&state.config_dir)?;
+    state.runs.set_debug(settings.reply_debug(state.dev_app));
+    Ok(())
+}
+
+/// Saves the reply debug switches; runs started from now on collect the parts that are on.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_reply_debug(state: State<'_, AppState>, debug: DebugSettings) -> AppResult<()> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.debug = debug;
+    settings.save(&state.config_dir)?;
+    state.runs.set_debug(settings.reply_debug(state.dev_app));
+    Ok(())
+}
+
+fn active_feature_ids(settings: &Settings, dev_app: bool) -> Vec<String> {
+    let active = settings.active_features(dev_app);
+    active.iter().map(|feature| feature.id.to_string()).collect()
+}
+
+/// The feature flags that are on.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn list_feature_flags(state: State<'_, AppState>) -> AppResult<Vec<FeatureFlag>> {
+    let active = state.settings().active_features(state.dev_app);
+    Ok(active.into_iter().map(FeatureFlag::from).collect())
+}
+
+/// Turns on the feature flag that `key` belongs to; fails with `wrong_key` when it is none.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn unlock_feature_flag(state: State<'_, AppState>, key: String) -> AppResult<FeatureFlag> {
+    let feature = features::matching(FEATURES, &key)
+        .ok_or_else(|| AppError::new("wrong_key", "This key doesn't match any feature flag."))?;
+    state.change_features(|settings| settings.unlock_feature(feature.id))?;
+    Ok(FeatureFlag::from(feature))
+}
+
+/// Turns off the feature flag `id`, so only its key turns it on again.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn lock_feature_flag(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.change_features(|settings| settings.lock_feature(&id))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -561,6 +627,8 @@ pub struct AiSettingsView {
     saved_keys: Vec<String>,
     threshold: f64,
     show_answers: bool,
+    show_asked: bool,
+    debug: DebugSettings,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -583,6 +651,8 @@ pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettings
         saved_keys: KeychainSecrets::saved(),
         threshold: settings.routing.threshold,
         show_answers: settings.routing.show_answers,
+        show_asked: settings.routing.show_asked,
+        debug: settings.debug,
     })
 }
 
@@ -798,6 +868,85 @@ pub async fn restart_to_update(app: AppHandle, state: State<'_, AppState>) -> Ap
     state.sidecar.shutdown();
     state.updates.install_pending();
     app.restart()
+}
+
+/// A page of CIP Dataverse's datasets matching `search`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn dataverse_search(search: Search) -> AppResult<SearchPage> {
+    dataverse::search(&search)
+}
+
+/// A file of a CIP Dataverse dataset, with the Asset it already is in the Project, if any.
+#[derive(Debug, Serialize)]
+pub struct DatasetFile {
+    #[serde(flatten)]
+    pub file: DataverseFile,
+    pub asset: Option<AssetRef>,
+}
+
+/// The files of the CIP Dataverse dataset `dataset_id`, marking those already in the Project.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn dataverse_files(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    dataset_id: String,
+) -> AppResult<Vec<DatasetFile>> {
+    let project = state.project(project_id)?;
+    let files = dataverse::files(&dataset_id)?;
+    let mut in_project = assets::dataverse_files(&project.lock())?;
+    Ok(files
+        .into_iter()
+        .map(|file| DatasetFile { asset: in_project.remove(&file.id), file })
+        .collect())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FileToDownload {
+    pub id: u64,
+    pub name: String,
+}
+
+/// What became of one file of a download: the Asset it is now, or why it failed.
+#[derive(Debug, Serialize)]
+pub struct Downloaded {
+    pub file_id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset: Option<AssetRef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Downloads `files` of the CIP Dataverse `dataset` into the Project's Files, one at a time;
+/// a file that fails leaves the others downloaded.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn dataverse_download(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    dataset: Dataset,
+    files: Vec<FileToDownload>,
+) -> AppResult<Vec<Downloaded>> {
+    let project = state.project(project_id)?;
+    let user = state.user();
+    let mut results = Vec::new();
+    for file in files {
+        let origin = AssetOrigin::Dataverse {
+            file_id: file.id,
+            dataset_id: dataset.id.clone(),
+            title: dataset.title.clone(),
+            url: dataset.url.clone(),
+        };
+        // Downloaded outside the Project first, so a failed download leaves nothing in it.
+        let temporary = std::env::temp_dir().join(format!("mini-me-dataverse-{}", new_id()));
+        let stored = dataverse::download(file.id, &temporary).and_then(|()| {
+            assets::import_downloaded(&project, &temporary, &file.name, &user, &origin)
+        });
+        let _ = std::fs::remove_file(&temporary);
+        results.push(match stored {
+            Ok(asset) => Downloaded { file_id: file.id, asset: Some(asset), error: None },
+            Err(error) => Downloaded { file_id: file.id, asset: None, error: Some(error.message) },
+        });
+    }
+    Ok(results)
 }
 
 /// Opens the native file picker and imports every picked file. Paths come only from the
@@ -1142,6 +1291,50 @@ pub async fn delete_asset(
     asset_id: Uuid,
 ) -> AppResult<()> {
     assets::delete(&*state.project(project_id)?, asset_id)
+}
+
+/// Deletes every debug record of Project `project_id`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn clear_debug_records(state: State<'_, AppState>, project_id: Uuid) -> AppResult<()> {
+    state.project(project_id)?.lock().clear_debug_records()
+}
+
+/// Opens the sidecar log in the system's default app for it.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn open_sidecar_log(app: AppHandle) -> AppResult<()> {
+    let dir = app.path().app_log_dir().map_err(|e| AppError::storage(e.to_string()))?;
+    let path = dir.join(LOG_FILE);
+    if !path.exists() {
+        return Err(AppError::not_found("No sidecar log yet."));
+    }
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|e| AppError::new("open_failed", e.to_string()))
+}
+
+/// The third-party software a release build collected (`scripts/third-party.mjs`), as the
+/// "Third-party Software" page shows it; `null` in a build without it, such as a development
+/// build.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_third_party(app: AppHandle) -> AppResult<Option<Value>> {
+    let dir = app.path().resource_dir().map_err(|e| AppError::storage(e.to_string()))?;
+    let path = dir.join("third-party.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    Ok(Some(serde_json::from_str(&std::fs::read_to_string(path)?)?))
+}
+
+/// Message `message_id`'s debug records of `kind`, in the order they were written, read when
+/// its debug block is expanded.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_debug_records(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    message_id: Uuid,
+    kind: String,
+) -> AppResult<Vec<Value>> {
+    state.project(project_id)?.lock().debug_records(message_id, &kind)
 }
 
 /// Shows the file `asset_id` in the system's file manager.

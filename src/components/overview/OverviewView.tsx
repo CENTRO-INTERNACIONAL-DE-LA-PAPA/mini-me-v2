@@ -5,6 +5,7 @@ import {
   BookOpenIcon,
   ChartColumnIcon,
   ChevronRightIcon,
+  DatabaseIcon,
   FileIcon,
   LightbulbIcon,
   RefreshCwIcon,
@@ -13,7 +14,15 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "../../api";
-import type { MiniMe, Overview, OverviewOutput, ProjectSummary } from "../../protocol/types";
+import type {
+  AssetRef,
+  FileEntry,
+  MiniMe,
+  Overview,
+  OverviewOutput,
+  ProjectSummary,
+} from "../../protocol/types";
+import { TextComponentChip } from "../chat/TextComponentChip";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
 import { FileMark } from "../files/FileMark";
 import { FileMenu } from "../files/FileMenu";
@@ -22,7 +31,13 @@ import { isDocument } from "../files/files";
 import { MiniMePill } from "../minime/MiniMePill";
 import { ItemMenu } from "../shell/ItemMenu";
 import { SheetPage, SheetSection } from "../shell/Sheet";
-import { headerLine, relativeInSentence, shownOutputs } from "./overview";
+import {
+  findNamed,
+  headerLine,
+  relativeInSentence,
+  shownOutputs,
+  summaryParts,
+} from "./overview";
 import { useMiniMes } from "../../hooks/useMiniMes";
 
 interface Props {
@@ -41,6 +56,7 @@ const KINDS: Record<string, { label: string; icon: typeof FileIcon }> = {
   table: { label: "Table", icon: Table2Icon },
   "paper-sources": { label: "Papers", icon: BookOpenIcon },
   theories: { label: "Theories", icon: LightbulbIcon },
+  "dataset-results": { label: "Datasets", icon: DatabaseIcon },
   file: { label: "File", icon: FileIcon },
 };
 
@@ -59,6 +75,8 @@ export function OverviewView({
 }: Props) {
   const miniMes = useMiniMes();
   const [overview, setOverview] = useState<Overview | null>(null);
+  // The Project's files, which the summary's links may name.
+  const [files, setFiles] = useState<FileEntry[]>([]);
   const [writing, setWriting] = useState(false);
   const [all, setAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +84,7 @@ export function OverviewView({
   const refresh = useCallback(async () => {
     try {
       setOverview(await api.getOverview(project.id));
+      setFiles(await api.listProjectFiles(project.id));
     } catch (e) {
       setError(errorMessage(e));
     }
@@ -104,6 +123,8 @@ export function OverviewView({
   const featured = overview.featured;
   const featuredBy = featured ? miniMeOf(featured.author.id) : undefined;
   const shown = shownOutputs(overview.outputs, all);
+  const openFile = (id: string, name: string) =>
+    isDocument(name) ? onOpenDocument(id) : void api.openAsset(project.id, id).catch(() => {});
 
   return (
     <SheetPage
@@ -125,7 +146,22 @@ export function OverviewView({
           <Card aria-label="Summary" className="gap-2.5 px-[22px] py-5">
             <h2 className="font-serif text-heading text-foreground">Where things stand</h2>
             {overview.summary ? (
-              <p className="text-body whitespace-pre-line text-document-ink">{overview.summary}</p>
+              <p className="text-body whitespace-pre-line text-document-ink">
+                {summaryParts(overview.summary).map((part, index) => {
+                  const found = part.named && findNamed(part.text, files, overview.outputs);
+                  return (
+                    <SummaryPart
+                      key={index}
+                      text={part.text}
+                      file={found && "file" in found ? found.file : undefined}
+                      component={found && "component" in found ? found.component : undefined}
+                      miniMes={miniMes}
+                      onOpenFile={openFile}
+                      onOpenConversation={onOpenConversation}
+                    />
+                  );
+                })}
+              </p>
             ) : (
               <p className="text-body text-muted-foreground">
                 No summary yet. Mini-Me can write one from this Project's Conversations.
@@ -247,7 +283,7 @@ function OutputRow({
   miniMe?: MiniMe;
   onOpen: () => void;
 }) {
-  const { label, icon: Icon } = kindOf(output.kind);
+  const { icon: Icon } = kindOf(output.kind);
   return (
     <Button
       variant="ghost"
@@ -258,9 +294,44 @@ function OutputRow({
       <span className="grid min-w-0 flex-1">
         <span className="truncate text-ui">{output.title}</span>
         <span className="truncate text-meta text-muted-foreground">
-          {label} · {output.conversation_title}
+          From {output.conversation_title}
         </span>
       </span>
     </Button>
+  );
+}
+
+/** A piece of the summary: the same `#` or `$` chip as in messages for a name of a file, table
+ * or chart of the Project, else plain text, such as a name of one deleted since. */
+function SummaryPart({
+  text,
+  file,
+  component,
+  miniMes,
+  onOpenFile,
+  onOpenConversation,
+}: {
+  text: string;
+  file?: AssetRef;
+  component?: OverviewOutput;
+  miniMes: MiniMe[];
+  onOpenFile: (id: string, name: string) => void;
+  onOpenConversation: (conversationId: string, messageId: string) => void;
+}) {
+  const target = file ?? component;
+  if (!target) return <>{text}</>;
+  const label = `${file ? "#" : "$"}${text.replace(/^[#$]/, "")}`;
+  return (
+    <TextComponentChip
+      component={{ kind: file ? "asset" : "component", id: target.id, label, start: 0, end: 0 }}
+      miniMes={miniMes}
+      onOpenAsset={file && (() => onOpenFile(file.id, file.name))}
+      onOpenComponent={
+        component && (() => onOpenConversation(component.conversation_id, component.message_id))
+      }
+      componentKind={component?.kind === "chart" ? "chart" : "table"}
+    >
+      {label}
+    </TextComponentChip>
   );
 }

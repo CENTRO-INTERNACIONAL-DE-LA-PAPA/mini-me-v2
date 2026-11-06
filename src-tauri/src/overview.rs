@@ -62,8 +62,8 @@ fn author(kind: &str, id: String) -> AppResult<Author> {
     Ok(Author { kind, id })
 }
 
-/// The title an output card shows: a chart's or table's own title, a count of papers or
-/// theories, or the first line of the component's text for other kinds.
+/// The title an output card shows: a chart's or table's own title, a count of papers, theories
+/// or matching datasets, or the first line of the component's text for other kinds.
 fn component_title(kind: &str, title: Option<String>, count: Option<i64>, text: &str) -> String {
     match (kind, title, count) {
         ("chart" | "table", Some(title), _) if !title.trim().is_empty() => title,
@@ -73,6 +73,8 @@ fn component_title(kind: &str, title: Option<String>, count: Option<i64>, text: 
         ("paper-sources", _, Some(n)) => format!("{n} papers"),
         ("theories", _, Some(1)) => "1 theory".into(),
         ("theories", _, Some(n)) => format!("{n} theories"),
+        ("dataset-results", _, Some(1)) => "1 dataset".into(),
+        ("dataset-results", _, Some(n)) => format!("{n} datasets"),
         _ => text.lines().next().unwrap_or(kind).to_string(),
     }
 }
@@ -147,7 +149,8 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
     let in_conversations = comments::not_a_thread(conn, "v.id")?;
     let mut stmt = conn.prepare(&format!(
         "SELECT c.kind, c.id, json_extract(c.data, '$.title'), \
-         COALESCE(json_array_length(c.data, '$.papers'), json_array_length(c.data, '$.theories')), \
+         COALESCE(json_array_length(c.data, '$.papers'), json_array_length(c.data, '$.theories'), \
+         json_extract(c.data, '$.total')), \
          c.text, m.author_kind, m.author_id, m.conversation_id, v.title, m.id, c.created_at \
          FROM components c JOIN messages m ON m.id = c.message_id \
          JOIN conversations v ON v.id = m.conversation_id \

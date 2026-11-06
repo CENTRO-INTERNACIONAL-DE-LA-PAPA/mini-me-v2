@@ -17,9 +17,9 @@ use crate::error::{AppError, AppResult};
 use crate::history::{author_name, results};
 use crate::library::{FALLBACK_MINI_ME, Library};
 use crate::user_library::LibraryStore;
-use crate::link::{CallModel, RouteFile, RouteMiniMe, RunFile};
+use crate::link::{CallModel, RouteComponent, RouteFile, RouteMiniMe, RunFile};
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
-use crate::runs::{RouteAnswers, RunSpec, Runs};
+use crate::runs::{RouteAnswers, Routed, RunSpec, Runs};
 use crate::store::Project;
 
 /// How long a message waits for Jev before the fallback Mini-Me answers it.
@@ -44,8 +44,10 @@ pub struct RouteSettings {
     pub model: Option<CallModel>,
     pub threshold: f64,
     pub timeout: Duration,
-    /// Store Jev's raw answers with the message (a developer setting).
+    /// Store Jev's answers in the message's debug record (a developer setting).
     pub show_answers: bool,
+    /// Store what was sent to Jev in the message's debug record (a developer setting).
+    pub show_asked: bool,
     /// The share of confident reactions that are added, from 0 to 1.
     pub reaction_chance: f64,
 }
@@ -206,32 +208,18 @@ impl Routing {
             })
             .collect();
         let messages = project.lock().conversation_messages(conversation_id).unwrap_or_default();
-        let files = file_options(project, &messages, message, &library);
+        let files = file_options(project, conversation_id, &messages, message, &library);
         if !files.is_empty() {
             ask.push("file".to_string());
         }
         let recent = recent(&messages, message.id, &library);
         let state = state(message, recent);
-        let routed = calls.route(state, mini_mes, files.clone(), ask, settings.timeout);
-        if settings.show_answers {
-            let (answers, error) = match &routed {
-                Ok(answers) => (json!(answers), None),
-                Err(err) => (
-                    Value::Null,
-                    Some(ErrorInfo {
-                        code: err.code.clone(),
-                        message: err.message.clone(),
-                    }),
-                ),
-            };
-            if let Err(err) = conversations::record_jev_answers(
-                project,
-                conversation_id,
-                message.id,
-                answers,
-                error,
-            ) {
-                eprintln!("could not store Jev's answers: {err}");
+        let Routed { answers: routed, asked } =
+            calls.route(state, mini_mes, files.clone(), ask, settings.timeout);
+        if let Some(record) = jev_record(&routed, asked, settings) {
+            let stored = project.lock().put_debug_record(conversation_id, message.id, "jev", &record);
+            if let Err(err) = stored {
+                eprintln!("could not store Jev's record: {err}");
             }
         }
         if let Some(warning) = warning_after(&routed) {
@@ -385,10 +373,12 @@ fn warning_after(routed: &AppResult<RouteAnswers>) -> Option<Option<&'static str
     }
 }
 
-/// The options of Jev's `file` question: the Conversation's Assets, newest first, or none
+/// The options of Jev's `file` question: the Assets of `messages`, the Conversation
+/// `conversation_id`, newest first, each with the tables and charts shown from it; or none
 /// when `message` references or attaches a file of its own, which always wins.
 fn file_options(
     project: &Project,
+    conversation_id: Uuid,
     messages: &[Message],
     message: &Message,
     library: &Library,
@@ -400,14 +390,46 @@ fn file_options(
     let found = results(messages, message.id, message.id, library, |id| {
         assets::find(&state, id).ok()
     });
+    let mut components = state.file_components(conversation_id).unwrap_or_default();
     found
         .assets
         .into_iter()
         .map(|a| RouteFile {
             id: a.asset.id,
             name: a.asset.name,
+            components: components
+                .remove(&a.asset.id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(kind, title)| RouteComponent { kind, title })
+                .collect(),
         })
         .collect()
+}
+
+/// The `jev` debug record of a routing request, `{ asked, answers, error }`, holding only the
+/// parts whose developer setting is on; `None` when both are off.
+fn jev_record(
+    routed: &AppResult<RouteAnswers>,
+    asked: Value,
+    settings: &RouteSettings,
+) -> Option<Value> {
+    if !settings.show_answers && !settings.show_asked {
+        return None;
+    }
+    let (answers, error) = match routed {
+        _ if !settings.show_answers => (Value::Null, None),
+        Ok(answers) => (json!(answers), None),
+        Err(err) => (
+            Value::Null,
+            Some(ErrorInfo {
+                code: err.code.clone(),
+                message: err.message.clone(),
+            }),
+        ),
+    };
+    let asked = if settings.show_asked { asked } else { Value::Null };
+    Some(json!({ "asked": asked, "answers": answers, "error": error }))
 }
 
 /// A random number from 0 up to 1, taken from the random bits of a new UUIDv7.
@@ -649,7 +671,11 @@ mod tests {
     #[test]
     fn jev_picks_one_of_the_offered_files_at_or_above_the_threshold() {
         let library = Library::builtin();
-        let cleaned = RouteFile { id: new_id(), name: "field-trial-cleaned.csv".into() };
+        let cleaned = RouteFile {
+            id: new_id(),
+            name: "field-trial-cleaned.csv".into(),
+            components: Vec::new(),
+        };
         let files = [cleaned.clone()];
         let pick = |choice: &str, confidence: f64| {
             let answers = answers(vec![("file", answer(choice, confidence, &[]))]);
@@ -782,6 +808,8 @@ mod tests {
         calls: Arc<Runs>,
         sink: Arc<Recorder>,
         routing: Arc<Routing>,
+        /// Whether messages are sent with both Jev debug settings on.
+        debug: bool,
     }
 
     fn fixture() -> Fixture {
@@ -816,6 +844,7 @@ mod tests {
             calls,
             sink,
             routing: Routing::new(library, true),
+            debug: false,
         }
     }
 
@@ -838,7 +867,8 @@ mod tests {
                 }),
                 threshold: 0.5,
                 timeout,
-                show_answers: false,
+                show_answers: self.debug,
+                show_asked: self.debug,
                 reaction_chance: 1.0,
             };
             self.routing.send(
@@ -953,9 +983,10 @@ mod tests {
         });
         let mut tagged = message("check #trial.csv", &[]);
         tagged.attachments = earlier.attachments.clone();
-        assert!(file_options(&f.project, &[plain.clone()], &plain, &library).is_empty());
+        let alone = [plain.clone()];
+        assert!(file_options(&f.project, f.conversation, &alone, &plain, &library).is_empty());
         let messages = [earlier, tagged.clone()];
-        assert!(file_options(&f.project, &messages, &tagged, &library).is_empty());
+        assert!(file_options(&f.project, f.conversation, &messages, &tagged, &library).is_empty());
 
         f.send("check the data", &[], ROUTE_TIMEOUT).unwrap();
         f.route_id();
@@ -964,6 +995,107 @@ mod tests {
             panic!("expected one route.start, got {starts:?}");
         };
         assert!(files.is_empty() && !ask.contains(&"file".to_string()));
+    }
+
+    #[test]
+    fn a_file_option_lists_the_tables_and_charts_shown_from_it_newest_first() {
+        let f = fixture();
+        let input = SendMessageInput {
+            content: "plot the trial".into(),
+            attachments: Vec::new(),
+            text_components: Vec::new(),
+        };
+        let question =
+            conversations::send_message(&f.project, f.conversation, input, new_id()).unwrap();
+        let plotter = Author { kind: AuthorKind::MiniMe, id: "plotter".into() };
+        let author = plotter.clone();
+        let reply =
+            conversations::start_reply(&f.project, f.conversation, question.id, author).unwrap();
+        let file = ("field-trial.csv", "text/csv", b"plot\n1\n".as_slice());
+        let asset = conversations::attach_generated(&f.project, reply, &plotter, file).unwrap();
+        let source = json!({ "source": asset.name, "source_id": asset.id });
+        let shown = [("table", "Field trial"), ("chart", "Yield by variety")];
+        for (kind, title) in shown {
+            let mut data = source.clone();
+            data["title"] = json!(title);
+            let component = (kind, 1, data, title.to_string());
+            conversations::add_component(&f.project, reply, None, component).unwrap();
+        }
+        conversations::complete_reply(&f.project, reply).unwrap();
+
+        f.send("make that chart a bar chart", &[], ROUTE_TIMEOUT).unwrap();
+        f.route_id();
+        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
+        let [CoreFrame::RouteStart { files, .. }] = starts.as_slice() else {
+            panic!("expected one route.start, got {starts:?}");
+        };
+        let component = |kind: &str, title: &str| RouteComponent {
+            kind: kind.into(),
+            title: Some(title.into()),
+        };
+        let expected = RouteFile {
+            id: asset.id,
+            name: asset.name.clone(),
+            components: vec![
+                component("chart", "Yield by variety"),
+                component("table", "Field trial"),
+            ],
+        };
+        assert_eq!(files, &vec![expected]);
+    }
+
+    #[test]
+    fn jevs_record_holds_only_the_parts_whose_setting_is_on() {
+        let settings = |show_answers: bool, show_asked: bool| RouteSettings {
+            model: None,
+            threshold: 0.5,
+            timeout: ROUTE_TIMEOUT,
+            show_answers,
+            show_asked,
+            reaction_chance: 1.0,
+        };
+        let asked = json!({ "state": { "message": "hi" }, "questions": {} });
+        let thumbs_up = answers(vec![("reaction", answer("👍", 0.9, &[]))]);
+        let answered: AppResult<RouteAnswers> = Ok(thumbs_up);
+        let timed_out: AppResult<RouteAnswers> =
+            Err(AppError::new("jev_timeout", "Typesafe did not answer in time."));
+        let record = |routed: &AppResult<RouteAnswers>, on: (bool, bool)| {
+            jev_record(routed, asked.clone(), &settings(on.0, on.1))
+        };
+
+        let both = record(&answered, (true, true)).unwrap();
+        assert_eq!(both["asked"], asked);
+        assert_eq!(both["answers"]["reaction"]["choice"], json!("👍"));
+        let only_answers = record(&answered, (true, false)).unwrap();
+        assert_eq!((&only_answers["asked"], &only_answers["error"]), (&Value::Null, &Value::Null));
+        let late = record(&timed_out, (true, true)).unwrap();
+        assert_eq!(late["answers"], Value::Null);
+        assert_eq!(late["error"]["code"], json!("jev_timeout"));
+        assert_eq!(record(&answered, (false, false)), None);
+    }
+
+    #[test]
+    fn jevs_record_is_stored_with_the_message() {
+        let mut f = fixture();
+        f.debug = true;
+        let sent = f.send("check the data", &[], ROUTE_TIMEOUT).unwrap();
+        let route_id = f.route_id();
+        let asked = json!({ "state": { "message": "check the data" }, "questions": {} });
+        f.calls.handle(crate::link::SidecarFrame::RouteDone {
+            route_id,
+            answers: answers(vec![("needs_context", answer("no", 0.9, &[]))]),
+            asked: asked.clone(),
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let record = loop {
+            if let Some(record) = f.project.lock().debug_records(sent.id, "jev").unwrap().pop() {
+                break record;
+            }
+            assert!(Instant::now() < deadline, "no jev record was stored");
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(record["asked"], asked);
+        assert_eq!(record["answers"]["needs_context"]["choice"], json!("no"));
     }
 
     #[test]
@@ -983,6 +1115,7 @@ mod tests {
                 ("reaction", answer("👍", 0.9, &[])),
                 ("needs_context", answer("no", 0.9, &[])),
             ]),
+            asked: Value::Null,
         });
         let assistant = Author {
             kind: AuthorKind::MiniMe,

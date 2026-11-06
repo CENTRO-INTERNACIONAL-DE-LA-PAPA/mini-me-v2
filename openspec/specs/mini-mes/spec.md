@@ -86,7 +86,7 @@ editors describe. The list of Mini-Mes the UI gets SHALL say for each whether it
   built-in
 
 ### Requirement: Predefined Mini-Mes
-Mini-Me SHALL ship with fifteen Mini-Mes:
+Mini-Me SHALL ship with sixteen Mini-Mes:
 - **Scribe:** "Summarizes your messages and the files you reference"; one Step running
   *Summarize*.
 - **Assistant:** "Answers general questions and requests that no other Mini-Me specializes
@@ -115,6 +115,8 @@ Mini-Me SHALL ship with fifteen Mini-Mes:
   *Clean Data*.
 - **Linker:** "Joins two data tables on their key columns"; one Step running *Join Data*.
 - **Plotter:** "Draws charts of a data table"; one Step running *Plot*.
+- **CIP's Archivist:** "Finds datasets in CIP's Dataverse and downloads their files into the
+  Project"; one Step running *Search CIP Dataverse*.
 - **Investigator:** "Investigates a research question in several steps: explores it, plans,
   tests the plan against criticism and, if you approve, designs an experiment"; the
   the Workflow described by the Investigator requirements below.
@@ -124,7 +126,8 @@ Their colours follow DESIGN.md's Mini-Me colour family, and no two share a colou
 #### Scenario: Mini-Mes available
 - **WHEN** the user types `@` in the composer
 - **THEN** Scribe, Assistant, Researcher, Theorist, Explorer, Skeptic, Planner, Inquirer,
-  Experimenter, Profiler, Validator, Curator, Linker, Plotter and Investigator are offered
+  Experimenter, Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist and Investigator
+  are offered
 
 #### Scenario: General question
 - **WHEN** the user sends "@Assistant what is late blight?"
@@ -177,14 +180,14 @@ a neutral pill.
 
 ### Requirement: Placeholder Traits
 The Trait library SHALL contain placeholder Traits for Traits that later changes will
-build: *Explore Dataverse*, *Code*, *Collect Data*, *Model*, *Predict* and *Index Sources*.
+build: *Code*, *Collect Data*, *Model*, *Predict* and *Index Sources*.
 Documents are written with the write-a-document tool, so there is no *Document* Trait. Each runs on the `echo` adapter and has no instructions. No predefined
 Mini-Me's Workflow SHALL reference a placeholder Trait.
 
 #### Scenario: Placeholders are in the library
 - **WHEN** the app starts
-- **THEN** the library contains *Explore Dataverse*, *Code*, *Collect Data*, *Model*,
-  *Predict* and *Index Sources*, each with adapter `echo`, and no *Document*
+- **THEN** the library contains *Code*, *Collect Data*, *Model*, *Predict* and *Index Sources*,
+  each with adapter `echo`, and no *Document*
 
 #### Scenario: Placeholders can't be invoked
 - **WHEN** the user types `@` in the composer, or sends a message without a mention
@@ -300,8 +303,9 @@ line typed with Shift+Enter SHALL be sent as a line break.
 ### Requirement: Predefined Mini-Mes have groups
 The predefined Mini-Mes SHALL have these groups: Thinking for Assistant, Scribe, Explorer,
 Skeptic, Planner, Inquirer, Experimenter and Investigator; Literature for Researcher and
-Theorist; Data for Profiler, Validator, Curator, Linker and Plotter.
+Theorist; Data for Profiler, Validator, Curator, Linker, Plotter and CIP's Archivist.
 
 #### Scenario: Data Mini-Mes
 - **WHEN** the user types "@" alone
-- **THEN** Profiler, Validator, Curator, Linker and Plotter are listed under Data
+- **THEN** Profiler, Validator, Curator, Linker, Plotter and CIP's Archivist are listed under
+  Data

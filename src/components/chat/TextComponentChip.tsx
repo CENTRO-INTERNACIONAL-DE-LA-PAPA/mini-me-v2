@@ -6,17 +6,22 @@ import { MiniMePill } from "../minime/MiniMePill";
 import { ReferenceChip } from "./ReferenceChip";
 import { useFileExists } from "./existingFiles";
 
-/** A Text Component: a Mini-Me's pill, a `$` table or chart chip, or a file chip that opens
- * the file when `onOpenAsset` is given. */
+/** A Text Component: a Mini-Me's pill, a `$` table or chart chip that opens the component
+ * when `onOpenComponent` is given, or a file chip that opens the file when `onOpenAsset` is.
+ * Outside a Conversation, `componentKind` says whether a `$` chip names a chart. */
 export function TextComponentChip({
   component,
   miniMes,
   onOpenAsset,
+  onOpenComponent,
+  componentKind,
   children,
 }: {
   component: TextComponent;
   miniMes: MiniMe[];
   onOpenAsset?: (assetId: string) => void;
+  onOpenComponent?: (componentId: string) => void;
+  componentKind?: "table" | "chart";
   children: ReactNode;
 }) {
   const exists = useFileExists(component.kind === "asset" ? component.id : null);
@@ -24,12 +29,20 @@ export function TextComponentChip({
     return <MiniMePill miniMe={miniMes.find((m) => m.id === component.id)}>{children}</MiniMePill>;
   }
   if (component.kind === "component") {
-    return <ComponentChip componentId={component.id}>{children}</ComponentChip>;
+    return (
+      <ComponentChip
+        componentId={component.id}
+        kind={componentKind}
+        onOpen={onOpenComponent && (() => onOpenComponent(component.id))}
+      >
+        {children}
+      </ComponentChip>
+    );
   }
   if (!exists) {
     return (
       <ReferenceChip title="This file was deleted" className="text-muted-foreground">
-        {children} · file removed
+        {children} (Deleted)
       </ReferenceChip>
     );
   }
@@ -43,8 +56,27 @@ export function TextComponentChip({
   );
 }
 
-/** A `$` reference: a chart's icon for a chart of the open Conversation, else a table's. */
-function ComponentChip({ componentId, children }: { componentId: string; children: ReactNode }) {
-  const Icon = useComponentName(componentId)?.kind === "chart" ? ChartColumnIcon : Table2Icon;
-  return <ReferenceChip icon={Icon}>{children}</ReferenceChip>;
+/** A `$` reference: a chart's icon for a chart of the open Conversation or of `kind`, else a
+ * table's. */
+function ComponentChip({
+  componentId,
+  kind,
+  onOpen,
+  children,
+}: {
+  componentId: string;
+  kind?: "table" | "chart";
+  onOpen?: () => void;
+  children: ReactNode;
+}) {
+  const chart = (useComponentName(componentId)?.kind ?? kind) === "chart";
+  return (
+    <ReferenceChip
+      icon={chart ? ChartColumnIcon : Table2Icon}
+      title={onOpen && "Open in its Conversation"}
+      onOpen={onOpen}
+    >
+      {children}
+    </ReferenceChip>
+  );
 }

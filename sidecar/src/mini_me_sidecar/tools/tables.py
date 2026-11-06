@@ -33,15 +33,17 @@ async def read_table(ctx: CallContext, asset_id: str, name: str, text: str = "")
             f"{name} is larger than 100 MiB, the limit for data files.", "table_too_large"
         )
     try:
-        return await WORKERS.run(ctx, parse_table, name, data, text)
+        table = await WORKERS.run(ctx, parse_table, name, data, text)
     except TraitError as error:
         raise ToolError(str(error), error.code) from None
+    table.source_id = asset_id
+    return table
 
 
 async def read_reference(ctx: CallContext, reference: dict[str, Any]) -> Table:
-    """The table a `$` reference (a `component` Text Component) points to, named after the
-    table with a `.csv` extension: the file it was shown from when the core names one, else
-    the component's own rows."""
+    """The table a `$` reference (a `component` Text Component) points to: the file it was
+    shown from when the core names one, named after that file, else the component's own rows,
+    named after the table with a `.csv` extension."""
     label = str(reference.get("label", ""))
     ctx.progress(f"Reading {label}")
     try:
@@ -54,11 +56,11 @@ async def read_reference(ctx: CallContext, reference: dict[str, Any]) -> Table:
         raise ToolError(f"{trait} reads tables, and {label} is a {kind}.", "not_a_table")
     data = component.get("data") or {}
     source_id = component.get("source_asset_id")
+    name = f"{label.removeprefix('$')}.csv"
     if source_id:
         frame = await _source_frame(ctx, str(source_id), data)
-    else:
-        frame = given_frame(data.get("columns") or [], data.get("rows") or [])
-    return Table(f"{label.removeprefix('$')}.csv", frame)
+        return Table(str(data.get("source") or name), frame, source_id=str(source_id))
+    return Table(name, given_frame(data.get("columns") or [], data.get("rows") or []))
 
 
 async def show_frame(

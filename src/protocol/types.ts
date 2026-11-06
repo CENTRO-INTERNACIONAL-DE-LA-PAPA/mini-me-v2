@@ -117,15 +117,24 @@ export type KnownEvent = Envelope &
     | { type: "component.added"; payload: { message_id: Uuid; component: Component } }
     | { type: "reaction.added"; payload: { message_id: Uuid; emoji: string; by: Author } }
     | { type: "reaction.removed"; payload: { message_id: Uuid; emoji: string; by: Author } }
-    | { type: "routing.answered"; payload: JevAnswers & { message_id: Uuid } }
   );
 
-/** Jev's raw answers about a message, shown by the "Show Jev's answers" developer setting. */
-export interface JevAnswers {
-  answers: Record<
-    string,
-    { choice: string; confidence: number; probabilities: Record<string, number> }
-  > | null;
+/** Jev's answer to one question: the option it chose and every option's probability. */
+export interface JevAnswer {
+  choice: string;
+  confidence: number;
+  probabilities: Record<string, number>;
+}
+
+/** A message's `jev` debug record. Each part is null while its developer setting was off;
+ * `answers` is also null, and `error` set, when Jev did not answer. */
+export interface JevRecord {
+  /** What was sent to Jev: the state, and each question's instructions and option texts. */
+  asked: {
+    state: unknown;
+    questions: Record<string, { instructions: string; options: Record<string, string> }>;
+  } | null;
+  answers: Record<string, JevAnswer> | null;
   error: ErrorInfo | null;
 }
 
@@ -195,11 +204,25 @@ export interface ConversationRef {
   title: string;
 }
 
+/** Where an Asset downloaded from outside the Project came from. */
+export type AssetOrigin = {
+  kind: "dataverse";
+  /** The file's ID in CIP's Dataverse. */
+  file_id: number;
+  /** The dataset's persistent ID, such as `doi:10.21223/R694DO`. */
+  dataset_id: string;
+  title: string;
+  url: string;
+};
+
 /** An Asset as the Project's Files screen lists it. */
 export interface FileEntry extends AssetRef {
   /** `upload` for a file the user imported or started, `generated` for one the app made,
-   * such as a Mini-Me's output or an exported PDF. */
-  source: "upload" | "generated";
+   * such as a Mini-Me's output or an exported PDF, `dataverse` for one downloaded from CIP's
+   * Dataverse. */
+  source: "upload" | "generated" | "dataverse";
+  /** Where a downloaded file came from; null for every other file. */
+  origin: AssetOrigin | null;
   created_at: number;
   /** When its file last changed (Unix ms); null when the file is missing. */
   modified_at: number | null;
@@ -207,6 +230,51 @@ export interface FileEntry extends AssetRef {
   added_by: Author | null;
   /** The Conversations that attach or reference the Asset, in the order it first appeared. */
   used_in: ConversationRef[];
+}
+
+/** A search of CIP Dataverse's datasets: keywords, optional years of publication, and how
+ * many matching datasets come before the page. */
+export interface DataverseSearch {
+  query: string;
+  from_year: number | null;
+  to_year: number | null;
+  start: number;
+}
+
+/** A dataset in CIP's Dataverse. */
+export interface Dataset {
+  /** Its persistent ID, such as `doi:10.21223/R694DO`. */
+  id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  url: string;
+  description: string;
+  /** How many files it has. */
+  files: number;
+}
+
+/** A page of CIP Dataverse's datasets, with how many match on every page. */
+export interface DataversePage {
+  total: number;
+  datasets: Dataset[];
+}
+
+/** A file of a Dataverse dataset, with the Asset it already is in the Project, if any. */
+export interface DatasetFile {
+  id: number;
+  name: string;
+  media_type: string;
+  size_bytes: number;
+  restricted: boolean;
+  asset: AssetRef | null;
+}
+
+/** What became of one file of a download: the Asset it is now, or why it failed. */
+export interface Downloaded {
+  file_id: number;
+  asset?: AssetRef;
+  error?: string;
 }
 
 /** A comment thread on a passage of a document: a Conversation shown only in the document
@@ -387,7 +455,7 @@ export interface SavedDefinition {
 export type ProviderId = "openai" | "anthropic" | "google" | "openrouter";
 
 /** Every key the keychain can hold: the AI providers and Typesafe, which routes messages. */
-export type KeyAccount = ProviderId | "typesafe";
+export type KeyAccount = ProviderId | "typesafe" | "dataverse";
 
 /** The AI and routing settings. Saved keys are only named, never sent to the UI. */
 /** A reply paused at an approval, in any Project. */
@@ -438,6 +506,13 @@ export interface HomeSettings {
   show_mini_mes: boolean;
 }
 
+/** A feature flag that is on: an experimental feature turned on by its key. */
+export interface FeatureFlag {
+  id: string;
+  name: string;
+  description: string;
+}
+
 /** The app-wide profile in `user-profile.json`. */
 export interface UserProfile {
   name: string | null;
@@ -451,9 +526,78 @@ export interface AiSettings {
   saved_keys: KeyAccount[];
   /** Below this confidence in Jev's choice, the user is asked to mention a Mini-Me; 0 to 1. */
   threshold: number;
-  /** Developer setting: store and show Jev's raw answers under each message. */
+  /** Developer setting: store and show Jev's answers under each message. */
   show_answers: boolean;
+  /** Developer setting: store and show what was sent to Jev under each message. */
+  show_asked: boolean;
+  /** Developer settings: the parts of each reply's debug records to store and show. */
+  debug: ReplyDebugSettings;
 }
+
+export interface ReplyDebugSettings {
+  reply_input: boolean;
+  reply_details: boolean;
+  reply_tools: boolean;
+}
+
+/** The third-party software a release build ships (`scripts/third-party.mjs`). */
+export interface ThirdParty {
+  /** Mini-Me's own NOTICE and license. */
+  notice: string;
+  license: string;
+  /** Each distinct license or notice text once; components refer to them by index. */
+  texts: string[];
+  /** Sorted by part, then name. */
+  components: ThirdPartyComponent[];
+}
+
+export interface ThirdPartyComponent {
+  /** Which part of the app ships it: the Rust core, the interface, or the AI runtime. */
+  part: "core" | "interface" | "runtime";
+  name: string;
+  version: string;
+  license: string;
+  repository: string | null;
+  texts: number[];
+}
+
+/** One message of a model call's input, as a reply's debug record holds it. */
+export interface DebugMessage {
+  role: string;
+  /** Text, or the provider's content blocks. */
+  content: unknown;
+  tool_calls?: { name: string; args: unknown; id?: string }[];
+  tool_call_id?: string;
+}
+
+/** A model call of a reply. Each part is null when its switch was off. */
+export interface ModelCallRecord {
+  type: "model_call";
+  id: string;
+  step: string;
+  /** null for a Workflow decision. */
+  trait: string | null;
+  /** The model call whose whole input this call's input starts with; `messages` then holds
+   * only the messages after it. */
+  continues: string | null;
+  messages: DebugMessage[] | null;
+  provider: string | null;
+  model: string | null;
+  duration_ms: number | null;
+  tokens_in: number | null;
+  tokens_out: number | null;
+}
+
+/** A tool a model called, asked for by model call `call`, with the result the model got. */
+export interface ToolCallRecord {
+  type: "tool_call";
+  call: string | null;
+  name: string;
+  args: unknown;
+  result: string;
+}
+
+export type ReplyRecord = ModelCallRecord | ToolCallRecord;
 
 /** What the app knows about the user's Quarto, which documents are edited and rendered with. */
 export interface QuartoStatus {

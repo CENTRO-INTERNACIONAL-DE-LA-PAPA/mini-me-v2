@@ -1,7 +1,9 @@
 ## Summary
 What this changes and why, in one to three sentences.
 
-Closes #… · Roadmap #… · OpenSpec change: `openspec/changes/<name>/`
+Closes #…
+Roadmap #…
+OpenSpec change: `openspec/changes/<name>/`
 (Keep only the links that apply.)
 
 ## Changes

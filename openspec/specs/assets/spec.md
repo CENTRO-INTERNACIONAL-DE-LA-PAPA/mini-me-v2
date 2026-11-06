@@ -108,7 +108,9 @@ The app SHALL show every Asset of the open Project on its Files screen, newest f
 its name, who added it, the Conversations that use it, when it was added and its size. "Who
 added it" SHALL be the author recorded with the Asset when it is created: the user for a file
 they upload, paste, drop or start, the Mini-Me whose reply saves a file, Scribe for a document
-it drafted, and for a PDF exported from a document, whoever added that document. An Asset
+it drafted, and for a PDF exported from a document, whoever added that document. A file
+downloaded from CIP Dataverse SHALL show "From Dataverse" in place of who added it, which
+opens its dataset. An Asset
 SHALL count as used in a Conversation when one of its messages attaches it or references it
 with `#`. The Files screen SHALL filter Assets by name and by kind (data, documents, or files a Mini-Me
 saved), import files with Upload, and open an Asset when its row is clicked.
@@ -126,6 +128,10 @@ saved), import files with Upload, and open an Asset when its row is clicked.
 - **WHEN** Scribe drafts "Trial design.qmd" from a Conversation and the user exports it
 - **THEN** the Files screen shows both "Trial design.qmd" and "Trial design.pdf" as added by
   Scribe
+
+#### Scenario: A file from Dataverse
+- **WHEN** the user downloads `late-blight-2021.csv` from a dataset in a results card
+- **THEN** the Files screen shows it as "From Dataverse", which opens the dataset's DOI
 
 ### Requirement: Attachments in the composer
 Files attached to a message being written SHALL show in a row at the top of the composer,
@@ -179,7 +185,7 @@ change only the name stored for the file's ID. Duplicate SHALL add a copy named 
 
 ### Requirement: Deleting a file
 Delete SHALL ask first, and after confirmation SHALL remove the file's record and its folder in the
-Project. References to it in messages SHALL show as a "file removed" chip.
+Project. References to it in messages SHALL show as a chip with "(Deleted)" after its name.
 
 #### Scenario: Delete
 - **WHEN** the user confirms deleting `field-trial.csv`
@@ -187,4 +193,4 @@ Project. References to it in messages SHALL show as a "file removed" chip.
 
 #### Scenario: A reference to a deleted file
 - **WHEN** a message references a file that was deleted
-- **THEN** the reference shows as a "file removed" chip and opens nothing
+- **THEN** the reference shows as a chip with "(Deleted)" after its name and opens nothing

@@ -3,6 +3,7 @@ name = "mini-me-sidecar"
 version = "0.1.0"
 description = "Runs Mini-Me's Traits for the Rust core over a JSON-lines link."
 requires-python = "==3.14.*"
+license = "GPL-3.0-or-later"
 dependencies = [
     "asta",
     "langchain-anthropic>=1.7.6",

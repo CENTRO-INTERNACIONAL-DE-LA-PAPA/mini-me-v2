@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
 import { useDeveloperMode } from "./hooks/useDeveloperMode";
+import { useFilesChanged } from "./hooks/useFilesChanged";
 import { useRunningKey } from "./hooks/useRunningReplies";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/chat/ChatView";
@@ -13,6 +14,7 @@ import { LibraryView } from "./components/library/LibraryView";
 import { MiniMeEditor } from "./components/library/MiniMeEditor";
 import { OverviewView } from "./components/overview/OverviewView";
 import { SettingsView } from "./components/settings/SettingsView";
+import { ThirdPartyView } from "./components/shell/ThirdPartyView";
 import { WhatsNewView } from "./components/shell/WhatsNewView";
 import { AppSidebar } from "./components/shell/AppSidebar";
 import { MainSheet } from "./components/shell/Sheet";
@@ -69,11 +71,13 @@ export default function App() {
     refreshConversations();
   }, [refreshConversations]);
 
-  // A Conversation's status, shown in the sidebar, follows its reply as it runs, pauses and ends.
+  // A Conversation's status, shown in the sidebar, follows its reply as it runs, pauses and ends;
+  // the file count also follows files added without a reply, such as a download.
   const runningKey = useRunningKey();
+  const filesChanged = useFilesChanged(projectId);
   useEffect(() => {
     refreshConversations();
-  }, [runningKey, refreshConversations]);
+  }, [runningKey, filesChanged, refreshConversations]);
 
   // The first start after an update opens What's new once, over Home.
   useEffect(() => {
@@ -246,14 +250,20 @@ function Main({
       return scrolling(
         <SettingsView
           initialPage={view.page}
+          projectId={project?.id}
           onOpenAvatars={() => onNavigate({ kind: "avatars" })}
           onOpenWhatsNew={() =>
             onNavigate({ kind: "whats-new", from: { kind: "settings", page: "about" } })
           }
+          onOpenThirdParty={() => onNavigate({ kind: "third-party" })}
         />,
       );
     case "whats-new":
       return scrolling(<WhatsNewView onClose={() => onNavigate(view.from ?? { kind: "home" })} />);
+    case "third-party":
+      return scrolling(
+        <ThirdPartyView onClose={() => onNavigate({ kind: "settings", page: "about" })} />,
+      );
     case "avatars":
       // Opened from Settings → General, so closing it goes back there.
       return scrolling(<AvatarDebugView onClose={() => onNavigate({ kind: "settings" })} />);
@@ -342,7 +352,6 @@ function Main({
         <DocumentView
           key={view.assetId}
           projectId={project.id}
-          projectName={project.name}
           assetId={view.assetId}
           draftFrom={view.draftFrom}
           comments={view.comments}

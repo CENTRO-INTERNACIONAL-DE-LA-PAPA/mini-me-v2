@@ -16,7 +16,7 @@ describe("paper-sources version 1", () => {
     expect(html).toContain(`Paper ${SHOWN_SOURCES}<`);
     expect(html).not.toContain(`Paper ${SHOWN_SOURCES + 1}<`);
     expect(html).toContain("Show all sources (18)");
-    expect(html).toContain("A, B, C et al. · 2020");
+    expect(html).toContain("A, B, C et al. (2020)");
   });
 
   it("makes a card without a web address plain text", () => {

@@ -87,7 +87,8 @@
         },
         "needs_context": false,
         "file": null,
-        "mini_mes": []
+        "mini_mes": [],
+        "debug": { "input": true, "details": true, "tools": false }
       },
       "resume": { "state": "eyJmb3JtYXQiOjF9", "step_id": "ask", "approved": true }
     },
@@ -162,6 +163,23 @@
     },
     { "type": "run.progress", "run_id": "0199d0a0-0000-7000-8000-000000000301", "label": "Thinking", "fraction": null },
     {
+      "type": "run.debug",
+      "run_id": "0199d0a0-0000-7000-8000-000000000301",
+      "entry": {
+        "type": "model_call",
+        "id": "c1",
+        "step": "Summarize",
+        "trait": "Summarize",
+        "continues": null,
+        "messages": [{ "role": "user", "content": "Summarize field-trial.csv" }],
+        "provider": "anthropic",
+        "model": "claude-sonnet-5-5",
+        "duration_ms": 1200,
+        "tokens_in": 850,
+        "tokens_out": 120
+      }
+    },
+    {
       "type": "step.started",
       "run_id": "0199d0a0-0000-7000-8000-000000000301",
       "step_id": "summarize",
@@ -200,12 +218,22 @@
           "probabilities": { "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01": 0.95 }
         },
         "reaction": { "choice": "none", "confidence": 0.8, "probabilities": { "none": 0.9 } }
+      },
+      "asked": {
+        "state": { "message": "hi", "files": [], "recent": [] },
+        "questions": {
+          "reaction": {
+            "instructions": "Should the assistant react to the user's message with an emoji?",
+            "options": { "none": "No reaction fits" }
+          }
+        }
       }
     },
     {
       "type": "route.error",
       "route_id": "0199d0a0-0000-7000-8000-000000000401",
-      "error": { "code": "jev_unavailable", "message": "Typesafe could not be reached." }
+      "error": { "code": "jev_unavailable", "message": "Typesafe could not be reached." },
+      "asked": null
     },
     {
       "type": "summary.done",

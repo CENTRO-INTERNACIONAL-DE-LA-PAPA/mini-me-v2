@@ -29,6 +29,9 @@ pub const STABLE_AFTER: Duration = Duration::from_secs(60);
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 const LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 
+/// The sidecar log's file name in the app's log directory.
+pub const LOG_FILE: &str = "sidecar.log";
+
 #[derive(Debug, Clone, Copy)]
 pub struct Timing {
     pub start_timeout: Duration,
@@ -163,7 +166,7 @@ impl SidecarLog {
     fn with_limit(dir: &Path, max_bytes: u64) -> Self {
         let path = std::fs::create_dir_all(dir)
             .ok()
-            .map(|_| dir.join("sidecar.log"));
+            .map(|_| dir.join(LOG_FILE));
         Self {
             path,
             max_bytes,

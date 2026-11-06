@@ -8,17 +8,25 @@ import type {
   Anchor,
   CommentThread,
   AssetRef,
+  Dataset,
+  DatasetFile,
+  DataversePage,
+  DataverseSearch,
+  Downloaded,
   KeyAccount,
   ConversationSummary,
   DraftEvent,
   LibraryView,
   FileEntry,
+  FeatureFlag,
   HomeSettings,
   Message,
   MiniMe,
   MiniMeDefinition,
   OpenedDocument,
   QuartoStatus,
+  ReplyDebugSettings,
+  ThirdParty,
   Overview,
   PausedApproval,
   ProjectSummary,
@@ -111,6 +119,14 @@ export const api = {
   listProjectFiles: (project_id: Uuid) => invoke<FileEntry[]>("list_project_files", { project_id }),
   openAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("open_asset", { project_id, asset_id }),
+  /** A page of CIP Dataverse's datasets matching `search`. */
+  dataverseSearch: (search: DataverseSearch) => invoke<DataversePage>("dataverse_search", { search }),
+  /** A dataset's files, with the Asset each already is in the Project. */
+  dataverseFiles: (project_id: Uuid, dataset_id: string) =>
+    invoke<DatasetFile[]>("dataverse_files", { project_id, dataset_id }),
+  /** Downloads `files` of `dataset` into the Project's Files, one at a time. */
+  dataverseDownload: (project_id: Uuid, dataset: Dataset, files: { id: number; name: string }[]) =>
+    invoke<Downloaded[]>("dataverse_download", { project_id, dataset, files }),
   /** Creates an empty `.qmd` document titled `title`, with the user's name as author. */
   createDocument: (project_id: Uuid, title: string) =>
     invoke<AssetRef>("create_document", { project_id, title }),
@@ -186,6 +202,9 @@ export const api = {
     invoke<AssetRef>("duplicate_asset", { project_id, asset_id }),
   deleteAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("delete_asset", { project_id, asset_id }),
+  /** A message's debug records of `kind`, in the order they were written. */
+  getDebugRecords: <T>(project_id: Uuid, message_id: Uuid, kind: string) =>
+    invoke<T[]>("get_debug_records", { project_id, message_id, kind }),
   /** Shows the file in the system's file manager. */
   revealAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("reveal_asset", { project_id, asset_id }),
@@ -248,11 +267,25 @@ export const api = {
   removeApiKey: (provider: KeyAccount) => invoke<void>("remove_api_key", { provider }),
   setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
   setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
+  setShowJevAsked: (show: boolean) => invoke<void>("set_show_jev_asked", { show }),
+  setReplyDebug: (debug: ReplyDebugSettings) => invoke<void>("set_reply_debug", { debug }),
+  /** Deletes every debug record of the Project. */
+  clearDebugRecords: (project_id: Uuid) => invoke<void>("clear_debug_records", { project_id }),
+  /** Opens the sidecar log in the system's default app for it. */
+  openSidecarLog: () => invoke<void>("open_sidecar_log"),
+  /** The third-party software this build ships; null in a build without it, such as dev. */
+  getThirdParty: () => invoke<ThirdParty | null>("get_third_party"),
   /** Whether developer options are shown: on in Mini-Me Dev and off in Mini-Me until set. */
   /** Whether to open What's new now; true once after the app updated, never in Mini-Me Dev. */
   takeWhatsNew: () => invoke<boolean>("take_whats_new"),
   getDeveloperMode: () => invoke<boolean>("get_developer_mode"),
   setDeveloperMode: (on: boolean) => invoke<void>("set_developer_mode", { on }),
+  /** The feature flags that are on. */
+  listFeatureFlags: () => invoke<FeatureFlag[]>("list_feature_flags"),
+  /** Turns on the flag `key` belongs to; fails with the code `wrong_key` when it is none. */
+  unlockFeatureFlag: (key: string) => invoke<FeatureFlag>("unlock_feature_flag", { key }),
+  /** Turns the flag off; only its key turns it on again. */
+  lockFeatureFlag: (id: string) => invoke<void>("lock_feature_flag", { id }),
   getHomeSettings: () => invoke<HomeSettings>("get_home_settings"),
   setShowHomeMiniMes: (show: boolean) => invoke<void>("set_show_home_mini_mes", { show }),
 

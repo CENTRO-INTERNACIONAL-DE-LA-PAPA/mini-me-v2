@@ -1,13 +1,15 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { api, errorMessage } from "../../api";
 import type { MessageView } from "../../protocol/eventStore";
 import { segments } from "../../protocol/references";
-import type { AssetRef, JevAnswers, MiniMe } from "../../protocol/types";
+import type { AssetRef, MiniMe } from "../../protocol/types";
 import { formatClock, formatSize } from "../../lib/format";
 import { approvalState } from "../interactive/approval";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
+import { JevDebugBlock } from "./JevDebugBlock";
+import { ReplyDebugBlock } from "./ReplyDebugBlock";
 import { Markdown } from "./Markdown";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMePill } from "../minime/MiniMePill";
@@ -16,10 +18,13 @@ import { ReferenceChip } from "./ReferenceChip";
 import { useFileExists } from "./existingFiles";
 import { TextComponentChip } from "./TextComponentChip";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
+import { useJevDebug } from "../../hooks/useJevDebug";
+import { useReplyDebug } from "../../hooks/useReplyDebug";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useOpenDocument } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
+import { MetaParts } from "@/components/ui/meta-parts";
 
 const STATUS_LABEL: Record<string, string | undefined> = {
   streaming: "Replying…",
@@ -65,6 +70,8 @@ export const MessageItem = memo(function MessageItem({
   const [error, setError] = useState<string | null>(null);
   const miniMes = useMiniMes();
   const developer = useDeveloperMode();
+  const jevDebug = useJevDebug();
+  const replyDebug = useReplyDebug();
   const { name, miniMe: authorMiniMe } = author(message, miniMes);
 
   const counts = new Map<string, number>();
@@ -171,10 +178,10 @@ export const MessageItem = memo(function MessageItem({
 
   const notes = (
     <>
-      {developer && message.jev && (
-        <JevAnswersBlock
-          jev={message.jev}
+      {fromUser && !compact && developer && (jevDebug.answers || jevDebug.asked) && (
+        <JevDebugBlock
           projectId={projectId}
+          messageId={message.id}
           miniMeName={(id) => miniMe(id)?.name}
         />
       )}
@@ -189,7 +196,7 @@ export const MessageItem = memo(function MessageItem({
     return (
       <article data-message-id={message.id} className="flex flex-col gap-1">
         <p className="text-meta text-muted-foreground">
-          {name} · {time}
+          <MetaParts parts={[name, time]} />
         </p>
         {text}
         {attachments}
@@ -206,144 +213,102 @@ export const MessageItem = memo(function MessageItem({
           {attachments}
           {reactionPills}
         </div>
-        <p className={cn("text-meta text-muted-foreground", counts.size > 0 && "mt-2")}>
-          {name} · {time}
-        </p>
+        <p className={cn("text-meta text-muted-foreground", counts.size > 0 && "mt-2")}>{time}</p>
         {notes}
       </article>
     );
   }
 
+  const debugged =
+    !compact &&
+    developer &&
+    (replyDebug.reply_input || replyDebug.reply_details || replyDebug.reply_tools);
+
   return (
-    <MiniMeSurface
-      miniMe={authorMiniMe}
-      render={<article />}
-      data-message-id={message.id}
-      className={cn(
-        "relative flex flex-col text-foreground",
-        compact ? "gap-2.5 px-3 py-2.5" : "gap-3.5 px-[18px] py-4",
-      )}
-    >
-      <header className="flex items-center gap-[9px] text-meta">
-        <MiniMeAvatar miniMe={authorMiniMe} size={compact ? 20 : 28} />
-        <strong className="font-serif text-name font-medium text-foreground">{name}</strong>
-        <span className="text-mm-ink">
-          {time}
-          {status && message.status !== "failed" && ` · ${status}`}
-        </span>
-        {message.status === "failed" && <span className="text-destructive">{status}</span>}
-      </header>
-      {showsProgress(message.steps) && (
-        <WorkflowProgress
-          steps={message.steps}
-          components={message.components}
-          messageId={message.id}
-          replyStatus={message.status}
-          color={authorMiniMe?.colors.solid}
-          onShowSteps={onToggleSteps && (() => onToggleSteps(message.id))}
-          stepsShown={stepsShown}
-        />
-      )}
-      {/* A reply with no text yet, or none at all, leaves no empty block to space around. */}
-      {message.author.kind === "mini_me" ? (
-        message.content.trim() !== "" && (
-          <Markdown
-            content={message.content}
-            textComponents={message.text_components}
-            miniMes={miniMes}
-            onOpenAsset={open}
+    <div className="flex flex-col gap-1.5">
+      <MiniMeSurface
+        miniMe={authorMiniMe}
+        render={<article />}
+        data-message-id={message.id}
+        className={cn(
+          "relative flex flex-col text-foreground",
+          compact ? "gap-2.5 px-3 py-2.5" : "gap-3.5 px-[18px] py-4",
+        )}
+      >
+        <header className="flex items-center gap-[9px] text-meta">
+          <MiniMeAvatar miniMe={authorMiniMe} size={compact ? 20 : 28} />
+          <strong className="font-serif text-name font-medium text-foreground">{name}</strong>
+          <span className="text-mm-ink">
+            <MetaParts parts={[time, message.status !== "failed" && status]} />
+          </span>
+          {message.status === "failed" && <span className="text-destructive">{status}</span>}
+        </header>
+        {showsProgress(message.steps) && (
+          <WorkflowProgress
+            steps={message.steps}
+            components={message.components}
+            messageId={message.id}
+            replyStatus={message.status}
+            color={authorMiniMe?.colors.solid}
+            onShowSteps={onToggleSteps && (() => onToggleSteps(message.id))}
+            stepsShown={stepsShown}
           />
-        )
-      ) : (
-        text
-      )}
-      {shown.length > 0 && (
-        <div className="flex min-w-0 flex-col gap-3">
-          {shown.map((component) => (
-            <InteractiveComponent
-              key={component.id}
-              component={component}
-              projectId={projectId}
-              messageId={message.id}
-              replyStatus={message.status}
-              color={authorMiniMe?.colors.solid}
+        )}
+        {/* A reply with no text yet, or none at all, leaves no empty block to space around. */}
+        {message.author.kind === "mini_me" ? (
+          message.content.trim() !== "" && (
+            <Markdown
+              content={message.content}
+              textComponents={message.text_components}
+              miniMes={miniMes}
+              onOpenAsset={open}
             />
-          ))}
-        </div>
-      )}
-      {message.status === "streaming" && message.progress && (
-        <p role="status" className="text-meta text-muted-foreground">
-          {message.progress.label}
-          {message.progress.fraction !== null && ` · ${Math.round(message.progress.fraction * 100)}%`}
-        </p>
-      )}
-      {attachments}
-      {reactionPills}
-      {notes}
-    </MiniMeSurface>
+          )
+        ) : (
+          text
+        )}
+        {shown.length > 0 && (
+          <div className="flex min-w-0 flex-col gap-3">
+            {shown.map((component) => (
+              <InteractiveComponent
+                key={component.id}
+                component={component}
+                projectId={projectId}
+                messageId={message.id}
+                replyStatus={message.status}
+                color={authorMiniMe?.colors.solid}
+              />
+            ))}
+          </div>
+        )}
+        {message.status === "streaming" && message.progress && (
+          <p role="status" className="text-meta text-muted-foreground">
+            {message.progress.label}
+            {message.progress.fraction !== null && ` (${Math.round(message.progress.fraction * 100)}%)`}
+          </p>
+        )}
+        {attachments}
+        {reactionPills}
+        {notes}
+      </MiniMeSurface>
+      {/* Outside the reply's colours, where it reads as a developer note, not part of the reply. */}
+      {debugged && <ReplyDebugBlock projectId={projectId} messageId={message.id} />}
+    </div>
   );
 });
-
-/** Jev's raw answers, for the "Show Jev's answers" developer setting. Options are shown by
- * their Mini-Me's or file's name; the file names are fetched only when Jev answered `file`. */
-function JevAnswersBlock({
-  jev,
-  projectId,
-  miniMeName,
-}: {
-  jev: JevAnswers;
-  projectId: string;
-  miniMeName: (id: string) => string | undefined;
-}) {
-  const [fileNames, setFileNames] = useState<Map<string, string>>(new Map());
-  const asksFile = Boolean(jev.answers?.file);
-  useEffect(() => {
-    if (!asksFile) return;
-    let active = true;
-    api
-      .listAssets(projectId, "")
-      .then((assets) => active && setFileNames(new Map(assets.map((a) => [a.id, a.name]))))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [projectId, asksFile]);
-  const label = (option: string) => miniMeName(option) ?? fileNames.get(option) ?? option;
-  const percent = (value: number) => `${Math.round(value * 100)}%`;
-  return (
-    <details className="text-meta text-muted-foreground">
-      <summary className="cursor-pointer select-none">[DEBUG] Jev</summary>
-      {jev.error && (
-        <p className="mt-1">
-          {jev.error.code}: {jev.error.message}
-        </p>
-      )}
-      {jev.answers &&
-        Object.entries(jev.answers).map(([question, answer]) => (
-          <p key={question} className="mt-1 font-mono wrap-anywhere">
-            {question}: {label(answer.choice)} ({percent(answer.confidence)}) ·{" "}
-            {Object.entries(answer.probabilities)
-              .sort(([, a], [, b]) => b - a)
-              .map(([option, p]) => `${label(option)} ${percent(p)}`)
-              .join(", ")}
-          </p>
-        ))}
-    </details>
-  );
-}
 
 /** A file attached to a message: it opens the file, or says that the file was removed. */
 function AttachmentChip({ asset, onOpen }: { asset: AssetRef; onOpen: () => void }) {
   if (!useFileExists(asset.id)) {
     return (
       <ReferenceChip title="This file was deleted" className="text-muted-foreground">
-        {asset.name} · file removed
+        {asset.name} (Deleted)
       </ReferenceChip>
     );
   }
   return (
     <ReferenceChip title="Open file" onOpen={onOpen}>
-      {asset.name} · {formatSize(asset.size_bytes)}
+      {asset.name} ({formatSize(asset.size_bytes)})
     </ReferenceChip>
   );
 }

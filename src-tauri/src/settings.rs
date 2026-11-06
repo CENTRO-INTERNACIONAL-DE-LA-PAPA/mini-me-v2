@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::link::CallModel;
+use crate::features::{self, FEATURES, Feature};
+use crate::link::{CallModel, DebugParts};
 use crate::protocol::{Origin, new_id};
 use crate::secrets::is_provider;
 
@@ -26,6 +27,8 @@ pub struct Settings {
     #[serde(default)]
     pub routing: RoutingSettings,
     #[serde(default)]
+    pub debug: DebugSettings,
+    #[serde(default)]
     pub home: HomeSettings,
     /// Shows developer options when set; until the user sets it, it follows the app (on in
     /// Mini-Me Dev, off in Mini-Me).
@@ -38,6 +41,12 @@ pub struct Settings {
     /// were created. Settings from before this field existed hold none.
     #[serde(default)]
     pub last_seen_version: Option<String>,
+    /// The feature flags whose key was entered, which are on in Mini-Me.
+    #[serde(default)]
+    pub unlocked_features: Vec<String>,
+    /// The feature flags turned off, which stay off in Mini-Me Dev until their key is entered.
+    #[serde(default)]
+    pub locked_features: Vec<String>,
 }
 
 /// How Home looks.
@@ -48,14 +57,29 @@ pub struct HomeSettings {
     pub show_mini_mes: bool,
 }
 
+/// Developer aids that store parts of each reply's debug records, only while Developer mode is
+/// on as well.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct DebugSettings {
+    #[serde(default)]
+    pub reply_input: bool,
+    #[serde(default)]
+    pub reply_details: bool,
+    #[serde(default)]
+    pub reply_tools: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RoutingSettings {
     /// Below this confidence in its choice, Jev's Mini-Me is replaced by the fallback Mini-Me
     /// and its reaction is left out; from 0 to 1.
     pub threshold: f64,
-    /// A developer aid: store and show Jev's raw answers under each message.
+    /// A developer aid: store and show Jev's answers under each message.
     #[serde(default)]
     pub show_answers: bool,
+    /// A developer aid: store and show what was sent to Jev under each message.
+    #[serde(default)]
+    pub show_asked: bool,
 }
 
 impl Default for RoutingSettings {
@@ -63,6 +87,7 @@ impl Default for RoutingSettings {
         Self {
             threshold: 0.5,
             show_answers: false,
+            show_asked: false,
         }
     }
 }
@@ -131,10 +156,13 @@ impl Settings {
             recent_projects: HashMap::new(),
             ai: AiSettings::default(),
             routing: RoutingSettings::default(),
+            debug: DebugSettings::default(),
             home: HomeSettings::default(),
             developer_mode: None,
             quarto_path: None,
             last_seen_version: Some(version.to_string()),
+            unlocked_features: Vec::new(),
+            locked_features: Vec::new(),
         };
         settings.save(config_dir)?;
         Ok(settings)
@@ -163,6 +191,38 @@ impl Settings {
     /// Mini-Me Dev.
     pub fn developer_mode(&self, dev_app: bool) -> bool {
         self.developer_mode.unwrap_or(dev_app)
+    }
+
+    /// The parts of reply debug records runs collect, for an app that is (`dev_app`) or is not
+    /// Mini-Me Dev.
+    pub fn reply_debug(&self, dev_app: bool) -> DebugParts {
+        let on = self.developer_mode(dev_app);
+        DebugParts {
+            input: on && self.debug.reply_input,
+            details: on && self.debug.reply_details,
+            tools: on && self.debug.reply_tools,
+        }
+    }
+
+    /// The feature flags that are on, for an app that is (`dev_app`) or is not Mini-Me Dev.
+    pub fn active_features(&self, dev_app: bool) -> Vec<&'static Feature> {
+        features::active(FEATURES, &self.unlocked_features, &self.locked_features, dev_app)
+    }
+
+    /// Records the flag `id` as on, as entering its key does.
+    pub fn unlock_feature(&mut self, id: &str) {
+        self.locked_features.retain(|locked| locked != id);
+        if !self.unlocked_features.iter().any(|unlocked| unlocked == id) {
+            self.unlocked_features.push(id.to_string());
+        }
+    }
+
+    /// Records the flag `id` as off, so only its key turns it on again.
+    pub fn lock_feature(&mut self, id: &str) {
+        self.unlocked_features.retain(|unlocked| unlocked != id);
+        if !self.locked_features.iter().any(|locked| locked == id) {
+            self.locked_features.push(id.to_string());
+        }
     }
 
     pub fn origin(&self) -> Origin {
@@ -233,6 +293,20 @@ mod tests {
         assert!(!settings.developer_mode(false));
         assert!(settings.developer_mode(true));
         assert_eq!(settings.ai.model(), None);
+        assert!(settings.unlocked_features.is_empty() && settings.locked_features.is_empty());
+    }
+
+    #[test]
+    fn turning_a_flag_on_and_off_moves_it_between_the_lists() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut settings = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
+        settings.unlock_feature("test-flag");
+        settings.unlock_feature("test-flag");
+        assert_eq!(settings.unlocked_features, ["test-flag"]);
+        assert!(settings.locked_features.is_empty());
+        settings.lock_feature("test-flag");
+        assert!(settings.unlocked_features.is_empty());
+        assert_eq!(settings.locked_features, ["test-flag"]);
     }
 
     #[test]

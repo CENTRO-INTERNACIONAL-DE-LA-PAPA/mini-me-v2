@@ -146,6 +146,8 @@ async def plot(ctx: CallContext, text: str) -> None:
     for chart in drawn:
         ctx.progress(f"Drawing {chart.title or chart.type}")
         result = await WORKERS.run(ctx, build_chart, table.frame, chart, types)
+        if table.source_id:
+            result.data.update(source=table.name, source_id=table.source_id)
         notes = "; ".join(result.notes)
         ctx.write(f"- {result.data['title']}" + (f": {notes}" if notes else "") + "\n")
         results.append(result)

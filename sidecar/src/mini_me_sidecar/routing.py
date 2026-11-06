@@ -60,28 +60,36 @@ class Router:
         task.add_done_callback(self._tasks.discard)
 
     async def _route(self, route_id: str, frame: dict[str, Any]) -> None:
+        # What was sent to Jev, for the core's debug record; it stays None when the request
+        # fails before it is sent, such as without a Typesafe key.
+        asked: dict[str, Any] | None = None
         try:
-            answers = await self._ask(route_id, frame)
+            key = await self._requests.send(route_id, "secret.get", {"provider": "typesafe"})
+            state = frame.get("state") or {}
+            questions = _questions(
+                frame.get("ask") or [], frame.get("mini_mes") or [], frame.get("files") or []
+            )
+            asked = _asked(state, questions)
+            answers = await self._ask(key["value"], state, questions)
         except CoreRequestError as error:
-            self._error(route_id, error.code, str(error))
+            self._error(route_id, error.code, str(error), asked)
         except Exception:
             traceback.print_exc(file=sys.stderr)
-            self._error(route_id, "jev_unavailable", "Typesafe could not be reached.")
+            self._error(route_id, "jev_unavailable", "Typesafe could not be reached.", asked)
         else:
-            self._link.send({"type": "route.done", "route_id": route_id, "answers": answers})
+            done = {"type": "route.done", "route_id": route_id, "answers": answers}
+            self._link.send({**done, "asked": asked})
 
-    async def _ask(self, route_id: str, frame: dict[str, Any]) -> dict[str, Any]:
-        key = await self._requests.send(route_id, "secret.get", {"provider": "typesafe"})
-        questions = _questions(
-            frame.get("ask") or [], frame.get("mini_mes") or [], frame.get("files") or []
-        )
+    async def _ask(
+        self, api_key: str, state: dict[str, Any], questions: dict[str, Any]
+    ) -> dict[str, Any]:
         async with AsyncTypeSafeClient(
-            api_key=key["value"],
+            api_key=api_key,
             model=JEV_MODEL,
             timeout=JEV_TIMEOUT_S,
             retry=RetryPolicy(max_retries=0),
         ) as client:
-            response = await client.system_one(state=frame.get("state") or {}, questions=questions)
+            response = await client.system_one(state=state, questions=questions)
         return {
             name: {
                 "choice": answer.choice,
@@ -91,13 +99,28 @@ class Router:
             for name, answer in response.choices.items()
         }
 
-    def _error(self, route_id: str, code: str, message: str) -> None:
+    def _error(
+        self, route_id: str, code: str, message: str, asked: dict[str, Any] | None
+    ) -> None:
         error = {"code": code, "message": message}
-        self._link.send({"type": "route.error", "route_id": route_id, "error": error})
+        frame = {"type": "route.error", "route_id": route_id, "error": error, "asked": asked}
+        self._link.send(frame)
 
     async def close(self) -> None:
         for task in list(self._tasks):
             task.cancel()
+
+
+def _asked(state: dict[str, Any], questions: dict[str, Choice]) -> dict[str, Any]:
+    """What a Jev request holds, as the core's debug record shows it: the state, and each
+    question's instructions and the text of each of its options."""
+    return {
+        "state": state,
+        "questions": {
+            name: {"instructions": q.instructions, "options": dict(q.criteria)}
+            for name, q in questions.items()
+        },
+    }
 
 
 def _questions(
@@ -120,11 +143,26 @@ def _questions(
             criteria=NEEDS_CONTEXT,
         ),
         "file": lambda: Choice(
-            instructions="Which of the conversation's files does the user's message mean?",
+            instructions="Which of the conversation's files does the user's message mean, "
+            "directly or through a table or chart made from it?",
             criteria={
-                **{str(f.get("id")): f"The file {f.get('name')}" for f in files},
+                **{str(f.get("id")): _file_criterion(f) for f in files},
                 "none": "The message is not about one of these files",
             },
         ),
     }
     return {name: available[name]() for name in ask if name in available}
+
+
+def _file_criterion(file: dict[str, Any]) -> str:
+    """A `file` option as Jev reads it: the file's name and the tables and charts shown from
+    it, such as "The file trial.csv. Used by components: chart 'Yield', table 'Trial'"."""
+    used = []
+    for component in file.get("components") or []:
+        title = component.get("title")
+        kind = str(component.get("kind"))
+        used.append(f"{kind} '{title}'" if title else kind)
+    criterion = f"The file {file.get('name')}"
+    if not used:
+        return criterion
+    return f"{criterion}. Used by components: {', '.join(used)}"

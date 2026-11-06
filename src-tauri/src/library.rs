@@ -11,7 +11,7 @@ pub const FALLBACK_MINI_ME: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8
 pub const SCRIBE: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8e1f0d7b01);
 
 /// Every tool a Trait may list; the sidecar's `tools` package knows the same names.
-pub const TOOLS: [&str; 12] = [
+pub const TOOLS: [&str; 13] = [
     "read_file",
     "read_table",
     "read_component",
@@ -24,6 +24,7 @@ pub const TOOLS: [&str; 12] = [
     "show_chart",
     "show_papers",
     "show_theories",
+    "show_datasets",
 ];
 
 /// The tools a prompt-based Trait may list: those with a form for models. The read tools and
@@ -479,7 +480,7 @@ mod tests {
                 "Plan",
                 "Wonder",
                 "Experiment",
-                "Explore Dataverse",
+                "Search CIP Dataverse",
                 "Code",
                 "Collect Data",
                 "Model",
@@ -520,6 +521,7 @@ mod tests {
                 ),
                 ("Find Papers", vec!["show_papers"]),
                 ("Theorize", vec!["show_theories", "save_file"]),
+                ("Search CIP Dataverse", vec!["show_datasets"]),
                 ("Profile Data", vec!["read_table", "show_table"]),
                 ("Validate Data", table.clone()),
                 ("Clean Data", table.clone()),
@@ -609,10 +611,10 @@ mod tests {
     }
 
     #[test]
-    fn fifteen_mini_mes_ship_and_investigator_uses_every_control_step() {
+    fn sixteen_mini_mes_ship_and_investigator_uses_every_control_step() {
         let library = Library::builtin();
         let names: Vec<String> = library.summaries().into_iter().map(|m| m.name).collect();
-        assert_eq!(names.len(), 15);
+        assert_eq!(names.len(), 16);
         assert_eq!(names.last().map(String::as_str), Some("Investigator"));
 
         let investigator = library.mini_mes.iter().find(|m| m.name == "Investigator").unwrap();
@@ -642,7 +644,6 @@ mod tests {
         assert_eq!(
             placeholders,
             [
-                "Explore Dataverse",
                 "Code",
                 "Collect Data",
                 "Model",

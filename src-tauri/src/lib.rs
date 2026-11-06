@@ -4,9 +4,11 @@ mod assets;
 mod comments;
 mod components;
 mod conversations;
+mod dataverse;
 mod db;
 mod documents;
 mod error;
+mod features;
 mod history;
 mod ipc;
 mod library;
@@ -82,6 +84,9 @@ pub fn run() {
             ipc::list_recent_conversations,
             ipc::subscribe_running_replies,
             ipc::import_assets,
+            ipc::dataverse_search,
+            ipc::dataverse_files,
+            ipc::dataverse_download,
             ipc::import_pasted_image,
             ipc::import_dropped,
             ipc::read_image_asset,
@@ -96,6 +101,10 @@ pub fn run() {
             ipc::duplicate_asset,
             ipc::delete_asset,
             ipc::reveal_asset,
+            ipc::get_debug_records,
+            ipc::clear_debug_records,
+            ipc::open_sidecar_log,
+            ipc::get_third_party,
             ipc::rename_conversation,
             ipc::name_conversation,
             ipc::delete_conversation,
@@ -135,9 +144,14 @@ pub fn run() {
             ipc::remove_api_key,
             ipc::set_routing_threshold,
             ipc::set_show_jev_answers,
+            ipc::set_show_jev_asked,
             ipc::get_developer_mode,
             ipc::take_whats_new,
             ipc::set_developer_mode,
+            ipc::set_reply_debug,
+            ipc::list_feature_flags,
+            ipc::unlock_feature_flag,
+            ipc::lock_feature_flag,
             ipc::get_home_settings,
             ipc::set_show_home_mini_mes,
             ipc::ai2_start_sign_in,

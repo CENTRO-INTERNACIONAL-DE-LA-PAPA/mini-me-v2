@@ -40,7 +40,8 @@ with the message as the state and these Choice questions:
 - `needs_context`: options `yes`, `no`;
 - `file`: only when the message references and attaches no Asset and its Conversation has
   at least one; one option per Asset of the Conversation, keyed by its ID and described by
-  its name, plus `none`.
+  its name and by the tables and charts of the Conversation shown from it, newest first, each
+  by its kind and title, plus `none`.
 
 #### Scenario: Message without a mention
 - **WHEN** the user sends "summarize #field-notes.txt"
@@ -65,6 +66,12 @@ with the message as the state and these Choice questions:
 #### Scenario: Conversation without files
 - **WHEN** the Conversation holds no Asset and the user sends "check the data"
 - **THEN** the Jev request has no `file` question
+
+#### Scenario: A file shown as a chart
+- **WHEN** Plotter drew "Yield by variety" from `field-trial.csv` and the user sends
+  "@Plotter make that chart a bar chart"
+- **THEN** the `file` option for `field-trial.csv` reads "The file field-trial.csv. Used by
+  components: chart 'Yield by variety'"
 
 ### Requirement: What is sent to Jev
 The state sent to Jev SHALL be `{ message, files, recent }`:
@@ -110,9 +117,8 @@ Mini-Me…" under the message and keep the composer disabled as during a reply.
 ### Requirement: Confidence threshold setting
 Settings SHALL have a confidence threshold between 0 and 1, default 0.5, stored with the
 app settings. It SHALL apply to Jev's `mini_me` answer and to its `reaction` answer. It SHALL
-be shown, as "[DEBUG] Jev's confidence threshold" in Settings → Developer, only while
-Developer mode is on, and its saved
-value SHALL apply whether Developer mode is on or off.
+be shown, as "Jev's confidence threshold" in Settings → Developer, only while Developer mode is
+on, and its saved value SHALL apply whether Developer mode is on or off.
 
 #### Scenario: Changing the threshold
 - **WHEN** the user sets the threshold to 0.8 and Jev chooses a Mini-Me with confidence 0.7
@@ -158,23 +164,35 @@ The core SHALL ask for a decision with `route.start`, payload
 `{ route_id, state, mini_mes, files, ask }`:
 - `route_id` is a new UUIDv7;
 - `mini_mes` is `[{ id, name, description }]`;
-- `files` is `[{ id, name }]`, the options of the `file` question, newest first, and empty
-  when `ask` does not hold `file`;
+- `files` is `[{ id, name, components }]`, the options of the `file` question, newest first, and
+  empty when `ask` does not hold `file`; `components` lists the tables and charts of the
+  Conversation shown from that file, newest first, as `{ kind, title }`, and holds no rows or
+  other component data;
 - `ask` is the list of question IDs.
 
 The sidecar SHALL answer with exactly one of:
-- `route.done { route_id, answers }`, where each answer is `{ choice, confidence,
+- `route.done { route_id, answers, asked }`, where each answer is `{ choice, confidence,
   probabilities }`;
-- `route.error { route_id, error: { code, message } }`.
+- `route.error { route_id, error: { code, message }, asked }`.
+
+`asked` is the request sent to Jev, `{ state, questions }`, where `questions` maps each
+question ID to `{ instructions, options }` and `options` maps each option to the text Jev
+read for it; it is `null` in `route.error` when the request was not sent, such as when the
+Typesafe key is missing.
 
 #### Scenario: Decision
 - **WHEN** the core sends `route.start` asking `reaction` and `needs_context`
-- **THEN** the sidecar answers `route.done` with an answer for each of the two questions
+- **THEN** the sidecar answers `route.done` with an answer for each of the two questions, and
+  `asked` holding both questions with their instructions and options
 
 #### Scenario: File question
 - **WHEN** the core sends `route.start` asking `file` with two `files`
 - **THEN** the `file` Choice offers each file's ID and `none`, and `route.done` holds an
   answer for `file`
+
+#### Scenario: No Typesafe key
+- **WHEN** the core sends `route.start` and no Typesafe key is saved
+- **THEN** the sidecar answers `route.error` with `asked` `null`
 
 ### Requirement: Routing requests get the Typesafe key
 The sidecar SHALL get the Typesafe key with `secret.get` for provider `typesafe`, using

@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 9;
+pub const SCHEMA_VERSION: i32 = 12;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -155,6 +155,45 @@ CREATE INDEX comment_threads_by_asset ON comment_threads(asset_id);
 -- The Conversation a thread was opened from, when a Mini-Me opened it there by suggesting an
 -- edit; null for a thread the user started.
 ALTER TABLE comment_threads ADD COLUMN opened_from TEXT;
+"#,
+    r#"
+-- Where a downloaded Asset came from, as JSON (`AssetOrigin`); null for every other Asset.
+ALTER TABLE assets ADD COLUMN origin TEXT;
+"#,
+    r#"
+-- Developer debug records, such as what Jev was asked and answered about a message. They are
+-- kept apart from `events` so that opening a Conversation never reads them, and are read one
+-- at a time when a debug block is expanded. The retired `routing.answered` events are
+-- deleted, not moved here.
+CREATE TABLE debug_records (
+    message_id       TEXT NOT NULL REFERENCES messages(id),
+    kind             TEXT NOT NULL,
+    conversation_id  TEXT NOT NULL REFERENCES conversations(id),
+    content          TEXT NOT NULL,
+    created_at       INTEGER NOT NULL,
+    PRIMARY KEY (message_id, kind)
+);
+CREATE INDEX debug_records_by_conversation ON debug_records(conversation_id);
+DELETE FROM events WHERE type = 'routing.answered';
+"#,
+    r#"
+-- A message may hold several debug records of one kind, such as one per model call of a reply,
+-- kept in `position` order. SQLite cannot change a table's key in place, so the table is
+-- rebuilt; Jev's records, one per message, keep position 0.
+CREATE TABLE debug_records_new (
+    message_id       TEXT NOT NULL REFERENCES messages(id),
+    kind             TEXT NOT NULL,
+    position         INTEGER NOT NULL,
+    conversation_id  TEXT NOT NULL REFERENCES conversations(id),
+    content          TEXT NOT NULL,
+    created_at       INTEGER NOT NULL,
+    PRIMARY KEY (message_id, kind, position)
+);
+INSERT INTO debug_records_new
+    SELECT message_id, kind, 0, conversation_id, content, created_at FROM debug_records;
+DROP TABLE debug_records;
+ALTER TABLE debug_records_new RENAME TO debug_records;
+CREATE INDEX debug_records_by_conversation ON debug_records(conversation_id);
 "#,
 ];
 
@@ -365,6 +404,86 @@ mod tests {
         let conn = open(&path).unwrap();
         assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
         conn.prepare("SELECT opened_from FROM comment_threads").unwrap();
+    }
+
+    #[test]
+    fn a_version_9_database_keeps_its_assets_and_gains_their_origin() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..9] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 9).unwrap();
+            conn.execute_batch(
+                "INSERT INTO assets (id, name, media_type, size_bytes, source, rel_path, \
+                 created_at) VALUES ('a', 'trial.csv', 'text/csv', 1, 'upload', 'assets/a/t', 1);",
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        let sql = "SELECT origin FROM assets WHERE id = 'a'";
+        let origin: Option<String> = conn.query_row(sql, [], |row| row.get(0)).unwrap();
+        assert_eq!(origin, None);
+    }
+
+    #[test]
+    fn a_version_10_database_gains_debug_records_and_drops_jev_events() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..10] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 10).unwrap();
+            conn.execute_batch(
+                "INSERT INTO conversations (id, title, created_at, last_activity_at) \
+                 VALUES ('c', 'Trial', 1, 1); \
+                 INSERT INTO events (conversation_id, seq, id, type, ts, body) VALUES \
+                 ('c', 1, 'e1', 'message.created', 1, '{}'), \
+                 ('c', 2, 'e2', 'routing.answered', 1, '{}');",
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        let sql = "SELECT group_concat(type) FROM events";
+        let types: String = conn.query_row(sql, [], |row| row.get(0)).unwrap();
+        assert_eq!(types, "message.created");
+        let columns = "message_id, kind, conversation_id, content, created_at";
+        conn.prepare(&format!("SELECT {columns} FROM debug_records")).unwrap();
+    }
+
+    #[test]
+    fn a_version_11_database_keeps_jevs_records_at_position_0() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..11] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 11).unwrap();
+            conn.execute_batch(
+                "INSERT INTO conversations (id, title, created_at, last_activity_at) \
+                 VALUES ('c', 'Trial', 1, 1); \
+                 INSERT INTO messages (id, conversation_id, author_kind, author_id, content, \
+                 status, attachments, text_components, created_at) \
+                 VALUES ('m', 'c', 'user', 'u', 'hi', 'sent', '[]', '[]', 1); \
+                 INSERT INTO debug_records \
+                 (message_id, kind, conversation_id, content, created_at) VALUES ('m', 'jev', 'c', '{}', 1);",
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
+        let sql = "SELECT kind, position, content FROM debug_records WHERE message_id = 'm'";
+        let row: (String, i64, String) =
+            conn.query_row(sql, [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).unwrap();
+        assert_eq!(row, ("jev".into(), 0, "{}".into()));
     }
 
     #[test]

@@ -23,6 +23,11 @@ async def show_papers(ctx: CallContext, data: dict[str, Any], text: str) -> str:
     return await add_component(ctx, "paper-sources", data, text)
 
 
+async def show_datasets(ctx: CallContext, data: dict[str, Any], text: str) -> str:
+    """Shows a `dataset-results` component and returns its ID."""
+    return await add_component(ctx, "dataset-results", data, text)
+
+
 async def show_theories(ctx: CallContext, data: dict[str, Any], text: str) -> str:
     """Shows a `theories` component and returns its ID."""
     return await add_component(ctx, "theories", data, text)

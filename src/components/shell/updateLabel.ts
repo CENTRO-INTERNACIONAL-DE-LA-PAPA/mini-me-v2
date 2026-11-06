@@ -8,7 +8,7 @@ export function updateLabel(status: UpdateStatus): string | null {
     case "downloading":
       return status.percent === null
         ? `Downloading update ${status.version}`
-        : `Downloading update ${status.version} · ${status.percent}%`;
+        : `Downloading update ${status.version} (${status.percent}%)`;
     case "ready":
       return `Mini-Me ${status.version} is ready`;
   }

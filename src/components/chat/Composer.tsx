@@ -26,13 +26,13 @@ import { MiniMePill } from "../minime/MiniMePill";
 import { ReferenceNode } from "./ReferenceNode";
 import { sidecarReady, useSidecarStatus } from "../shell/SidecarStatusLine";
 import { useMiniMes } from "../../hooks/useMiniMes";
-import { fileDetail, sharedNames } from "./fileDetail";
+import { fileDetail } from "./fileDetail";
 import { Button } from "@/components/ui/button";
 import {
   ArrowUpIcon,
   AtSignIcon,
   ChartColumnIcon,
-  HashIcon,
+  FileSearchIcon,
   PaperclipIcon,
   SquareIcon,
   Table2Icon,
@@ -81,7 +81,7 @@ interface Suggestion {
   miniMe?: MiniMe;
   /** For a `$` entry, what the component is. */
   kind?: ComponentName["kind"];
-  /** For a `#` entry whose name another listed file shares, when and by whom it was added. */
+  /** For a `#` entry, when and by whom the file was added. */
   detail?: string;
 }
 
@@ -216,7 +216,6 @@ export function Composer({
 
   const assetSuggestions =
     query?.kind === "asset" ? files.filter((f) => fold(f.name).includes(fold(query.query))) : [];
-  const shared = sharedNames(assetSuggestions);
 
   const componentSuggestions: Suggestion[] =
     query?.kind === "component"
@@ -243,7 +242,7 @@ export function Composer({
                 entries: assetSuggestions.map((a) => ({
                   target: assetTarget(a),
                   // Only a name that more than one listed file has needs telling apart.
-                  detail: shared.has(a.name) ? fileDetail(a, miniMes) : undefined,
+                  detail: fileDetail(a, miniMes),
                 })),
               },
             ]
@@ -343,7 +342,7 @@ export function Composer({
   }
 
   /** Types `@` or `#` at the caret, with a space before it when needed, to open its list. */
-  function startReference(sign: "@" | "#") {
+  function startReference(sign: "@" | "#" | "$") {
     if (!editor) return;
     const { from } = editor.state.selection;
     // A reference before the caret counts as a word, so the sign gets a space after it.
@@ -477,7 +476,16 @@ export function Composer({
               title="Reference a file"
               onClick={() => startReference("#")}
             >
-              <HashIcon />
+              <FileSearchIcon />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Reference a table or chart"
+              title="Reference a table or chart"
+              onClick={() => startReference("$")}
+            >
+              <ChartColumnIcon />
             </Button>
             <Button
               variant="ghost"

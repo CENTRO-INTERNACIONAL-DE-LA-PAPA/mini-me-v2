@@ -466,15 +466,25 @@ Every tool acts through `ctx`, so the core's checks and Project-folder confineme
 
 - **Logs:** `sidecar.log` in the app's log directory (`~/Library/Logs/org.cipotato.mini-me/`
   on macOS, `%LOCALAPPDATA%\org.cipotato.mini-me\logs\` on Windows). Set
-  `MINI_ME_LOG_FRAMES=1` to also log every frame, with secrets redacted.
+  `MINI_ME_LOG_FRAMES=1` to also log every frame, with secrets redacted. Settings →
+  Developer → Sidecar log opens it.
 - **Adapters log** with a prefix, such as `[asta]` or `[prompt]`: the shape (never the
   values) of service responses, failed requests and the retries, refused components, and
   empty or filtered model answers.
 - **Data:** a Project is a folder with `project.sqlite` and `assets/`; `sqlite3 -readonly`
   on the database shows its events and messages, `message_steps` the Steps of each reply,
-  and `paused_runs` the replies waiting for an approval.
-- **Jev's answers:** "Show Jev's answers" in Settings stores and shows them under each
-  routed message.
+  `paused_runs` the replies waiting for an approval, and `debug_records` the developer
+  debug records.
+- **Jev:** "Show Jev's answers" and "Show what Jev was asked" in Settings → Developer store a
+  `jev` debug record for each routed message, shown in "[DEBUG] Jev" under it. Records are kept
+  apart from the events and read only when the block is opened; "Debug data" clears the open
+  Project's.
+- **Replies:** "Show what the AI read", "Show model call details" and "Show tool calls" in
+  Settings → Developer go to the sidecar in each run's `context.debug`. While any is on, a
+  LangChain callback that `chat_model()` attaches sends each model call of the run as
+  `run.debug`, and prompt-based Traits send each tool call; the core stores them in order as
+  the reply's `reply` debug records, shown in "[DEBUG] AI" under it. Only Traits that call a
+  model are recorded: Profiler, Echo and Asta's Traits make no model call of their own.
 
 ## Tests
 

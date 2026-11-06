@@ -19,7 +19,8 @@ export const SHOWN_SOURCES = 5;
 function byline(paper: Paper): string {
   const authors = paper.authors ?? [];
   const names = authors.slice(0, 3).join(", ") + (authors.length > 3 ? " et al." : "");
-  return [names, paper.year, paper.venue].filter(Boolean).join(" · ");
+  const year = paper.year ? ` (${paper.year})` : "";
+  return [names, paper.venue].filter(Boolean).join(", ") + year;
 }
 
 function SourceCard({ paper }: { paper: Paper }) {

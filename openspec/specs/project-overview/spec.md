@@ -9,19 +9,18 @@ for results.
 ## Requirements
 
 ### Requirement: Overview header
-The Overview SHALL show the meta line "Overview · updated <time> · <n> conversations" above
-the Project's name as its title. `<time>` is the latest activity of any of its Conversations
-as a relative time, and `<n>` the number of its Conversations. A Project without
-Conversations SHALL show "Overview · no conversations yet".
+The Overview SHALL show the meta line "Updated <time>" above the Project's name as its title.
+`<time>` is the latest activity of any of its Conversations as a relative time. A Project
+without Conversations SHALL show "No conversations yet".
 
 #### Scenario: Project with three Conversations
 - **WHEN** the user opens a Project with three Conversations, the latest active 2 hours ago
-- **THEN** the Overview reads "Overview · updated 2 h ago · 3 conversations" above the
+- **THEN** the Overview reads "Updated 2 h ago" above the
   Project's name
 
 #### Scenario: New Project
 - **WHEN** the user opens a Project that has no Conversations
-- **THEN** the Overview reads "Overview · no conversations yet"
+- **THEN** the Overview reads "No conversations yet"
 
 ### Requirement: Summary written on request
 The Overview SHALL have an "Update summary" button. Clicking it SHALL ask the AI model chosen
@@ -113,19 +112,23 @@ reply except approvals, and every Asset a Mini-Me saved. It SHALL show the first
 - **THEN** Latest outputs is empty and says that Mini-Mes' outputs will appear there
 
 ### Requirement: Output cards
-Each output SHALL be a card with a thumbnail for its kind (table, chart, papers, theories or
-file) tinted in the colour of the Mini-Me that made it with a bottom border in its solid
-colour, the output's title, and "<kind> · <Conversation title>". Clicking a card SHALL open
+Each output SHALL be a card with a thumbnail for its kind (table, chart, papers, theories,
+datasets or file) tinted in the colour of the Mini-Me that made it with a bottom border in its solid
+colour, the output's title, and "From <Conversation title>". Clicking a card SHALL open
 its Conversation and scroll to the reply it came from.
 
 #### Scenario: Curator's cleaned file
 - **WHEN** Curator saved `trial-cleaned.csv` in "Huancayo 2025 trial data"
 - **THEN** its card is tinted in Curator's colour and reads "trial-cleaned.csv" and
-  "File · Huancayo 2025 trial data"
+  "From Huancayo 2025 trial data"
 
 #### Scenario: Opening a card
 - **WHEN** the user clicks a chart's card
 - **THEN** its Conversation opens scrolled to the reply that holds the chart
+
+#### Scenario: Datasets CIP's Archivist found
+- **WHEN** CIP's Archivist's reply showed 213 matching datasets
+- **THEN** its card reads "213 datasets" with the Datasets icon
 
 ### Requirement: Link to Files
 The Latest outputs section SHALL have an "Open Files →" link that opens the Project's Files
@@ -143,3 +146,30 @@ file.
 #### Scenario: Two Projects
 - **WHEN** the user features a chart in one Project
 - **THEN** another Project's Overview is unchanged
+
+### Requirement: Names marked in the summary
+The model SHALL be asked to write each file, table or chart it names in the summary as
+`[name]()`, with the name as the Conversations write it. The summary SHALL be stored as written.
+
+#### Scenario: A file
+- **WHEN** the model names `field-trial-cleaned.csv` in the summary
+- **THEN** the stored summary holds `[field-trial-cleaned.csv]()`
+
+### Requirement: Summary pills
+The Overview SHALL show each marked name that is a file of the Project, or the title of a
+`table` or `chart` in the Overview's outputs, as the same `#` or `$` chip as a reference in a
+sent message. Clicking a file pill SHALL open the file, and clicking a `table` or `chart` pill
+SHALL open its Conversation at the reply that shows it. Any other marked name SHALL show as
+plain text.
+
+#### Scenario: Opening a chart
+- **WHEN** the user clicks the `$Yield-by-variety` pill in the summary
+- **THEN** the Conversation opens at the reply that shows the chart
+
+#### Scenario: A deleted file
+- **WHEN** a file the summary names has been deleted
+- **THEN** the summary shows its name as plain text
+
+#### Scenario: A summary written before marks
+- **WHEN** the Project's summary was written before names were marked
+- **THEN** it shows as plain text, as before

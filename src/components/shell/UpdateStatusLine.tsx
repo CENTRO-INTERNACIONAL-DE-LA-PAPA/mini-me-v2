@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { RefreshCwIcon } from "lucide-react";
 import { api, errorMessage } from "../../api";
 import type { UpdateStatus } from "../../protocol/types";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { updateLabel } from "./updateLabel";
 export function UpdateStatusLine() {
   const [status, setStatus] = useState<UpdateStatus>({ state: "none" });
   const [error, setError] = useState<string | null>(null);
+  const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -32,9 +34,11 @@ export function UpdateStatusLine() {
   async function restart() {
     try {
       setError(null);
+      setRestarting(true);
       await api.restartToUpdate();
     } catch (e) {
       setError(errorMessage(e));
+      setRestarting(false);
     }
   }
 
@@ -52,8 +56,9 @@ export function UpdateStatusLine() {
         {error && <span className="block text-destructive">{error}</span>}
       </p>
       {status.state === "ready" && (
-        <Button variant="outline" size="xs" onClick={restart}>
-          Restart
+        <Button variant="outline" size="xs" onClick={restart} disabled={restarting}>
+          {restarting && <RefreshCwIcon className="animate-spin" />}
+          {restarting ? "Restarting…" : "Restart"}
         </Button>
       )}
     </div>

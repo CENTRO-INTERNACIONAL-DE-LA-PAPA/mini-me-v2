@@ -22,6 +22,7 @@ import { formatRelative, formatSize } from "../../lib/format";
 import { FileMark } from "./FileMark";
 import { surfaceStyle } from "../minime/miniMeColors";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { openLink, webUrl } from "../interactive/links";
 import { SheetPage } from "../shell/Sheet";
 import { useMiniMes } from "../../hooks/useMiniMes";
 
@@ -98,16 +99,11 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
   );
   const total = entries.reduce((sum, entry) => sum + entry.size_bytes, 0);
 
-  const made = entries.filter((entry) => entry.source === "generated").length;
-
   return (
     <SheetPage
       title="Files"
       description={
-        <>
-          {entries.length} {entries.length === 1 ? "file" : "files"} in {project.name} ·{" "}
-          {made} made by Mini-Mes · {formatSize(total)}
-        </>
+        `${entries.length} ${entries.length === 1 ? "file" : "files"} (${formatSize(total)})`
       }
       actions={
         <Button onClick={upload}>
@@ -217,7 +213,19 @@ function FileRow({
         </span>
       </TableCell>
       <TableCell>
-        {by?.kind === "user" ? (
+        {entry.origin?.kind === "dataverse" ? (
+          <button
+            title={entry.origin.title}
+            className="cursor-pointer truncate hover:opacity-70"
+            onClick={(e) => {
+              e.stopPropagation();
+              const url = webUrl(entry.origin?.url);
+              if (url) openLink(url);
+            }}
+          >
+            From Dataverse
+          </button>
+        ) : by?.kind === "user" ? (
           <span className="flex items-center gap-2">
             {name && (
               <span className="flex size-4 items-center justify-center rounded-full bg-muted text-[7px] font-semibold">

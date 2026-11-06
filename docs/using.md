@@ -49,7 +49,7 @@ document (`.qmd`) opens in Mini-Me's document view rather than another app.
 Each file has a **…** menu, in Files and in the Overview's outputs, to **Open** it, **Show in
 folder**, **Duplicate** it ("<name> copy"), **Rename** it (the extension stays) or **Delete** it,
 which asks first and removes it from the Project's folder. Messages that mentioned a deleted file
-show it as "file removed".
+show "(Deleted)" after its name.
 
 ## Conversations and Projects
 
@@ -128,7 +128,7 @@ For another version, @-mention the Mini-Me again in the thread and say what to c
 Reference a document with `#` or attach it, and ask a Mini-Me whose Traits can edit documents,
 such as Assistant or Scribe, to change it ("@Scribe tighten the methods in #Trial report").
 The Mini-Me suggests its edits; the document itself is unchanged until you accept them. Each
-edit opens a thread on the passage it changes, saying "Opened by Scribe · from Trial design"
+edit opens a thread on the passage it changes, saying "Opened by Scribe from Trial design"
 with the Conversation's name as a link back, and holding the Mini-Me's reason and its
 suggestion, which you accept or discard as above. The reply shows a card for the document with
 how many suggested edits still wait; **Open** shows the document with its Comments.
@@ -155,6 +155,19 @@ for new papers or theories, not about earlier results.
 Profiler, Validator, Curator, Linker and Plotter work on your tables on your computer.
 pandas and pointblank compute every number, check and chart; the AI model only chooses what
 to run. Cleaned and joined tables are saved as new files; the original is never changed.
+Without a `#`, they use the file your message seems to mean, also when it points to a table or
+chart made from that file ("@Plotter make that chart a bar chart"), and the reply names the
+file it used.
+
+## Datasets from CIP's Dataverse
+
+Ask CIP's Archivist for datasets ("@CIP's Archivist late blight trials in Peru since 2020"). The
+AI model turns your message into a search of CIP's Dataverse, and the reply lists the datasets
+it finds, 20 at a time with **Show more**. Open a dataset's **Files** to see them with their
+sizes, tick the ones you want and click **Download**: they are saved straight into the
+Project's Files, without the AI model, and show "From Dataverse" there, which opens the dataset.
+Files already in the Project show **In Files**. Public datasets need nothing more; for
+restricted files, add your Dataverse API token in Settings → Accounts.
 
 ## Mini-Mes with several Steps
 

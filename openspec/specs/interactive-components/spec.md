@@ -20,7 +20,7 @@ the link protocol or the Project database.
 - **WHEN** the app starts
 - **THEN** the UI renders `paper-sources` version 1, `theories` version 1, `table`
   version 1, `approval` version 1, `chart` version 1, `document` version 1, `suggestion`
-  version 1, `document-edits` version 1 and `hand-off` version 1
+  version 1, `document-edits` version 1, `hand-off` version 1 and `dataset-results` version 1
 
 #### Scenario: Every listed kind is rendered
 - **WHEN** the app is built

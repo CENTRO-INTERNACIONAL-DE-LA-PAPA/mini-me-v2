@@ -255,6 +255,16 @@ class CallContext:
         self._results = None
         return result["asset"]
 
+    async def feature_on(self, feature_id: str) -> bool:
+        """Whether the feature flag `feature_id` is on in this app."""
+        result = await self._requests.send(self.call_id, "features.active", {})
+        return feature_id in result["features"]
+
+    async def search_dataverse(self, params: dict[str, Any]) -> dict[str, Any]:
+        """A page of CIP Dataverse's datasets, `{ total, datasets }`, which the core fetches;
+        `params` are `{ query, from_year, to_year, start }`."""
+        return await self._requests.send(self.call_id, "dataverse.search", params)
+
     async def secret(self, provider: str) -> Secret:
         """The secret for `provider`, which must be in the Trait's declared providers."""
         result = await self._requests.send(self.call_id, "secret.get", {"provider": provider})

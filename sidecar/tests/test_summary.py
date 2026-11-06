@@ -26,6 +26,7 @@ def test_the_summary_prompt_says_whose_research_it_is_and_how_long_to_write():
     assert prompt.startswith(RESEARCH_CONTEXT)
     assert "2 or 3 short sentences, at most 60" in prompt
     assert "never invent" in prompt
+    assert "[field-trial.csv]()" in prompt
 
 
 def test_a_summary_request_without_an_id_is_ignored():

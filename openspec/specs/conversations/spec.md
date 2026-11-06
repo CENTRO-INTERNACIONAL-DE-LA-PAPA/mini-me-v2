@@ -86,7 +86,7 @@ of Interactive Components (each `{ id, kind, version, data, text, answer }`, wit
 `null` until answered) and a list of Steps (each `{ step_id, type, name, output, done }`).
 A message's state SHALL be fully determined by the events of its Conversation. The UI SHALL
 show each message with the time it was created, its `message.created` event's `ts`: under a
-user message as "You · 10:42", and next to the name in a reply's header.
+user message, and next to the name in a reply's header.
 
 #### Scenario: Rebuilding from events
 - **WHEN** the app replays a Conversation's events from sequence 1
@@ -96,8 +96,8 @@ user message as "You · 10:42", and next to the name in a reply's header.
 #### Scenario: Opening from stored messages matches a replay
 - **WHEN** the app opens a Conversation from its stored messages
 - **THEN** every message's creation time, content, status, attachments, Text Components,
-  Interactive Components, Steps, reactions, failure, Jev's answer and progress equal what
-  replaying the Conversation's events from sequence 1 gives
+  Interactive Components, Steps, reactions, failure and progress equal what replaying the
+  Conversation's events from sequence 1 gives
 
 #### Scenario: Message without components
 - **WHEN** a message is created

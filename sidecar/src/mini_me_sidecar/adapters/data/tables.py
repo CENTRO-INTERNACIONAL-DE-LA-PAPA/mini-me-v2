@@ -37,6 +37,8 @@ class Table:
     # For an Excel file, the sheet read and every sheet it has.
     sheet: str | None = None
     sheets: list[str] = field(default_factory=list)
+    # The Asset ID of the file the table was read from, when there is one.
+    source_id: str | None = None
 
     @property
     def stem(self) -> str:

@@ -22,6 +22,7 @@ import { DeleteButton } from "../library/LibraryParts";
 import { ToolSheet } from "../shell/Sheet";
 import type { Placement } from "./anchors";
 import { passageLocation } from "./location";
+import { MetaParts } from "@/components/ui/meta-parts";
 
 type Tab = "open" | "resolved";
 
@@ -71,14 +72,13 @@ export function CommentsSheet({
     const at = from(thread);
     return at === undefined ? null : passageLocation(text, at);
   };
-  const meta = `${lists.open.length} open · ${lists.resolved.length} resolved`;
 
   const thread = threads.find((t) => t.conversation_id === open);
   if (thread) {
     const list = lists[thread.resolved ? "resolved" : "open"];
     const index = list.indexOf(thread);
     return (
-      <ToolSheet title="Comments" meta={meta} onClose={onClose}>
+      <ToolSheet title="Comments" onClose={onClose}>
         <ThreadView
           key={thread.conversation_id}
           projectId={projectId}
@@ -107,7 +107,7 @@ export function CommentsSheet({
   const shown = lists[tab];
   const detachedFrom = shown.findIndex((t) => from(t) === undefined);
   return (
-    <ToolSheet title="Comments" meta={meta} onClose={onClose}>
+    <ToolSheet title="Comments" onClose={onClose}>
       <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="mb-4">
         <TabsList aria-label="Comments">
           <TabsTrigger value="open">
@@ -289,21 +289,27 @@ function ThreadView({
         </h3>
         <div className="flex items-center gap-2 text-meta text-muted-foreground">
           <span className="flex-1">
-            Opened by {opener}
-            {from?.title && (
-              <>
-                {" · from "}
-                <Button
-                  variant="link"
-                  className="text-meta"
-                  onClick={() => onOpenConversation(from.conversation_id)}
-                >
-                  {from.title}
-                </Button>
-              </>
-            )}
-            {` · ${formatClock(thread.created_at)}`}
-            {detached && " · passage not found"}
+            <MetaParts
+              parts={[
+                <>
+                  Opened by {opener}
+                  {from?.title && (
+                    <>
+                      {" from "}
+                      <Button
+                        variant="link"
+                        className="text-meta"
+                        onClick={() => onOpenConversation(from.conversation_id)}
+                      >
+                        {from.title}
+                      </Button>
+                    </>
+                  )}
+                  {` (${formatClock(thread.created_at)})`}
+                </>,
+                detached && "Passage not found",
+              ]}
+            />
           </span>
           {thread.resolved ? (
             <Button variant="mini-me" onClick={() => onResolve(false)}>

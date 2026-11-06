@@ -53,7 +53,7 @@ Traits; those marked *planned* are on the [Roadmap](docs/roadmap.md).
 | **Refute** | Argues that a statement is wrong, using the information it's given. |
 | **Plan** | Creates an architecture or a sequence of steps for a project. |
 | **Experiment** | Designs experiments to verify a hypothesis. |
-| **Explore Dataverse** *(planned)* | Finds information in Dataverse. |
+| **Search CIP Dataverse** | Finds datasets in CIP's Dataverse, whose files can be downloaded into the Project. |
 | **Index Sources** *(planned)* | Indexes sources so they can be referenced later. |
 | **Code** *(planned)* | Solves problems by writing and running code (Python and R). |
 
@@ -161,6 +161,14 @@ Theorizer. Mini-Me always asks before an action that would cost extra.
 release; [docs/architecture.md](docs/architecture.md) explains how the UI, the Rust core and
 the Python sidecar work together. [docs/roadmap.md](docs/roadmap.md) lists the planned
 changes in order, and their specifications live in [`openspec/`](openspec/).
+
+## License
+
+Mini-Me is free software, released under the
+[GNU General Public License, version 3 or later](LICENSE). You may use, study, change and
+share it, including commercially. Anyone who distributes Mini-Me, changed or not, must do so
+under the same license, pass on the source code, and keep the [NOTICE](NOTICE) crediting the
+International Potato Center (CIP).
 
 ## Acknowledgements
 

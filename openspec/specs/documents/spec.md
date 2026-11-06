@@ -109,7 +109,7 @@ when no Quarto is found.
 
 ### Requirement: The document view
 A document SHALL open across the whole main sheet under an editor header: a back link to the view it
-was opened from, its title from the YAML header, a status line "Draft · <Project> · edited <time>", a
+was opened from, its title from the YAML header, a status line "Edited <time>", a
 Comments button, Export PDF, and below them the source and the preview side by side. The Comments
 button SHALL show or hide the Comments sheet beside the main sheet. The back link SHALL return to the
 view the document was opened from. Without Quarto, the source and the preview SHALL be replaced by the

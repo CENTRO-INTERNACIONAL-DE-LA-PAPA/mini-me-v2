@@ -52,7 +52,6 @@ const BAR = "mt-5 flex h-11 shrink-0 items-center gap-0.5 border-y border-border
 
 interface Props {
   projectId: Uuid;
-  projectName: string;
   assetId: Uuid;
   /** Where the back link returns to, such as the Conversation's title or "Files". */
   back: string;
@@ -96,7 +95,6 @@ const theme = EditorView.theme({
  * writes and can be edited once the draft ends. */
 export function DocumentView({
   projectId,
-  projectName,
   assetId,
   back,
   draftFrom,
@@ -454,13 +452,7 @@ export function DocumentView({
   };
 
   const title = headerField(text, "title") || "Untitled document";
-  const subtitle = [
-    "Draft",
-    projectName,
-    editedAt !== null ? `edited ${formatRelative(editedAt)}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const subtitle = editedAt !== null ? `Edited ${formatRelative(editedAt)}` : undefined;
 
   return (
     // The comments sheet floats beside the document's sheet, like a Conversation's tool sheets.

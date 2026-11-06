@@ -20,6 +20,7 @@ TOOL_NAMES = (
     "show_chart",
     "show_papers",
     "show_theories",
+    "show_datasets",
 )
 
 # Offered to the model of every prompt-based Trait, which therefore does not list them: reading

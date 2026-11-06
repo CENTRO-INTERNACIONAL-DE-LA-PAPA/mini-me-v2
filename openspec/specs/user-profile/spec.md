@@ -51,13 +51,13 @@ clear the name. A name longer than 100 characters SHALL be refused with the reas
 ### Requirement: Where the name appears
 The UI SHALL derive a first name (the name's first word) and initials (the first letter of the
 first and last words, uppercased, or one letter for a one-word name). The sidebar's Settings
-button SHALL show the initials with the tooltip "<name> · Settings", and Files SHALL show the
+button SHALL show the initials with the tooltip "Settings (<name>)", and Files SHALL show the
 initials before "You" for files the user added. With no name, the Settings button SHALL show
 the Settings icon with the tooltip "Settings", and Files SHALL show "You" alone.
 
 #### Scenario: Two-word name
 - **WHEN** the saved name is "Ana Pérez"
-- **THEN** the Settings button shows "AP" and the tooltip "Ana Pérez · Settings"
+- **THEN** the Settings button shows "AP" and the tooltip "Settings (Ana Pérez)"
 
 #### Scenario: One-word name
 - **WHEN** the saved name is "Ana"
