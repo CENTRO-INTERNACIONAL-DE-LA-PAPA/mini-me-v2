@@ -1,6 +1,7 @@
-"""Records a run's model calls as `run.debug` entries, the reply's debug records, while the
-core asks for them in `context.debug`. A LangChain callback that `chat_model()` attaches
-catches every call, so no call site records its own."""
+"""Records a run's model calls and tool calls as `run.debug` entries, the reply's debug
+records, while the core asks for them in `context.debug`. A LangChain callback that
+`chat_model()` attaches catches every model call, so no call site records its own; tool calls
+are recorded with `record_tool`."""
 
 import json
 import sys
@@ -43,7 +44,8 @@ class Parts:
 
 
 class Recorder:
-    """Records the model calls of one Trait call or decision, sending each as an entry."""
+    """Records the model calls and tool calls of one Trait call or decision, sending each as an
+    entry."""
 
     def __init__(
         self, parts: Parts, send: Callable[[dict[str, Any]], None], step: str, trait: str | None
@@ -54,6 +56,8 @@ class Recorder:
         self._send = send
         # The previous model call's ID and whole input, which a call continuing it starts with.
         self._previous: tuple[str, list[dict[str, Any]]] | None = None
+        # The ID of the latest model call, which asked for the tool calls that follow it.
+        self._last_call: str | None = None
 
     def model_call(
         self,
@@ -63,6 +67,7 @@ class Recorder:
         answer: BaseMessage | None,
     ) -> None:
         call_id = str(uuid.uuid4())
+        self._last_call = call_id
         entry: dict[str, Any] = {
             "type": "model_call",
             "id": call_id,
@@ -96,6 +101,19 @@ class Recorder:
             )
         self._send(entry)
 
+    def tool_call(self, name: str, args: Any, result: str) -> None:
+        if not self.parts.tools:
+            return
+        self._send(
+            {
+                "type": "tool_call",
+                "call": self._last_call,
+                "name": name,
+                "args": _json(args),
+                "result": result,
+            }
+        )
+
 
 _recorder: ContextVar[Recorder | None] = ContextVar("debug_recorder", default=None)
 
@@ -121,6 +139,12 @@ def callbacks(model: Model) -> list[BaseCallbackHandler]:
     calls inside `recording`, none outside."""
     recorder = _recorder.get()
     return [] if recorder is None else [_Handler(recorder, model)]
+
+
+def record_tool(name: str, args: Any, result: str) -> None:
+    """Records a tool call and the `result` its model was given, inside `recording`."""
+    if (recorder := _recorder.get()) is not None:
+        recorder.tool_call(name, args, result)
 
 
 class _Handler(BaseCallbackHandler):

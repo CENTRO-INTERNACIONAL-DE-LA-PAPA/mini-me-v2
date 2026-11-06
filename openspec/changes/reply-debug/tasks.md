@@ -11,7 +11,7 @@
 ## 3. Catching calls in the sidecar
 
 - [x] 3.1 Add the `Recorder` (its `ContextVar`, the LangChain callback handler, serialising messages, `continues`), set it in `Run.trait()` and `Run.decide()` while a `debug` flag is on, and attach it in `chat_model()`; verify with pytest tests that a fake chat model's call sends one entry with only the enabled parts, that a second call continuing the first sends only the new messages, and that nothing is sent with every flag off
-- [ ] 3.2 Record tool calls in `prompt.py`'s `_converse` after each final result, with the asking call's `id`, only while `tools` is on; verify with a pytest test of a round with one tool call
+- [x] 3.2 Record tool calls in `prompt.py`'s `_converse` after each final result, with the asking call's `id`, only while `tools` is on; verify with a pytest test of a round with one tool call
 
 ## 4. The block and the Developer page
 
