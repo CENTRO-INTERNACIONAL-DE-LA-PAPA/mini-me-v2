@@ -78,17 +78,20 @@ const PAGES: Section<Page>[] = [
   { id: "about", name: "About", icon: InfoIcon },
 ];
 
-/** `onOpenAvatars` opens the avatar parts page, a developer option, and `onOpenWhatsNew` the
- * page of the version's changes. Settings opens at `initialPage`, General unless given.
- * `projectId` is the open Project, whose debug records the Developer page can clear. */
+/** `onOpenAvatars` opens the avatar parts page, a developer option, `onOpenWhatsNew` the page
+ * of the version's changes, and `onOpenThirdParty` the third-party software page. Settings opens
+ * at `initialPage`, General unless given. `projectId` is the open Project, whose debug records
+ * the Developer page can clear. */
 export function SettingsView({
   onOpenAvatars,
   onOpenWhatsNew,
+  onOpenThirdParty,
   initialPage = "general",
   projectId,
 }: {
   onOpenAvatars: () => void;
   onOpenWhatsNew: () => void;
+  onOpenThirdParty: () => void;
   initialPage?: Page;
   projectId?: string;
 }) {
@@ -134,7 +137,9 @@ export function SettingsView({
             projectId={projectId}
           />
         )}
-        {shown === "about" && <AboutPage onOpenWhatsNew={onOpenWhatsNew} />}
+        {shown === "about" && (
+          <AboutPage onOpenWhatsNew={onOpenWhatsNew} onOpenThirdParty={onOpenThirdParty} />
+        )}
       </div>
     </SectionPage>
   );
@@ -507,7 +512,13 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
   );
 }
 
-function AboutPage({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
+function AboutPage({
+  onOpenWhatsNew,
+  onOpenThirdParty,
+}: {
+  onOpenWhatsNew: () => void;
+  onOpenThirdParty: () => void;
+}) {
   return (
     <>
       <PageHeader title="About" lead="What Mini-Me is, who makes it, and which version is running." />
@@ -534,6 +545,14 @@ function AboutPage({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
               CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2
             </a>
           </span>
+        </SettingRow>
+        <SettingRow
+          label="Third-party Software"
+          description="The software Mini-Me is built with, and its licenses."
+        >
+          <Button variant="secondary" onClick={onOpenThirdParty}>
+            Show
+          </Button>
         </SettingRow>
         <DeveloperModeRow />
       </div>

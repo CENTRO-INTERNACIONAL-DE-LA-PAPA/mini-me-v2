@@ -540,6 +540,27 @@ export interface ReplyDebugSettings {
   reply_tools: boolean;
 }
 
+/** The third-party software a release build ships (`scripts/third-party.mjs`). */
+export interface ThirdParty {
+  /** Mini-Me's own NOTICE and license. */
+  notice: string;
+  license: string;
+  /** Each distinct license or notice text once; components refer to them by index. */
+  texts: string[];
+  /** Sorted by part, then name. */
+  components: ThirdPartyComponent[];
+}
+
+export interface ThirdPartyComponent {
+  /** Which part of the app ships it: the Rust core, the interface, or the AI runtime. */
+  part: "core" | "interface" | "runtime";
+  name: string;
+  version: string;
+  license: string;
+  repository: string | null;
+  texts: number[];
+}
+
 /** One message of a model call's input, as a reply's debug record holds it. */
 export interface DebugMessage {
   role: string;

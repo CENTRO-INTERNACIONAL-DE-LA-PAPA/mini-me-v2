@@ -38,6 +38,14 @@ npm run tauri:release
 Local release builds produce no update files and need no signing key, and a local build
 does not update itself.
 
+A release build also writes `src-tauri/resources/third-party.json` with `npm run third-party`
+([`scripts/third-party.mjs`](../scripts/third-party.mjs)), after the sidecar bundle: Mini-Me's
+`NOTICE` and license, then every Rust crate, npm package and Python package the app ships, with
+its license texts, which Settings → About shows as "Third-party Software". It lists the crates
+of the build machine's platform, and the build fails if a component declares no license. A dev
+dependency whose own files are built into the interface, such as `shadcn`'s stylesheet, is
+listed in the script's `BUILT_IN`.
+
 ## Building the UI
 
 [DESIGN.md](../DESIGN.md) holds the design rules. This is where the code follows them:

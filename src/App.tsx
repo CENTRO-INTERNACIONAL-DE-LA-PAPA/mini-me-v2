@@ -14,6 +14,7 @@ import { LibraryView } from "./components/library/LibraryView";
 import { MiniMeEditor } from "./components/library/MiniMeEditor";
 import { OverviewView } from "./components/overview/OverviewView";
 import { SettingsView } from "./components/settings/SettingsView";
+import { ThirdPartyView } from "./components/shell/ThirdPartyView";
 import { WhatsNewView } from "./components/shell/WhatsNewView";
 import { AppSidebar } from "./components/shell/AppSidebar";
 import { MainSheet } from "./components/shell/Sheet";
@@ -254,10 +255,15 @@ function Main({
           onOpenWhatsNew={() =>
             onNavigate({ kind: "whats-new", from: { kind: "settings", page: "about" } })
           }
+          onOpenThirdParty={() => onNavigate({ kind: "third-party" })}
         />,
       );
     case "whats-new":
       return scrolling(<WhatsNewView onClose={() => onNavigate(view.from ?? { kind: "home" })} />);
+    case "third-party":
+      return scrolling(
+        <ThirdPartyView onClose={() => onNavigate({ kind: "settings", page: "about" })} />,
+      );
     case "avatars":
       // Opened from Settings → General, so closing it goes back there.
       return scrolling(<AvatarDebugView onClose={() => onNavigate({ kind: "settings" })} />);

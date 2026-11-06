@@ -104,6 +104,7 @@ pub fn run() {
             ipc::get_debug_records,
             ipc::clear_debug_records,
             ipc::open_sidecar_log,
+            ipc::get_third_party,
             ipc::rename_conversation,
             ipc::name_conversation,
             ipc::delete_conversation,
