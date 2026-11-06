@@ -15,7 +15,7 @@
 
 ## 4. The block and the Developer page
 
-- [ ] 4.1 Add `ReplyDebugBlock` under replies (grouping entries into model calls with their tool calls, rebuilding each input from the calls it continues, "Nothing recorded for this reply", "Copy as JSON"), its types and `api.ts`; verify with a frontend test of the grouping and rebuilding, `npm test`, and in the app with a reply of Assistant that reads a table
+- [x] 4.1 Add `ReplyDebugBlock` under replies (grouping entries into model calls with their tool calls, rebuilding each input from the calls it continues, "Nothing recorded for this reply", "Copy as JSON"), its types and `api.ts`; verify with a frontend test of the grouping and rebuilding, `npm test`, and in the app with a reply of Assistant that reads a table
 - [ ] 4.2 Add "Show what the AI read", "Show model call details" and "Show tool calls" to the Developer page and update the debugging notes in `docs/architecture.md`; verify in the app that each switch stores and shows only its part, and that Plotter, a Workflow decision and the Dataverse search are recorded
 
 ## Workflow follow-up

@@ -530,7 +530,53 @@ export interface AiSettings {
   show_answers: boolean;
   /** Developer setting: store and show what was sent to Jev under each message. */
   show_asked: boolean;
+  /** Developer settings: the parts of each reply's debug records to store and show. */
+  debug: ReplyDebugSettings;
 }
+
+export interface ReplyDebugSettings {
+  reply_input: boolean;
+  reply_details: boolean;
+  reply_tools: boolean;
+}
+
+/** One message of a model call's input, as a reply's debug record holds it. */
+export interface DebugMessage {
+  role: string;
+  /** Text, or the provider's content blocks. */
+  content: unknown;
+  tool_calls?: { name: string; args: unknown; id?: string }[];
+  tool_call_id?: string;
+}
+
+/** A model call of a reply. Each part is null when its switch was off. */
+export interface ModelCallRecord {
+  type: "model_call";
+  id: string;
+  step: string;
+  /** null for a Workflow decision. */
+  trait: string | null;
+  /** The model call whose whole input this call's input starts with; `messages` then holds
+   * only the messages after it. */
+  continues: string | null;
+  messages: DebugMessage[] | null;
+  provider: string | null;
+  model: string | null;
+  duration_ms: number | null;
+  tokens_in: number | null;
+  tokens_out: number | null;
+}
+
+/** A tool a model called, asked for by model call `call`, with the result the model got. */
+export interface ToolCallRecord {
+  type: "tool_call";
+  call: string | null;
+  name: string;
+  args: unknown;
+  result: string;
+}
+
+export type ReplyRecord = ModelCallRecord | ToolCallRecord;
 
 /** What the app knows about the user's Quarto, which documents are edited and rendered with. */
 export interface QuartoStatus {
