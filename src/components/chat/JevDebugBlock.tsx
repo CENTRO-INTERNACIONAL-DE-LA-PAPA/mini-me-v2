@@ -57,31 +57,36 @@ export function JevDebugBlock({
       {record === null && <p className="mt-1">Nothing recorded for this message</p>}
       {record && (
         <div className="mt-1 flex flex-col gap-2">
-          {record.error && (
-            <p>
-              {record.error.code}: {record.error.message}
-            </p>
-          )}
-          {record.answers && (
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-              {answerRows(record.answers).map((row) => (
-                <Fragment key={row.question}>
-                  <dt>{row.question}</dt>
-                  <dd className="wrap-anywhere">
-                    <span className="text-foreground">
-                      {label(row.choice)} {percent(row.confidence)}
-                    </span>
-                    {row.others.length > 0 && (
-                      <span className="block">
-                        {row.others
-                          .map((o) => `${label(o.option)} ${percent(o.probability)}`)
-                          .join(", ")}
-                      </span>
-                    )}
-                  </dd>
-                </Fragment>
-              ))}
-            </dl>
+          {(record.error || record.answers) && (
+            <div className="flex flex-col gap-1">
+              <p className="text-foreground">What Jev answered</p>
+              {record.error && (
+                <p>
+                  {record.error.code}: {record.error.message}
+                </p>
+              )}
+              {record.answers && (
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                  {answerRows(record.answers).map((row) => (
+                    <Fragment key={row.question}>
+                      <dt>{row.question}</dt>
+                      <dd className="wrap-anywhere">
+                        <span className="text-foreground">
+                          {label(row.choice)} {percent(row.confidence)}
+                        </span>
+                        {row.others.length > 0 && (
+                          <span className="block">
+                            {row.others
+                              .map((o) => `${label(o.option)} ${percent(o.probability)}`)
+                              .join(", ")}
+                          </span>
+                        )}
+                      </dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              )}
+            </div>
           )}
           {record.asked && (
             <div className="flex flex-col gap-1">
