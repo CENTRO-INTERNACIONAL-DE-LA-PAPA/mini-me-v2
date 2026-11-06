@@ -44,6 +44,7 @@ import { openLink } from "../interactive/links";
 import { SectionPage, type Section } from "../shell/SectionPage";
 import type { SettingsPageId } from "../shell/view";
 import { refreshDeveloperMode, useDeveloperMode } from "../../hooks/useDeveloperMode";
+import { refreshJevDebug, type JevDebug } from "../../hooks/useJevDebug";
 import { reloadFeatureFlags, useFeatureFlags } from "../../hooks/useFeatureFlags";
 import { recheckQuarto, showQuarto, useQuarto } from "../../hooks/useQuarto";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
@@ -76,15 +77,18 @@ const PAGES: Section<Page>[] = [
 ];
 
 /** `onOpenAvatars` opens the avatar parts page, a developer option, and `onOpenWhatsNew` the
- * page of the version's changes. Settings opens at `initialPage`, General unless given. */
+ * page of the version's changes. Settings opens at `initialPage`, General unless given.
+ * `projectId` is the open Project, whose debug records the Developer page can clear. */
 export function SettingsView({
   onOpenAvatars,
   onOpenWhatsNew,
   initialPage = "general",
+  projectId,
 }: {
   onOpenAvatars: () => void;
   onOpenWhatsNew: () => void;
   initialPage?: Page;
+  projectId?: string;
 }) {
   const [page, setPage] = useState<Page>(initialPage);
   const developer = useDeveloperMode();
@@ -121,7 +125,12 @@ export function SettingsView({
           <AccountsPage settings={settings} onChanged={refresh} />
         )}
         {settings && shown === "developer" && (
-          <DeveloperPage settings={settings} onChanged={refresh} onOpenAvatars={onOpenAvatars} />
+          <DeveloperPage
+            settings={settings}
+            onChanged={refresh}
+            onOpenAvatars={onOpenAvatars}
+            projectId={projectId}
+          />
         )}
         {shown === "about" && <AboutPage onOpenWhatsNew={onOpenWhatsNew} />}
       </div>
@@ -229,10 +238,12 @@ function DeveloperPage({
   settings,
   onChanged,
   onOpenAvatars,
+  projectId,
 }: {
   settings: AiSettings;
   onChanged: () => void;
   onOpenAvatars: () => void;
+  projectId?: string;
 }) {
   return (
     <>
@@ -241,9 +252,11 @@ function DeveloperPage({
         lead="Options for developing and testing Mini-Me. This page is listed while Developer mode (Settings → About) is on."
       />
       <ThresholdRow settings={settings} onChanged={onChanged} />
-      <DeveloperRow settings={settings} onChanged={onChanged} />
+      <JevDebugRows settings={settings} onChanged={onChanged} />
+      <DebugDataRow projectId={projectId} />
+      <SidecarLogRow />
       <SettingRow
-        label="[DEBUG] Avatars"
+        label="Avatars"
         description="Every avatar base, face, accessory and colour, to try combinations."
       >
         <Button variant="outline" onClick={onOpenAvatars}>
@@ -284,7 +297,7 @@ function FeatureFlagsSection() {
 
   return (
     <Section
-      title="[DEBUG] Feature flags"
+      title="Feature flags"
       description="Experimental features this version carries switched off."
     >
       <form onSubmit={enable}>
@@ -535,7 +548,7 @@ function DeveloperModeRow() {
       htmlFor="developer-mode"
       description={
         <>
-          Shows the [DEBUG] options under General, and the right-click menu with Inspect.
+          Shows the Developer page, and the right-click menu with Inspect.
           Inspect follows this switch from the next time Mini-Me starts.
           {error && <span className="mt-1 block text-destructive">{error}</span>}
         </>
@@ -910,7 +923,7 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
   return (
     <form onSubmit={save}>
       <SettingRow
-        label="[DEBUG] Jev's confidence threshold"
+        label="Jev's confidence threshold"
         htmlFor="threshold"
         description={
           <>
@@ -942,32 +955,140 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
   );
 }
 
-function DeveloperRow({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
-  const [error, setError] = useState<string | null>(null);
-  return (
+/** The two switches for Jev's debug record under each message: its answers, and what was
+ * sent to it. Each part is stored only while its switch is on. */
+function JevDebugRows({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
+  const [error, setError] = useState<{ part: keyof JevDebug; text: string } | null>(null);
+
+  async function set(part: keyof JevDebug, checked: boolean) {
+    try {
+      setError(null);
+      await (part === "answers" ? api.setShowJevAnswers(checked) : api.setShowJevAsked(checked));
+      const shown = { answers: settings.show_answers, asked: settings.show_asked };
+      refreshJevDebug({ ...shown, [part]: checked });
+      onChanged();
+    } catch (e) {
+      setError({ part, text: errorMessage(e) });
+    }
+  }
+
+  const row = (part: keyof JevDebug, label: string, description: string, checked: boolean) => (
     <SettingRow
-      label="[DEBUG] Show Jev's answers"
-      htmlFor="show-answers"
+      label={label}
+      htmlFor={`show-jev-${part}`}
       description={
         <>
-          Stores Jev's raw answers and shows them under each message.
-          {error && <span className="mt-1 block text-destructive">{error}</span>}
+          {description}
+          {error?.part === part && (
+            <span className="mt-1 block text-destructive">{error.text}</span>
+          )}
         </>
       }
     >
       <Switch
-        id="show-answers"
-        checked={settings.show_answers}
-        onCheckedChange={async (checked) => {
-          try {
-            setError(null);
-            await api.setShowJevAnswers(checked);
-            onChanged();
-          } catch (e) {
-            setError(errorMessage(e));
-          }
-        }}
+        id={`show-jev-${part}`}
+        checked={checked}
+        onCheckedChange={(next) => void set(part, next)}
       />
+    </SettingRow>
+  );
+
+  return (
+    <>
+      {row(
+        "answers",
+        "Show Jev's answers",
+        "Stores Jev's answers and shows them under each message.",
+        settings.show_answers,
+      )}
+      {row(
+        "asked",
+        "Show what Jev was asked",
+        "Stores the questions and options sent to Jev and shows them under each message.",
+        settings.show_asked,
+      )}
+    </>
+  );
+}
+
+/** Clears the open Project's debug records, after asking. */
+function DebugDataRow({ projectId }: { projectId?: string }) {
+  const [asking, setAsking] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function clear() {
+    if (!projectId) return;
+    try {
+      await api.clearDebugRecords(projectId);
+      setStatus("Cleared");
+    } catch (e) {
+      setStatus(errorMessage(e));
+    }
+    setAsking(false);
+  }
+
+  return (
+    <SettingRow
+      label="Debug data"
+      description={
+        <>
+          {projectId
+            ? "Deletes the debug records stored in the open Project."
+            : "Open a Project to clear its debug records."}
+          {asking && (
+            <span className="mt-1 block">Delete every debug record of this Project?</span>
+          )}
+          {status && <span className="mt-1 block text-ink-2">{status}</span>}
+        </>
+      }
+    >
+      {asking ? (
+        <>
+          <Button variant="ghost" onClick={() => setAsking(false)}>
+            Keep
+          </Button>
+          <Button variant="destructive" onClick={() => void clear()}>
+            Clear
+          </Button>
+        </>
+      ) : (
+        <Button
+          variant="outline"
+          disabled={!projectId}
+          onClick={() => {
+            setStatus(null);
+            setAsking(true);
+          }}
+        >
+          Clear
+        </Button>
+      )}
+    </SettingRow>
+  );
+}
+
+/** Opens the sidecar log, where the sidecar's errors and the core's notes about it go. */
+function SidecarLogRow() {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <SettingRow
+      label="Sidecar log"
+      description={
+        <>
+          The sidecar's errors and the core's notes about it.
+          {error && <span className="mt-1 block text-destructive">{error}</span>}
+        </>
+      }
+    >
+      <Button
+        variant="outline"
+        onClick={() => {
+          setError(null);
+          api.openSidecarLog().catch((e) => setError(errorMessage(e)));
+        }}
+      >
+        Open
+      </Button>
     </SettingRow>
   );
 }

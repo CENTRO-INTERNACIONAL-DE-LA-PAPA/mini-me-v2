@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -37,7 +38,7 @@ use crate::runs::{self, CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
 use crate::settings::{AiSettings, HomeSettings, Settings};
 use crate::link::SummaryKind;
-use crate::sidecar::{Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
+use crate::sidecar::{LOG_FILE, Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
 use crate::updates::{UpdateStatus, Updates};
 
@@ -425,8 +426,9 @@ pub async fn send_message(
         model: settings.ai.model(),
         threshold: settings.routing.threshold,
         timeout: ROUTE_TIMEOUT,
-        // Jev's raw answers are a developer aid, kept only while Developer mode is on.
+        // Jev's debug record is a developer aid, kept only while Developer mode is on.
         show_answers: settings.routing.show_answers && state.developer_mode(),
+        show_asked: settings.routing.show_asked && state.developer_mode(),
         reaction_chance: REACTION_CHANCE,
     };
     state.routing.send(
@@ -450,6 +452,13 @@ pub async fn set_routing_threshold(state: State<'_, AppState>, threshold: f64) -
 pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> AppResult<()> {
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
     settings.routing.show_answers = show;
+    settings.save(&state.config_dir)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_show_jev_asked(state: State<'_, AppState>, show: bool) -> AppResult<()> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.routing.show_asked = show;
     settings.save(&state.config_dir)
 }
 
@@ -605,6 +614,7 @@ pub struct AiSettingsView {
     saved_keys: Vec<String>,
     threshold: f64,
     show_answers: bool,
+    show_asked: bool,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -627,6 +637,7 @@ pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettings
         saved_keys: KeychainSecrets::saved(),
         threshold: settings.routing.threshold,
         show_answers: settings.routing.show_answers,
+        show_asked: settings.routing.show_asked,
     })
 }
 
@@ -1265,6 +1276,37 @@ pub async fn delete_asset(
     asset_id: Uuid,
 ) -> AppResult<()> {
     assets::delete(&*state.project(project_id)?, asset_id)
+}
+
+/// Deletes every debug record of Project `project_id`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn clear_debug_records(state: State<'_, AppState>, project_id: Uuid) -> AppResult<()> {
+    state.project(project_id)?.lock().clear_debug_records()
+}
+
+/// Opens the sidecar log in the system's default app for it.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn open_sidecar_log(app: AppHandle) -> AppResult<()> {
+    let dir = app.path().app_log_dir().map_err(|e| AppError::storage(e.to_string()))?;
+    let path = dir.join(LOG_FILE);
+    if !path.exists() {
+        return Err(AppError::not_found("No sidecar log yet."));
+    }
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|e| AppError::new("open_failed", e.to_string()))
+}
+
+/// The debug record of `kind` that message `message_id` has, read when its debug block is
+/// expanded; `null` when it has none.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_debug_record(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    message_id: Uuid,
+    kind: String,
+) -> AppResult<Option<Value>> {
+    state.project(project_id)?.lock().debug_record(message_id, &kind)
 }
 
 /// Shows the file `asset_id` in the system's file manager.

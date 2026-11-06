@@ -273,13 +273,23 @@ pub enum SidecarFrame {
     RunError { run_id: Uuid, error: ErrorInfo },
     #[serde(rename = "run.cancelled")]
     RunCancelled { run_id: Uuid },
+    /// `asked` is the request sent to Jev, `{ state, questions }`, kept for the developer's
+    /// debug record.
     #[serde(rename = "route.done")]
     RouteDone {
         route_id: Uuid,
         answers: BTreeMap<String, ChoiceAnswer>,
+        #[serde(default)]
+        asked: Value,
     },
+    /// `asked` is `null` when the request was not sent to Jev.
     #[serde(rename = "route.error")]
-    RouteError { route_id: Uuid, error: ErrorInfo },
+    RouteError {
+        route_id: Uuid,
+        error: ErrorInfo,
+        #[serde(default)]
+        asked: Value,
+    },
     #[serde(rename = "summary.done")]
     SummaryDone { summary_id: Uuid, text: String },
     #[serde(rename = "summary.error")]

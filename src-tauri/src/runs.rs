@@ -51,6 +51,13 @@ const ROUTING_KEY: &str = "typesafe";
 /// Jev's answers to a routing request, by question ID.
 pub type RouteAnswers = BTreeMap<String, ChoiceAnswer>;
 
+/// The end of a routing request: Jev's answers or why there are none, and what was sent to
+/// Jev (`null` when nothing was).
+pub struct Routed {
+    pub answers: AppResult<RouteAnswers>,
+    pub asked: Value,
+}
+
 /// What the sidecar sends about a draft: some text, or its end.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -223,7 +230,7 @@ struct Inner {
     adapters: HashMap<String, AdapterInfo>,
     runs: HashMap<Uuid, Run>,
     /// Routing requests waiting for their `route.done` or `route.error`.
-    routes: Pending<RouteAnswers>,
+    routes: Pending<(Result<RouteAnswers, ErrorInfo>, Value)>,
     /// Summary requests waiting for their `summary.done` or `summary.error`.
     summaries: Pending<String>,
     /// Drafts being written.
@@ -557,7 +564,8 @@ impl Runs {
 
     /// Asks the sidecar for Jev's answers to the `ask` questions about `state`, waiting at
     /// most `timeout`; `mini_mes` and `files` are the options of the `mini_me` and `file`
-    /// questions. Fails with the sidecar's error, `jev_timeout`, or `sidecar_stopped`.
+    /// questions. The answers fail with the sidecar's error, `jev_timeout`, or
+    /// `sidecar_stopped`.
     pub fn route(
         &self,
         state: Value,
@@ -565,7 +573,7 @@ impl Runs {
         files: Vec<RouteFile>,
         ask: Vec<String>,
         timeout: Duration,
-    ) -> AppResult<RouteAnswers> {
+    ) -> Routed {
         let route_id = new_id();
         let frame = CoreFrame::RouteStart { route_id, state, mini_mes, files, ask };
         let no_answer = NoAnswer {
@@ -573,7 +581,13 @@ impl Runs {
             timeout: ("jev_timeout", "Typesafe did not answer in time."),
             stopped: "Mini-Me's runtime stopped before choosing a Mini-Me.",
         };
-        self.request(|inner| &mut inner.routes, route_id, frame, timeout, no_answer)
+        match self.request(|inner| &mut inner.routes, route_id, frame, timeout, no_answer) {
+            Ok((answers, asked)) => Routed {
+                answers: answers.map_err(|error| AppError::new(&error.code, error.message)),
+                asked,
+            },
+            Err(err) => Routed { answers: Err(err), asked: Value::Null },
+        }
     }
 
     /// Asks the sidecar to summarise `material` with `model`, waiting at most `timeout`.
@@ -1007,11 +1021,13 @@ impl Runs {
                     let _ = conversations::cancel_reply(&run.project, run.message_id);
                 }
             }
-            SidecarFrame::RouteDone { route_id, answers } => {
-                self.answered(|inner| &mut inner.routes, "route", route_id, Ok(answers));
+            SidecarFrame::RouteDone { route_id, answers, asked } => {
+                let routed = Ok((Ok(answers), asked));
+                self.answered(|inner| &mut inner.routes, "route", route_id, routed);
             }
-            SidecarFrame::RouteError { route_id, error } => {
-                self.answered(|inner| &mut inner.routes, "route", route_id, Err(error));
+            SidecarFrame::RouteError { route_id, error, asked } => {
+                let routed = Ok((Err(error), asked));
+                self.answered(|inner| &mut inner.routes, "route", route_id, routed);
             }
             SidecarFrame::SummaryDone { summary_id, text } => {
                 self.answered(|inner| &mut inner.summaries, "summary", summary_id, Ok(text));
@@ -2388,7 +2404,7 @@ mod tests {
     fn start_route(
         f: &Fixture,
         timeout: Duration,
-    ) -> (Uuid, std::thread::JoinHandle<AppResult<RouteAnswers>>) {
+    ) -> (Uuid, std::thread::JoinHandle<Routed>) {
         let runs = Arc::clone(&f.runs);
         let handle = std::thread::spawn(move || {
             let ask = vec!["reaction".into()];
@@ -2417,20 +2433,26 @@ mod tests {
             probabilities: BTreeMap::new(),
         };
         let answers = BTreeMap::from([("reaction".to_string(), answer)]);
-        f.runs.handle(SidecarFrame::RouteDone { route_id, answers: answers.clone() });
-        assert_eq!(handle.join().unwrap().unwrap(), answers);
+        let asked = json!({ "state": { "message": "hi" }, "questions": {} });
+        f.runs.handle(SidecarFrame::RouteDone {
+            route_id,
+            answers: answers.clone(),
+            asked: asked.clone(),
+        });
+        let routed = handle.join().unwrap();
+        assert_eq!((routed.answers.unwrap(), routed.asked), (answers, asked));
     }
 
     #[test]
     fn a_routing_request_times_out_or_ends_with_the_sidecar() {
         let f = quick();
         let (_, handle) = start_route(&f, Duration::from_millis(50));
-        assert_eq!(handle.join().unwrap().unwrap_err().code, "jev_timeout");
+        assert_eq!(handle.join().unwrap().answers.unwrap_err().code, "jev_timeout");
 
         let g = quick();
         let (_, handle) = start_route(&g, CANCEL_TIMEOUT);
         g.runs.disconnect();
-        assert_eq!(handle.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
+        assert_eq!(handle.join().unwrap().answers.unwrap_err().code, SIDECAR_STOPPED);
     }
 
     /// Starts a summary request on another thread; returns its summary ID and the outcome.
@@ -2614,8 +2636,9 @@ mod tests {
         f.runs.handle(SidecarFrame::RouteError {
             route_id,
             error: ErrorInfo { code: "jev_unavailable".into(), message: String::new() },
+            asked: Value::Null,
         });
-        assert_eq!(handle.join().unwrap().unwrap_err().code, "jev_unavailable");
+        assert_eq!(handle.join().unwrap().answers.unwrap_err().code, "jev_unavailable");
     }
 
     #[test]

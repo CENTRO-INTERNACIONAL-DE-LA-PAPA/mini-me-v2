@@ -200,6 +200,9 @@ export const api = {
     invoke<AssetRef>("duplicate_asset", { project_id, asset_id }),
   deleteAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("delete_asset", { project_id, asset_id }),
+  /** A message's debug record of `kind`, or null when it has none. */
+  getDebugRecord: <T>(project_id: Uuid, message_id: Uuid, kind: string) =>
+    invoke<T | null>("get_debug_record", { project_id, message_id, kind }),
   /** Shows the file in the system's file manager. */
   revealAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("reveal_asset", { project_id, asset_id }),
@@ -262,6 +265,11 @@ export const api = {
   removeApiKey: (provider: KeyAccount) => invoke<void>("remove_api_key", { provider }),
   setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
   setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
+  setShowJevAsked: (show: boolean) => invoke<void>("set_show_jev_asked", { show }),
+  /** Deletes every debug record of the Project. */
+  clearDebugRecords: (project_id: Uuid) => invoke<void>("clear_debug_records", { project_id }),
+  /** Opens the sidecar log in the system's default app for it. */
+  openSidecarLog: () => invoke<void>("open_sidecar_log"),
   /** Whether developer options are shown: on in Mini-Me Dev and off in Mini-Me until set. */
   /** Whether to open What's new now; true once after the app updated, never in Mini-Me Dev. */
   takeWhatsNew: () => invoke<boolean>("take_whats_new"),

@@ -106,15 +106,6 @@ pub enum EventKind {
         emoji: String,
         by: Author,
     },
-    /// Jev's raw answers about `message_id`, stored only while the "Show Jev's answers"
-    /// developer setting is on. `answers` maps question IDs to `{ choice, confidence,
-    /// probabilities }`, or is null when Jev could not be asked.
-    #[serde(rename = "routing.answered")]
-    RoutingAnswered {
-        message_id: Uuid,
-        answers: Value,
-        error: Option<ErrorInfo>,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -295,9 +286,6 @@ pub struct MessageView {
     pub reactions: Vec<Reaction>,
     /// The latest progress of a streaming reply; `null` once it has ended or paused.
     pub progress: Option<Progress>,
-    /// Jev's answers about the message, when the developer setting stored them.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub jev: Option<JevAnswers>,
     /// Why the reply failed, once it has.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure: Option<ErrorInfo>,
@@ -313,12 +301,6 @@ pub struct Reaction {
 pub struct Progress {
     pub label: String,
     pub fraction: Option<f64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct JevAnswers {
-    pub answers: Value,
-    pub error: Option<ErrorInfo>,
 }
 
 /// A Conversation as it stands when the UI opens it. Events after `last_seq` reach the UI
@@ -455,13 +437,12 @@ mod tests {
             created_at: 1_760_000_000_000,
             reactions: Vec::new(),
             progress: Some(Progress { label: "Reading trial.csv".into(), fraction: None }),
-            jev: None,
             failure: None,
         };
         let value = serde_json::to_value(&view).unwrap();
         assert_eq!(value["content"], json!("Reading"));
         assert_eq!(value["progress"], json!({ "label": "Reading trial.csv", "fraction": null }));
         assert_eq!(value["reactions"], json!([]));
-        assert!(value.get("jev").is_none() && value.get("failure").is_none());
+        assert!(value.get("failure").is_none());
     }
 }

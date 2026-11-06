@@ -96,8 +96,8 @@ user message, and next to the name in a reply's header.
 #### Scenario: Opening from stored messages matches a replay
 - **WHEN** the app opens a Conversation from its stored messages
 - **THEN** every message's creation time, content, status, attachments, Text Components,
-  Interactive Components, Steps, reactions, failure, Jev's answer and progress equal what
-  replaying the Conversation's events from sequence 1 gives
+  Interactive Components, Steps, reactions, failure and progress equal what replaying the
+  Conversation's events from sequence 1 gives
 
 #### Scenario: Message without components
 - **WHEN** a message is created

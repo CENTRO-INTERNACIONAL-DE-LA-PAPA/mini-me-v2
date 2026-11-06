@@ -12,12 +12,13 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use serde_json::Value;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::paths::ProjectPaths;
 use crate::protocol::{
-    AssetRef, Author, AuthorKind, Component, ENVELOPE_VERSION, Event, EventKind, JevAnswers,
+    AssetRef, Author, AuthorKind, Component, ENVELOPE_VERSION, Event, EventKind,
     Message, MessageStatus, MessageStep, MessageView, OpenedConversation, Origin, Progress,
     Reaction, TextComponent, new_id, now_ms,
 };
@@ -513,6 +514,48 @@ impl ProjectState {
         Ok(shown)
     }
 
+    /// Stores `content` as `message_id`'s debug record of `kind`, replacing the one it had.
+    pub fn put_debug_record(
+        &self,
+        conversation_id: Uuid,
+        message_id: Uuid,
+        kind: &str,
+        content: &Value,
+    ) -> AppResult<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO debug_records \
+             (message_id, kind, conversation_id, content, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                message_id.to_string(),
+                kind,
+                conversation_id.to_string(),
+                content.to_string(),
+                now_ms()
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// `message_id`'s debug record of `kind`, if it has one.
+    pub fn debug_record(&self, message_id: Uuid, kind: &str) -> AppResult<Option<Value>> {
+        let content: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT content FROM debug_records WHERE message_id = ?1 AND kind = ?2",
+                params![message_id.to_string(), kind],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(content.map(|c| serde_json::from_str(&c)).transpose()?)
+    }
+
+    /// Deletes every debug record of the Project.
+    pub fn clear_debug_records(&self) -> AppResult<()> {
+        self.conn.execute("DELETE FROM debug_records", [])?;
+        Ok(())
+    }
+
     /// IDs of messages still streaming, optionally limited to one Conversation.
     pub fn streaming_messages(&self, conversation_id: Option<Uuid>) -> AppResult<Vec<(Uuid, Uuid)>> {
         self.messages_with_status(&[MessageStatus::Streaming], conversation_id)
@@ -573,7 +616,6 @@ impl ProjectState {
                 message,
                 reactions: Vec::new(),
                 progress: None,
-                jev: None,
                 failure: None,
             })
             .collect();
@@ -610,8 +652,8 @@ impl ProjectState {
 
         let mut stmt = self.conn.prepare(
             "SELECT body FROM events WHERE conversation_id = ?1 AND type IN \
-             ('message.failed', 'routing.answered', 'message.progress', 'message.paused', \
-             'message.resumed') ORDER BY seq",
+             ('message.failed', 'message.progress', 'message.paused', 'message.resumed') \
+             ORDER BY seq",
         )?;
         let bodies = stmt.query_map(params![conversation_id.to_string()], |row| {
             row.get::<_, String>(0)
@@ -624,11 +666,6 @@ impl ProjectState {
                 EventKind::MessageFailed { message_id, error } => {
                     if let Some(i) = view(&message_id) {
                         views[i].failure = Some(error);
-                    }
-                }
-                EventKind::RoutingAnswered { message_id, answers, error } => {
-                    if let Some(i) = view(&message_id) {
-                        views[i].jev = Some(JevAnswers { answers, error });
                     }
                 }
                 // Pausing clears a reply's progress; it stays empty after resuming until the
@@ -760,9 +797,9 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
                 params![message_id.to_string(), text],
             )?;
         }
-        // Progress and Jev's answers have no projection: opening a Conversation reads them
-        // from their events (`message_views`), as it does a failure's details.
-        EventKind::MessageProgress { .. } | EventKind::RoutingAnswered { .. } => {}
+        // Progress has no projection: opening a Conversation reads it from its events
+        // (`message_views`), as it does a failure's details.
+        EventKind::MessageProgress { .. } => {}
         EventKind::MessagePaused { message_id } => {
             tx.execute(
                 "UPDATE messages SET status = 'paused' WHERE id = ?1",
@@ -1145,6 +1182,38 @@ mod tests {
         let state = project.lock();
         assert_eq!(state.conversation_component(other, first.id).unwrap(), None);
         assert_eq!(state.conversation_component(conversation, first.id).unwrap(), Some(first));
+    }
+
+    #[test]
+    fn debug_records_are_replaced_cleared_and_deleted_with_their_conversation() {
+        let (_dir, project) = temp_project();
+        let send = |conversation: Uuid| {
+            let input = conversations::SendMessageInput {
+                content: "check the data".into(),
+                attachments: Vec::new(),
+                text_components: Vec::new(),
+            };
+            conversations::send_message(&project, conversation, input, new_id()).unwrap().id
+        };
+        let kept = conversations::create(&project).unwrap().id;
+        let deleted = conversations::create(&project).unwrap().id;
+        let (first, second) = (send(kept), send(deleted));
+        let record = |n: u32| serde_json::json!({ "answers": n });
+        {
+            let state = project.lock();
+            state.put_debug_record(kept, first, "jev", &record(1)).unwrap();
+            state.put_debug_record(kept, first, "jev", &record(2)).unwrap();
+            state.put_debug_record(deleted, second, "jev", &record(3)).unwrap();
+            assert_eq!(state.debug_record(first, "jev").unwrap(), Some(record(2)));
+            assert_eq!(state.debug_record(first, "prompt").unwrap(), None);
+        }
+
+        conversations::delete(&project, deleted).unwrap();
+        let state = project.lock();
+        assert_eq!(state.debug_record(second, "jev").unwrap(), None);
+        assert_eq!(state.debug_record(first, "jev").unwrap(), Some(record(2)));
+        state.clear_debug_records().unwrap();
+        assert_eq!(state.debug_record(first, "jev").unwrap(), None);
     }
 
     #[test]

@@ -1,13 +1,14 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { api, errorMessage } from "../../api";
 import type { MessageView } from "../../protocol/eventStore";
 import { segments } from "../../protocol/references";
-import type { AssetRef, JevAnswers, MiniMe } from "../../protocol/types";
+import type { AssetRef, MiniMe } from "../../protocol/types";
 import { formatClock, formatSize } from "../../lib/format";
 import { approvalState } from "../interactive/approval";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
+import { JevDebugBlock } from "./JevDebugBlock";
 import { Markdown } from "./Markdown";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMePill } from "../minime/MiniMePill";
@@ -16,6 +17,7 @@ import { ReferenceChip } from "./ReferenceChip";
 import { useFileExists } from "./existingFiles";
 import { TextComponentChip } from "./TextComponentChip";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
+import { useJevDebug } from "../../hooks/useJevDebug";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useOpenDocument } from "../documents/openDocument";
 import { isDocument } from "../files/files";
@@ -66,6 +68,7 @@ export const MessageItem = memo(function MessageItem({
   const [error, setError] = useState<string | null>(null);
   const miniMes = useMiniMes();
   const developer = useDeveloperMode();
+  const jevDebug = useJevDebug();
   const { name, miniMe: authorMiniMe } = author(message, miniMes);
 
   const counts = new Map<string, number>();
@@ -172,10 +175,10 @@ export const MessageItem = memo(function MessageItem({
 
   const notes = (
     <>
-      {developer && message.jev && (
-        <JevAnswersBlock
-          jev={message.jev}
+      {fromUser && !compact && developer && (jevDebug.answers || jevDebug.asked) && (
+        <JevDebugBlock
           projectId={projectId}
+          messageId={message.id}
           miniMeName={(id) => miniMe(id)?.name}
         />
       )}
@@ -281,58 +284,6 @@ export const MessageItem = memo(function MessageItem({
     </MiniMeSurface>
   );
 });
-
-/** Jev's raw answers, for the "Show Jev's answers" developer setting. Options are shown by
- * their Mini-Me's or file's name; the file names are fetched only when Jev answered `file`. */
-function JevAnswersBlock({
-  jev,
-  projectId,
-  miniMeName,
-}: {
-  jev: JevAnswers;
-  projectId: string;
-  miniMeName: (id: string) => string | undefined;
-}) {
-  const [fileNames, setFileNames] = useState<Map<string, string>>(new Map());
-  const asksFile = Boolean(jev.answers?.file);
-  useEffect(() => {
-    if (!asksFile) return;
-    let active = true;
-    api
-      .listAssets(projectId, "")
-      .then((assets) => active && setFileNames(new Map(assets.map((a) => [a.id, a.name]))))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [projectId, asksFile]);
-  const label = (option: string) => miniMeName(option) ?? fileNames.get(option) ?? option;
-  const percent = (value: number) => `${Math.round(value * 100)}%`;
-  return (
-    <details className="text-meta text-muted-foreground">
-      <summary className="cursor-pointer select-none">[DEBUG] Jev</summary>
-      {jev.error && (
-        <p className="mt-1">
-          {jev.error.code}: {jev.error.message}
-        </p>
-      )}
-      {jev.answers &&
-        Object.entries(jev.answers).map(([question, answer]) => (
-          <p key={question} className="mt-1 font-mono wrap-anywhere">
-            <MetaParts
-              parts={[
-                `${question}: ${label(answer.choice)} (${percent(answer.confidence)})`,
-                Object.entries(answer.probabilities)
-                  .sort(([, a], [, b]) => b - a)
-                  .map(([option, p]) => `${label(option)} ${percent(p)}`)
-                  .join(", "),
-              ]}
-            />
-          </p>
-        ))}
-    </details>
-  );
-}
 
 /** A file attached to a message: it opens the file, or says that the file was removed. */
 function AttachmentChip({ asset, onOpen }: { asset: AssetRef; onOpen: () => void }) {

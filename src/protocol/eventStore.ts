@@ -1,7 +1,6 @@
 import type {
   Author,
   ErrorInfo,
-  JevAnswers,
   KnownEvent,
   Message,
   Progress,
@@ -20,8 +19,6 @@ export interface MessageView extends Message {
   reactions: Reaction[];
   /** The latest progress of a streaming reply; null once it has ended. */
   progress: Progress | null;
-  /** Jev's raw answers about this message, when the developer setting stored them. */
-  jev?: JevAnswers;
   /** Why the reply failed, once it has. */
   failure?: ErrorInfo;
 }
@@ -215,13 +212,6 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
           ...m,
           reactions: m.reactions.filter((r) => !(r.emoji === emoji && sameAuthor(r.by, by))),
         })),
-      };
-    }
-    case "routing.answered": {
-      const { message_id, answers, error } = known.payload;
-      return {
-        ...next,
-        messages: updateMessage(state, message_id, (m) => ({ ...m, jev: { answers, error } })),
       };
     }
     default:

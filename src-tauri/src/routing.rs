@@ -19,7 +19,7 @@ use crate::library::{FALLBACK_MINI_ME, Library};
 use crate::user_library::LibraryStore;
 use crate::link::{CallModel, RouteComponent, RouteFile, RouteMiniMe, RunFile};
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
-use crate::runs::{RouteAnswers, RunSpec, Runs};
+use crate::runs::{RouteAnswers, Routed, RunSpec, Runs};
 use crate::store::Project;
 
 /// How long a message waits for Jev before the fallback Mini-Me answers it.
@@ -44,8 +44,10 @@ pub struct RouteSettings {
     pub model: Option<CallModel>,
     pub threshold: f64,
     pub timeout: Duration,
-    /// Store Jev's raw answers with the message (a developer setting).
+    /// Store Jev's answers in the message's debug record (a developer setting).
     pub show_answers: bool,
+    /// Store what was sent to Jev in the message's debug record (a developer setting).
+    pub show_asked: bool,
     /// The share of confident reactions that are added, from 0 to 1.
     pub reaction_chance: f64,
 }
@@ -212,26 +214,12 @@ impl Routing {
         }
         let recent = recent(&messages, message.id, &library);
         let state = state(message, recent);
-        let routed = calls.route(state, mini_mes, files.clone(), ask, settings.timeout);
-        if settings.show_answers {
-            let (answers, error) = match &routed {
-                Ok(answers) => (json!(answers), None),
-                Err(err) => (
-                    Value::Null,
-                    Some(ErrorInfo {
-                        code: err.code.clone(),
-                        message: err.message.clone(),
-                    }),
-                ),
-            };
-            if let Err(err) = conversations::record_jev_answers(
-                project,
-                conversation_id,
-                message.id,
-                answers,
-                error,
-            ) {
-                eprintln!("could not store Jev's answers: {err}");
+        let Routed { answers: routed, asked } =
+            calls.route(state, mini_mes, files.clone(), ask, settings.timeout);
+        if let Some(record) = jev_record(&routed, asked, settings) {
+            let stored = project.lock().put_debug_record(conversation_id, message.id, "jev", &record);
+            if let Err(err) = stored {
+                eprintln!("could not store Jev's record: {err}");
             }
         }
         if let Some(warning) = warning_after(&routed) {
@@ -417,6 +405,31 @@ fn file_options(
                 .collect(),
         })
         .collect()
+}
+
+/// The `jev` debug record of a routing request, `{ asked, answers, error }`, holding only the
+/// parts whose developer setting is on; `None` when both are off.
+fn jev_record(
+    routed: &AppResult<RouteAnswers>,
+    asked: Value,
+    settings: &RouteSettings,
+) -> Option<Value> {
+    if !settings.show_answers && !settings.show_asked {
+        return None;
+    }
+    let (answers, error) = match routed {
+        _ if !settings.show_answers => (Value::Null, None),
+        Ok(answers) => (json!(answers), None),
+        Err(err) => (
+            Value::Null,
+            Some(ErrorInfo {
+                code: err.code.clone(),
+                message: err.message.clone(),
+            }),
+        ),
+    };
+    let asked = if settings.show_asked { asked } else { Value::Null };
+    Some(json!({ "asked": asked, "answers": answers, "error": error }))
 }
 
 /// A random number from 0 up to 1, taken from the random bits of a new UUIDv7.
@@ -795,6 +808,8 @@ mod tests {
         calls: Arc<Runs>,
         sink: Arc<Recorder>,
         routing: Arc<Routing>,
+        /// Whether messages are sent with both Jev debug settings on.
+        debug: bool,
     }
 
     fn fixture() -> Fixture {
@@ -829,6 +844,7 @@ mod tests {
             calls,
             sink,
             routing: Routing::new(library, true),
+            debug: false,
         }
     }
 
@@ -851,7 +867,8 @@ mod tests {
                 }),
                 threshold: 0.5,
                 timeout,
-                show_answers: false,
+                show_answers: self.debug,
+                show_asked: self.debug,
                 reaction_chance: 1.0,
             };
             self.routing.send(
@@ -1028,6 +1045,60 @@ mod tests {
     }
 
     #[test]
+    fn jevs_record_holds_only_the_parts_whose_setting_is_on() {
+        let settings = |show_answers: bool, show_asked: bool| RouteSettings {
+            model: None,
+            threshold: 0.5,
+            timeout: ROUTE_TIMEOUT,
+            show_answers,
+            show_asked,
+            reaction_chance: 1.0,
+        };
+        let asked = json!({ "state": { "message": "hi" }, "questions": {} });
+        let thumbs_up = answers(vec![("reaction", answer("👍", 0.9, &[]))]);
+        let answered: AppResult<RouteAnswers> = Ok(thumbs_up);
+        let timed_out: AppResult<RouteAnswers> =
+            Err(AppError::new("jev_timeout", "Typesafe did not answer in time."));
+        let record = |routed: &AppResult<RouteAnswers>, on: (bool, bool)| {
+            jev_record(routed, asked.clone(), &settings(on.0, on.1))
+        };
+
+        let both = record(&answered, (true, true)).unwrap();
+        assert_eq!(both["asked"], asked);
+        assert_eq!(both["answers"]["reaction"]["choice"], json!("👍"));
+        let only_answers = record(&answered, (true, false)).unwrap();
+        assert_eq!((&only_answers["asked"], &only_answers["error"]), (&Value::Null, &Value::Null));
+        let late = record(&timed_out, (true, true)).unwrap();
+        assert_eq!(late["answers"], Value::Null);
+        assert_eq!(late["error"]["code"], json!("jev_timeout"));
+        assert_eq!(record(&answered, (false, false)), None);
+    }
+
+    #[test]
+    fn jevs_record_is_stored_with_the_message() {
+        let mut f = fixture();
+        f.debug = true;
+        let sent = f.send("check the data", &[], ROUTE_TIMEOUT).unwrap();
+        let route_id = f.route_id();
+        let asked = json!({ "state": { "message": "check the data" }, "questions": {} });
+        f.calls.handle(crate::link::SidecarFrame::RouteDone {
+            route_id,
+            answers: answers(vec![("needs_context", answer("no", 0.9, &[]))]),
+            asked: asked.clone(),
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let record = loop {
+            if let Some(record) = f.project.lock().debug_record(sent.id, "jev").unwrap() {
+                break record;
+            }
+            assert!(Instant::now() < deadline, "no jev record was stored");
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(record["asked"], asked);
+        assert_eq!(record["answers"]["needs_context"]["choice"], json!("no"));
+    }
+
+    #[test]
     fn a_mention_with_a_thumbs_up_gets_a_reply_and_a_reaction_from_that_mini_me() {
         let f = fixture();
         let sent = f
@@ -1044,6 +1115,7 @@ mod tests {
                 ("reaction", answer("👍", 0.9, &[])),
                 ("needs_context", answer("no", 0.9, &[])),
             ]),
+            asked: Value::Null,
         });
         let assistant = Author {
             kind: AuthorKind::MiniMe,
