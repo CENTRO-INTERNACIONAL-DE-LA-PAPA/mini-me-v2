@@ -4,6 +4,28 @@ Product overview and concepts are in `README.md`, and the Roadmap in `docs/roadm
 The glossary, architecture rules and per-artifact rules are in `openspec/config.yaml`;
 follow them exactly.
 
+## Who decides
+
+The user designs the architecture and makes the decisions, and is responsible for what the code
+does. AI speeds up the coding; it does not decide for the user.
+
+- When a choice comes up (structure, naming, an approach, a trade-off), lay out the options
+  with a recommendation and let the user choose. Do not pick one and carry on.
+- Work one task at a time: one OpenSpec task, or outside OpenSpec, one small group of related
+  edits. When it is done, stop: show what changed and why, then wait until the user has
+  reviewed and understood it before starting the next one.
+- Keep each task small enough to review in one sitting.
+- In a plan (`design.md` and the rest), a decision is one the user made. A choice made while
+  drafting goes under "Open questions", with options and a recommendation, until the user
+  settles it.
+- Do only what the task says. Something else worth fixing, found along the way, is reported
+  and left alone until the user asks for it.
+- When a task is done, report it the same way each time:
+  - the files changed, as `path:line` links;
+  - why each change is there;
+  - what deserves a careful look (a subtle line, a trade-off, an edge case);
+  - how to check it works (the test to run, or what to try in the app).
+
 ## Picking up work
 
 - Run `openspec list` first. If a change is active, continue it.
@@ -117,7 +139,6 @@ Risks, follow-ups, decisions the reviewer should know about, screenshots.
   Do not move tests into separate folders or files. Frontend tests are `*.test.ts` files
   next to the code they test. Sidecar Python tests use pytest and live in `sidecar/tests/`
   as `test_<module>.py`; run them with `cd sidecar && uv run pytest`.
-- Write and review comments with the `timeless-comments` skill.
 - Put imports at the top of the file. Import inside a function or condition only for a
   reason you can name, and state it in a comment: an optional or platform-specific module,
   a package that is slow to load and that most runs never use, or an import that must run
@@ -126,3 +147,24 @@ Risks, follow-ups, decisions the reviewer should know about, screenshots.
 - Keep tests minimal and concise (Rust unit tests, frontend tests for core logic, and
   pytest tests for the sidecar's Python tools) until the user says the architecture is
   stable.
+
+## Comments
+
+A comment is written for someone who opens the file a year from now and sees only the code as
+it is. It must still be true and useful if the git history and the conversation were deleted.
+
+- Write only what the code cannot say: what a non-obvious function or type is for, why a
+  choice was made (as a present-tense fact: a constraint, an invariant, an outside quirk),
+  contracts (units, side effects, errors) that names and types don't show, warnings about
+  what breaks if the code is "simplified", and pointers to a spec or issue.
+- Never describe the change: no history ("changed from", "previously", "no longer"), no
+  edit markers ("NEW", "fix here"), no references to the conversation or the user ("as
+  discussed"), no notes about removed code. That belongs in the commit or PR.
+- Don't narrate the obvious, don't restate names or types, and don't hedge ("not sure why
+  this works"). Improve a name rather than explain it.
+- One line by default. Not every function needs a comment.
+- No divider or banner comments. If a file seems to need sections, say so to the user.
+- When a change makes an existing comment wrong, reword it. Leave other existing comments
+  alone; list any that break these rules (`path:line` and why) for the user.
+- Before finishing a task, reread the comments you wrote and drop any that mention a previous
+  state, refer to the conversation or "the fix", or restate the next line.
