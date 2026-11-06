@@ -30,10 +30,10 @@ In `replies.plot()`, each chart's data gets `source` and `source_id` from the ta
 one, before it is shown. The field names match a table's, so the core reads both kinds alike.
 
 ### One query maps files to their tables and charts
-`ProjectState::shown_from_files(conversation_id)` returns, per Asset ID, the `{ kind, title }` of
+`ProjectState::file_components(conversation_id)` returns, per Asset ID, the `{ kind, title }` of
 the Conversation's `table` and `chart` components whose data holds that `source_id`, newest
 first, reading only `json_extract(data, '$.source_id')` and `'$.title'`. `file_options()` adds
-them to each `RouteFile` as `shown_as`. No component's data is loaded.
+them to each `RouteFile` as `components`. No component's data is loaded.
 
 ### Jev reads it in the criterion
 `routing.py` writes a file option as "The file field-trial.csv, shown as the chart Yield by
@@ -41,7 +41,7 @@ variety and the table Field trial" ("and" before the last, commas between the ot
 component without a title is named by its kind alone.
 
 ### No cap on the list
-A file's `shown_as` lists every table and chart shown from it. Nothing is cut; if Typesafe ever
+A file's `components` lists every table and chart shown from it. Nothing is cut; if Typesafe ever
 refuses a long criterion, the route fails as any Jev error does and Assistant answers.
 
 ## Risks / Trade-offs

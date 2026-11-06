@@ -40,6 +40,6 @@ None.
 
 - Sidecar: `adapters/data/replies.py` (the chart's `source` and `source_id`), `tools/tables.py`
   (a table remembers its file), `routing.py` (the option text).
-- Rust core: `link.rs` (`RouteFile.shown_as`), `routing.rs` (filling it), `store.rs` (one query
+- Rust core: `link.rs` (`RouteFile.components`), `routing.rs` (filling it), `store.rs` (one query
   for the Conversation's tables and charts by file).
 - No UI or schema change.

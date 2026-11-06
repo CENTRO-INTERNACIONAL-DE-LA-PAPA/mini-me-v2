@@ -51,8 +51,8 @@ The core SHALL ask for a decision with `route.start`, payload
 `{ route_id, state, mini_mes, files, ask }`:
 - `route_id` is a new UUIDv7;
 - `mini_mes` is `[{ id, name, description }]`;
-- `files` is `[{ id, name, shown_as }]`, the options of the `file` question, newest first, and
-  empty when `ask` does not hold `file`; `shown_as` lists the tables and charts of the
+- `files` is `[{ id, name, components }]`, the options of the `file` question, newest first, and
+  empty when `ask` does not hold `file`; `components` lists the tables and charts of the
   Conversation shown from that file, newest first, as `{ kind, title }`, and holds no rows or
   other component data;
 - `ask` is the list of question IDs.

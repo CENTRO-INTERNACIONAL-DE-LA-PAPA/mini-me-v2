@@ -6,8 +6,8 @@
 
 ## 2. Jev's file options
 
-- [ ] 2.1 Add `ProjectState::shown_from_files()` and `RouteFile.shown_as`, filled in `file_options()`, with the frames fixture; verify with a unit test that a file lists the table and chart shown from it, newest first, and `cargo test` passes
-- [ ] 2.2 Write the file criterion with what the file was shown as in `routing.py`; verify with a pytest test of the criterion for a file with a chart and a table, and one with none
+- [x] 2.1 Add `ProjectState::file_components()` and `RouteFile.components`, filled in `file_options()`, with the frames fixture; verify with a unit test that a file lists the table and chart shown from it, newest first, and `cargo test` passes
+- [ ] 2.2 Write the file criterion with the tables and charts shown from the file in `routing.py`; verify with a pytest test of the criterion for a file with a chart and a table, and one with none
 
 ## 3. Check and docs
 

@@ -17,7 +17,7 @@ use crate::error::{AppError, AppResult};
 use crate::history::{author_name, results};
 use crate::library::{FALLBACK_MINI_ME, Library};
 use crate::user_library::LibraryStore;
-use crate::link::{CallModel, RouteFile, RouteMiniMe, RunFile};
+use crate::link::{CallModel, RouteComponent, RouteFile, RouteMiniMe, RunFile};
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
 use crate::runs::{RouteAnswers, RunSpec, Runs};
 use crate::store::Project;
@@ -206,7 +206,7 @@ impl Routing {
             })
             .collect();
         let messages = project.lock().conversation_messages(conversation_id).unwrap_or_default();
-        let files = file_options(project, &messages, message, &library);
+        let files = file_options(project, conversation_id, &messages, message, &library);
         if !files.is_empty() {
             ask.push("file".to_string());
         }
@@ -385,10 +385,12 @@ fn warning_after(routed: &AppResult<RouteAnswers>) -> Option<Option<&'static str
     }
 }
 
-/// The options of Jev's `file` question: the Conversation's Assets, newest first, or none
+/// The options of Jev's `file` question: the Assets of `messages`, the Conversation
+/// `conversation_id`, newest first, each with the tables and charts shown from it; or none
 /// when `message` references or attaches a file of its own, which always wins.
 fn file_options(
     project: &Project,
+    conversation_id: Uuid,
     messages: &[Message],
     message: &Message,
     library: &Library,
@@ -400,12 +402,19 @@ fn file_options(
     let found = results(messages, message.id, message.id, library, |id| {
         assets::find(&state, id).ok()
     });
+    let mut components = state.file_components(conversation_id).unwrap_or_default();
     found
         .assets
         .into_iter()
         .map(|a| RouteFile {
             id: a.asset.id,
             name: a.asset.name,
+            components: components
+                .remove(&a.asset.id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(kind, title)| RouteComponent { kind, title })
+                .collect(),
         })
         .collect()
 }
@@ -649,7 +658,11 @@ mod tests {
     #[test]
     fn jev_picks_one_of_the_offered_files_at_or_above_the_threshold() {
         let library = Library::builtin();
-        let cleaned = RouteFile { id: new_id(), name: "field-trial-cleaned.csv".into() };
+        let cleaned = RouteFile {
+            id: new_id(),
+            name: "field-trial-cleaned.csv".into(),
+            components: Vec::new(),
+        };
         let files = [cleaned.clone()];
         let pick = |choice: &str, confidence: f64| {
             let answers = answers(vec![("file", answer(choice, confidence, &[]))]);
@@ -953,9 +966,10 @@ mod tests {
         });
         let mut tagged = message("check #trial.csv", &[]);
         tagged.attachments = earlier.attachments.clone();
-        assert!(file_options(&f.project, &[plain.clone()], &plain, &library).is_empty());
+        let alone = [plain.clone()];
+        assert!(file_options(&f.project, f.conversation, &alone, &plain, &library).is_empty());
         let messages = [earlier, tagged.clone()];
-        assert!(file_options(&f.project, &messages, &tagged, &library).is_empty());
+        assert!(file_options(&f.project, f.conversation, &messages, &tagged, &library).is_empty());
 
         f.send("check the data", &[], ROUTE_TIMEOUT).unwrap();
         f.route_id();
@@ -964,6 +978,53 @@ mod tests {
             panic!("expected one route.start, got {starts:?}");
         };
         assert!(files.is_empty() && !ask.contains(&"file".to_string()));
+    }
+
+    #[test]
+    fn a_file_option_lists_the_tables_and_charts_shown_from_it_newest_first() {
+        let f = fixture();
+        let input = SendMessageInput {
+            content: "plot the trial".into(),
+            attachments: Vec::new(),
+            text_components: Vec::new(),
+        };
+        let question =
+            conversations::send_message(&f.project, f.conversation, input, new_id()).unwrap();
+        let plotter = Author { kind: AuthorKind::MiniMe, id: "plotter".into() };
+        let author = plotter.clone();
+        let reply =
+            conversations::start_reply(&f.project, f.conversation, question.id, author).unwrap();
+        let file = ("field-trial.csv", "text/csv", b"plot\n1\n".as_slice());
+        let asset = conversations::attach_generated(&f.project, reply, &plotter, file).unwrap();
+        let source = json!({ "source": asset.name, "source_id": asset.id });
+        let shown = [("table", "Field trial"), ("chart", "Yield by variety")];
+        for (kind, title) in shown {
+            let mut data = source.clone();
+            data["title"] = json!(title);
+            let component = (kind, 1, data, title.to_string());
+            conversations::add_component(&f.project, reply, None, component).unwrap();
+        }
+        conversations::complete_reply(&f.project, reply).unwrap();
+
+        f.send("make that chart a bar chart", &[], ROUTE_TIMEOUT).unwrap();
+        f.route_id();
+        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
+        let [CoreFrame::RouteStart { files, .. }] = starts.as_slice() else {
+            panic!("expected one route.start, got {starts:?}");
+        };
+        let component = |kind: &str, title: &str| RouteComponent {
+            kind: kind.into(),
+            title: Some(title.into()),
+        };
+        let expected = RouteFile {
+            id: asset.id,
+            name: asset.name.clone(),
+            components: vec![
+                component("chart", "Yield by variety"),
+                component("table", "Field trial"),
+            ],
+        };
+        assert_eq!(files, &vec![expected]);
     }
 
     #[test]
