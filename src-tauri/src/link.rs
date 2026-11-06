@@ -65,6 +65,21 @@ pub struct RunContext {
     /// The document a comment thread is about, for a run answering a comment in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document: Option<RunDocument>,
+    /// Which parts of the reply's debug records the sidecar sends as `run.debug`.
+    #[serde(default)]
+    pub debug: DebugParts,
+}
+
+/// The parts of a reply's debug records to collect, each on only while Developer mode and its
+/// switch are on; with all three off, the sidecar sends no `run.debug`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DebugParts {
+    /// Each model call's input messages.
+    pub input: bool,
+    /// Each model call's provider, model, time and tokens.
+    pub details: bool,
+    /// Each tool call, with its arguments and result.
+    pub tools: bool,
 }
 
 /// An Asset of the Conversation, as a run's picked file.
@@ -246,6 +261,9 @@ pub enum SidecarFrame {
         label: String,
         fraction: Option<f64>,
     },
+    /// One model call or tool call of the run, stored as the reply's next `reply` debug record.
+    #[serde(rename = "run.debug")]
+    RunDebug { run_id: Uuid, entry: Value },
     #[serde(rename = "step.started")]
     StepStarted {
         run_id: Uuid,
@@ -398,6 +416,7 @@ mod tests {
             "run.cancel",
             "run.delta",
             "run.progress",
+            "run.debug",
             "step.started",
             "step.completed",
             "run.paused",

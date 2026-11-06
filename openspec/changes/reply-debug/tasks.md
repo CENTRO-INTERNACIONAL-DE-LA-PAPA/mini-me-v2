@@ -6,7 +6,7 @@
 
 ## 2. The switches and the link
 
-- [ ] 2.1 Add the `debug` settings (`reply_input`, `reply_details`, `reply_tools`) with their IPC setter and AI settings view, `RunContext.debug` filled from them and Developer mode, and `SidecarFrame::RunDebug` stored with `append_debug_record` for an open run; add both to the frames fixture; verify with a runs test that a `run.debug` lands as the reply's next record and one for a closed run is dropped, and `cargo test` passes
+- [x] 2.1 Add the `debug` settings (`reply_input`, `reply_details`, `reply_tools`) with their IPC setter and AI settings view, `RunContext.debug` filled from them and Developer mode, and `SidecarFrame::RunDebug` stored with `append_debug_record` for an open run; add both to the frames fixture; verify with a runs test that a `run.debug` lands as the reply's next record and one for a closed run is dropped, and `cargo test` passes
 
 ## 3. Catching calls in the sidecar
 

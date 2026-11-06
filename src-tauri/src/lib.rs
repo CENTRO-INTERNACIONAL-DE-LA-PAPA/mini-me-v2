@@ -147,6 +147,7 @@ pub fn run() {
             ipc::get_developer_mode,
             ipc::take_whats_new,
             ipc::set_developer_mode,
+            ipc::set_reply_debug,
             ipc::list_feature_flags,
             ipc::unlock_feature_flag,
             ipc::lock_feature_flag,

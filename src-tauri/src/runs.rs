@@ -26,8 +26,8 @@ use crate::library::{Library, StepKind, TraitDef, Workflow};
 use crate::routing::explain;
 use crate::user_library::LibraryStore;
 use crate::link::{
-    AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, RouteFile, RouteMiniMe, RunContext,
-    RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
+    AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, DebugParts, RouteFile, RouteMiniMe,
+    RunContext, RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
 };
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
@@ -263,6 +263,8 @@ pub struct Runs {
     document_gate: Mutex<Option<DocumentGate>>,
     /// The IDs of the feature flags that are on, as the app last set them.
     features: Mutex<Vec<String>>,
+    /// The parts of reply debug records new runs collect, as the app last set them.
+    debug: Mutex<DebugParts>,
 }
 
 #[derive(Deserialize)]
@@ -341,7 +343,12 @@ impl Runs {
             cancel_timeout,
             document_gate: Mutex::new(None),
             features: Mutex::new(Vec::new()),
+            debug: Mutex::new(DebugParts::default()),
         }
+    }
+
+    pub fn set_debug(&self, parts: DebugParts) {
+        *self.debug.lock().unwrap_or_else(|p| p.into_inner()) = parts;
     }
 
     /// Sets which feature flags are on, for Traits that ask during a call.
@@ -531,6 +538,7 @@ impl Runs {
                 file: spec.file.clone(),
                 mini_mes: mini_me_list(&self.library.current()),
                 document: comments::run_document(&project, conversation_id).ok().flatten(),
+                debug: *self.debug.lock().unwrap_or_else(|p| p.into_inner()),
             },
         };
         self.lock().runs.insert(
@@ -850,12 +858,13 @@ impl Runs {
         subscribers.retain(|sink| sink(&running));
     }
 
-    fn active(&self, run_id: Uuid) -> Option<(Arc<Project>, Uuid)> {
+    /// The Project, Conversation and reply of open run `run_id`.
+    fn active(&self, run_id: Uuid) -> Option<(Arc<Project>, Uuid, Uuid)> {
         let found = self
             .lock()
             .runs
             .get(&run_id)
-            .map(|run| (Arc::clone(&run.project), run.message_id));
+            .map(|run| (Arc::clone(&run.project), run.conversation_id, run.message_id));
         if found.is_none() {
             self.log
                 .line(&format!("ignoring a frame for run {run_id}, which is not open"));
@@ -976,7 +985,7 @@ impl Runs {
     pub fn handle(self: &Arc<Self>, frame: SidecarFrame) {
         match frame {
             SidecarFrame::RunDelta { run_id, text } => {
-                if let Some((project, message_id)) = self.active(run_id) {
+                if let Some((project, _, message_id)) = self.active(run_id) {
                     let _ = conversations::append_delta(&project, message_id, &text);
                 }
             }
@@ -985,8 +994,14 @@ impl Runs {
                 label,
                 fraction,
             } => {
-                if let Some((project, message_id)) = self.active(run_id) {
+                if let Some((project, _, message_id)) = self.active(run_id) {
                     let _ = conversations::append_progress(&project, message_id, &label, fraction);
+                }
+            }
+            SidecarFrame::RunDebug { run_id, entry } => {
+                if let Some((project, conversation_id, message_id)) = self.active(run_id) {
+                    let state = project.lock();
+                    let _ = state.append_debug_record(conversation_id, message_id, "reply", &entry);
                 }
             }
             SidecarFrame::StepStarted { run_id, step_id, call_id } => {
@@ -1658,6 +1673,20 @@ mod tests {
         assert!(matches!(&events[2], EventKind::MessageProgress { label, fraction: Some(_), .. } if label == "Echoing"));
         assert!(matches!(&events[4], EventKind::MessageCompleted { content, .. } if content == "late blight"));
         assert_eq!(events.len(), 5);
+    }
+
+    #[test]
+    fn debug_entries_are_stored_in_order_until_the_run_ends() {
+        let f = quick();
+        let (run_id, reply) = f.start("echo");
+        for n in 1..=2 {
+            f.runs.handle(SidecarFrame::RunDebug { run_id, entry: json!({ "n": n }) });
+        }
+        f.runs.handle(SidecarFrame::RunDone { run_id });
+        f.runs.handle(SidecarFrame::RunDebug { run_id, entry: json!({ "n": 3 }) });
+
+        let records = f.project.lock().debug_records(reply, "reply").unwrap();
+        assert_eq!(records, vec![json!({ "n": 1 }), json!({ "n": 2 })]);
     }
 
     #[test]
