@@ -119,12 +119,22 @@ export type KnownEvent = Envelope &
     | { type: "reaction.removed"; payload: { message_id: Uuid; emoji: string; by: Author } }
   );
 
-/** Jev's answers in a message's `jev` debug record. */
-export interface JevAnswers {
-  answers: Record<
-    string,
-    { choice: string; confidence: number; probabilities: Record<string, number> }
-  > | null;
+/** Jev's answer to one question: the option it chose and every option's probability. */
+export interface JevAnswer {
+  choice: string;
+  confidence: number;
+  probabilities: Record<string, number>;
+}
+
+/** A message's `jev` debug record. Each part is null while its developer setting was off;
+ * `answers` is also null, and `error` set, when Jev did not answer. */
+export interface JevRecord {
+  /** What was sent to Jev: the state, and each question's instructions and option texts. */
+  asked: {
+    state: unknown;
+    questions: Record<string, { instructions: string; options: Record<string, string> }>;
+  } | null;
+  answers: Record<string, JevAnswer> | null;
   error: ErrorInfo | null;
 }
 
@@ -516,8 +526,10 @@ export interface AiSettings {
   saved_keys: KeyAccount[];
   /** Below this confidence in Jev's choice, the user is asked to mention a Mini-Me; 0 to 1. */
   threshold: number;
-  /** Developer setting: store and show Jev's raw answers under each message. */
+  /** Developer setting: store and show Jev's answers under each message. */
   show_answers: boolean;
+  /** Developer setting: store and show what was sent to Jev under each message. */
+  show_asked: boolean;
 }
 
 /** What the app knows about the user's Quarto, which documents are edited and rendered with. */

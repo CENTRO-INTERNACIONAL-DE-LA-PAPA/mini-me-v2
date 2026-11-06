@@ -27,10 +27,10 @@ These were settled with the user while planning:
 - Jev answers stored as `routing.answered` events are deleted, and the event type is retired.
 - "[DEBUG] Jev" shows under every user message while a Jev switch is on, and says "Nothing
   recorded for this message" when there is no record.
-- Two Jev switches: "[DEBUG] Show Jev's answers" and "[DEBUG] Show what Jev was asked"; each
+- Two Jev switches: "Show Jev's answers" and "Show what Jev was asked"; each
   part of the record is stored only while its switch is on.
 - "Copy as JSON" is always in an expanded block.
-- "[DEBUG] Debug data" clears the open Project's records; "[DEBUG] Sidecar log" opens the log
+- "Debug data" clears the open Project's records; "Sidecar log" opens the log
   file in the system's default app.
 - The table's key is one record per message and kind; reply debugging adds a `position`
   column for its one record per model call when it needs it.

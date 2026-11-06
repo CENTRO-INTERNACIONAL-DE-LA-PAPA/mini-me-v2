@@ -12,8 +12,8 @@
 
 ## 3. The block and the Developer page
 
-- [ ] 3.1 Add `get_debug_record` (IPC and `api.ts`) and rebuild `JevAnswersBlock`: shown under every user message while a Jev switch is on, fetched on first expand, the plain-words layout with lighter discarded options, what Jev was asked, "Copy as JSON", and "Nothing recorded for this message"; verify with a frontend test of the question words and option ordering, `npm test`, and in the app by expanding the block under a routed message
-- [ ] 3.2 On the Developer page, add "[DEBUG] Show what Jev was asked", "[DEBUG] Debug data" (clear the open Project's records after confirming, disabled without one; `clear_debug_records` IPC) and "[DEBUG] Sidecar log" (`open_sidecar_log` IPC); update the debugging notes in `docs/architecture.md`; verify in the app that each switch shows only its part, clearing empties the blocks, and the log opens
+- [x] 3.1 Add `get_debug_record` (IPC and `api.ts`) and rebuild `JevAnswersBlock`: shown under every user message while a Jev switch is on, fetched on first expand, the plain-words layout with lighter discarded options, what Jev was asked, "Copy as JSON", and "Nothing recorded for this message"; verify with a frontend test of the question words and option ordering, `npm test`, and in the app by expanding the block under a routed message
+- [ ] 3.2 On the Developer page, name every option without "[DEBUG]" (the existing four lose it) and add "Show what Jev was asked", "Debug data" (clear the open Project's records after confirming, disabled without one; `clear_debug_records` IPC) and "Sidecar log" (`open_sidecar_log` IPC); update the debugging notes in `docs/architecture.md` and the option path in `docs/feature-flags.md`; verify in the app that each switch shows only its part, clearing empties the blocks, and the log opens
 
 ## Workflow follow-up
 

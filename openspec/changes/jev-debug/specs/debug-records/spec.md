@@ -31,15 +31,15 @@ The UI SHALL read one message's record of one `kind` on request, and SHALL get e
 - **THEN** it gets nothing
 
 ### Requirement: Jev's record
-After each Jev request, while Developer mode is on and "[DEBUG] Show Jev's answers" or
-"[DEBUG] Show what Jev was asked" is on, the core SHALL store a `jev` record for the user
+After each Jev request, while Developer mode is on and "Show Jev's answers" or
+"Show what Jev was asked" is on, the core SHALL store a `jev` record for the user
 message, with `content` `{ asked, answers, error }`:
 - `asked` is what was sent to Jev, `{ state, questions }`, where `questions` maps each question
   ID to `{ instructions, options }` and `options` maps each option to the text Jev read for it;
-  `null` when no request reached Jev or "[DEBUG] Show what Jev was asked" is off;
+  `null` when no request reached Jev or "Show what Jev was asked" is off;
 - `answers` maps each question ID to `{ choice, confidence, probabilities }`; `null` when Jev
-  did not answer or "[DEBUG] Show Jev's answers" is off;
-- `error` is `{ code, message }` when Jev did not answer and "[DEBUG] Show Jev's answers" is on,
+  did not answer or "Show Jev's answers" is off;
+- `error` is `{ code, message }` when Jev did not answer and "Show Jev's answers" is on,
   else `null`.
 
 #### Scenario: Jev answers
@@ -49,11 +49,11 @@ message, with `content` `{ asked, answers, error }`:
   the three answers
 
 #### Scenario: Only the answers
-- **WHEN** "[DEBUG] Show Jev's answers" is on and "[DEBUG] Show what Jev was asked" is off
+- **WHEN** "Show Jev's answers" is on and "Show what Jev was asked" is off
 - **THEN** the record holds the answers, and `asked` is `null`
 
 #### Scenario: Typesafe does not answer in time
-- **WHEN** "[DEBUG] Show Jev's answers" is on and the Jev request times out
+- **WHEN** "Show Jev's answers" is on and the Jev request times out
 - **THEN** the record holds `answers` `null` and the error `jev_timeout`
 
 ### Requirement: The "[DEBUG] Jev" block
@@ -89,7 +89,7 @@ stored, with IDs rather than names.
 - **THEN** the clipboard holds the record's `asked`, `answers` and `error` as JSON
 
 ### Requirement: Clearing debug records
-"[DEBUG] Debug data" on the Developer page SHALL delete every debug record of the open Project
+"Debug data" on the Developer page SHALL delete every debug record of the open Project
 after the user confirms, and SHALL be unavailable while no Project is open.
 
 #### Scenario: Clearing

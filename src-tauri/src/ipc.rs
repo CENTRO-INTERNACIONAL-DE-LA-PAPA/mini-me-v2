@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -1275,6 +1276,18 @@ pub async fn delete_asset(
     asset_id: Uuid,
 ) -> AppResult<()> {
     assets::delete(&*state.project(project_id)?, asset_id)
+}
+
+/// The debug record of `kind` that message `message_id` has, read when its debug block is
+/// expanded; `null` when it has none.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_debug_record(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    message_id: Uuid,
+    kind: String,
+) -> AppResult<Option<Value>> {
+    state.project(project_id)?.lock().debug_record(message_id, &kind)
 }
 
 /// Shows the file `asset_id` in the system's file manager.

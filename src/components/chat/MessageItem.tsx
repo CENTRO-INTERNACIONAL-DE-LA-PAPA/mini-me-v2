@@ -8,6 +8,7 @@ import type { AssetRef, MiniMe } from "../../protocol/types";
 import { formatClock, formatSize } from "../../lib/format";
 import { approvalState } from "../interactive/approval";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
+import { JevDebugBlock } from "./JevDebugBlock";
 import { Markdown } from "./Markdown";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMePill } from "../minime/MiniMePill";
@@ -15,6 +16,8 @@ import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { ReferenceChip } from "./ReferenceChip";
 import { useFileExists } from "./existingFiles";
 import { TextComponentChip } from "./TextComponentChip";
+import { useDeveloperMode } from "../../hooks/useDeveloperMode";
+import { useJevDebug } from "../../hooks/useJevDebug";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useOpenDocument } from "../documents/openDocument";
 import { isDocument } from "../files/files";
@@ -64,6 +67,8 @@ export const MessageItem = memo(function MessageItem({
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const miniMes = useMiniMes();
+  const developer = useDeveloperMode();
+  const jevDebug = useJevDebug();
   const { name, miniMe: authorMiniMe } = author(message, miniMes);
 
   const counts = new Map<string, number>();
@@ -170,6 +175,13 @@ export const MessageItem = memo(function MessageItem({
 
   const notes = (
     <>
+      {fromUser && !compact && developer && (jevDebug.answers || jevDebug.asked) && (
+        <JevDebugBlock
+          projectId={projectId}
+          messageId={message.id}
+          miniMeName={(id) => miniMe(id)?.name}
+        />
+      )}
       {message.failure && (
         <p className="text-meta text-destructive">{message.failure.message}</p>
       )}

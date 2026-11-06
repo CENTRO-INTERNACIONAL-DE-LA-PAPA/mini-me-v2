@@ -44,6 +44,7 @@ import { openLink } from "../interactive/links";
 import { SectionPage, type Section } from "../shell/SectionPage";
 import type { SettingsPageId } from "../shell/view";
 import { refreshDeveloperMode, useDeveloperMode } from "../../hooks/useDeveloperMode";
+import { refreshJevDebug } from "../../hooks/useJevDebug";
 import { reloadFeatureFlags, useFeatureFlags } from "../../hooks/useFeatureFlags";
 import { recheckQuarto, showQuarto, useQuarto } from "../../hooks/useQuarto";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
@@ -962,6 +963,7 @@ function DeveloperRow({ settings, onChanged }: { settings: AiSettings; onChanged
           try {
             setError(null);
             await api.setShowJevAnswers(checked);
+            refreshJevDebug({ answers: checked, asked: settings.show_asked });
             onChanged();
           } catch (e) {
             setError(errorMessage(e));
