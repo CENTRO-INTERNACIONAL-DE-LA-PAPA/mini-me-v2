@@ -2,6 +2,7 @@
   "name": "mini-me",
   "private": true,
   "version": "0.5.3",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "dev": "vite",

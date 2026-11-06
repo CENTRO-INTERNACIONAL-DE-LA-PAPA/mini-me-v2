@@ -162,6 +162,14 @@ release; [docs/architecture.md](docs/architecture.md) explains how the UI, the R
 the Python sidecar work together. [docs/roadmap.md](docs/roadmap.md) lists the planned
 changes in order, and their specifications live in [`openspec/`](openspec/).
 
+## License
+
+Mini-Me is free software, released under the
+[GNU General Public License, version 3 or later](LICENSE). You may use, study, change and
+share it, including commercially. Anyone who distributes Mini-Me, changed or not, must do so
+under the same license, pass on the source code, and keep the [NOTICE](NOTICE) crediting the
+International Potato Center (CIP).
+
 ## Acknowledgements
 
 **Mini-Me** is developed by and for the
