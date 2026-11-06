@@ -479,6 +479,12 @@ Every tool acts through `ctx`, so the core's checks and Project-folder confineme
   `jev` debug record for each routed message, shown in "[DEBUG] Jev" under it. Records are kept
   apart from the events and read only when the block is opened; "Debug data" clears the open
   Project's.
+- **Replies:** "Show what the AI read", "Show model call details" and "Show tool calls" in
+  Settings → Developer go to the sidecar in each run's `context.debug`. While any is on, a
+  LangChain callback that `chat_model()` attaches sends each model call of the run as
+  `run.debug`, and prompt-based Traits send each tool call; the core stores them in order as
+  the reply's `reply` debug records, shown in "[DEBUG] AI" under it. Only Traits that call a
+  model are recorded: Profiler, Echo and Asta's Traits make no model call of their own.
 
 ## Tests
 

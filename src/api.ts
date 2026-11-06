@@ -25,6 +25,7 @@ import type {
   MiniMeDefinition,
   OpenedDocument,
   QuartoStatus,
+  ReplyDebugSettings,
   Overview,
   PausedApproval,
   ProjectSummary,
@@ -266,6 +267,7 @@ export const api = {
   setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
   setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
   setShowJevAsked: (show: boolean) => invoke<void>("set_show_jev_asked", { show }),
+  setReplyDebug: (debug: ReplyDebugSettings) => invoke<void>("set_reply_debug", { debug }),
   /** Deletes every debug record of the Project. */
   clearDebugRecords: (project_id: Uuid) => invoke<void>("clear_debug_records", { project_id }),
   /** Opens the sidecar log in the system's default app for it. */
