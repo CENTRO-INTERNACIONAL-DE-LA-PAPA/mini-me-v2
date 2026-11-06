@@ -140,6 +140,7 @@ pub fn run() {
             ipc::remove_api_key,
             ipc::set_routing_threshold,
             ipc::set_show_jev_answers,
+            ipc::set_show_jev_asked,
             ipc::get_developer_mode,
             ipc::take_whats_new,
             ipc::set_developer_mode,

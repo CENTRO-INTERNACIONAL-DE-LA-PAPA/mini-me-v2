@@ -425,8 +425,9 @@ pub async fn send_message(
         model: settings.ai.model(),
         threshold: settings.routing.threshold,
         timeout: ROUTE_TIMEOUT,
-        // Jev's raw answers are a developer aid, kept only while Developer mode is on.
+        // Jev's debug record is a developer aid, kept only while Developer mode is on.
         show_answers: settings.routing.show_answers && state.developer_mode(),
+        show_asked: settings.routing.show_asked && state.developer_mode(),
         reaction_chance: REACTION_CHANCE,
     };
     state.routing.send(
@@ -450,6 +451,13 @@ pub async fn set_routing_threshold(state: State<'_, AppState>, threshold: f64) -
 pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> AppResult<()> {
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
     settings.routing.show_answers = show;
+    settings.save(&state.config_dir)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_show_jev_asked(state: State<'_, AppState>, show: bool) -> AppResult<()> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.routing.show_asked = show;
     settings.save(&state.config_dir)
 }
 
@@ -605,6 +613,7 @@ pub struct AiSettingsView {
     saved_keys: Vec<String>,
     threshold: f64,
     show_answers: bool,
+    show_asked: bool,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -627,6 +636,7 @@ pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettings
         saved_keys: KeychainSecrets::saved(),
         threshold: settings.routing.threshold,
         show_answers: settings.routing.show_answers,
+        show_asked: settings.routing.show_asked,
     })
 }
 

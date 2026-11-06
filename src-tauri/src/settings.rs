@@ -60,9 +60,12 @@ pub struct RoutingSettings {
     /// Below this confidence in its choice, Jev's Mini-Me is replaced by the fallback Mini-Me
     /// and its reaction is left out; from 0 to 1.
     pub threshold: f64,
-    /// A developer aid: store and show Jev's raw answers under each message.
+    /// A developer aid: store and show Jev's answers under each message.
     #[serde(default)]
     pub show_answers: bool,
+    /// A developer aid: store and show what was sent to Jev under each message.
+    #[serde(default)]
+    pub show_asked: bool,
 }
 
 impl Default for RoutingSettings {
@@ -70,6 +73,7 @@ impl Default for RoutingSettings {
         Self {
             threshold: 0.5,
             show_answers: false,
+            show_asked: false,
         }
     }
 }
