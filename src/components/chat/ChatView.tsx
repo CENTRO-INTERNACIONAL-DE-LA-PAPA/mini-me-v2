@@ -20,6 +20,7 @@ import type { ReferenceTarget } from "../../protocol/references";
 import { JobsPanel, OutlinePanel, StepsPanel, type Panel } from "./SidePanels";
 import { outline } from "./outline";
 import { useConversation } from "./useConversation";
+import { useFilesChanged } from "../../hooks/useFilesChanged";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useRunningReplies } from "../../hooks/useRunningReplies";
 
@@ -144,8 +145,10 @@ export function ChatView({
   // Follows new messages and the latest one as it streams, but not changes to earlier
   // messages, such as a reaction, which would pull the user away from what they read.
   const last = state.messages[state.messages.length - 1];
-  // What a chip's file lists depend on: a new message, or a file attached to one.
-  const filesKey = `${state.messages.length}:${state.messages.reduce((n, m) => n + m.attachments.length, 0)}`;
+  // What a chip's file lists depend on: a new message, a file attached to one, or files added
+  // without a message, such as a download.
+  const filesChanged = useFilesChanged(projectId);
+  const filesKey = `${state.messages.length}:${state.messages.reduce((n, m) => n + m.attachments.length, 0)}:${filesChanged}`;
   // The message the Conversation was opened at, until it has been scrolled to.
   const target = useRef(messageId);
   useEffect(() => {
