@@ -36,7 +36,7 @@ use crate::quarto;
 use crate::routing::{REACTION_CHANCE, ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{self, CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
-use crate::settings::{AiSettings, HomeSettings, Settings};
+use crate::settings::{AiSettings, DebugSettings, HomeSettings, Settings};
 use crate::link::SummaryKind;
 use crate::sidecar::{LOG_FILE, Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
@@ -132,6 +132,7 @@ impl AppState {
         let gate = Arc::clone(&quarto);
         runs.set_document_gate(Arc::new(move || gate.require().map(|_| ())));
         runs.set_active_features(active_feature_ids(&settings, dev_app));
+        runs.set_debug(settings.reply_debug(dev_app));
         let sidecar = Supervisor::new(
             launch,
             false,
@@ -483,7 +484,19 @@ pub async fn get_developer_mode(state: State<'_, AppState>) -> AppResult<bool> {
 pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResult<()> {
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
     settings.developer_mode = Some(on);
-    settings.save(&state.config_dir)
+    settings.save(&state.config_dir)?;
+    state.runs.set_debug(settings.reply_debug(state.dev_app));
+    Ok(())
+}
+
+/// Saves the reply debug switches; runs started from now on collect the parts that are on.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_reply_debug(state: State<'_, AppState>, debug: DebugSettings) -> AppResult<()> {
+    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    settings.debug = debug;
+    settings.save(&state.config_dir)?;
+    state.runs.set_debug(settings.reply_debug(state.dev_app));
+    Ok(())
 }
 
 fn active_feature_ids(settings: &Settings, dev_app: bool) -> Vec<String> {
@@ -615,6 +628,7 @@ pub struct AiSettingsView {
     threshold: f64,
     show_answers: bool,
     show_asked: bool,
+    debug: DebugSettings,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -638,6 +652,7 @@ pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettings
         threshold: settings.routing.threshold,
         show_answers: settings.routing.show_answers,
         show_asked: settings.routing.show_asked,
+        debug: settings.debug,
     })
 }
 
@@ -1297,16 +1312,16 @@ pub async fn open_sidecar_log(app: AppHandle) -> AppResult<()> {
         .map_err(|e| AppError::new("open_failed", e.to_string()))
 }
 
-/// The debug record of `kind` that message `message_id` has, read when its debug block is
-/// expanded; `null` when it has none.
+/// Message `message_id`'s debug records of `kind`, in the order they were written, read when
+/// its debug block is expanded.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_debug_record(
+pub async fn get_debug_records(
     state: State<'_, AppState>,
     project_id: Uuid,
     message_id: Uuid,
     kind: String,
-) -> AppResult<Option<Value>> {
-    state.project(project_id)?.lock().debug_record(message_id, &kind)
+) -> AppResult<Vec<Value>> {
+    state.project(project_id)?.lock().debug_records(message_id, &kind)
 }
 
 /// Shows the file `asset_id` in the system's file manager.

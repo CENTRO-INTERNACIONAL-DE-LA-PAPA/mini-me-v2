@@ -9,6 +9,7 @@ import { formatClock, formatSize } from "../../lib/format";
 import { approvalState } from "../interactive/approval";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
 import { JevDebugBlock } from "./JevDebugBlock";
+import { ReplyDebugBlock } from "./ReplyDebugBlock";
 import { Markdown } from "./Markdown";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMePill } from "../minime/MiniMePill";
@@ -18,6 +19,7 @@ import { useFileExists } from "./existingFiles";
 import { TextComponentChip } from "./TextComponentChip";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useJevDebug } from "../../hooks/useJevDebug";
+import { useReplyDebug } from "../../hooks/useReplyDebug";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useOpenDocument } from "../documents/openDocument";
 import { isDocument } from "../files/files";
@@ -69,6 +71,7 @@ export const MessageItem = memo(function MessageItem({
   const miniMes = useMiniMes();
   const developer = useDeveloperMode();
   const jevDebug = useJevDebug();
+  const replyDebug = useReplyDebug();
   const { name, miniMe: authorMiniMe } = author(message, miniMes);
 
   const counts = new Map<string, number>();
@@ -216,72 +219,81 @@ export const MessageItem = memo(function MessageItem({
     );
   }
 
+  const debugged =
+    !compact &&
+    developer &&
+    (replyDebug.reply_input || replyDebug.reply_details || replyDebug.reply_tools);
+
   return (
-    <MiniMeSurface
-      miniMe={authorMiniMe}
-      render={<article />}
-      data-message-id={message.id}
-      className={cn(
-        "relative flex flex-col text-foreground",
-        compact ? "gap-2.5 px-3 py-2.5" : "gap-3.5 px-[18px] py-4",
-      )}
-    >
-      <header className="flex items-center gap-[9px] text-meta">
-        <MiniMeAvatar miniMe={authorMiniMe} size={compact ? 20 : 28} />
-        <strong className="font-serif text-name font-medium text-foreground">{name}</strong>
-        <span className="text-mm-ink">
-          <MetaParts parts={[time, message.status !== "failed" && status]} />
-        </span>
-        {message.status === "failed" && <span className="text-destructive">{status}</span>}
-      </header>
-      {showsProgress(message.steps) && (
-        <WorkflowProgress
-          steps={message.steps}
-          components={message.components}
-          messageId={message.id}
-          replyStatus={message.status}
-          color={authorMiniMe?.colors.solid}
-          onShowSteps={onToggleSteps && (() => onToggleSteps(message.id))}
-          stepsShown={stepsShown}
-        />
-      )}
-      {/* A reply with no text yet, or none at all, leaves no empty block to space around. */}
-      {message.author.kind === "mini_me" ? (
-        message.content.trim() !== "" && (
-          <Markdown
-            content={message.content}
-            textComponents={message.text_components}
-            miniMes={miniMes}
-            onOpenAsset={open}
+    <div className="flex flex-col gap-1.5">
+      <MiniMeSurface
+        miniMe={authorMiniMe}
+        render={<article />}
+        data-message-id={message.id}
+        className={cn(
+          "relative flex flex-col text-foreground",
+          compact ? "gap-2.5 px-3 py-2.5" : "gap-3.5 px-[18px] py-4",
+        )}
+      >
+        <header className="flex items-center gap-[9px] text-meta">
+          <MiniMeAvatar miniMe={authorMiniMe} size={compact ? 20 : 28} />
+          <strong className="font-serif text-name font-medium text-foreground">{name}</strong>
+          <span className="text-mm-ink">
+            <MetaParts parts={[time, message.status !== "failed" && status]} />
+          </span>
+          {message.status === "failed" && <span className="text-destructive">{status}</span>}
+        </header>
+        {showsProgress(message.steps) && (
+          <WorkflowProgress
+            steps={message.steps}
+            components={message.components}
+            messageId={message.id}
+            replyStatus={message.status}
+            color={authorMiniMe?.colors.solid}
+            onShowSteps={onToggleSteps && (() => onToggleSteps(message.id))}
+            stepsShown={stepsShown}
           />
-        )
-      ) : (
-        text
-      )}
-      {shown.length > 0 && (
-        <div className="flex min-w-0 flex-col gap-3">
-          {shown.map((component) => (
-            <InteractiveComponent
-              key={component.id}
-              component={component}
-              projectId={projectId}
-              messageId={message.id}
-              replyStatus={message.status}
-              color={authorMiniMe?.colors.solid}
+        )}
+        {/* A reply with no text yet, or none at all, leaves no empty block to space around. */}
+        {message.author.kind === "mini_me" ? (
+          message.content.trim() !== "" && (
+            <Markdown
+              content={message.content}
+              textComponents={message.text_components}
+              miniMes={miniMes}
+              onOpenAsset={open}
             />
-          ))}
-        </div>
-      )}
-      {message.status === "streaming" && message.progress && (
-        <p role="status" className="text-meta text-muted-foreground">
-          {message.progress.label}
-          {message.progress.fraction !== null && ` (${Math.round(message.progress.fraction * 100)}%)`}
-        </p>
-      )}
-      {attachments}
-      {reactionPills}
-      {notes}
-    </MiniMeSurface>
+          )
+        ) : (
+          text
+        )}
+        {shown.length > 0 && (
+          <div className="flex min-w-0 flex-col gap-3">
+            {shown.map((component) => (
+              <InteractiveComponent
+                key={component.id}
+                component={component}
+                projectId={projectId}
+                messageId={message.id}
+                replyStatus={message.status}
+                color={authorMiniMe?.colors.solid}
+              />
+            ))}
+          </div>
+        )}
+        {message.status === "streaming" && message.progress && (
+          <p role="status" className="text-meta text-muted-foreground">
+            {message.progress.label}
+            {message.progress.fraction !== null && ` (${Math.round(message.progress.fraction * 100)}%)`}
+          </p>
+        )}
+        {attachments}
+        {reactionPills}
+        {notes}
+      </MiniMeSurface>
+      {/* Outside the reply's colours, where it reads as a developer note, not part of the reply. */}
+      {debugged && <ReplyDebugBlock projectId={projectId} messageId={message.id} />}
+    </div>
   );
 });
 

@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from mini_me_sidecar import debug
 from mini_me_sidecar.context import Model, TraitError
 
 PROVIDER_NAMES = {
@@ -48,22 +49,33 @@ ANTHROPIC_MAX_TOKENS = 4096
 
 
 def chat_model(model: Model, key: str) -> Any:
-    """The LangChain chat model for `model`. Integrations are imported here so the sidecar
-    starts quickly and calls that never use a provider never load its package."""
+    """The LangChain chat model for `model`, which records its calls inside `debug.recording`.
+    Integrations are imported here so the sidecar starts quickly and calls that never use a
+    provider never load its package."""
+    callbacks = debug.callbacks(model)
     match model.provider:
         case "openai" | "openrouter":
             from langchain_openai import ChatOpenAI
 
             base_url = OPENROUTER_URL if model.provider == "openrouter" else None
-            return ChatOpenAI(model=model.model, api_key=key, base_url=base_url)
+            return ChatOpenAI(
+                model=model.model, api_key=key, base_url=base_url, callbacks=callbacks
+            )
         case "anthropic":
             from langchain_anthropic import ChatAnthropic
 
-            return ChatAnthropic(model=model.model, api_key=key, max_tokens=ANTHROPIC_MAX_TOKENS)
+            return ChatAnthropic(
+                model=model.model,
+                api_key=key,
+                max_tokens=ANTHROPIC_MAX_TOKENS,
+                callbacks=callbacks,
+            )
         case "google":
             from langchain_google_genai import ChatGoogleGenerativeAI
 
-            return ChatGoogleGenerativeAI(model=model.model, google_api_key=key)
+            return ChatGoogleGenerativeAI(
+                model=model.model, google_api_key=key, callbacks=callbacks
+            )
     raise TraitError("provider_unavailable", f"Unknown provider {model.provider!r}.")
 
 

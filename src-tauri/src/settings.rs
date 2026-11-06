@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::features::{self, FEATURES, Feature};
-use crate::link::CallModel;
+use crate::link::{CallModel, DebugParts};
 use crate::protocol::{Origin, new_id};
 use crate::secrets::is_provider;
 
@@ -26,6 +26,8 @@ pub struct Settings {
     pub ai: AiSettings,
     #[serde(default)]
     pub routing: RoutingSettings,
+    #[serde(default)]
+    pub debug: DebugSettings,
     #[serde(default)]
     pub home: HomeSettings,
     /// Shows developer options when set; until the user sets it, it follows the app (on in
@@ -53,6 +55,18 @@ pub struct HomeSettings {
     /// Whether the Mini-Mes appear on Home on their own; a key sequence brings them anyway.
     #[serde(default)]
     pub show_mini_mes: bool,
+}
+
+/// Developer aids that store parts of each reply's debug records, only while Developer mode is
+/// on as well.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct DebugSettings {
+    #[serde(default)]
+    pub reply_input: bool,
+    #[serde(default)]
+    pub reply_details: bool,
+    #[serde(default)]
+    pub reply_tools: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -142,6 +156,7 @@ impl Settings {
             recent_projects: HashMap::new(),
             ai: AiSettings::default(),
             routing: RoutingSettings::default(),
+            debug: DebugSettings::default(),
             home: HomeSettings::default(),
             developer_mode: None,
             quarto_path: None,
@@ -176,6 +191,17 @@ impl Settings {
     /// Mini-Me Dev.
     pub fn developer_mode(&self, dev_app: bool) -> bool {
         self.developer_mode.unwrap_or(dev_app)
+    }
+
+    /// The parts of reply debug records runs collect, for an app that is (`dev_app`) or is not
+    /// Mini-Me Dev.
+    pub fn reply_debug(&self, dev_app: bool) -> DebugParts {
+        let on = self.developer_mode(dev_app);
+        DebugParts {
+            input: on && self.debug.reply_input,
+            details: on && self.debug.reply_details,
+            tools: on && self.debug.reply_tools,
+        }
     }
 
     /// The feature flags that are on, for an app that is (`dev_app`) or is not Mini-Me Dev.

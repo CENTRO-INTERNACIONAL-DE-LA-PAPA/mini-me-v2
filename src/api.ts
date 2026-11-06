@@ -25,6 +25,7 @@ import type {
   MiniMeDefinition,
   OpenedDocument,
   QuartoStatus,
+  ReplyDebugSettings,
   Overview,
   PausedApproval,
   ProjectSummary,
@@ -200,9 +201,9 @@ export const api = {
     invoke<AssetRef>("duplicate_asset", { project_id, asset_id }),
   deleteAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("delete_asset", { project_id, asset_id }),
-  /** A message's debug record of `kind`, or null when it has none. */
-  getDebugRecord: <T>(project_id: Uuid, message_id: Uuid, kind: string) =>
-    invoke<T | null>("get_debug_record", { project_id, message_id, kind }),
+  /** A message's debug records of `kind`, in the order they were written. */
+  getDebugRecords: <T>(project_id: Uuid, message_id: Uuid, kind: string) =>
+    invoke<T[]>("get_debug_records", { project_id, message_id, kind }),
   /** Shows the file in the system's file manager. */
   revealAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("reveal_asset", { project_id, asset_id }),
@@ -266,6 +267,7 @@ export const api = {
   setRoutingThreshold: (threshold: number) => invoke<void>("set_routing_threshold", { threshold }),
   setShowJevAnswers: (show: boolean) => invoke<void>("set_show_jev_answers", { show }),
   setShowJevAsked: (show: boolean) => invoke<void>("set_show_jev_asked", { show }),
+  setReplyDebug: (debug: ReplyDebugSettings) => invoke<void>("set_reply_debug", { debug }),
   /** Deletes every debug record of the Project. */
   clearDebugRecords: (project_id: Uuid) => invoke<void>("clear_debug_records", { project_id }),
   /** Opens the sidecar log in the system's default app for it. */

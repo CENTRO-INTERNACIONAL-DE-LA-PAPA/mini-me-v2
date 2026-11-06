@@ -17,6 +17,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
+from mini_me_sidecar import debug
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, chat_model, provider_error
 from mini_me_sidecar.context import CallContext, Model, TraitError
@@ -171,6 +172,7 @@ async def _converse(
             if results_size + len(result) > MAX_TOOL_RESULT_CHARS:
                 result = _over_budget(len(result), MAX_TOOL_RESULT_CHARS - results_size)
             results_size += len(result)
+            debug.record_tool(str(call.get("name")), call.get("args"), result)
             messages.append(ToolMessage(content=result, tool_call_id=call["id"]))
         # Providers expect a result for every call the reply holds, malformed ones included.
         for call in reply.invalid_tool_calls:

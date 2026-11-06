@@ -39,12 +39,14 @@ import type {
   KeyAccount,
   ProviderId,
   QuartoStatus,
+  ReplyDebugSettings,
 } from "../../protocol/types";
 import { openLink } from "../interactive/links";
 import { SectionPage, type Section } from "../shell/SectionPage";
 import type { SettingsPageId } from "../shell/view";
 import { refreshDeveloperMode, useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { refreshJevDebug, type JevDebug } from "../../hooks/useJevDebug";
+import { refreshReplyDebug } from "../../hooks/useReplyDebug";
 import { reloadFeatureFlags, useFeatureFlags } from "../../hooks/useFeatureFlags";
 import { recheckQuarto, showQuarto, useQuarto } from "../../hooks/useQuarto";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
@@ -253,6 +255,7 @@ function DeveloperPage({
       />
       <ThresholdRow settings={settings} onChanged={onChanged} />
       <JevDebugRows settings={settings} onChanged={onChanged} />
+      <ReplyDebugRows settings={settings} onChanged={onChanged} />
       <DebugDataRow projectId={projectId} />
       <SidecarLogRow />
       <SettingRow
@@ -1006,6 +1009,66 @@ function JevDebugRows({ settings, onChanged }: { settings: AiSettings; onChanged
         "Show what Jev was asked",
         "Stores the questions and options sent to Jev and shows them under each message.",
         settings.show_asked,
+      )}
+    </>
+  );
+}
+
+/** The switches for the parts of each reply's debug records. */
+function ReplyDebugRows({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
+  const [error, setError] = useState<{ part: keyof ReplyDebugSettings; text: string } | null>(
+    null,
+  );
+
+  async function set(part: keyof ReplyDebugSettings, checked: boolean) {
+    try {
+      setError(null);
+      const debug = { ...settings.debug, [part]: checked };
+      await api.setReplyDebug(debug);
+      refreshReplyDebug(debug);
+      onChanged();
+    } catch (e) {
+      setError({ part, text: errorMessage(e) });
+    }
+  }
+
+  const row = (part: keyof ReplyDebugSettings, label: string, description: string) => (
+    <SettingRow
+      label={label}
+      htmlFor={`debug-${part}`}
+      description={
+        <>
+          {description}
+          {error?.part === part && (
+            <span className="mt-1 block text-destructive">{error.text}</span>
+          )}
+        </>
+      }
+    >
+      <Switch
+        id={`debug-${part}`}
+        checked={settings.debug[part]}
+        onCheckedChange={(next) => void set(part, next)}
+      />
+    </SettingRow>
+  );
+
+  return (
+    <>
+      {row(
+        "reply_input",
+        "Show what the AI read",
+        "Stores what each model call read and shows it under each reply.",
+      )}
+      {row(
+        "reply_details",
+        "Show model call details",
+        "Stores each model call's provider, model, time and tokens, shown under each reply.",
+      )}
+      {row(
+        "reply_tools",
+        "Show tool calls",
+        "Stores each tool the AI calls, with arguments and result, shown under each reply.",
       )}
     </>
   );

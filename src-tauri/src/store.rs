@@ -514,7 +514,8 @@ impl ProjectState {
         Ok(shown)
     }
 
-    /// Stores `content` as `message_id`'s debug record of `kind`, replacing the one it had.
+    /// Stores `content` as `message_id`'s only debug record of `kind`, at position 0, replacing
+    /// the one it had.
     pub fn put_debug_record(
         &self,
         conversation_id: Uuid,
@@ -524,8 +525,8 @@ impl ProjectState {
     ) -> AppResult<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO debug_records \
-             (message_id, kind, conversation_id, content, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+             (message_id, kind, position, conversation_id, content, created_at) \
+             VALUES (?1, ?2, 0, ?3, ?4, ?5)",
             params![
                 message_id.to_string(),
                 kind,
@@ -537,17 +538,44 @@ impl ProjectState {
         Ok(())
     }
 
-    /// `message_id`'s debug record of `kind`, if it has one.
-    pub fn debug_record(&self, message_id: Uuid, kind: &str) -> AppResult<Option<Value>> {
-        let content: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT content FROM debug_records WHERE message_id = ?1 AND kind = ?2",
-                params![message_id.to_string(), kind],
-                |row| row.get(0),
-            )
-            .optional()?;
-        Ok(content.map(|c| serde_json::from_str(&c)).transpose()?)
+    /// Stores `content` as `message_id`'s next debug record of `kind`, after the ones it has.
+    pub fn append_debug_record(
+        &self,
+        conversation_id: Uuid,
+        message_id: Uuid,
+        kind: &str,
+        content: &Value,
+    ) -> AppResult<()> {
+        self.conn.execute(
+            "INSERT INTO debug_records \
+             (message_id, kind, position, conversation_id, content, created_at) \
+             SELECT ?1, ?2, COALESCE(MAX(position) + 1, 0), ?3, ?4, ?5 FROM debug_records \
+             WHERE message_id = ?1 AND kind = ?2",
+            params![
+                message_id.to_string(),
+                kind,
+                conversation_id.to_string(),
+                content.to_string(),
+                now_ms()
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// `message_id`'s debug records of `kind`, in the order they were written.
+    pub fn debug_records(&self, message_id: Uuid, kind: &str) -> AppResult<Vec<Value>> {
+        let mut statement = self.conn.prepare(
+            "SELECT content FROM debug_records WHERE message_id = ?1 AND kind = ?2 \
+             ORDER BY position",
+        )?;
+        let rows = statement.query_map(params![message_id.to_string(), kind], |row| {
+            row.get::<_, String>(0)
+        })?;
+        let mut records = Vec::new();
+        for content in rows {
+            records.push(serde_json::from_str(&content?)?);
+        }
+        Ok(records)
     }
 
     /// Deletes every debug record of the Project.
@@ -1204,16 +1232,38 @@ mod tests {
             state.put_debug_record(kept, first, "jev", &record(1)).unwrap();
             state.put_debug_record(kept, first, "jev", &record(2)).unwrap();
             state.put_debug_record(deleted, second, "jev", &record(3)).unwrap();
-            assert_eq!(state.debug_record(first, "jev").unwrap(), Some(record(2)));
-            assert_eq!(state.debug_record(first, "prompt").unwrap(), None);
+            assert_eq!(state.debug_records(first, "jev").unwrap(), vec![record(2)]);
+            assert_eq!(state.debug_records(first, "reply").unwrap(), Vec::<Value>::new());
         }
 
         conversations::delete(&project, deleted).unwrap();
         let state = project.lock();
-        assert_eq!(state.debug_record(second, "jev").unwrap(), None);
-        assert_eq!(state.debug_record(first, "jev").unwrap(), Some(record(2)));
+        assert_eq!(state.debug_records(second, "jev").unwrap(), Vec::<Value>::new());
+        assert_eq!(state.debug_records(first, "jev").unwrap(), vec![record(2)]);
         state.clear_debug_records().unwrap();
-        assert_eq!(state.debug_record(first, "jev").unwrap(), None);
+        assert_eq!(state.debug_records(first, "jev").unwrap(), Vec::<Value>::new());
+    }
+
+    #[test]
+    fn appended_debug_records_come_back_in_order_next_to_jevs() {
+        let (_dir, project) = temp_project();
+        let conversation = conversations::create(&project).unwrap().id;
+        let input = conversations::SendMessageInput {
+            content: "check the data".into(),
+            attachments: Vec::new(),
+            text_components: Vec::new(),
+        };
+        let message =
+            conversations::send_message(&project, conversation, input, new_id()).unwrap().id;
+        let record = |n: u32| serde_json::json!({ "n": n });
+        let state = project.lock();
+        state.put_debug_record(conversation, message, "jev", &record(0)).unwrap();
+        for n in 1..=3 {
+            state.append_debug_record(conversation, message, "reply", &record(n)).unwrap();
+        }
+        let replies = state.debug_records(message, "reply").unwrap();
+        assert_eq!(replies, vec![record(1), record(2), record(3)]);
+        assert_eq!(state.debug_records(message, "jev").unwrap(), vec![record(0)]);
     }
 
     #[test]

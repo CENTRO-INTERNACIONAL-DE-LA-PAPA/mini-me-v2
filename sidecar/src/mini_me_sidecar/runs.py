@@ -12,6 +12,7 @@ from langgraph.types import Command
 
 from mini_me_sidecar.adapters.base import Adapter
 from mini_me_sidecar.context import CallContext, Requests, TraitError
+from mini_me_sidecar.debug import Parts, recording
 from mini_me_sidecar.link import Link, log
 from mini_me_sidecar.workflow import state as saved_state
 from mini_me_sidecar.workflow.decide import decide
@@ -38,6 +39,7 @@ class Run:
         self.model = frame.get("model")
         self.input: dict[str, Any] = frame.get("input") or {}
         self.context: dict[str, Any] = frame.get("context") or {}
+        self.debug = Parts.from_context(self.context.get("debug"))
         self.mini_me_name = (frame.get("mini_me") or {}).get("name")
         self.resume: dict[str, Any] | None = frame.get("resume")
         self.cancelled = False
@@ -61,6 +63,9 @@ class Run:
     def send(self, frame: dict[str, Any]) -> None:
         if not self.ended:
             self._link.send({**frame, "run_id": self.run_id})
+
+    def send_debug(self, entry: dict[str, Any]) -> None:
+        self.send({"type": "run.debug", "entry": entry})
 
     def _call(self, call_id: str, start: dict[str, Any], stream: bool) -> CallContext:
         context = {**self.context, "mini_me_name": self.mini_me_name, **start.pop("context")}
@@ -90,8 +95,10 @@ class Run:
             "context": {"steps": earlier},
         }
         ctx = self._call(call_id, start, stream)
+        step_name = step.name(self.trait_names())
         try:
-            await adapter.run(ctx, dict(self.input))
+            with recording(self.debug, self.send_debug, step_name, str(definition.get("name"))):
+                await adapter.run(ctx, dict(self.input))
         finally:
             self._close(ctx)
         self.send({"type": "step.completed", "step_id": step.id, "output": ctx.output})
@@ -105,7 +112,8 @@ class Run:
         ctx = self._call(call_id, start, stream=False)
         try:
             message = str(self.input.get("text", ""))
-            choice = await decide(ctx, step.question, choices, message, earlier)
+            with recording(self.debug, self.send_debug, name, None):
+                choice = await decide(ctx, step.question, choices, message, earlier)
         finally:
             self._close(ctx)
         self.send({"type": "step.completed", "step_id": step.id, "output": choice})
