@@ -3,6 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDownIcon, ChevronRightIcon, DownloadIcon, LockIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../../api";
+import { announceFilesChanged } from "../../hooks/useFilesChanged";
 import { formatSize } from "../../lib/format";
 import type { AssetRef, Dataset, DatasetFile, DataverseSearch } from "../../protocol/types";
 import { ReferenceChip } from "../chat/ReferenceChip";
@@ -61,6 +62,7 @@ function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Data
     const chosen = files.filter((f) => ticked.has(f.file.id)).map((f) => f.file);
     try {
       const results = await api.dataverseDownload(projectId, dataset, chosen);
+      if (results.some((r) => r.asset)) announceFilesChanged(projectId);
       const byId = new Map(results.map((r) => [r.file_id, r]));
       setFiles(
         files.map(({ file, error }) => {

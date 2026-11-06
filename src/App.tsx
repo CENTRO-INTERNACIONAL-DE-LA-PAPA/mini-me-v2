@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
 import { useDeveloperMode } from "./hooks/useDeveloperMode";
+import { useFilesChanged } from "./hooks/useFilesChanged";
 import { useRunningKey } from "./hooks/useRunningReplies";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/chat/ChatView";
@@ -69,11 +70,13 @@ export default function App() {
     refreshConversations();
   }, [refreshConversations]);
 
-  // A Conversation's status, shown in the sidebar, follows its reply as it runs, pauses and ends.
+  // A Conversation's status, shown in the sidebar, follows its reply as it runs, pauses and ends;
+  // the file count also follows files added without a reply, such as a download.
   const runningKey = useRunningKey();
+  const filesChanged = useFilesChanged(projectId);
   useEffect(() => {
     refreshConversations();
-  }, [runningKey, refreshConversations]);
+  }, [runningKey, filesChanged, refreshConversations]);
 
   // The first start after an update opens What's new once, over Home.
   useEffect(() => {
