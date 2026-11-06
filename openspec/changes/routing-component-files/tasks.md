@@ -11,7 +11,7 @@
 
 ## 3. Check and docs
 
-- [ ] 3.1 Mention in `docs/using.md` that "that chart" or "that table" works without `#`; verify in the app that "@Plotter make that chart a bar chart" after a chart of a clean table redraws it from that file, and that the [DEBUG] Jev block shows the file picked
+- [x] 3.1 Mention in `docs/using.md` that "that chart" or "that table" works without `#`; verify in the app that "@Plotter make that chart a bar chart" after a chart of a clean table redraws it from that file, and that the [DEBUG] Jev block shows the file picked
 
 ## Workflow follow-up
 

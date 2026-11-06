@@ -155,6 +155,9 @@ for new papers or theories, not about earlier results.
 Profiler, Validator, Curator, Linker and Plotter work on your tables on your computer.
 pandas and pointblank compute every number, check and chart; the AI model only chooses what
 to run. Cleaned and joined tables are saved as new files; the original is never changed.
+Without a `#`, they use the file your message seems to mean, also when it points to a table or
+chart made from that file ("@Plotter make that chart a bar chart"), and the reply names the
+file it used.
 
 ## Datasets from CIP's Dataverse
 
