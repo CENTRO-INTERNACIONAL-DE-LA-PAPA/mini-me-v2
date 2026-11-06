@@ -3,7 +3,7 @@
 ## 1. The debug table
 
 - [x] 1.1 Add migration 10 → 11 in `db.rs` (the `debug_records` table and its index, and deleting `routing.answered` events), `ProjectState::put_debug_record`, `debug_record` and `clear_debug_records` in `store.rs`, and delete a Conversation's records when it is deleted; verify with a migration test in the style of the existing "a_version_N_database" tests and a unit test that a record is written, read back, replaced, cleared, and deleted with its Conversation, and `cargo test` passes
-- [ ] 1.2 Retire `routing.answered`: remove `EventKind::RoutingAnswered`, `JevAnswers`, `MessageView.jev` and `record_jev_answers`, drop the type from `message_views()`, `fixtures/replay.json`, `eventStore.ts` and `types.ts`, and make `routing.rs` write a `jev` record with the answers instead (nothing else yet); verify with `cargo test` and `npm test`
+- [x] 1.2 Retire `routing.answered`: remove `EventKind::RoutingAnswered`, `JevAnswers`, `MessageView.jev` and `record_jev_answers`, drop the type from `message_views()`, `fixtures/replay.json`, `eventStore.ts` and `types.ts`, and make `routing.rs` write a `jev` record with the answers instead (nothing else yet); verify with `cargo test` and `npm test`
 
 ## 2. What Jev was asked
 

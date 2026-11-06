@@ -18,7 +18,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::paths::ProjectPaths;
 use crate::protocol::{
-    AssetRef, Author, AuthorKind, Component, ENVELOPE_VERSION, Event, EventKind, JevAnswers,
+    AssetRef, Author, AuthorKind, Component, ENVELOPE_VERSION, Event, EventKind,
     Message, MessageStatus, MessageStep, MessageView, OpenedConversation, Origin, Progress,
     Reaction, TextComponent, new_id, now_ms,
 };
@@ -616,7 +616,6 @@ impl ProjectState {
                 message,
                 reactions: Vec::new(),
                 progress: None,
-                jev: None,
                 failure: None,
             })
             .collect();
@@ -653,8 +652,8 @@ impl ProjectState {
 
         let mut stmt = self.conn.prepare(
             "SELECT body FROM events WHERE conversation_id = ?1 AND type IN \
-             ('message.failed', 'routing.answered', 'message.progress', 'message.paused', \
-             'message.resumed') ORDER BY seq",
+             ('message.failed', 'message.progress', 'message.paused', 'message.resumed') \
+             ORDER BY seq",
         )?;
         let bodies = stmt.query_map(params![conversation_id.to_string()], |row| {
             row.get::<_, String>(0)
@@ -667,11 +666,6 @@ impl ProjectState {
                 EventKind::MessageFailed { message_id, error } => {
                     if let Some(i) = view(&message_id) {
                         views[i].failure = Some(error);
-                    }
-                }
-                EventKind::RoutingAnswered { message_id, answers, error } => {
-                    if let Some(i) = view(&message_id) {
-                        views[i].jev = Some(JevAnswers { answers, error });
                     }
                 }
                 // Pausing clears a reply's progress; it stays empty after resuming until the
@@ -803,9 +797,9 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
                 params![message_id.to_string(), text],
             )?;
         }
-        // Progress and Jev's answers have no projection: opening a Conversation reads them
-        // from their events (`message_views`), as it does a failure's details.
-        EventKind::MessageProgress { .. } | EventKind::RoutingAnswered { .. } => {}
+        // Progress has no projection: opening a Conversation reads it from its events
+        // (`message_views`), as it does a failure's details.
+        EventKind::MessageProgress { .. } => {}
         EventKind::MessagePaused { message_id } => {
             tx.execute(
                 "UPDATE messages SET status = 'paused' WHERE id = ?1",

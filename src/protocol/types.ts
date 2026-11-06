@@ -117,10 +117,9 @@ export type KnownEvent = Envelope &
     | { type: "component.added"; payload: { message_id: Uuid; component: Component } }
     | { type: "reaction.added"; payload: { message_id: Uuid; emoji: string; by: Author } }
     | { type: "reaction.removed"; payload: { message_id: Uuid; emoji: string; by: Author } }
-    | { type: "routing.answered"; payload: JevAnswers & { message_id: Uuid } }
   );
 
-/** Jev's raw answers about a message, shown by the "Show Jev's answers" developer setting. */
+/** Jev's answers in a message's `jev` debug record. */
 export interface JevAnswers {
   answers: Record<
     string,

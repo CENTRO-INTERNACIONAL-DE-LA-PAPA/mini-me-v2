@@ -642,26 +642,6 @@ pub fn file_names(message: &Message) -> Vec<String> {
     names
 }
 
-/// Stores Jev's raw answers about `message_id`, for the "Show Jev's answers" developer
-/// setting.
-pub fn record_jev_answers(
-    project: &Project,
-    conversation_id: Uuid,
-    message_id: Uuid,
-    answers: serde_json::Value,
-    error: Option<ErrorInfo>,
-) -> AppResult<()> {
-    project.lock().persist(
-        conversation_id,
-        EventKind::RoutingAnswered {
-            message_id,
-            answers,
-            error,
-        },
-    )?;
-    Ok(())
-}
-
 /// Persists a reply that is complete from the start, written by the app itself rather than
 /// produced by a Trait.
 pub fn system_reply(

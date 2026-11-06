@@ -224,14 +224,10 @@ impl Routing {
                     }),
                 ),
             };
-            if let Err(err) = conversations::record_jev_answers(
-                project,
-                conversation_id,
-                message.id,
-                answers,
-                error,
-            ) {
-                eprintln!("could not store Jev's answers: {err}");
+            let record = json!({ "asked": null, "answers": answers, "error": error });
+            let stored = project.lock().put_debug_record(conversation_id, message.id, "jev", &record);
+            if let Err(err) = stored {
+                eprintln!("could not store Jev's record: {err}");
             }
         }
         if let Some(warning) = warning_after(&routed) {
