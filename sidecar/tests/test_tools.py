@@ -221,15 +221,25 @@ def test_a_table_without_a_file_is_read_from_its_component(monkeypatch):
     assert table.name == "Columns-of-trial.csv"
     assert list(table.frame["plot"]) == [1, 2, 3] and table.frame["yield"].dtype == float
     assert pd.api.types.is_datetime64_any_dtype(table.frame["height"])
-    assert read == []
+    assert (read, table.source_id) == ([], None)
 
 
 def test_a_preview_is_read_from_its_file(monkeypatch):
     read = full_trial(monkeypatch)
-    reference = {"kind": "component", "id": "c1", "label": "$trial"}
+    reference = {"kind": "component", "id": "c1", "label": "$Trial-preview"}
     table = asyncio.run(read_reference(ComponentContext(), reference))
     assert (table.name, list(table.frame["plot"])) == ("trial.csv", [1, 2, 3, 4, 5])
-    assert read == ["trial.csv"]
+    assert (read, table.source_id) == (["trial.csv"], "a1")
+
+
+def test_a_table_read_from_a_file_carries_the_file(monkeypatch):
+    async def parse(ctx, function, name, data, text):
+        return Table(name, pd.DataFrame({"plot": [1]}))
+
+    monkeypatch.setattr(tables.WORKERS, "run", parse)
+    ctx = ReadingContext()
+    table = asyncio.run(tables.read_table(ctx, "a1", "trial.csv"))
+    assert (table.name, table.source_id) == ("trial.csv", "a1")
 
 
 def test_a_chart_is_not_read_as_a_table():
