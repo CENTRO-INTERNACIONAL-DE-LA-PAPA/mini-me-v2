@@ -2,7 +2,7 @@
 
 ## 1. Collecting
 
-- [ ] 1.1 Add `scripts/third-party.mjs` and `npm run third-party`, which writes `src-tauri/resources/third-party.json` (Mini-Me's notice and license, then each Rust crate, npm package, Python package and the Python runtime with its part, version, repository and license texts, each distinct text stored once) and fails on a component that declares no license; verify by running it after `npm run bundle-sidecar` and checking `serde`, `react` and `pandas` with their texts, with tests of its pure helpers
+- [x] 1.1 Add `scripts/third-party.mjs` and `npm run third-party`, which writes `src-tauri/resources/third-party.json` (Mini-Me's notice and license, then each Rust crate, npm package, Python package and the Python runtime with its part, version, repository and license texts, each distinct text stored once) and fails on a component that declares no license; verify by running it after `npm run bundle-sidecar` and checking `serde`, `react` and `pandas` with their texts, with tests of its pure helpers
 
 ## 2. Shipping
 
