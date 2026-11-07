@@ -14,6 +14,7 @@ import { LibraryView } from "./components/library/LibraryView";
 import { MiniMeEditor } from "./components/library/MiniMeEditor";
 import { OverviewView } from "./components/overview/OverviewView";
 import { SettingsView } from "./components/settings/SettingsView";
+import { LicenseView } from "./components/shell/LicenseView";
 import { ThirdPartyView } from "./components/shell/ThirdPartyView";
 import { WhatsNewView } from "./components/shell/WhatsNewView";
 import { AppSidebar } from "./components/shell/AppSidebar";
@@ -255,11 +256,16 @@ function Main({
           onOpenWhatsNew={() =>
             onNavigate({ kind: "whats-new", from: { kind: "settings", page: "about" } })
           }
+          onOpenLicense={() => onNavigate({ kind: "license" })}
           onOpenThirdParty={() => onNavigate({ kind: "third-party" })}
         />,
       );
     case "whats-new":
       return scrolling(<WhatsNewView onClose={() => onNavigate(view.from ?? { kind: "home" })} />);
+    case "license":
+      return scrolling(
+        <LicenseView onClose={() => onNavigate({ kind: "settings", page: "about" })} />,
+      );
     case "third-party":
       return scrolling(
         <ThirdPartyView onClose={() => onNavigate({ kind: "settings", page: "about" })} />,
