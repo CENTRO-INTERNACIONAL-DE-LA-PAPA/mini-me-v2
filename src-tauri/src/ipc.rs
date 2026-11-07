@@ -56,6 +56,10 @@ const MODEL_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(6
 /// How long a draft may go without new text before it is stopped.
 const DRAFT_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
 
+/// How long the app waits between installing an update on macOS or Linux and opening it: a
+/// relaunch right after the install has opened the version it replaced.
+const RESTART_AFTER_INSTALL: Duration = Duration::from_secs(3);
+
 /// The key account Jev's routing uses.
 const TYPESAFE: &str = "typesafe";
 
@@ -113,6 +117,7 @@ impl AppState {
         let profile = ProfileStore::open(&config_dir);
         let ai2 = Ai2::system();
         let app_version = app.package_info().version.to_string();
+        log.line(&format!("start: Mini-Me {app_version}"));
         let settings = Settings::load_or_create(&config_dir, &app_version)?;
         let quarto = Arc::new(quarto::Known::new(settings.quarto_path.clone()));
         // Looked up now, in the background, so a document does not wait for it.
@@ -861,12 +866,13 @@ pub async fn subscribe_update_status(
     Ok(())
 }
 
-/// Stops the sidecar, installs the downloaded update and restarts. If the install fails the
-/// app still restarts, on the version it was running.
+/// Stops the sidecar, installs the downloaded update and restarts after `RESTART_AFTER_INSTALL`.
+/// If the install fails the app still restarts, on the version it was running.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn restart_to_update(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
     state.sidecar.shutdown();
     state.updates.install_pending();
+    std::thread::sleep(RESTART_AFTER_INSTALL);
     app.restart()
 }
 

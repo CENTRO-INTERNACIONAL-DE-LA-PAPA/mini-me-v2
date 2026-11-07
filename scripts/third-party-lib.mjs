@@ -97,7 +97,7 @@ export function shippedCrates(metadata, root) {
 /** Builds the third-party file from components given as `{ part, name, version, license,
  * repository, texts: [string] }`: each distinct text is kept once, and components refer to
  * theirs by index. Throws, naming them, when components declare no license. */
-export function thirdParty(notice, license, components) {
+export function thirdParty(components) {
   const missing = components.filter((c) => !c.license).map((c) => `${c.name} ${c.version}`);
   if (missing.length > 0) {
     throw new Error(`These components declare no license: ${missing.join(", ")}`);
@@ -116,5 +116,5 @@ export function thirdParty(notice, license, components) {
       }),
     }))
     .sort((a, b) => a.part.localeCompare(b.part) || a.name.localeCompare(b.name));
-  return { notice, license, texts, components: listed };
+  return { texts, components: listed };
 }
