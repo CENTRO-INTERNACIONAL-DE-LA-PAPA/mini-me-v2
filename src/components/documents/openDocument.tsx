@@ -1,8 +1,8 @@
 import { createContext, useContext, type ReactNode } from "react";
 
-/** Opens the document `assetId` in the document view, with its Comments sheet showing when
- * `comments` is set. */
-type OpenDocument = (assetId: string, comments?: boolean) => void;
+/** Opens the document `assetId` in the document view. `edits`, the threads a reply's suggested
+ * edits opened, also shows the Comments sheet, with Accept all and Discard all for them. */
+type OpenDocument = (assetId: string, edits?: string[]) => void;
 
 // Provided around a Conversation, so a reply's document card and attachments can open a
 // document in the document view; elsewhere documents open in the system's default app.

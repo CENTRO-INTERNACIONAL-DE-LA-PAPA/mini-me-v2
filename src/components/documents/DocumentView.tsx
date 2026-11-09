@@ -20,7 +20,7 @@ import {
   RefreshCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { api, errorMessage } from "../../api";
+import { api, errorCode, errorMessage } from "../../api";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { recheckQuarto, useQuarto } from "../../hooks/useQuarto";
 import { formatRelative } from "../../lib/format";
@@ -57,10 +57,10 @@ interface Props {
   back: string;
   /** Set for a document just created to be drafted from this Conversation. */
   draftFrom?: Uuid;
-  /** Set to open with the Comments sheet showing, as for a Mini-Me's suggested edits. */
-  comments?: boolean;
+  /** A reply's suggested edits, the threads they opened: set to open with the Comments sheet
+   * showing them, with Accept all and Discard all. */
+  edits?: Uuid[];
   onClose: () => void;
-  onOpenConversation: (id: Uuid) => void;
 }
 
 /** Source highlighting in the theme's colours: headings and strong text in ink, the rest of
@@ -98,9 +98,8 @@ export function DocumentView({
   assetId,
   back,
   draftFrom,
-  comments,
+  edits,
   onClose,
-  onOpenConversation,
 }: Props) {
   const [text, setText] = useState("");
   const [editedAt, setEditedAt] = useState<number | null>(null);
@@ -114,7 +113,7 @@ export function DocumentView({
   const [pages, setPages] = useState<string[]>([]);
   const [rendering, setRendering] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [showComments, setShowComments] = useState(Boolean(comments));
+  const [showComments, setShowComments] = useState(Boolean(edits));
   const [threads, setThreads] = useState<CommentThread[]>([]);
   const [placements, setPlacementsShown] = useState<ReadonlyMap<Uuid, Placement>>(new Map());
   const [selected, setSelected] = useState<Uuid | null>(null);
@@ -391,6 +390,41 @@ export function DocumentView({
     await resolve(id, true);
   }
 
+  /** The threads among `ids` whose suggestion still waits. */
+  const waiting = (ids: Uuid[]) =>
+    threads.filter((t) => t.pending && ids.includes(t.conversation_id));
+
+  /** Accepts the waiting suggestion of each thread among `ids` in turn, as `accept` does one.
+   * Returns the threads left waiting because their edit conflicts with the user's or their
+   * passage is lost; any other failure stops it. */
+  async function acceptAll(ids: Uuid[]): Promise<Uuid[]> {
+    const left: Uuid[] = [];
+    for (const thread of waiting(ids)) {
+      const { message_id, component_id } = thread.pending!;
+      try {
+        await accept(thread.conversation_id, message_id, component_id);
+      } catch (e) {
+        const code = errorCode(e);
+        if (code !== "suggestion_conflict" && code !== "suggestion_detached") throw e;
+        left.push(thread.conversation_id);
+      }
+    }
+    return left;
+  }
+
+  /** Discards the waiting suggestion of each thread among `ids`, leaving the document as it
+   * is and the threads open. */
+  async function discardAll(ids: Uuid[]) {
+    try {
+      for (const thread of waiting(ids)) {
+        const { message_id, component_id } = thread.pending!;
+        await api.answerSuggestion(projectId, message_id, component_id, "rejected");
+      }
+    } finally {
+      await refreshThreads();
+    }
+  }
+
   async function remove(id: Uuid) {
     try {
       await api.deleteThread(projectId, id);
@@ -620,7 +654,9 @@ export function DocumentView({
           // Cleared after the delete, so the thread is no longer there to be left empty.
           onDelete={(id) => void remove(id).then(() => setSelected(null))}
           onAccept={accept}
-          onOpenConversation={onOpenConversation}
+          edits={edits}
+          onAcceptAll={acceptAll}
+          onDiscardAll={discardAll}
         />
       )}
     </>

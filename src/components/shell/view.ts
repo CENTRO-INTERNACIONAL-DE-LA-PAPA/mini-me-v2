@@ -2,14 +2,15 @@
  * Project; the others do not. A Conversation opened at `messageId` scrolls to that message. A
  * Mini-Me or Trait editor opens `id`, starts a copy of `from`, or, with neither, starts a new
  * one. What's new returns to `from` when closed, or to Home; License and Third-party Software
- * return to Settings → About. A document returns to `from` when closed, and is drafted from the
- * Conversation `draftFrom` when given. */
+ * return to Settings → About. A document returns to `from` when closed, is drafted from the
+ * Conversation `draftFrom` when given, and opens its Comments sheet on a reply's suggested
+ * `edits` (the threads they opened) when given. */
 export type View =
   | { kind: "home" }
   | { kind: "overview" }
   | { kind: "files" }
   | { kind: "conversation"; id: string; messageId?: string }
-  | { kind: "document"; assetId: string; from: View; draftFrom?: string; comments?: boolean }
+  | { kind: "document"; assetId: string; from: View; draftFrom?: string; edits?: string[] }
   | { kind: "settings"; page?: SettingsPageId }
   | { kind: "whats-new"; from?: View }
   | { kind: "license" }

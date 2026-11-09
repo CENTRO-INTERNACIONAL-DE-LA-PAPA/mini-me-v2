@@ -341,7 +341,7 @@ function Main({
               assetId,
               from: view,
               draftFrom: how === "draft" ? view.id : undefined,
-              comments: how === "comments",
+              edits: typeof how === "object" ? how.edits : undefined,
             })
           }
         />
@@ -360,10 +360,9 @@ function Main({
           projectId={project.id}
           assetId={view.assetId}
           draftFrom={view.draftFrom}
-          comments={view.comments}
+          edits={view.edits}
           back={back}
           onClose={() => onNavigate(from)}
-          onOpenConversation={(id) => onNavigate({ kind: "conversation", id })}
         />
       ) : null;
     }
