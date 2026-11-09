@@ -203,3 +203,28 @@ that Conversation. With no Conversations, the group SHALL be left out.
 #### Scenario: Nothing running
 - **WHEN** no reply in a recent Conversation is running or paused
 - **THEN** its row shows its Project's name and time, as before
+
+### Requirement: Project cards show their activity
+Each Project card on Home SHALL show, besides the Project's name:
+- "Running now" while a reply runs in the Project; otherwise "Updated <time>" from its latest
+  Conversation activity, or "Created <time>" for a Project without Conversations;
+- the avatars of up to four Mini-Mes that replied in it, the latest to reply first;
+- the first sentence of its Overview summary, as plain text, when one has been written.
+
+The Rust core SHALL read these from each `project.sqlite` without changing it, as for recent
+Conversations, leaving out comment threads. Home SHALL read them again each time the running
+replies change while it is shown.
+
+#### Scenario: An active Project
+- **WHEN** Theorist and Scribe replied in "Late blight resistance", Scribe last, and its summary
+  starts "Resistance held in three of five trials."
+- **THEN** its card shows Scribe's and Theorist's avatars, "Updated <time>" and "Resistance held
+  in three of five trials."
+
+#### Scenario: A reply running
+- **WHEN** a reply runs in "Late blight resistance" and the user is on Home
+- **THEN** its card shows "Running now", and "Updated <time>" once the reply ends
+
+#### Scenario: A new Project
+- **WHEN** a Project has no Conversations
+- **THEN** its card shows "Created <time>", no avatars and no summary

@@ -33,6 +33,7 @@ import type {
   ProjectSummary,
   ProtocolEvent,
   ProviderId,
+  ProjectActivity,
   RecentConversation,
   RunningReply,
   SavedDefinition,
@@ -89,6 +90,7 @@ export const api = {
     invoke<MessageStatus | null>("get_message_status", { project_id, message_id }),
   /** The most recently active Conversations across all Projects, newest first. */
   listRecentConversations: () => invoke<RecentConversation[]>("list_recent_conversations"),
+  listProjectActivity: () => invoke<ProjectActivity[]>("list_project_activity"),
 
 
   /** Opens the native file picker; resolves with the imported Assets (empty if cancelled). */

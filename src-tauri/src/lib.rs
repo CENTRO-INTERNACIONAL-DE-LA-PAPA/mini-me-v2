@@ -15,6 +15,7 @@ mod library;
 mod link;
 mod overview;
 mod paths;
+mod project_activity;
 mod projects;
 mod recent;
 mod protocol;
@@ -84,6 +85,7 @@ pub fn run() {
             ipc::list_paused_approvals,
             ipc::get_message_status,
             ipc::list_recent_conversations,
+            ipc::list_project_activity,
             ipc::subscribe_running_replies,
             ipc::import_assets,
             ipc::dataverse_search,
