@@ -42,6 +42,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let state = ipc::AppState::init(app.handle())?;
@@ -81,6 +82,7 @@ pub fn run() {
             ipc::stop_reply,
             ipc::answer_approval,
             ipc::list_paused_approvals,
+            ipc::get_message_status,
             ipc::list_recent_conversations,
             ipc::subscribe_running_replies,
             ipc::import_assets,

@@ -25,7 +25,8 @@ use crate::features::{self, FEATURES, FeatureFlag};
 use crate::projects::{self, ProjectSummary};
 use crate::recent::{self, RecentConversation};
 use crate::protocol::{
-    AssetRef, Author, AuthorKind, Event, Message, OpenedConversation, new_id, now_ms,
+    AssetRef, Author, AuthorKind, Event, Message, MessageStatus, OpenedConversation, new_id,
+    now_ms,
 };
 use crate::history::HISTORY_BUDGET_CHARS;
 use crate::library::{MiniMe, MiniMeSummary, TraitSummary};
@@ -793,6 +794,19 @@ pub async fn answer_approval(
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_paused_approvals(state: State<'_, AppState>) -> AppResult<Vec<PausedApproval>> {
     approvals::list(&state.data_root)
+}
+
+/// The status of the message `message_id`; none once it no longer exists. A reply's final
+/// status is stored before it leaves the running replies.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_message_status(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    message_id: Uuid,
+) -> AppResult<Option<MessageStatus>> {
+    let project = state.project(project_id)?;
+    let place = project.lock().message_place(message_id)?;
+    Ok(place.map(|(_, status)| status))
 }
 
 /// The most recently active Conversations across all Projects, newest first.
