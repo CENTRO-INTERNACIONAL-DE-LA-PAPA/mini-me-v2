@@ -176,11 +176,6 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
           </TableBody>
         </Table>
       </div>
-
-      <p className="flex items-center gap-2 text-meta text-muted-foreground">
-        <span aria-hidden className="size-[7px] rounded-full bg-success" />
-        Every file here is stored on this computer, in the Project's folder.
-      </p>
     </SheetPage>
   );
 }

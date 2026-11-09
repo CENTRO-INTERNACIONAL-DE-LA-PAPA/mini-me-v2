@@ -212,6 +212,9 @@ export const api = {
   getDebugRecords: <T>(project_id: Uuid, message_id: Uuid, kind: string) =>
     invoke<T[]>("get_debug_records", { project_id, message_id, kind }),
   /** Shows the file in the system's file manager. */
+  /** Saves a table's rows, written as CSV, as a file of the Project named after `title`. */
+  saveTableCsv: (project_id: Uuid, title: string, csv: string) =>
+    invoke<AssetRef>("save_table_csv", { project_id, title, csv }),
   revealAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("reveal_asset", { project_id, asset_id }),
   /** Whether Quarto is usable, its version and where it is, as last looked up: when the app

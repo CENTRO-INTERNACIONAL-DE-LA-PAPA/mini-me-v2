@@ -101,6 +101,7 @@ pub fn run() {
             ipc::update_overview_summary,
             ipc::test_model,
             ipc::open_asset,
+            ipc::save_table_csv,
             ipc::rename_asset,
             ipc::duplicate_asset,
             ipc::delete_asset,
