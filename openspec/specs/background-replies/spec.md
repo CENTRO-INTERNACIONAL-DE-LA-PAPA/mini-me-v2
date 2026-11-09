@@ -69,3 +69,20 @@ Project first when it belongs to another one.
 - **WHEN** the user clicks Researcher's reply from "Late blight resistance" while another
   Project is open
 - **THEN** "Late blight resistance" is opened and "Literature" is shown at Researcher's reply
+
+### Requirement: Notifying when a reply ends out of view
+When a reply leaves the running replies because it completed, failed or paused at an approval,
+and the window is not focused or its Conversation is not the open one, the app SHALL send a
+desktop notification titled with the Conversation's title, saying which Mini-Me and what
+happened ("Theorist replied", "Theorist's reply failed", "Theorist needs your approval"). A
+cancelled reply SHALL NOT notify. When the Conversation was not the open one, the sidebar SHALL
+mark it with a dot until it is opened; the marks are not kept across restarts.
+
+#### Scenario: Theorist finishes in another Conversation
+- **WHEN** Theorist's reply in "Literature" completes while the user is in "Trial design"
+- **THEN** a notification titled "Literature" says "Theorist replied", and
+  "Literature" has a dot in the sidebar until the user opens it
+
+#### Scenario: Watching the reply
+- **WHEN** the reply completes in the open Conversation while the window is focused
+- **THEN** no notification is sent and no dot is shown

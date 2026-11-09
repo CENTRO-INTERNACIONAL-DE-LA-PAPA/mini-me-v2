@@ -21,6 +21,7 @@ import type {
   FeatureFlag,
   HomeSettings,
   Message,
+  MessageStatus,
   MiniMe,
   MiniMeDefinition,
   OpenedDocument,
@@ -83,6 +84,9 @@ export const api = {
     invoke<void>("answer_approval", { project_id, message_id, component_id, approved }),
   /** Every reply paused at an approval, across all Projects, newest first. */
   listPausedApprovals: () => invoke<PausedApproval[]>("list_paused_approvals"),
+  /** The status of a message; null once it no longer exists. */
+  getMessageStatus: (project_id: Uuid, message_id: Uuid) =>
+    invoke<MessageStatus | null>("get_message_status", { project_id, message_id }),
   /** The most recently active Conversations across all Projects, newest first. */
   listRecentConversations: () => invoke<RecentConversation[]>("list_recent_conversations"),
 

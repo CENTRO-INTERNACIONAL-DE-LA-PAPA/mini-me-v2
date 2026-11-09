@@ -3,6 +3,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
 import { useDeveloperMode } from "./hooks/useDeveloperMode";
 import { useFilesChanged } from "./hooks/useFilesChanged";
+import { useReplyNotifications } from "./hooks/useReplyNotifications";
 import { useRunningKey } from "./hooks/useRunningReplies";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/chat/ChatView";
@@ -75,6 +76,7 @@ export default function App() {
   // A Conversation's status, shown in the sidebar, follows its reply as it runs, pauses and ends;
   // the file count also follows files added without a reply, such as a download.
   const runningKey = useRunningKey();
+  const unseen = useReplyNotifications(view.kind === "conversation" ? view.id : null);
   const filesChanged = useFilesChanged(projectId);
   useEffect(() => {
     refreshConversations();
@@ -172,6 +174,7 @@ export default function App() {
         project={project}
         projects={projects}
         conversations={conversations}
+        unseen={unseen}
         fileCount={fileCount}
         onOpenProject={openProject}
         onNavigate={navigate}
