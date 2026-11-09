@@ -12,7 +12,7 @@ const PARTS: { part: ThirdPartyComponent["part"]; title: string }[] = [
 
 const anchor = (index: number) => `third-party-${index}`;
 
-/** Mini-Me's license and the third-party software this build ships, from Settings → About: a
+/** The third-party software this build ships, from Settings → About: a
  * table of contents by part of the app, then each component with its license texts. Its column
  * is centred in the sheet, like What's new. */
 export function ThirdPartyView({ onClose }: { onClose: () => void }) {
@@ -51,14 +51,6 @@ export function ThirdPartyView({ onClose }: { onClose: () => void }) {
       )}
       {list && (
         <>
-          <section className="grid gap-2">
-            <pre className="font-mono text-meta whitespace-pre-wrap text-foreground">
-              {list.notice}
-            </pre>
-            <pre className="font-mono text-meta whitespace-pre-wrap text-muted-foreground">
-              {list.license}
-            </pre>
-          </section>
           <nav aria-label="Contents" className="grid gap-4">
             {PARTS.map(({ part, title }) => (
               <div key={part} className="grid gap-1">

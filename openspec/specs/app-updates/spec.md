@@ -127,13 +127,22 @@ the app remembered a version SHALL be treated as updated.
 - **WHEN** the user closes the What's new page
 - **THEN** the app shows what it showed before it, or Home
 
+### Requirement: License page
+Settings → About SHALL have a "License" row, above "Third-party Software", that opens a page
+inside Mini-Me showing Mini-Me's own notice and license. The texts SHALL be built into the app,
+so the page shows them in every build, development builds included.
+
+#### Scenario: Reading Mini-Me's license
+- **WHEN** the user opens "License" in Settings → About
+- **THEN** the page shows Mini-Me's notice and the GNU General Public License, version 3 or later
+
 ### Requirement: Third-party Software page
 Settings → About SHALL have a "Third-party Software" row that opens a page inside Mini-Me. The
-page SHALL show Mini-Me's notice and license, then a table of contents of the third-party
-components grouped by part of the app (core, interface, AI runtime), then a section for each
-component with its name, version, a link to its repository when it has one, and its license
-text. Clicking an entry of the table of contents SHALL go to its section. In a build without
-the file, such as a development build, the page SHALL say the list comes with released builds.
+page SHALL show a table of contents of the third-party components grouped by part of the app
+(core, interface, AI runtime), then a section for each component with its name, version, a link
+to its repository when it has one, and its license text. Clicking an entry of the table of
+contents SHALL go to its section. In a build without the file, such as a development build, the
+page SHALL say the list comes with released builds.
 
 #### Scenario: Finding a license
 - **WHEN** the user opens "Third-party Software" in a released build and clicks `pandas` in the

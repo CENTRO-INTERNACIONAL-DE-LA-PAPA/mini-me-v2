@@ -79,18 +79,20 @@ const PAGES: Section<Page>[] = [
 ];
 
 /** `onOpenAvatars` opens the avatar parts page, a developer option, `onOpenWhatsNew` the page
- * of the version's changes, and `onOpenThirdParty` the third-party software page. Settings opens
- * at `initialPage`, General unless given. `projectId` is the open Project, whose debug records
- * the Developer page can clear. */
+ * of the version's changes, `onOpenLicense` Mini-Me's license, and `onOpenThirdParty` the
+ * third-party software page. Settings opens at `initialPage`, General unless given. `projectId`
+ * is the open Project, whose debug records the Developer page can clear. */
 export function SettingsView({
   onOpenAvatars,
   onOpenWhatsNew,
+  onOpenLicense,
   onOpenThirdParty,
   initialPage = "general",
   projectId,
 }: {
   onOpenAvatars: () => void;
   onOpenWhatsNew: () => void;
+  onOpenLicense: () => void;
   onOpenThirdParty: () => void;
   initialPage?: Page;
   projectId?: string;
@@ -138,7 +140,11 @@ export function SettingsView({
           />
         )}
         {shown === "about" && (
-          <AboutPage onOpenWhatsNew={onOpenWhatsNew} onOpenThirdParty={onOpenThirdParty} />
+          <AboutPage
+            onOpenWhatsNew={onOpenWhatsNew}
+            onOpenLicense={onOpenLicense}
+            onOpenThirdParty={onOpenThirdParty}
+          />
         )}
       </div>
     </SectionPage>
@@ -514,9 +520,11 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
 
 function AboutPage({
   onOpenWhatsNew,
+  onOpenLicense,
   onOpenThirdParty,
 }: {
   onOpenWhatsNew: () => void;
+  onOpenLicense: () => void;
   onOpenThirdParty: () => void;
 }) {
   return (
@@ -545,6 +553,14 @@ function AboutPage({
               CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2
             </a>
           </span>
+        </SettingRow>
+        <SettingRow
+          label="License"
+          description="The GNU General Public License, version 3 or later."
+        >
+          <Button variant="secondary" onClick={onOpenLicense}>
+            Show
+          </Button>
         </SettingRow>
         <SettingRow
           label="Third-party Software"
