@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ComponentReferencesProvider } from "./component-references";
-import { TableView } from "./table";
+import { TableView, tableText } from "./table";
 
 const data = {
   columns: [
@@ -62,6 +62,27 @@ describe("table version 1", () => {
     );
     expect(html).toContain('aria-label="Add $trial to the message"');
     const outside = renderToStaticMarkup(<TableView data={data} componentId="t1" />);
-    expect(outside).not.toContain("<header");
+    expect(outside).not.toContain("Add $trial");
+  });
+});
+
+describe("tableText", () => {
+  const columns = [
+    { name: "plot", type: "text" as const },
+    { name: "yield", type: "number" as const },
+  ];
+  const rows = [
+    ["a, north", 1200.5],
+    ['say "hi"\tnow', null],
+  ];
+
+  it("writes tab-separated text for a spreadsheet, values as stored", () => {
+    expect(tableText(columns, rows, "tsv")).toBe('plot\tyield\na, north\t1200.5\nsay "hi" now\t');
+  });
+
+  it("quotes CSV fields that need it", () => {
+    expect(tableText(columns, rows, "csv")).toBe(
+      'plot,yield\r\n"a, north",1200.5\r\n"say ""hi""\tnow",',
+    );
   });
 });

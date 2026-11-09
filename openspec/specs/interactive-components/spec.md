@@ -187,13 +187,35 @@ for `null`, a scrollable body, and sorting by clicking a column header.
 ### Requirement: Table previews
 When a `table` component's `total_rows` is larger than its number of rows, it is a preview
 and `source` names the Asset holding the full table. The UI SHALL then say "Showing n of m
-rows" and name the source Asset.
+rows" and name the source Asset; when the component has `source_id` and belongs to a Project,
+clicking the name SHALL open that Asset in the system's default app.
 
 #### Scenario: Preview of a large table
 - **WHEN** a component holds 500 rows with `total_rows` 12,340 and `source`
   `field-trial-cleaned.csv`
 - **THEN** the table shows the 500 rows and "Showing 500 of 12,340 rows", naming
   `field-trial-cleaned.csv`
+
+#### Scenario: Opening the full table
+- **WHEN** the user clicks `field-trial-cleaned.csv` in "Showing 500 of 12,340 rows"
+- **THEN** `field-trial-cleaned.csv` opens in the system's default app for CSV files
+
+### Requirement: Copying and saving a table
+A `table` component SHALL have a "…" menu in its header with "Copy table", which puts its
+header and the rows it shows, in their current order, on the clipboard as tab-separated text,
+and, when it belongs to a Project, "Save to Files", which saves the same rows as a CSV file of
+the Project, named after the table's title (or `Table`) and added by the user. Values SHALL be
+written as stored, without the display's thousands separators. The header SHALL say briefly
+what happened ("Copied", "Saved as <name>") or why it failed.
+
+#### Scenario: Pasting into a spreadsheet
+- **WHEN** the user picks "Copy table" on a table sorted by `yield` and pastes into Excel
+- **THEN** the header and rows land in separate cells, in the order shown
+
+#### Scenario: Saving a preview
+- **WHEN** the user picks "Save to Files" on "Yield by variety", a preview of 500 of 12,340 rows
+- **THEN** `Yield by variety.csv` with those 500 rows is added to the Project's Files, and the
+  header says "Saved as Yield by variety.csv"
 
 ### Requirement: Approval component
 The data of `approval` version 1 SHALL be `{ step_id, prompt }`, and its `text` the prompt.

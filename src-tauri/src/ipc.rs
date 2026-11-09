@@ -1386,6 +1386,20 @@ pub async fn open_asset(
         .map_err(|e| AppError::new("open_failed", e.to_string()))
 }
 
+/// Saves a table's rows, already written as CSV, as a file of the Project named after `title`,
+/// added by the user.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn save_table_csv(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    title: String,
+    csv: String,
+) -> AppResult<AssetRef> {
+    let project = state.project(project_id)?;
+    let name = assets::table_file_name(&title);
+    assets::import_bytes(&project, &name, "text/csv", csv.as_bytes(), &state.user())
+}
+
 /// Starts a comment thread on the passage `start..end` of the document `asset_id`, which reads
 /// `quote`. Its comments are sent with `send_message` on its `conversation_id`.
 #[tauri::command(rename_all = "snake_case")]

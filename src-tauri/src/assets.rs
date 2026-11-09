@@ -186,6 +186,24 @@ pub fn import_bytes(
     store(project, name, media_type, bytes, ("upload", user))
 }
 
+/// The file name a table's rows are saved under: its title made safe for a file name, or
+/// `Table` without one, with `.csv`. A title that is a table file's name, as for a table shown
+/// from a file, loses its extension, so `trial.csv` is not saved as `trial.csv.csv`.
+pub fn table_file_name(title: &str) -> String {
+    let title = title.trim();
+    let lower = title.to_lowercase();
+    let title = [".csv", ".tsv", ".xlsx", ".xls"]
+        .iter()
+        .find(|extension| lower.ends_with(*extension) && lower.len() > extension.len())
+        .map_or(title, |extension| &title[..title.len() - extension.len()]);
+    let stem = if title.is_empty() {
+        "Table".to_string()
+    } else {
+        crate::projects::folder_name(title)
+    };
+    format!("{stem}.csv")
+}
+
 /// The name of a pasted image: the clipboard's file name when it gives a usable one, else
 /// `Pasted image` with the usual extension of `media_type`.
 pub fn pasted_name(clipboard_name: &str, media_type: &str) -> String {
@@ -828,6 +846,15 @@ mod tests {
             })
             .unwrap();
         assert_eq!(source, "upload");
+    }
+
+    #[test]
+    fn a_table_is_saved_under_its_title_made_safe() {
+        assert_eq!(table_file_name("Yield by variety"), "Yield by variety.csv");
+        assert_eq!(table_file_name("Plots 1/2"), "Plots 1-2.csv");
+        assert_eq!(table_file_name("  "), "Table.csv");
+        assert_eq!(table_file_name("field-trial.csv"), "field-trial.csv");
+        assert_eq!(table_file_name("Harvest.XLSX"), "Harvest.csv");
     }
 
     #[test]
