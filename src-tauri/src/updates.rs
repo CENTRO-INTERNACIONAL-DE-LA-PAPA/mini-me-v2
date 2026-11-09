@@ -4,6 +4,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+#[cfg(target_os = "macos")]
+use core_foundation::{base::TCFType, url::CFURL, url::CFURLRef};
 use serde::Serialize;
 use tauri::AppHandle;
 use tauri_plugin_updater::{Update, UpdaterExt};
@@ -27,6 +29,32 @@ type StatusSink = Box<dyn Fn(&UpdateStatus) -> bool + Send>;
 fn percent(downloaded: u64, total: Option<u64>) -> Option<u8> {
     let total = total.filter(|&t| t > 0)?;
     Some((downloaded.min(total) * 100 / total) as u8)
+}
+
+#[cfg(target_os = "macos")]
+#[link(name = "CoreServices", kind = "framework")]
+unsafe extern "C" {
+    fn LSRegisterURL(url: CFURLRef, update: u8) -> i32;
+}
+
+/// Makes LaunchServices re-read the app bundle after an update. The restart goes through
+/// `open`, which launches the version LaunchServices has on record, and that record keeps the
+/// replaced version until something refreshes it.
+#[cfg(target_os = "macos")]
+fn register_bundle(log: &SidecarLog) {
+    // The executable is at <bundle>.app/Contents/MacOS/<name>.
+    let bundle = tauri::utils::platform::current_exe()
+        .ok()
+        .and_then(|exe| exe.ancestors().nth(3).map(|p| p.to_path_buf()))
+        .filter(|p| p.extension().is_some_and(|e| e == "app"));
+    let Some(url) = bundle.and_then(|b| CFURL::from_path(b, true)) else {
+        log.line("update: app bundle not found, LaunchServices not refreshed");
+        return;
+    };
+    let status = unsafe { LSRegisterURL(url.as_concrete_TypeRef(), 1) };
+    if status != 0 {
+        log.line(&format!("update: LaunchServices refresh failed ({status})"));
+    }
 }
 
 pub struct Updates {
@@ -87,7 +115,11 @@ impl Updates {
         };
         self.log.line(&format!("update: installing {}", update.version));
         match update.install(bytes) {
-            Ok(()) => true,
+            Ok(()) => {
+                #[cfg(target_os = "macos")]
+                register_bundle(&self.log);
+                true
+            }
             Err(e) => {
                 self.log.line(&format!("update: install failed: {e}"));
                 false

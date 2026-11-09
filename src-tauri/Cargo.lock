@@ -2397,6 +2397,7 @@ name = "mini-me"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "core-foundation 0.10.1",
  "diffy",
  "keyring",
  "libc",
