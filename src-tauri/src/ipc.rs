@@ -113,6 +113,7 @@ impl AppState {
         let profile = ProfileStore::open(&config_dir);
         let ai2 = Ai2::system();
         let app_version = app.package_info().version.to_string();
+        log.line(&format!("start: Mini-Me {app_version}"));
         let settings = Settings::load_or_create(&config_dir, &app_version)?;
         let quarto = Arc::new(quarto::Known::new(settings.quarto_path.clone()));
         // Looked up now, in the background, so a document does not wait for it.

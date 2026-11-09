@@ -82,7 +82,7 @@ describe("thirdParty", () => {
   });
 
   it("keeps each text once and sorts components by part and name", () => {
-    const file = thirdParty("notice", "gpl", [
+    const file = thirdParty([
       component("serde", "MIT", ["MIT text"]),
       component("anyhow", "MIT", ["MIT text"]),
     ]);
@@ -94,6 +94,6 @@ describe("thirdParty", () => {
   });
 
   it("fails naming the components that declare no license", () => {
-    expect(() => thirdParty("n", "l", [component("mystery", null, [])])).toThrow("mystery 1.0.0");
+    expect(() => thirdParty([component("mystery", null, [])])).toThrow("mystery 1.0.0");
   });
 });

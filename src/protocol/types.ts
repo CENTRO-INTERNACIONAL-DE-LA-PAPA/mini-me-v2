@@ -542,9 +542,6 @@ export interface ReplyDebugSettings {
 
 /** The third-party software a release build ships (`scripts/third-party.mjs`). */
 export interface ThirdParty {
-  /** Mini-Me's own NOTICE and license. */
-  notice: string;
-  license: string;
   /** Each distinct license or notice text once; components refer to them by index. */
   texts: string[];
   /** Sorted by part, then name. */

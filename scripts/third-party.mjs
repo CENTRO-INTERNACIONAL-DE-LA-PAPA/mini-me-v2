@@ -1,7 +1,7 @@
-// Writes `src-tauri/resources/third-party.json` for a release build: Mini-Me's notice and
-// license, then every third-party component the app ships with its license texts, which
-// Settings → About shows as "Third-party Software". Run after `npm run bundle-sidecar`, since
-// the Python packages are read from the sidecar bundle. Run with `npm run third-party`.
+// Writes `src-tauri/resources/third-party.json` for a release build: every third-party
+// component the app ships with its license texts, which Settings → About shows as "Third-party
+// Software". Run after `npm run bundle-sidecar`, since the Python packages are read from the
+// sidecar bundle. Run with `npm run third-party`.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -138,11 +138,7 @@ function pythonExecutable(python) {
   return process.platform === "win32" ? join(python, "python.exe") : join(python, "bin", "python3");
 }
 
-const file = thirdParty(read(join(ROOT, "NOTICE")).trim(), read(join(ROOT, "LICENSE")).trim(), [
-  ...crates(),
-  ...npmPackages(),
-  ...pythonPackages(),
-]);
+const file = thirdParty([...crates(), ...npmPackages(), ...pythonPackages()]);
 writeFileSync(OUT, JSON.stringify(file));
 const count = (part) => file.components.filter((c) => c.part === part).length;
 console.log(
