@@ -66,21 +66,14 @@ Clicking a row SHALL open the thread view.
 ### Requirement: The thread view
 The thread view SHALL replace the list in the Comments sheet, with "All comments" to go back,
 "N of M open" with buttons for the previous and next thread, the thread's number and where its
-passage is ("Hypothesis, bullet 3"), who opened it and when with Resolve (Reopen once resolved)
-and Delete, its comments and replies, and for an
-open thread a one-line field to comment with the @ list of Mini-Mes. The field SHALL start
-empty, so a comment is a note unless the user @-mentions a Mini-Me. A thread the user started
-SHALL say "Opened by you"; a thread opened from a Conversation SHALL name the Mini-Me and the
-Conversation ("Opened by Scribe from Trial design"), and clicking the Conversation's name
-SHALL open it. When that Conversation has been deleted, the thread SHALL name only the Mini-Me.
+passage is ("Hypothesis, bullet 3") with a "…" menu beside them holding Resolve (Reopen once
+resolved) and Delete, its comments and replies, and for an open thread a one-line field to
+comment with the @ list of Mini-Mes. The field SHALL start empty, so a comment is a note unless
+the user @-mentions a Mini-Me.
 
 #### Scenario: Replying after Scribe
 - **WHEN** Scribe has replied in a thread and the user sends "make it shorter still"
 - **THEN** the comment is a note, and Scribe is asked only if the user @-mentions it
-
-#### Scenario: Back to the Conversation
-- **WHEN** the user opens a thread Scribe opened from "Trial design" and clicks "Trial design"
-- **THEN** the Conversation "Trial design" is shown
 
 ### Requirement: Passages and number badges in the source
 An open thread's passage SHALL show a faint underline and, right after it, a badge with the
@@ -212,3 +205,17 @@ SHALL NOT run in the thread until the user @-mentions it there.
 #### Scenario: Asking again in such a thread
 - **WHEN** the user comments "@Scribe keep the second sentence" in one of those threads
 - **THEN** Scribe answers in the thread like in any other thread
+
+### Requirement: Answering a reply's edits at once
+Opening the document from a reply's suggested-edits card SHALL show, above the Comments sheet's
+list, how many of that reply's edits still wait, with Accept all and Discard all while any do.
+Accept all SHALL accept each waiting suggestion of that reply as "Accept and resolve" does,
+continuing past one that conflicts with the user's edits or whose passage is lost, and then name
+the ones left waiting. Discard all SHALL discard each waiting suggestion of that reply, leaving
+the document and the threads open.
+
+#### Scenario: Accepting all with one conflict
+- **WHEN** Scribe's reply suggested three edits, the user has rewritten the passage of the
+  second, and the user clicks Accept all
+- **THEN** the first and third are applied and their threads resolved, and the second stays
+  waiting and is named under "Not applied"

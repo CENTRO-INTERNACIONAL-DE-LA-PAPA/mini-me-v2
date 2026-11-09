@@ -34,9 +34,9 @@ interface Props {
   onRename: (title: string) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
-  /** Opens a document: to be drafted from this Conversation, with its Comments sheet showing,
-   * or as it is. */
-  onOpenDocument: (assetId: Uuid, how?: "draft" | "comments") => void;
+  /** Opens a document: to be drafted from this Conversation, with the Comments sheet showing a
+   * reply's suggested edits (the threads they opened), or as it is. */
+  onOpenDocument: (assetId: Uuid, how?: "draft" | { edits: Uuid[] }) => void;
 }
 
 export function ChatView({
@@ -108,8 +108,8 @@ export function ChatView({
   const openDocumentRef = useRef(onOpenDocument);
   openDocumentRef.current = onOpenDocument;
   const openDocument = useCallback(
-    (assetId: Uuid, comments?: boolean) =>
-      openDocumentRef.current(assetId, comments ? "comments" : undefined),
+    (assetId: Uuid, edits?: Uuid[]) =>
+      openDocumentRef.current(assetId, edits ? { edits } : undefined),
     [],
   );
   /** Files are being dragged over the window. */

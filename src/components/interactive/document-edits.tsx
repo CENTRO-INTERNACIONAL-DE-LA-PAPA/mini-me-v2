@@ -52,7 +52,7 @@ function DocumentEditsV1({ data, projectId }: RendererProps) {
       title={title || "Untitled document"}
       meta={editsWaiting(waiting, threads.length)}
       removed={removed || !assetId}
-      onOpen={() => assetId && openDocument?.(assetId, true)}
+      onOpen={() => assetId && openDocument?.(assetId, threads)}
     />
   );
 }
