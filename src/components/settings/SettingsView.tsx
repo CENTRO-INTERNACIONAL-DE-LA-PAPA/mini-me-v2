@@ -80,9 +80,8 @@ const PAGES: Section<Page>[] = [
 
 /** `onOpenAvatars` opens the avatar parts page, a developer option, `onOpenWhatsNew` the page
  * of the version's changes, `onOpenLicense` Mini-Me's license, and `onOpenThirdParty` the
- * third-party software page. Settings opens
- * at `initialPage`, General unless given. `projectId` is the open Project, whose debug records
- * the Developer page can clear. */
+ * third-party software page. Settings opens at `initialPage`, General unless given. `projectId`
+ * is the open Project, whose debug records the Developer page can clear. */
 export function SettingsView({
   onOpenAvatars,
   onOpenWhatsNew,
