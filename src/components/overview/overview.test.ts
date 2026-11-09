@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Overview, OverviewOutput } from "../../protocol/types";
-import { findNamed, headerLine, shownOutputs, summaryParts } from "./overview";
+import { findNamed, headerLine, shownOutputs, summaryLine, summaryParts } from "./overview";
 
 const now = new Date(2026, 9, 21, 15, 0).getTime();
 const base: Overview = {
@@ -65,5 +65,17 @@ describe("findNamed", () => {
 
   it("finds nothing for a name the Project does not have", () => {
     expect(findNamed("old.csv", [file], [chart])).toBeUndefined();
+  });
+});
+
+describe("summaryLine", () => {
+  it("keeps the first sentence, with names unmarked", () => {
+    expect(summaryLine("Yield rose in [trial.csv](). Two plots are pending.")).toBe(
+      "Yield rose in trial.csv.",
+    );
+  });
+
+  it("keeps a summary without an ending whole", () => {
+    expect(summaryLine("Yield rose")).toBe("Yield rose");
   });
 });

@@ -43,6 +43,15 @@ export function summaryParts(summary: string): SummaryPart[] {
   return parts;
 }
 
+/** The summary's first sentence as plain text, names unmarked, for a line on Home's card. */
+export function summaryLine(summary: string): string {
+  const text = summaryParts(summary)
+    .map((part) => part.text)
+    .join("")
+    .trim();
+  return text.match(/^[\s\S]*?[.!?](?=\s|$)/)?.[0] ?? text;
+}
+
 /** A name as `$` references write it: other characters than letters, digits, `.`, `_` and `-`
  * become `-`, a run of `-` one, and case is ignored. */
 const asReference = (name: string) =>

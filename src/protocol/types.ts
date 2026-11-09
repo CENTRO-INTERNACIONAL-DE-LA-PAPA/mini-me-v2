@@ -482,6 +482,17 @@ export interface RecentConversation {
   status: ConversationStatus | null;
 }
 
+/** What a Project's card on Home shows beyond its name. */
+export interface ProjectActivity {
+  project_id: Uuid;
+  /** Unix ms of the latest activity in its Conversations; null without Conversations. */
+  last_activity_at: number | null;
+  /** The Mini-Mes that replied in it, the latest to reply first; at most four. */
+  mini_mes: Uuid[];
+  /** The Overview's summary as stored, with names marked as `[name]()`. */
+  summary: string | null;
+}
+
 /** What arrives while Scribe drafts a document: some text, or the draft's end. */
 export type DraftEvent =
   | { type: "delta"; text: string }

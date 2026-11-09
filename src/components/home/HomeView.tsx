@@ -4,12 +4,19 @@ import { Input } from "@/components/ui/input";
 import { PlusIcon } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, errorMessage } from "../../api";
-import type { PausedApproval, ProjectSummary, Uuid } from "../../protocol/types";
-import { formatRelative } from "../../lib/format";
+import type {
+  MiniMe,
+  PausedApproval,
+  ProjectActivity,
+  ProjectSummary,
+  Uuid,
+} from "../../protocol/types";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
+import { relativeInSentence, summaryLine } from "../overview/overview";
 import { SheetSection } from "../shell/Sheet";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { useRunningReplies } from "../../hooks/useRunningReplies";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { firstName } from "../../lib/names";
 
@@ -33,6 +40,21 @@ export function HomeView({ projects, onOpen, onCreate, onOpenReply }: Props) {
   const name = useUserProfile()?.name;
   // The "New project" tile is showing its name field; the header button opens it too.
   const [creating, setCreating] = useState(false);
+  const miniMes = useMiniMes();
+  const running = useRunningReplies();
+  const [activity, setActivity] = useState<ReadonlyMap<Uuid, ProjectActivity>>(new Map());
+  // Read again whenever a reply starts or stops, which changes a Project's activity.
+  const replies = running.map((reply) => reply.message_id).join();
+  useEffect(() => {
+    let active = true;
+    api
+      .listProjectActivity()
+      .then((list) => active && setActivity(new Map(list.map((a) => [a.project_id, a]))))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [replies, projects]);
   return (
     <main className="flex w-full flex-col gap-10 px-14 py-12">
       <header className="flex flex-wrap items-end justify-between gap-6">
@@ -56,7 +78,13 @@ export function HomeView({ projects, onOpen, onCreate, onOpenReply }: Props) {
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
           {projects.map((project) => (
             <li key={project.id}>
-              <ProjectCard project={project} onOpen={() => onOpen(project)} />
+              <ProjectCard
+                project={project}
+                activity={activity.get(project.id)}
+                running={running.some((reply) => reply.project_id === project.id)}
+                miniMes={miniMes}
+                onOpen={() => onOpen(project)}
+              />
             </li>
           ))}
           <li>
@@ -72,17 +100,48 @@ export function HomeView({ projects, onOpen, onCreate, onOpenReply }: Props) {
   );
 }
 
-function ProjectCard({ project, onOpen }: { project: ProjectSummary; onOpen: () => void }) {
+function ProjectCard({
+  project,
+  activity,
+  running,
+  miniMes,
+  onOpen,
+}: {
+  project: ProjectSummary;
+  activity?: ProjectActivity;
+  running: boolean;
+  miniMes: MiniMe[];
+  onOpen: () => void;
+}) {
+  const when = running
+    ? "Running now"
+    : activity?.last_activity_at
+      ? `Updated ${relativeInSentence(activity.last_activity_at)}`
+      : `Created ${relativeInSentence(project.created_at)}`;
+  const summary = activity?.summary ? summaryLine(activity.summary) : null;
   return (
     <Card
       render={<button type="button" onClick={onOpen} />}
       className="h-full w-full cursor-pointer justify-between gap-7 p-5 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring"
     >
-      <span className="self-end text-meta text-muted-foreground">
-        {formatRelative(project.created_at)}
+      <span className="flex items-center justify-between gap-3">
+        <span className="flex gap-0">
+          {activity?.mini_mes.map((id) => {
+            const miniMe = miniMes.find((m) => m.id === id);
+            return (
+              <span key={id} title={miniMe?.name}>
+                <MiniMeAvatar miniMe={miniMe} size={22} />
+              </span>
+            );
+          })}
+        </span>
+        <span className="shrink-0 text-meta text-muted-foreground">{when}</span>
       </span>
-      <span className="font-serif text-card-title font-medium text-foreground">
-        {project.name}
+      <span className="grid gap-1">
+        <span className="font-serif text-card-title font-medium text-foreground">
+          {project.name}
+        </span>
+        {summary && <span className="line-clamp-2 text-meta text-muted-foreground">{summary}</span>}
       </span>
     </Card>
   );

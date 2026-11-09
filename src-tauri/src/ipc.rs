@@ -23,6 +23,7 @@ use crate::documents;
 use crate::error::{AppError, AppResult};
 use crate::features::{self, FEATURES, FeatureFlag};
 use crate::projects::{self, ProjectSummary};
+use crate::project_activity::{self, ProjectActivity};
 use crate::recent::{self, RecentConversation};
 use crate::protocol::{
     AssetRef, Author, AuthorKind, Event, Message, MessageStatus, OpenedConversation, new_id,
@@ -821,6 +822,12 @@ pub async fn list_recent_conversations(
             runs::running_status(&running, conversation.project_id, conversation.conversation_id);
     }
     Ok(list)
+}
+
+/// What Home's Project cards show beyond each Project's name.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn list_project_activity(state: State<'_, AppState>) -> AppResult<Vec<ProjectActivity>> {
+    project_activity::list(&state.data_root)
 }
 
 /// Sends the running replies now and the whole list again each time it changes.
