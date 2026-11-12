@@ -23,12 +23,11 @@ export const useOpenDocument = () => useContext(OpenDocumentContext);
 interface OpenFileOptions {
   /** Opens documents where there is no Conversation's document view. */
   openDocument?: (assetId: string) => void;
-  /** Hears why the system's default app could not open a file; failures are dropped without it. */
+  /** Gets why the system's default app failed; without it, failures are dropped. */
   onError?: (e: unknown) => void;
 }
 
-/** Opens a file in the document view when `asDocument` and a document view is at hand, else in
- * the system's default app. */
+/** Opens a file in the document view when `asDocument` and one is open, else in the system app. */
 export function useOpenFile(projectId: string | undefined, options: OpenFileOptions = {}) {
   const fromConversation = useOpenDocument();
   const latest = useRef(options);

@@ -110,7 +110,6 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
     })
 }
 
-/// The columns of the featured component and its message that `featured` reads, as stored.
 struct FeaturedRow {
     id: String,
     kind: String,
@@ -168,7 +167,6 @@ fn featured(conn: &Connection, id: &str) -> AppResult<Option<Featured>> {
     }))
 }
 
-/// The columns of a component output that `component_outputs` reads, as stored.
 struct ComponentOutputRow {
     kind: String,
     id: String,
@@ -234,7 +232,6 @@ struct GeneratedFile {
     created_at: i64,
 }
 
-/// The columns of a message with attachments that `file_outputs` reads, as stored.
 struct AttachingMessage {
     message: String,
     author_kind: String,
@@ -244,8 +241,7 @@ struct AttachingMessage {
     attachments: String,
 }
 
-/// Every file a Mini-Me saved that a message of the Project's Conversations attaches, in no set
-/// order. A file belongs to the first message that attaches it.
+/// Files Mini-Mes saved, each with the first message that attaches it, in no set order.
 fn file_outputs(conn: &Connection) -> AppResult<Vec<Output>> {
     let generated: HashMap<Uuid, GeneratedFile> = {
         let mut stmt =

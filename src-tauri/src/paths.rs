@@ -63,8 +63,7 @@ impl ProjectPaths {
     }
 }
 
-/// Writes `bytes` to `<path>.tmp`, then renames it over `path`, so a failed write leaves the
-/// previous file whole.
+/// Writes through `<path>.tmp`, so a failed write leaves the previous file whole.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");

@@ -1,5 +1,3 @@
-//! Lock helpers shared by the core's long-lived state.
-
 use std::sync::{Mutex, MutexGuard};
 
 /// Locks `mutex`, taking the value even if a thread panicked while holding it.

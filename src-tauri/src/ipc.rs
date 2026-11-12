@@ -190,8 +190,7 @@ impl AppState {
         self.updated_settings(change).map(drop)
     }
 
-    /// Like `update_settings`, but the settings stay locked, so what is applied from them sees no
-    /// later change.
+    /// Like `update_settings`, but returns the settings still locked.
     fn updated_settings(
         &self,
         change: impl FnOnce(&mut Settings),
@@ -202,7 +201,6 @@ impl AppState {
         Ok(settings)
     }
 
-    /// Stops the Conversation's running replies and cancels their runs.
     fn stop_replies(&self, project: &Project, conversation_id: Uuid) -> AppResult<()> {
         for message_id in conversations::stop_reply(project, conversation_id)? {
             self.runs.cancel_message(message_id);

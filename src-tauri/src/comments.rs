@@ -643,7 +643,7 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
     Ok(threads)
 }
 
-/// A row `threads_where` reads; `first_author_*` is the author of the thread's first message.
+/// `first_author_*` is the author of the thread's first message.
 struct ThreadRow {
     conversation_id: String,
     asset_id: String,

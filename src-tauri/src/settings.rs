@@ -189,7 +189,6 @@ impl Settings {
         self.developer_mode.unwrap_or(is_dev_app)
     }
 
-    /// The reply debug parts runs collect.
     pub fn reply_debug(&self, is_dev_app: bool) -> DebugParts {
         let on = self.developer_mode(is_dev_app);
         DebugParts {
@@ -199,7 +198,6 @@ impl Settings {
         }
     }
 
-    /// The feature flags that are on.
     pub fn active_features(&self, is_dev_app: bool) -> Vec<&'static Feature> {
         features::active(FEATURES, &self.unlocked_features, &self.locked_features, is_dev_app)
     }

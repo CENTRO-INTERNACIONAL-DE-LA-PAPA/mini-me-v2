@@ -23,11 +23,10 @@ pub enum AssetOrigin {
     Dataverse { file_id: u64, dataset_id: String, title: String, url: String },
 }
 
-/// Where an Asset's file came from, stored in the `source` column under its serialized name.
+/// Stored in the `source` column as its serialized name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AssetSource {
-    /// Imported or started by the user.
     Upload,
     /// Made by the app, such as a Mini-Me's output or an exported PDF.
     Generated,
@@ -377,7 +376,6 @@ fn media_type_of(name: &str) -> String {
     mime_guess::from_path(name).first_or_octet_stream().essence_str().to_string()
 }
 
-/// Adds a stored file to the registry.
 fn register(
     project: &Project,
     asset: AssetRef,
@@ -488,7 +486,6 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     Ok(entries)
 }
 
-/// The columns of an `assets` row `file_entries` reads, as stored.
 struct AssetRow {
     id: String,
     name: String,
@@ -550,7 +547,6 @@ fn file_entries(project: &Project, state: &ProjectState) -> AppResult<Vec<FileEn
     Ok(entries)
 }
 
-/// Fills each entry's `used_in` from the messages that attach or reference its Asset.
 fn add_used_in(state: &ProjectState, entries: &mut [FileEntry]) -> AppResult<()> {
     let index: HashMap<Uuid, usize> =
         entries.iter().enumerate().map(|(i, e)| (e.asset.id, i)).collect();

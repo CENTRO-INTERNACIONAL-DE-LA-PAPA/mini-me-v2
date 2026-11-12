@@ -720,14 +720,12 @@ impl Scope {
     }
 }
 
-/// A message by its Conversation's ID and its own.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MessageAt {
     pub conversation: Uuid,
     pub message: Uuid,
 }
 
-/// The columns of a `messages` row `messages_in` reads, as stored.
 struct MessageRow {
     id: String,
     conversation: String,
@@ -740,13 +738,12 @@ struct MessageRow {
     text_components: String,
 }
 
-/// The columns `ComponentRow::read` reads; `data` reads as `null` unless `with_data` is set.
+/// `data` reads as `null` unless `with_data` is set.
 fn component_columns(with_data: bool) -> String {
     let data = if with_data { "c.data" } else { "'null'" };
     format!("c.id, c.kind, c.version, {data}, c.text, c.answer, c.step_index")
 }
 
-/// The values of `component_columns`, as stored.
 struct ComponentRow {
     id: String,
     kind: String,
@@ -784,7 +781,6 @@ impl ComponentRow {
     }
 }
 
-/// The error for a stored `what` that cannot be read back: "stored `what` is not readable".
 pub(crate) fn unreadable(what: &str) -> AppError {
     AppError::storage(format!("stored {what} is not readable"))
 }
