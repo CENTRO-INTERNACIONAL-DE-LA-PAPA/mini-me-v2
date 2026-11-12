@@ -64,13 +64,14 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 
 ## 6. Rust: duplicates
 
-- [ ] 6.1 In `runs.rs`: delete the 6 tests covered elsewhere (`a_running_reply_gives_...`,
-  `every_run_lists_every_mini_me`, `a_dataverse_search_needs_a_query`, `a_paused_reply_is_not_running`,
-  `a_valid_component_is_added_to_the_reply`, `runs_without_ai_adapters_or_decisions_get_no_model`
-  folded into `a_missing_model_fails_...`); turn the 8 key-scope tests into 2 table tests (Trait
-  calls, other requests); merge the pairs listed in the scan; make `start_route` and
-  `start_summary` use `wait_for`; move the test `Recorder` into `runs::test_support` and use it
-  from `routing.rs` and `sidecar.rs`; verify with `cargo test`.
+- [x] 6.1 In `runs.rs`: delete the tests covered elsewhere (`a_paused_reply_is_not_running`,
+  `a_valid_component_is_added_to_the_reply`, `a_dataverse_search_needs_a_query`), fold
+  `runs_without_ai_adapters_or_decisions_get_no_model` into the missing-model test, and keep
+  `a_running_reply_gives_its_conversation_the_running_status` and `every_run_lists_every_mini_me`,
+  which nothing else covers; turn the 8 key-scope tests into 3 (Trait calls, decisions, requests
+  outside a run); merge the component refusals, the ended-call refusals and the two timeout tests;
+  make `start_route` and `start_summary` use `wait_for`; move the test `Recorder` into
+  `runs::test_support` and use it from `routing.rs` and `sidecar.rs`; verify with `cargo test`.
 - [ ] 6.2 In `routing.rs`: turn the 7 `decide` tests into one table test plus the files case,
   keep one of the two `file_options` checks, and import `SCRIBE` and `FALLBACK_MINI_ME` from
   `library` instead of re-declaring them; verify with `cargo test`.

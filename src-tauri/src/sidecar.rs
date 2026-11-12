@@ -723,6 +723,7 @@ fn exit(child: &Arc<Mutex<Child>>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runs::test_support::Recorder;
     use serde_json::json;
 
     #[test]
@@ -767,16 +768,6 @@ mod tests {
 
         assert!(check_protocol(1, 2, true).unwrap_err().contains("the sidecar is the stale side"));
         assert!(check_protocol(3, 2, true).unwrap_err().contains("the Rust core is the stale side"));
-    }
-
-    #[derive(Default)]
-    struct Recorder(Mutex<Vec<CoreFrame>>);
-
-    impl FrameSink for Recorder {
-        fn send(&self, frame: &CoreFrame) -> bool {
-            self.0.lock().unwrap().push(frame.clone());
-            true
-        }
     }
 
     fn line(value: serde_json::Value) -> Incoming {

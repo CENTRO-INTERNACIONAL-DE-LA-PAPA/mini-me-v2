@@ -523,6 +523,7 @@ mod tests {
     use crate::secrets::NoSecrets;
     use crate::sidecar::SidecarLog;
     use crate::runs::FrameSink;
+    use crate::runs::test_support::Recorder;
 
     const SCRIBE: Uuid = uuid::uuid!("5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01");
     const ASSISTANT: Uuid = uuid::uuid!("5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b03");
@@ -789,16 +790,6 @@ mod tests {
         );
         input.text_components[0].id = SCRIBE;
         assert!(check_mentions(&input, &library).is_ok());
-    }
-
-    #[derive(Default)]
-    struct Recorder(Mutex<Vec<CoreFrame>>);
-
-    impl FrameSink for Recorder {
-        fn send(&self, frame: &CoreFrame) -> bool {
-            self.0.lock().unwrap().push(frame.clone());
-            true
-        }
     }
 
     struct Fixture {
