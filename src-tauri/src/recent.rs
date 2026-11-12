@@ -71,7 +71,6 @@ mod tests {
     use super::*;
     use crate::conversations;
     use crate::comments::test_support::into_thread;
-    use crate::db;
     use crate::projects::test_support::origin;
     use crate::protocol::{Author, AuthorKind, new_id};
     use crate::store::Project;
@@ -140,26 +139,6 @@ mod tests {
             Some(ConversationStatus::NeedsApproval { mini_me })
         );
         assert_eq!(status(by_project("Survey")), None);
-    }
-
-    #[test]
-    fn a_project_from_a_newer_app_is_skipped_and_unchanged() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
-        project(&root, "Trials", &[1]);
-        let newer = project(&root, "Newer", &[2]);
-        let database = newer.paths.database();
-        drop(newer);
-        {
-            let conn = Connection::open(&database).unwrap();
-            conn.pragma_update(None, "user_version", db::SCHEMA_VERSION + 1).unwrap();
-        }
-        let before = std::fs::read(&database).unwrap();
-
-        let recent = list(&root).unwrap();
-        assert_eq!(recent.len(), 1);
-        assert_eq!(recent[0].project_name, "Trials");
-        assert_eq!(std::fs::read(&database).unwrap(), before);
     }
 
     #[test]

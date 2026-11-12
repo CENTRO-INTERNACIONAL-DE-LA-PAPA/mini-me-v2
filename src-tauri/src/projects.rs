@@ -283,27 +283,39 @@ mod tests {
     }
 
     #[test]
-    fn creates_project_folder_and_lists_it() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
-        let summary = create(&root, "Late Blight Resistance").unwrap();
-        assert!(summary.folder.join("project.sqlite").is_file());
-        assert!(summary.folder.join("assets").is_dir());
-
-        let listed = list(&root, &HashMap::new()).unwrap();
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].name, "Late Blight Resistance");
-    }
-
-    #[test]
-    fn same_name_gets_separate_folders_named_by_id() {
+    fn each_project_gets_its_own_folder_named_by_id_until_deleted() {
         let dir = tempfile::tempdir().unwrap();
         let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
         let first = create(&root, "Trials: 2026/27").unwrap();
         let second = create(&root, "Trials: 2026/27").unwrap();
-        assert_ne!(first.folder, second.folder);
+        assert!(first.folder.join("project.sqlite").is_file());
+        assert!(first.folder.join("assets").is_dir());
         assert_eq!(first.folder.file_name().unwrap().to_string_lossy(), first.id.to_string());
-        assert_eq!(list(&root, &HashMap::new()).unwrap().len(), 2);
+        assert_ne!(first.folder, second.folder);
+        let listed = list(&root, &HashMap::new()).unwrap();
+        assert!(listed.len() == 2 && listed.iter().all(|p| p.name == "Trials: 2026/27"));
+
+        delete(&second.folder).unwrap();
+        assert!(!second.folder.exists());
+        assert_eq!(list(&root, &HashMap::new()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn reading_each_project_skips_and_never_changes_one_from_a_newer_app() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
+        create(&root, "Trials").unwrap();
+        let newer = create(&root, "Newer").unwrap();
+        let database = newer.folder.join("project.sqlite");
+        rusqlite::Connection::open(&database)
+            .unwrap()
+            .pragma_update(None, "user_version", db::SCHEMA_VERSION + 1)
+            .unwrap();
+        let before = std::fs::read(&database).unwrap();
+
+        let names = read_each(&root, |project, _| Ok(vec![project.name.clone()])).unwrap();
+        assert_eq!(names, ["Trials"]);
+        assert_eq!(std::fs::read(&database).unwrap(), before);
     }
 
     #[test]
@@ -318,16 +330,6 @@ mod tests {
         assert_eq!(listed[0].name, "Huancayo 2025");
         assert_eq!(listed[0].folder, project.folder);
         assert!(opened.rename("   ").is_err());
-    }
-
-    #[test]
-    fn deleting_removes_the_folder_and_the_listing() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
-        let project = create(&root, "Trial design").unwrap();
-        delete(&project.folder).unwrap();
-        assert!(!project.folder.exists());
-        assert!(list(&root, &HashMap::new()).unwrap().is_empty());
     }
 
     #[test]

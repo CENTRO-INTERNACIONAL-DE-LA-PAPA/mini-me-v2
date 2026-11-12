@@ -85,10 +85,12 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 - [x] 6.4 In `quarto.rs`: merge the three render tests into one that still returns early without
   Quarto, merge the three `locate` tests and the two blocking-message tests, and delete
   `only_assets_named_in_the_source_are_copied` with its `asset` helper; verify with `cargo test`.
-- [ ] 6.5 In `updates.rs`, `settings.rs`, `projects.rs`, `components.rs`, `sidecar.rs`,
-  `project_activity.rs`, `approvals.rs` and `recent.rs`: merge the pairs listed in the scan into
-  table tests, and keep one `a_project_from_a_newer_app_is_skipped_and_unchanged`, moved to
-  `projects.rs` next to `read_each`; verify with `cargo test`.
+- [x] 6.5 In `updates.rs`, `settings.rs`, `projects.rs`, `components.rs`, `sidecar.rs` and
+  `project_activity.rs`: merge each file's overlapping tests (download percent, update checks,
+  settings reloads, Project folders and deletion, component checks, restart backoff, activity of
+  an empty Project); replace the two `a_project_from_a_newer_app_is_skipped_and_unchanged` tests in
+  `approvals.rs` and `recent.rs` with one test of `read_each` in `projects.rs`; verify with
+  `cargo test`.
 
 ## 7. Frontend tests
 

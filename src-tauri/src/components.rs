@@ -73,25 +73,16 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn any_kind_with_text_passes() {
+    fn a_traits_component_needs_text_small_data_and_a_kind_traits_may_add() {
         assert!(check("paper-sources", &json!({ "papers": [] }), "none").is_ok());
         assert!(check("theories", &json!({}), "t").is_ok());
-    }
-
-    #[test]
-    fn an_approval_from_a_trait_is_refused() {
-        let err = check("approval", &json!({}), "t").unwrap_err();
-        assert_eq!(err.code, "component_not_allowed");
-        assert_eq!(check("hand-off", &json!({}), "t").unwrap_err().code, "component_not_allowed");
-    }
-
-    #[test]
-    fn empty_text_or_too_much_data_is_refused() {
-        let err = check("paper-sources", &json!({}), "  ").unwrap_err();
-        assert_eq!(err.code, "invalid_component");
+        for kind in ["approval", "hand-off"] {
+            assert_eq!(check(kind, &json!({}), "t").unwrap_err().code, "component_not_allowed");
+        }
+        let empty = check("paper-sources", &json!({}), "  ").unwrap_err();
+        assert_eq!(empty.code, "invalid_component");
         let big = json!({ "papers": "x".repeat(MAX_DATA_BYTES) });
-        let err = check("paper-sources", &big, "t").unwrap_err();
-        assert_eq!(err.code, "invalid_component");
+        assert_eq!(check("paper-sources", &big, "t").unwrap_err().code, "invalid_component");
     }
 
     #[test]

@@ -727,7 +727,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn backoff_delays_then_gives_up_after_five_failures() {
+    fn backoff_delays_gives_up_after_five_failures_and_resets_when_stable() {
         let mut backoff = Backoff::default();
         let now = Instant::now();
         let delays: Vec<_> = (0..5).map(|_| backoff.failed(now)).collect();
@@ -741,20 +741,15 @@ mod tests {
                 None,
             ]
         );
-    }
 
-    #[test]
-    fn staying_ready_resets_the_failure_count() {
+        // Staying ready long enough starts the count again; a short spell does not.
         let mut backoff = Backoff::default();
-        let start = Instant::now();
-        backoff.failed(start);
-        backoff.failed(start);
-
-        backoff.ready(start);
-        assert_eq!(backoff.failed(start + Duration::from_secs(10)), Some(Duration::from_secs(2)));
-
-        backoff.ready(start);
-        assert_eq!(backoff.failed(start + STABLE_AFTER), Some(Duration::from_millis(500)));
+        backoff.failed(now);
+        backoff.failed(now);
+        backoff.ready(now);
+        assert_eq!(backoff.failed(now + Duration::from_secs(10)), Some(Duration::from_secs(2)));
+        backoff.ready(now);
+        assert_eq!(backoff.failed(now + STABLE_AFTER), Some(Duration::from_millis(500)));
     }
 
     #[test]

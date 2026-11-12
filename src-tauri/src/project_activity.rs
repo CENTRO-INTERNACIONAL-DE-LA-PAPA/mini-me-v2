@@ -79,7 +79,7 @@ mod tests {
     }
 
     #[test]
-    fn a_project_lists_its_latest_mini_mes_activity_and_summary() {
+    fn a_project_lists_its_latest_mini_mes_activity_and_summary_or_none() {
         let dir = tempfile::tempdir().unwrap();
         let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
         let summary = projects::create(&root, "Trials").unwrap();
@@ -92,21 +92,16 @@ mod tests {
         reply(&project, conversation, mini_mes[0], 10);
         overview::save_summary(&project, "Yield rose. More trials are pending.", 11).unwrap();
 
-        let activity = list(&root).unwrap().remove(0);
+        let empty = projects::create(&root, "Empty").unwrap();
+
+        let activities = list(&root).unwrap();
+        let of = |id: Uuid| activities.iter().find(|a| a.project_id == id).unwrap();
+        let activity = of(summary.id);
         assert_eq!(activity.mini_mes, [mini_mes[0], mini_mes[4], mini_mes[3], mini_mes[2]]);
         assert!(activity.last_activity_at.is_some());
         assert_eq!(activity.summary.as_deref(), Some("Yield rose. More trials are pending."));
-    }
-
-    #[test]
-    fn a_new_project_has_no_activity() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
-        projects::create(&root, "Empty").unwrap();
-
-        let activity = list(&root).unwrap().remove(0);
-        assert_eq!(activity.last_activity_at, None);
-        assert!(activity.mini_mes.is_empty());
-        assert_eq!(activity.summary, None);
+        let none = of(empty.id);
+        assert_eq!((none.last_activity_at, none.summary.as_deref()), (None, None));
+        assert!(none.mini_mes.is_empty());
     }
 }
