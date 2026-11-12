@@ -44,7 +44,7 @@ Evidence for each item (copies with `path:line`) is in the scan reports and in P
 
 ## 4. Check
 
-- [ ] 4.1 Run all suites and `npx tsc --noEmit`; in the app, send a message, open a document,
+- [x] 4.1 Run all suites and `npx tsc --noEmit`; in the app, send a message, open a document,
   and create a Teal Mini-Me to see its card's wash and edge; verify all pass.
 
 ## Workflow follow-up
