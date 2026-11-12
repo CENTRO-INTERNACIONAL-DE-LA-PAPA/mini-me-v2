@@ -64,7 +64,7 @@ const TYPESAFE: &str = "typesafe";
 pub struct AppState {
     config_dir: PathBuf,
     /// Mini-Me Dev has Developer mode on until the user turns it off.
-    dev_app: bool,
+    is_dev_app: bool,
     /// From the Tauri configuration.
     app_version: String,
     data_root: PathBuf,
@@ -121,7 +121,7 @@ impl AppState {
         std::thread::spawn(move || {
             warm.status();
         });
-        let dev_app = projects::is_mini_me_dev(&identifier);
+        let is_dev_app = projects::is_mini_me_dev(&identifier);
         let runs = Arc::new(Runs::new(
             Box::new(AppSecrets {
                 ai2: Arc::clone(&ai2),
@@ -132,8 +132,8 @@ impl AppState {
         ));
         let gate = Arc::clone(&quarto);
         runs.set_document_gate(Arc::new(move || gate.require().map(|_| ())));
-        runs.set_active_features(active_feature_ids(&settings, dev_app));
-        runs.set_debug(settings.reply_debug(dev_app));
+        runs.set_active_features(active_feature_ids(&settings, is_dev_app));
+        runs.set_debug(settings.reply_debug(is_dev_app));
         let sidecar = Supervisor::new(
             launch,
             Timing::for_build(),
@@ -147,7 +147,7 @@ impl AppState {
             updates.spawn(app.clone());
         }
         Ok(Self {
-            dev_app,
+            is_dev_app,
             app_version,
             settings: Mutex::new(settings),
             quarto,
@@ -175,13 +175,13 @@ impl AppState {
 
     /// Whether developer options and the web inspector are available.
     pub fn developer_mode(&self) -> bool {
-        self.settings().developer_mode(self.dev_app)
+        self.settings().developer_mode(self.is_dev_app)
     }
 
     /// Saves the flags, then tells running Traits which are on.
     fn change_features(&self, change: impl FnOnce(&mut Settings)) -> AppResult<()> {
         let settings = self.updated_settings(change)?;
-        self.runs.set_active_features(active_feature_ids(&settings, self.dev_app));
+        self.runs.set_active_features(active_feature_ids(&settings, self.is_dev_app));
         Ok(())
     }
 
@@ -471,7 +471,7 @@ pub async fn set_show_jev_asked(state: State<'_, AppState>, show: bool) -> AppRe
 #[tauri::command(rename_all = "snake_case")]
 pub async fn take_whats_new(state: State<'_, AppState>) -> AppResult<bool> {
     let mut settings = locked(&state.settings);
-    if !settings.take_whats_new(&state.app_version, state.dev_app) {
+    if !settings.take_whats_new(&state.app_version, state.is_dev_app) {
         return Ok(false);
     }
     settings.save(&state.config_dir)?;
@@ -486,7 +486,7 @@ pub async fn get_developer_mode(state: State<'_, AppState>) -> AppResult<bool> {
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResult<()> {
     let settings = state.updated_settings(|settings| settings.developer_mode = Some(on))?;
-    state.runs.set_debug(settings.reply_debug(state.dev_app));
+    state.runs.set_debug(settings.reply_debug(state.is_dev_app));
     Ok(())
 }
 
@@ -494,18 +494,18 @@ pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResu
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_reply_debug(state: State<'_, AppState>, debug: DebugSettings) -> AppResult<()> {
     let settings = state.updated_settings(|settings| settings.debug = debug)?;
-    state.runs.set_debug(settings.reply_debug(state.dev_app));
+    state.runs.set_debug(settings.reply_debug(state.is_dev_app));
     Ok(())
 }
 
-fn active_feature_ids(settings: &Settings, dev_app: bool) -> Vec<String> {
-    let active = settings.active_features(dev_app);
+fn active_feature_ids(settings: &Settings, is_dev_app: bool) -> Vec<String> {
+    let active = settings.active_features(is_dev_app);
     active.iter().map(|feature| feature.id.to_string()).collect()
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_feature_flags(state: State<'_, AppState>) -> AppResult<Vec<FeatureFlag>> {
-    let active = state.settings().active_features(state.dev_app);
+    let active = state.settings().active_features(state.is_dev_app);
     Ok(active.into_iter().map(FeatureFlag::from).collect())
 }
 

@@ -12,7 +12,7 @@ Evidence for each item (copies with `path:line`) is in the scan reports and in P
   one "stop replies, then cancel runs" helper; split `runs::answer` into one function per method
   and `routing::route` into its steps, with `start_reply` taking a `Decision`; rename `NoAnswer`'s
   fields and replace `CallKind`/`Place::call`'s `Option` with an enum; verify with `cargo test`.
-- [ ] 1.3 Read database rows into named structs in `store.rs`, `overview.rs` (splitting
+- [x] 1.3 Read database rows into named structs in `store.rs`, `overview.rs` (splitting
   `overview()` into its queries), `comments.rs` and `assets.rs`; a `NewComponent` struct for
   `conversations.rs`'s component tuple; an enum for `FileEntry.source`; a struct for `store.rs`'s
   `(Uuid, Uuid)` pairs; one name for the `dev_app` parameter; verify with `cargo test`.

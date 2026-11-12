@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::assets;
 use crate::comments;
 use crate::components;
-use crate::conversations::{self, ConversationStatus, PausedRun};
+use crate::conversations::{self, ConversationStatus, NewComponent, PausedRun};
 use crate::dataverse;
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
@@ -1177,7 +1177,7 @@ impl Runs {
         let text = format!("Handed to {name}: {}", hand_off.request);
         self.hold_hand_off(call_id, hand_off)?;
         let step_id = Some(place.step_id.as_str());
-        let card = ("hand-off", 1, data, text);
+        let card = NewComponent { kind: "hand-off".into(), version: 1, data, text };
         let added = conversations::add_core_component(&place.project, place.reply, step_id, card);
         if let Err(err) = added {
             self.drop_hand_off(call_id);
@@ -1376,7 +1376,7 @@ fn add_component(place: &Place, p: ComponentAddParams) -> AppResult<Value> {
         "suggestion" => comments::suggestion(&place.project, place.conversation_id, &p.data)?,
         _ => p.data,
     };
-    let component = (p.kind.as_str(), p.version, data, p.text);
+    let component = NewComponent { kind: p.kind, version: p.version, data, text: p.text };
     let step_id = Some(place.step_id.as_str());
     let id = conversations::add_component(&place.project, place.reply, step_id, component)
         .map_err(reply_ended)?;

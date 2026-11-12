@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::assets;
-use crate::conversations;
+use crate::conversations::{self, NewComponent};
 use crate::documents;
 use crate::error::{AppError, AppResult};
 use crate::link::RunDocument;
@@ -425,7 +425,12 @@ pub fn edit_document(
         n => format!("{n} edits"),
     };
     let data = json!({ "asset_id": asset_id, "title": title, "threads": threads });
-    let card = ("document-edits", 1, data, format!("Suggested {count} to {title}"));
+    let card = NewComponent {
+        kind: "document-edits".into(),
+        version: 1,
+        data,
+        text: format!("Suggested {count} to {title}"),
+    };
     let component_id = conversations::add_core_component(project, call.reply, call.step_id, card)?;
     Ok(EditedDocument { component_id, threads })
 }
@@ -593,46 +598,41 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
         first("author_id"),
     ))?;
     let rows = stmt.query_map(params![id.to_string()], |row| {
-        Ok((
-            (
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, u32>(2)?,
-                row.get::<_, u32>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, bool>(5)?,
-                row.get::<_, i64>(6)?,
-                row.get::<_, u32>(7)?,
-            ),
-            (
-                row.get::<_, Option<String>>(8)?,
-                row.get::<_, Option<String>>(9)?,
-                row.get::<_, Option<String>>(10)?,
-                row.get::<_, Option<String>>(11)?,
-            ),
-        ))
+        Ok(ThreadRow {
+            conversation_id: row.get(0)?,
+            asset_id: row.get(1)?,
+            start: row.get(2)?,
+            end: row.get(3)?,
+            quote: row.get(4)?,
+            resolved: row.get(5)?,
+            created_at: row.get(6)?,
+            comments: row.get(7)?,
+            opened_from: row.get(8)?,
+            opened_from_title: row.get(9)?,
+            first_author_kind: row.get(10)?,
+            first_author_id: row.get(11)?,
+        })
     })?;
     let mut threads = Vec::new();
     for row in rows {
-        let ((conversation_id, asset_id, start, end, quote, resolved, created_at, comments), from) =
-            row?;
-        let opened_from = match from {
-            (Some(conversation), title, Some(kind), Some(id)) => Some(OpenedFrom {
+        let row = row?;
+        let opened_from = match (row.opened_from, row.first_author_kind, row.first_author_id) {
+            (Some(conversation), Some(kind), Some(id)) => Some(OpenedFrom {
                 conversation_id: parse_id(&conversation, "ID")?,
-                title,
+                title: row.opened_from_title,
                 by: Author { kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("ID"))?, id },
             }),
             _ => None,
         };
         threads.push(CommentThread {
-            conversation_id: parse_id(&conversation_id, "ID")?,
-            asset_id: parse_id(&asset_id, "ID")?,
-            start,
-            end,
-            quote,
-            resolved,
-            created_at,
-            comments,
+            conversation_id: parse_id(&row.conversation_id, "ID")?,
+            asset_id: parse_id(&row.asset_id, "ID")?,
+            start: row.start,
+            end: row.end,
+            quote: row.quote,
+            resolved: row.resolved,
+            created_at: row.created_at,
+            comments: row.comments,
             pending: None,
             opened_from,
         });
@@ -641,6 +641,22 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
         thread.pending = pending(state, thread.conversation_id)?;
     }
     Ok(threads)
+}
+
+/// A row `threads_where` reads; `first_author_*` is the author of the thread's first message.
+struct ThreadRow {
+    conversation_id: String,
+    asset_id: String,
+    start: u32,
+    end: u32,
+    quote: String,
+    resolved: bool,
+    created_at: i64,
+    comments: u32,
+    opened_from: Option<String>,
+    opened_from_title: Option<String>,
+    first_author_kind: Option<String>,
+    first_author_id: Option<String>,
 }
 
 /// The newest suggestion in the thread still waiting for an answer.
@@ -795,7 +811,12 @@ mod tests {
         let conversation = thread.conversation_id;
         let reply = conversations::start_reply(project, conversation, comment.id, scribe).unwrap();
         let data = suggestion(project, thread.conversation_id, &json!({ "text": suggested }));
-        let component = ("suggestion", 1, data.unwrap(), suggested.to_string());
+        let component = NewComponent {
+            kind: "suggestion".into(),
+            version: 1,
+            data: data.unwrap(),
+            text: suggested.to_string(),
+        };
         let component = conversations::add_component(project, reply, None, component).unwrap();
         (document, thread, (reply, component))
     }

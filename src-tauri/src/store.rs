@@ -337,38 +337,37 @@ impl ProjectState {
             scope.condition()
         ))?;
         let rows = stmt.query_map(params![scope.id()], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, String>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, String>(8)?,
-            ))
+            Ok(MessageRow {
+                id: row.get(0)?,
+                conversation: row.get(1)?,
+                author_kind: row.get(2)?,
+                author_id: row.get(3)?,
+                content: row.get(4)?,
+                status: row.get(5)?,
+                reply_to: row.get(6)?,
+                attachments: row.get(7)?,
+                text_components: row.get(8)?,
+            })
         })?;
         let mut messages = Vec::new();
         for row in rows {
-            let (id, conversation, kind, author_id, content, status, reply_to, attachments, refs) =
-                row?;
-            let id = parse_id(&id, "message")?;
+            let row = row?;
+            let id = parse_id(&row.id, "message")?;
             let message = Message {
                 id,
                 author: Author {
-                    kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("message"))?,
-                    id: author_id,
+                    kind: AuthorKind::parse(&row.author_kind).ok_or_else(|| unreadable("message"))?,
+                    id: row.author_id,
                 },
-                content,
-                status: MessageStatus::parse(&status).ok_or_else(|| unreadable("message"))?,
-                reply_to: reply_to.map(|id| parse_id(&id, "message")).transpose()?,
-                attachments: serde_json::from_str::<Vec<AssetRef>>(&attachments)?,
-                text_components: serde_json::from_str::<Vec<TextComponent>>(&refs)?,
+                content: row.content,
+                status: MessageStatus::parse(&row.status).ok_or_else(|| unreadable("message"))?,
+                reply_to: row.reply_to.map(|id| parse_id(&id, "message")).transpose()?,
+                attachments: serde_json::from_str::<Vec<AssetRef>>(&row.attachments)?,
+                text_components: serde_json::from_str::<Vec<TextComponent>>(&row.text_components)?,
                 components: components.remove(&id).unwrap_or_default(),
                 steps: steps.remove(&id).unwrap_or_default(),
             };
-            messages.push((parse_id(&conversation, "message")?, message));
+            messages.push((parse_id(&row.conversation, "message")?, message));
         }
         Ok(messages)
     }
@@ -386,13 +385,13 @@ impl ProjectState {
             scope.condition(),
         ))?;
         let rows = stmt.query_map(params![scope.id()], |row| {
-            Ok((row.get::<_, String>(0)?, component_row(row, 1)?))
+            Ok((row.get::<_, String>(0)?, ComponentRow::read(row, 1)?))
         })?;
         let mut components: HashMap<Uuid, Vec<Component>> = HashMap::new();
         for row in rows {
             let (message_id, raw) = row?;
             let message_id = parse_id(&message_id, "component")?;
-            components.entry(message_id).or_default().push(component(raw)?);
+            components.entry(message_id).or_default().push(raw.into_component()?);
         }
         Ok(components)
     }
@@ -451,10 +450,10 @@ impl ProjectState {
                     component_columns(true),
                 ),
                 params![conversation_id.to_string(), component_id.to_string()],
-                |row| component_row(row, 0),
+                |row| ComponentRow::read(row, 0),
             )
             .optional()?;
-        raw.map(component).transpose()
+        raw.map(ComponentRow::into_component).transpose()
     }
 
     /// `(kind, title)` of tables and charts by source Asset ID, newest first; reads no other data.
@@ -553,17 +552,15 @@ impl ProjectState {
         Ok(())
     }
 
-    /// `(conversation, message)` IDs.
-    pub fn streaming_messages(&self, conversation_id: Option<Uuid>) -> AppResult<Vec<(Uuid, Uuid)>> {
+    pub fn streaming_messages(&self, conversation_id: Option<Uuid>) -> AppResult<Vec<MessageAt>> {
         self.messages_with_status(&[MessageStatus::Streaming], conversation_id)
     }
 
-    /// `(conversation, message)` IDs.
     pub fn messages_with_status(
         &self,
         statuses: &[MessageStatus],
         conversation_id: Option<Uuid>,
-    ) -> AppResult<Vec<(Uuid, Uuid)>> {
+    ) -> AppResult<Vec<MessageAt>> {
         // The statuses are fixed identifiers, so listing them in the SQL text is safe.
         let listed: Vec<String> = statuses.iter().map(|s| format!("'{}'", s.as_str())).collect();
         let mut stmt = self.conn.prepare(&format!(
@@ -577,7 +574,10 @@ impl ProjectState {
         let mut result = Vec::new();
         for row in rows {
             let (conversation, message) = row?;
-            result.push((parse_id(&conversation, "ID")?, parse_id(&message, "ID")?));
+            result.push(MessageAt {
+                conversation: parse_id(&conversation, "ID")?,
+                message: parse_id(&message, "ID")?,
+            });
         }
         Ok(result)
     }
@@ -720,25 +720,68 @@ impl Scope {
     }
 }
 
-/// The columns `component_row` reads; `data` reads as `null` unless `with_data` is set.
+/// A message by its Conversation's ID and its own.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MessageAt {
+    pub conversation: Uuid,
+    pub message: Uuid,
+}
+
+/// The columns of a `messages` row `messages_in` reads, as stored.
+struct MessageRow {
+    id: String,
+    conversation: String,
+    author_kind: String,
+    author_id: String,
+    content: String,
+    status: String,
+    reply_to: Option<String>,
+    attachments: String,
+    text_components: String,
+}
+
+/// The columns `ComponentRow::read` reads; `data` reads as `null` unless `with_data` is set.
 fn component_columns(with_data: bool) -> String {
     let data = if with_data { "c.data" } else { "'null'" };
     format!("c.id, c.kind, c.version, {data}, c.text, c.answer, c.step_index")
 }
 
-/// The raw values of `component_columns`, in order.
-type ComponentRow = (String, String, u32, String, String, Option<String>, Option<u32>);
+/// The values of `component_columns`, as stored.
+struct ComponentRow {
+    id: String,
+    kind: String,
+    version: u32,
+    data: String,
+    text: String,
+    answer: Option<String>,
+    step_index: Option<u32>,
+}
 
-fn component_row(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<ComponentRow> {
-    Ok((
-        row.get(first)?,
-        row.get(first + 1)?,
-        row.get(first + 2)?,
-        row.get(first + 3)?,
-        row.get(first + 4)?,
-        row.get(first + 5)?,
-        row.get(first + 6)?,
-    ))
+impl ComponentRow {
+    /// Reads `component_columns` starting at column `first`.
+    fn read(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(first)?,
+            kind: row.get(first + 1)?,
+            version: row.get(first + 2)?,
+            data: row.get(first + 3)?,
+            text: row.get(first + 4)?,
+            answer: row.get(first + 5)?,
+            step_index: row.get(first + 6)?,
+        })
+    }
+
+    fn into_component(self) -> AppResult<Component> {
+        Ok(Component {
+            id: parse_id(&self.id, "component")?,
+            kind: self.kind,
+            version: self.version,
+            data: serde_json::from_str(&self.data)?,
+            text: self.text,
+            answer: self.answer.map(|a| serde_json::from_str(&a)).transpose()?.unwrap_or_default(),
+            step_index: self.step_index,
+        })
+    }
 }
 
 /// The error for a stored `what` that cannot be read back: "stored `what` is not readable".
@@ -748,20 +791,6 @@ pub(crate) fn unreadable(what: &str) -> AppError {
 
 pub(crate) fn parse_id(value: &str, what: &str) -> AppResult<Uuid> {
     Uuid::parse_str(value).map_err(|_| unreadable(what))
-}
-
-fn component(
-    (id, kind, version, data, text, answer, step_index): ComponentRow,
-) -> AppResult<Component> {
-    Ok(Component {
-        id: parse_id(&id, "component")?,
-        kind,
-        version,
-        data: serde_json::from_str(&data)?,
-        text,
-        answer: answer.map(|a| serde_json::from_str(&a)).transpose()?.unwrap_or_default(),
-        step_index,
-    })
 }
 
 fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {

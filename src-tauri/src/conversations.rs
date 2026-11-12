@@ -15,7 +15,7 @@ use crate::protocol::{
     AssetRef, Author, AuthorKind, Component, ErrorInfo, EventKind, Message, MessageStatus,
     TextComponent, TextComponentKind, new_id, now_ms,
 };
-use crate::store::{Project, ProjectState, parse_id};
+use crate::store::{MessageAt, Project, ProjectState, parse_id};
 
 pub const DEFAULT_TITLE: &str = "New conversation";
 const MAX_EMOJI_CHARS: usize = 16;
@@ -338,14 +338,22 @@ pub fn append_step_completed(
     reply_event(project, message_id, kind)
 }
 
+/// A component a reply adds; its ID, answer and Step are set when it is added.
+pub struct NewComponent {
+    pub kind: String,
+    pub version: u32,
+    pub data: serde_json::Value,
+    pub text: String,
+}
+
 /// Returns the new ID; the component records the latest run of `step_id`, the Step that added it.
 pub fn add_component(
     project: &Project,
     message_id: Uuid,
     step_id: Option<&str>,
-    component: (&str, u32, serde_json::Value, String),
+    component: NewComponent,
 ) -> AppResult<Uuid> {
-    components::check(component.0, &component.2, &component.3)?;
+    components::check(&component.kind, &component.data, &component.text)?;
     add_core_component(project, message_id, step_id, component)
 }
 
@@ -354,7 +362,7 @@ pub fn add_core_component(
     project: &Project,
     message_id: Uuid,
     step_id: Option<&str>,
-    (kind, version, data, text): (&str, u32, serde_json::Value, String),
+    NewComponent { kind, version, data, text }: NewComponent,
 ) -> AppResult<Uuid> {
     let mut state = project.lock();
     let conversation = streaming_reply(&state, message_id)?;
@@ -364,7 +372,7 @@ pub fn add_core_component(
     };
     let component = Component {
         id: new_id(),
-        kind: kind.to_string(),
+        kind,
         version,
         data,
         text,
@@ -457,7 +465,8 @@ pub fn stop_reply(project: &Project, conversation_id: Uuid) -> AppResult<Vec<Uui
     state.require_conversation(conversation_id)?;
     let in_progress = [MessageStatus::Streaming, MessageStatus::Paused];
     let mut stopped = Vec::new();
-    for (_, message_id) in state.messages_with_status(&in_progress, Some(conversation_id))? {
+    let replies = state.messages_with_status(&in_progress, Some(conversation_id))?;
+    for MessageAt { message: message_id, .. } in replies {
         let kinds = vec![EventKind::MessageCancelled { message_id }];
         state.persist_all(conversation_id, kinds, |tx| {
             tx.execute("DELETE FROM paused_runs WHERE message_id = ?1", params![message_id.to_string()])?;
@@ -642,7 +651,7 @@ pub fn system_reply(
 /// Marks replies left streaming by a previous session as failed with code `interrupted`.
 pub fn recover_interrupted(project: &Project) -> AppResult<()> {
     let mut state = project.lock();
-    for (_, message_id) in state.streaming_messages(None)? {
+    for MessageAt { message: message_id, .. } in state.streaming_messages(None)? {
         fail_locked(
             &mut state,
             message_id,
@@ -905,7 +914,9 @@ mod tests {
         let question = send_message(project, conversation, text("profile"), new_id()).unwrap();
         let reply = start_reply(project, conversation, question.id, echo()).unwrap();
         let ids = ["table", "chart", "theories"].map(|kind| {
-            add_component(project, reply, None, (kind, 1, serde_json::json!({}), "t".into())).unwrap()
+            let data = serde_json::json!({});
+            let component = NewComponent { kind: kind.into(), version: 1, data, text: "t".into() };
+            add_component(project, reply, None, component).unwrap()
         });
         complete_reply(project, reply).unwrap();
         (conversation, ids)

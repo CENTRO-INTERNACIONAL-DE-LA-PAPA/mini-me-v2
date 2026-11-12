@@ -927,7 +927,12 @@ mod tests {
         for (kind, title) in shown {
             let mut data = source.clone();
             data["title"] = json!(title);
-            let component = (kind, 1, data, title.to_string());
+            let component = conversations::NewComponent {
+                kind: kind.into(),
+                version: 1,
+                data,
+                text: title.to_string(),
+            };
             conversations::add_component(&f.project, reply, None, component).unwrap();
         }
         conversations::complete_reply(&f.project, reply).unwrap();
