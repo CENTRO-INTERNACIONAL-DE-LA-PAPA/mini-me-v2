@@ -2,8 +2,7 @@ import { Button } from "@/components/ui/button";
 import notice from "../../../NOTICE?raw";
 import license from "../../../LICENSE?raw";
 
-/** Mini-Me's own notice and license, from Settings → About. Its column is centred in the sheet,
- * like What's new. */
+/** Mini-Me's own notice and license, from Settings → About. */
 export function LicenseView({ onClose }: { onClose: () => void }) {
   return (
     <main className="mx-auto flex w-full max-w-[760px] flex-col gap-7 px-10 py-9">

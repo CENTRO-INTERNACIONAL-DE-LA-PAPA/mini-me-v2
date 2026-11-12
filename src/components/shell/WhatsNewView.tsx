@@ -2,8 +2,8 @@ import { Button } from "@/components/ui/button";
 import { changelog } from "../../lib/changelog";
 import { Markdown } from "../chat/Markdown";
 
-/** The changes of the version this build is, from the changelog bundled in it. Shown once after
- * an update, and from Settings → About. Its column is centred in the sheet, like Settings'. */
+/** This build's changes, from its bundled changelog; shown once after an update, and from
+ * Settings → About. */
 export function WhatsNewView({ onClose }: { onClose: () => void }) {
   return (
     <main className="mx-auto flex w-full max-w-[760px] flex-col gap-7 px-10 py-9">

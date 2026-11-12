@@ -35,8 +35,7 @@ export default function App() {
   const fail = (e: unknown) => setError(errorMessage(e));
   const developer = useDeveloperMode();
 
-  // Outside Developer mode the webview's own right-click menu (Reload, Back, …) is kept only
-  // in text fields, for cut, copy and paste.
+  // Outside Developer mode only text fields keep the webview's context menu, for cut and paste.
   useEffect(() => {
     if (developer) return;
     const block = (event: MouseEvent) => {
@@ -73,8 +72,7 @@ export default function App() {
     refreshConversations();
   }, [refreshConversations]);
 
-  // A Conversation's status, shown in the sidebar, follows its reply as it runs, pauses and ends;
-  // the file count also follows files added without a reply, such as a download.
+  // Reload as replies run, pause and end, and as files change without a reply (a download).
   const runningKey = useRunningKey();
   const unseen = useReplyNotifications(view.kind === "conversation" ? view.id : null);
   const filesChanged = useFilesChanged(projectId);
@@ -105,7 +103,6 @@ export default function App() {
   async function deleteConversation(id: string) {
     if (!project) return;
     await api.deleteConversation(project.id, id);
-    // Leaving the deleted Conversation's view for the Project's Overview.
     if (view.kind === "conversation" && view.id === id) setView({ kind: "overview" });
     await refreshConversations();
   }
@@ -143,8 +140,7 @@ export default function App() {
     }
   }
 
-  /** Shows a Conversation, at `messageId` when given, opening its Project first when another
-   * is open. */
+  /** Shows a Conversation, at `messageId` if given, opening its Project first if needed. */
   async function openConversation(projectId: Uuid, conversationId: Uuid, messageId?: Uuid) {
     const next: View = { kind: "conversation", id: conversationId, messageId };
     if (project?.id === projectId) {
@@ -242,8 +238,7 @@ function Main({
   onNavigate: (view: View) => void;
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
 }) {
-  // A Conversation and the Mini-Me editor lay out their own sheets; other views fill the main
-  // sheet and scroll as a whole.
+  // Views other than a Conversation and the Mini-Me editor fill one sheet and scroll as a whole.
   const scrolling = (content: ReactNode) => (
     <MainSheet>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{content}</div>

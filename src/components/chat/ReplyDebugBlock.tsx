@@ -7,8 +7,7 @@ import { modelCalls } from "./replyDebug";
 const json = (value: unknown) =>
   typeof value === "string" ? value : JSON.stringify(value, null, 2);
 
-/** The "[DEBUG] AI" block under a reply: its model calls and tool calls, read each time the
- * block is opened, so records written or cleared since show as they are. */
+/** The "[DEBUG] AI" block under a reply: its model and tool calls, read again on each open. */
 export function ReplyDebugBlock({
   projectId,
   messageId,

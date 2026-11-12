@@ -266,8 +266,7 @@ function NumberBadge({ number }: { number: number }) {
   );
 }
 
-/** One thread in full: where it is, its messages with any suggestions, and a field to reply,
- * with ways to move to the previous or next thread and back to the list. */
+/** One thread in full: where it is, its messages and suggestions, a reply field and navigation. */
 function ThreadView({
   projectId,
   thread,

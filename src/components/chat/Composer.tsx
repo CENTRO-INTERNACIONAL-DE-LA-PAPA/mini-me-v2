@@ -241,7 +241,6 @@ export function Composer({
                 heading: "",
                 entries: assetSuggestions.map((a) => ({
                   target: assetTarget(a),
-                  // Only a name that more than one listed file has needs telling apart.
                   detail: fileDetail(a, miniMes),
                 })),
               },
@@ -341,7 +340,7 @@ export function Composer({
     }
   }
 
-  /** Types `@` or `#` at the caret, with a space before it when needed, to open its list. */
+  /** Types `sign` at the caret, with a space before it when needed, to open its list. */
   function startReference(sign: "@" | "#" | "$") {
     if (!editor) return;
     const { from } = editor.state.selection;

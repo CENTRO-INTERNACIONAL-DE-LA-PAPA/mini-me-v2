@@ -15,7 +15,7 @@ decision 1). Each is reviewed uncommitted before its commit. The scan's "Comment
 
 ## 2. UI
 
-- [ ] 2.1 Comments in `src/App.tsx`, `api.ts`, `main.tsx`, `protocol/`, `hooks/`, `lib/` and
+- [x] 2.1 Comments in `src/App.tsx`, `api.ts`, `main.tsx`, `protocol/`, `hooks/`, `lib/` and
   `components/{chat,documents,shell}` (including the misplaced docs in `api.ts` and `types.ts`,
   and `Sheet.tsx`'s To-do panel); verify with `npm test`, `npx tsc --noEmit` and that `git diff`
   touches only comment lines.

@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 
 const listeners = new Set<(projectId: string) => void>();
 
-/** Tells every `useFilesChanged` of `projectId` that its files changed without a message, such
- * as by a download, so lists and counts of the Project's files read them again. */
+/** Tells every `useFilesChanged(projectId)` its files changed without a message (a download). */
 export function announceFilesChanged(projectId: string): void {
   listeners.forEach((listener) => listener(projectId));
 }

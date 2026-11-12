@@ -25,10 +25,8 @@ export const componentTarget = (name: string, componentId: string): ReferenceTar
   label: `$${name}`,
 });
 
-/**
- * The composer's document as a message: its text with each reference's label in place, and a
- * Text Component over each label. Paragraphs and hard breaks become line breaks.
- */
+/** The composer's document as a message: its text with each reference's label in place and a
+ * Text Component over each label. Paragraphs and hard breaks become line breaks. */
 export function draftFromDoc(doc: JSONContent): {
   content: string;
   text_components: TextComponent[];
@@ -53,11 +51,8 @@ export function draftFromDoc(doc: JSONContent): {
   return { content, text_components };
 }
 
-/**
- * The content as Markdown source in which each Text Component reads `[label](ref:N)`, `N`
- * being its index in `components`, so a Markdown renderer can draw it as a chip. A component
- * whose range doesn't hold its label is left as plain text.
- */
+/** Markdown in which each Text Component reads `[label](ref:N)`, `N` its index in `components`,
+ * for chips; a component whose range doesn't hold its label stays plain text. */
 export function markdownSource(content: string, components: TextComponent[]): string {
   const escape = (label: string) => label.replace(/[\\[\]]/g, "\\$&");
   return components
@@ -87,10 +82,8 @@ export const fold = (text: string) =>
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 
-/**
- * The Mini-Mes whose name contains `query`, ignoring case and accents, grouped in the order
- * of `MINI_ME_GROUPS` and in their library order within a group. Empty groups are left out.
- */
+/** The Mini-Mes whose name contains `query` (ignoring case and accents), grouped in
+ * `MINI_ME_GROUPS` order, library order within a group; empty groups are left out. */
 export function miniMeSuggestions(
   miniMes: MiniMe[],
   query: string,

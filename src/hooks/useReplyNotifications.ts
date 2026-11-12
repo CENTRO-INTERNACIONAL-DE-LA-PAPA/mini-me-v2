@@ -8,8 +8,7 @@ import { api } from "../api";
 import type { MessageStatus, RunningReply, Uuid } from "../protocol/types";
 import { useRunningReplies } from "./useRunningReplies";
 
-/** What the notification for a reply that stopped running says, or null when it needs none, as
- * for a reply the user cancelled. */
+/** The notice for a reply that stopped running; null when it needs none, as when cancelled. */
 export function replyNotice(
   reply: RunningReply,
   status: MessageStatus | null,
@@ -26,9 +25,8 @@ export function replyNotice(
   return body ? { title: reply.conversation_title, body } : null;
 }
 
-/** Sends a desktop notification when a reply finishes, fails or pauses for an approval out of
- * view: while the window is not focused, or its Conversation is not `open`. Returns the
- * Conversations whose reply stopped while they were not open, until each is opened. */
+/** Notifies when a reply finishes, fails or pauses out of view (window unfocused or Conversation
+ * not `open`); returns the Conversations whose reply stopped unseen, until each is opened. */
 export function useReplyNotifications(open: Uuid | null): ReadonlySet<Uuid> {
   const running = useRunningReplies();
   const previous = useRef(running);

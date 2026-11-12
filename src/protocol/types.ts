@@ -43,8 +43,7 @@ export interface Component {
   text: string;
   /** The user's answer, for kinds that ask for one; null until answered. */
   answer: unknown;
-  /** The position in the reply's `steps` of the Step run whose Trait call added it; absent
-   * when no Trait Step added it. */
+  /** Index in the reply's `steps` of the Trait Step run that added it; absent otherwise. */
   step_index?: number | null;
 }
 
@@ -217,9 +216,8 @@ export type AssetOrigin = {
 
 /** An Asset as the Project's Files screen lists it. */
 export interface FileEntry extends AssetRef {
-  /** `upload` for a file the user imported or started, `generated` for one the app made,
-   * such as a Mini-Me's output or an exported PDF, `dataverse` for one downloaded from CIP's
-   * Dataverse. */
+  /** `upload`: imported or started by the user; `generated`: made by the app, such as a
+   * Mini-Me's output or an exported PDF; `dataverse`: downloaded from CIP's Dataverse. */
   source: "upload" | "generated" | "dataverse";
   /** Where a downloaded file came from; null for every other file. */
   origin: AssetOrigin | null;
@@ -277,9 +275,8 @@ export interface Downloaded {
   error?: string;
 }
 
-/** A comment thread on a passage of a document: a Conversation shown only in the document
- * view. `start` and `end` are UTF-16 offsets in the source; `quote` is the passage's text when
- * the thread was last anchored. */
+/** A comment thread on a document passage: a Conversation shown only in the document view.
+ * `start`/`end` are UTF-16 offsets in the source; `quote` is the passage when last anchored. */
 export interface CommentThread {
   conversation_id: Uuid;
   asset_id: Uuid;
@@ -372,7 +369,6 @@ export interface MiniMeColors {
 /** Which heading the `@` list shows a Mini-Me under. */
 export type MiniMeGroup = "thinking" | "literature" | "data";
 
-/** A Mini-Me as the UI lists and shows it. */
 /** The avatar parts a Mini-Me is drawn with, by the ids of the avatar part files. */
 export interface MiniMeAvatar {
   base: string;
@@ -380,6 +376,7 @@ export interface MiniMeAvatar {
   accessory?: string;
 }
 
+/** A Mini-Me as the UI lists and shows it. */
 export interface MiniMe {
   id: Uuid;
   name: string;
@@ -454,10 +451,9 @@ export interface SavedDefinition {
 
 export type ProviderId = "openai" | "anthropic" | "google" | "openrouter";
 
-/** Every key the keychain can hold: the AI providers and Typesafe, which routes messages. */
+/** Every key the keychain can hold: the AI providers, Typesafe (routing) and Dataverse. */
 export type KeyAccount = ProviderId | "typesafe" | "dataverse";
 
-/** The AI and routing settings. Saved keys are only named, never sent to the UI. */
 /** A reply paused at an approval, in any Project. */
 export interface PausedApproval {
   project_id: Uuid;
@@ -531,6 +527,7 @@ export interface UserProfile {
   unreadable: string | null;
 }
 
+/** The AI and routing settings. Saved keys are only named, never sent to the UI. */
 export interface AiSettings {
   provider: ProviderId;
   model: string;

@@ -7,6 +7,5 @@ const miniMes = sharedValue<MiniMe[]>(() => api.listMiniMes(), []);
 /** The Mini-Mes, empty until they have loaded. */
 export const useMiniMes = miniMes.use;
 
-/** Loads the Mini-Mes again and shows the new list wherever `useMiniMes` is used; the editors
- * call it after a change. */
+/** Reloads the Mini-Mes wherever `useMiniMes` is used. */
 export const refreshMiniMes = miniMes.reload;

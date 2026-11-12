@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 
-/** A value every component shares from one `request`. `use` is the hook that reads it, `initial`
- * until it has loaded; `show` shows a value already known wherever it is used, and `reload`
- * requests it again and shows the result. */
+/** A value all components share from one `request`: `use` reads it (`initial` until loaded),
+ * `show` sets an already known value everywhere, and `reload` requests it again. */
 export function sharedValue<T>(request: () => Promise<T>, initial: T) {
   let loading: Promise<T> | null = null;
   const listeners = new Set<(value: T) => void>();

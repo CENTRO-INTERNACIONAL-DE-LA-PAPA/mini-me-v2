@@ -8,8 +8,7 @@ import { ReferenceChip } from "./ReferenceChip";
 /** Media types the core reads for a thumbnail, as every webview the app runs in draws them. */
 const THUMBNAIL_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
-/** The files attached to the message being written: images as thumbnails with their name,
- * other files as their name and size, each with a button that removes it. */
+/** The files attached to the message being written, each with a button that removes it. */
 export function AttachmentTray({
   projectId,
   attachments,
