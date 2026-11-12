@@ -1,6 +1,8 @@
 /** `chart` version 1 data, as *Plot* builds it, and the controls' state, which is never saved. */
 
-export type ColumnType = "number" | "text" | "date" | "boolean";
+import { oklchToHex } from "../minime/miniMeColors";
+
+type ColumnType = "number" | "text" | "date" | "boolean";
 
 export interface Column {
   name: string;
@@ -16,7 +18,7 @@ export interface Bin {
   series?: string;
 }
 
-export interface Bar {
+interface Bar {
   x: string;
   y: number | null;
   series?: string;
@@ -103,33 +105,14 @@ export const SERIES_TOKENS = [2, 3, 4, 5, 6, 7, 8].map((n) => `--chart-series-${
 // hue by the golden angle, so each new series lands far from the hues before it.
 const GENERATED = { lightness: 0.64, chroma: 0.15, start: 20, step: 137.508 };
 
-function linearToSrgb(c: number): number {
-  const v = c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
-  return Math.round(Math.min(1, Math.max(0, v)) * 255);
-}
-
-/** An oklch colour as hex, since Plot's SVG attributes may not parse `oklch()`. */
-export function oklchToHex(lightness: number, chroma: number, hue: number): string {
-  const a = chroma * Math.cos((hue * Math.PI) / 180);
-  const b = chroma * Math.sin((hue * Math.PI) / 180);
-  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const rgb = [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ];
-  return `#${rgb.map((c) => linearToSrgb(c).toString(16).padStart(2, "0")).join("")}`;
-}
-
 /** Series `index`'s colour: the Mini-Me's (`first`), then `palette`, then generated ones. */
 export function seriesColour(index: number, first: string, palette: string[]): string {
   if (index === 0) return first;
   if (index <= palette.length) return palette[index - 1];
   const step = index - palette.length - 1;
   const hue = (GENERATED.start + step * GENERATED.step) % 360;
-  return oklchToHex(GENERATED.lightness, GENERATED.chroma, hue);
+  // Hex, since Plot's SVG attributes may not parse `oklch()`.
+  return oklchToHex([GENERATED.lightness, GENERATED.chroma, hue]);
 }
 
 export interface ChartState {
@@ -137,7 +120,7 @@ export interface ChartState {
   hidden: string[];
 }
 
-export type ChartAction =
+type ChartAction =
   | { type: "toggleSeries"; series: string }
   | { type: "chooseView"; view: number };
 

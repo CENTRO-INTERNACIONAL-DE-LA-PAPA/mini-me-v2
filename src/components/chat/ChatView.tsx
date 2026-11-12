@@ -111,8 +111,7 @@ export function ChatView({
       openDocumentRef.current(assetId, edits ? { edits } : undefined),
     [],
   );
-  /** Files are being dragged over the window. */
-  const [dragging, setDragging] = useState(false);
+  const [draggingFiles, setDraggingFiles] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -120,11 +119,11 @@ export function ChatView({
     getCurrentWebview()
       .onDragDropEvent(({ payload }) => {
         if (payload.type === "enter") {
-          setDragging(payload.paths.length > 0);
+          setDraggingFiles(payload.paths.length > 0);
         } else if (payload.type === "leave") {
-          setDragging(false);
+          setDraggingFiles(false);
         } else if (payload.type === "drop") {
-          setDragging(false);
+          setDraggingFiles(false);
           if (payload.paths.length > 0) composer.current?.attachDropped(payload.paths);
         }
       })
@@ -191,7 +190,7 @@ export function ChatView({
         <ComponentReferencesProvider names={names} append={appendReference}>
           <div className="flex min-h-0 min-w-0 flex-1 gap-3">
             <MainSheet>
-              {dragging && (
+              {draggingFiles && (
                 <div
                   role="status"
                   className={cn(

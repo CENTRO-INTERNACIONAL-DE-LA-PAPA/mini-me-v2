@@ -55,7 +55,7 @@ export function ToolSheet({
 }
 
 /** The well-filled square close button at the top right of a sheet. */
-export function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
+function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <Button variant="secondary" size="icon" aria-label={label} title={label} onClick={onClick}>
       <XIcon />

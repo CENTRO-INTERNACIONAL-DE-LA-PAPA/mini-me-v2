@@ -1,9 +1,8 @@
 import { ArrowRightIcon } from "lucide-react";
-import { api } from "../../api";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import type { MiniMe } from "../../protocol/types";
 import { ReferenceChip } from "../chat/ReferenceChip";
-import { useOpenDocument } from "../documents/openDocument";
+import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import { MiniMePill } from "../minime/MiniMePill";
 import type { Renderers, RendererProps } from "./catalogue";
@@ -52,14 +51,13 @@ export function HandOffCard({
 function HandOffV1({ data, projectId }: RendererProps) {
   const { mini_me_id: miniMeId, request, file } = (data ?? {}) as HandOffData;
   const miniMe = useMiniMes().find((m) => m.id === miniMeId);
-  const openDocument = useOpenDocument();
+  const open = useOpenFile(projectId);
   const assetId = file?.asset_id;
   const fileName = file?.name;
 
   const openFile = () => {
     if (!assetId) return;
-    if (openDocument && fileName && isDocument(fileName)) openDocument(assetId);
-    else if (projectId) void api.openAsset(projectId, assetId).catch(() => {});
+    open(assetId, !!fileName && isDocument(fileName));
   };
   return (
     <HandOffCard

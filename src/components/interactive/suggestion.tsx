@@ -18,7 +18,7 @@ const DECISIONS: Record<SuggestionDecision, string> = {
 };
 
 /** What the user decided about a suggestion; null while it waits. */
-export function suggestionDecision(answer: unknown): SuggestionDecision | null {
+function suggestionDecision(answer: unknown): SuggestionDecision | null {
   if (answer && typeof answer === "object" && "decision" in answer) {
     const decision = answer.decision as SuggestionDecision;
     if (decision in DECISIONS) return decision;

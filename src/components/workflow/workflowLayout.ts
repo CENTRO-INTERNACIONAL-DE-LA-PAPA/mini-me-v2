@@ -2,15 +2,15 @@ import type { Edge, Node } from "@xyflow/react";
 import type { WorkflowStep } from "../../protocol/types";
 import type { ListPath, PathPart, Slot } from "./workflowEdit";
 
-export const NODE = { width: 220, height: 56 };
-export const PILL = { width: 180, height: 32 };
+const NODE = { width: 220, height: 56 };
+const PILL = { width: 180, height: 32 };
 export const EMPTY_SLOT = { width: 160, height: 40 };
 const JOIN = 8;
 const GAP_Y = 44;
 const GAP_X = 40;
 const LOOP_PAD = 20;
 
-export type LayoutNodeKind =
+type LayoutNodeKind =
   "start" | "end" | "trait" | "approval" | "marker" | "loop" | "frame" | "join" | "slot";
 
 export interface LayoutNodeData extends Record<string, unknown> {
@@ -181,7 +181,7 @@ class Builder {
 }
 
 /** The start and end pills' IDs. Step IDs never hold a ":", so they can't clash. */
-export const START_ID = ":start";
+const START_ID = ":start";
 export const END_ID = ":end";
 
 /** The canvas for a Workflow: a "When invoked" start, its Steps from top to bottom, and a

@@ -13,7 +13,7 @@ use crate::error::{AppError, AppResult};
 use crate::protocol::{
     AssetRef, Author, AuthorKind, TextComponent, TextComponentKind, new_id, now_ms,
 };
-use crate::store::{Project, ProjectState};
+use crate::store::{Project, ProjectState, parse_id, unreadable};
 
 /// Where an Asset downloaded from outside the Project came from.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -23,6 +23,32 @@ pub enum AssetOrigin {
     Dataverse { file_id: u64, dataset_id: String, title: String, url: String },
 }
 
+/// Stored in the `source` column as its serialized name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AssetSource {
+    Upload,
+    /// Made by the app, such as a Mini-Me's output or an exported PDF.
+    Generated,
+    Dataverse,
+}
+
+impl AssetSource {
+    fn as_str(self) -> &'static str {
+        match self {
+            AssetSource::Upload => "upload",
+            AssetSource::Generated => "generated",
+            AssetSource::Dataverse => "dataverse",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        [AssetSource::Upload, AssetSource::Generated, AssetSource::Dataverse]
+            .into_iter()
+            .find(|source| source.as_str() == value)
+    }
+}
+
 /// Copies a file the user picked into the Project; the original is only read.
 pub fn import(project: &Project, source: &Path, user: &Author) -> AppResult<AssetRef> {
     let name = source
@@ -30,7 +56,7 @@ pub fn import(project: &Project, source: &Path, user: &Author) -> AppResult<Asse
         .map(|n| n.to_string_lossy().to_string())
         .filter(|n| !n.is_empty())
         .ok_or_else(|| AppError::invalid_input("The selected item is not a file."))?;
-    copy_in(project, source, &name, ("upload", user), None)
+    copy_in(project, source, &name, (AssetSource::Upload, user), None)
 }
 
 /// Copies a downloaded file into the Project as `name` and records where it came from.
@@ -43,7 +69,7 @@ pub fn import_downloaded(
 ) -> AppResult<AssetRef> {
     check_name(name)?;
     let kind = match origin {
-        AssetOrigin::Dataverse { .. } => "dataverse",
+        AssetOrigin::Dataverse { .. } => AssetSource::Dataverse,
     };
     copy_in(project, source, name, (kind, user), Some(origin))
 }
@@ -76,7 +102,7 @@ fn copy_in(
     project: &Project,
     source: &Path,
     name: &str,
-    (kind, author): (&str, &Author),
+    (kind, author): (AssetSource, &Author),
     origin: Option<&AssetOrigin>,
 ) -> AppResult<AssetRef> {
     if !source.is_file() {
@@ -165,7 +191,7 @@ pub fn write_generated(
     bytes: &[u8],
     author: &Author,
 ) -> AppResult<AssetRef> {
-    store(project, name, media_type, bytes, ("generated", author))
+    store(project, name, media_type, bytes, (AssetSource::Generated, author))
 }
 
 /// Stores bytes the user pasted or started, such as a blank document, as an `upload` Asset.
@@ -176,7 +202,7 @@ pub fn import_bytes(
     bytes: &[u8],
     user: &Author,
 ) -> AppResult<AssetRef> {
-    store(project, name, media_type, bytes, ("upload", user))
+    store(project, name, media_type, bytes, (AssetSource::Upload, user))
 }
 
 /// The title made safe plus `.csv`, or `Table.csv` without one. A title that is a table file's name
@@ -219,7 +245,7 @@ fn store(
     name: &str,
     media_type: &str,
     bytes: &[u8],
-    (source, author): (&str, &Author),
+    (source, author): (AssetSource, &Author),
 ) -> AppResult<AssetRef> {
     check_name(name)?;
     let id = new_id();
@@ -350,11 +376,10 @@ fn media_type_of(name: &str) -> String {
     mime_guess::from_path(name).first_or_octet_stream().essence_str().to_string()
 }
 
-/// Adds a stored file to the registry; `source` is `upload`, `generated` or `dataverse`.
 fn register(
     project: &Project,
     asset: AssetRef,
-    (source, author): (&str, &Author),
+    (source, author): (AssetSource, &Author),
     rel_path: &str,
     origin: Option<&AssetOrigin>,
 ) -> AppResult<AssetRef> {
@@ -367,7 +392,7 @@ fn register(
             asset.name,
             asset.media_type,
             asset.size_bytes,
-            source,
+            source.as_str(),
             rel_path,
             now_ms(),
             author.kind.as_str(),
@@ -420,7 +445,7 @@ pub fn list(project: &Project, query: Option<&str>) -> AppResult<Vec<AssetRef>> 
             continue;
         }
         assets.push(AssetRef {
-            id: Uuid::parse_str(&id).map_err(|_| AppError::storage("stored ID is not readable"))?,
+            id: parse_id(&id, "ID")?,
             name,
             media_type,
             size_bytes,
@@ -434,9 +459,7 @@ pub fn list(project: &Project, query: Option<&str>) -> AppResult<Vec<AssetRef>> 
 pub struct FileEntry {
     #[serde(flatten)]
     pub asset: AssetRef,
-    /// `upload` (imported or started by the user), `generated` (made by the app, such as a
-    /// Mini-Me's output or an exported PDF) or `dataverse`.
-    pub source: String,
+    pub source: AssetSource,
     /// Where a downloaded file came from.
     pub origin: Option<AssetOrigin>,
     /// When the Asset was registered, in milliseconds since the epoch.
@@ -458,57 +481,75 @@ pub struct ConversationRef {
 /// Every Asset of the Project, newest first, with who added it and where it is used.
 pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     let state = project.lock();
-    let corrupt = || AppError::storage("stored ID is not readable");
+    let mut entries = file_entries(project, &state)?;
+    add_used_in(&state, &mut entries)?;
+    Ok(entries)
+}
+
+struct AssetRow {
+    id: String,
+    name: String,
+    media_type: String,
+    size_bytes: i64,
+    source: String,
+    created_at: i64,
+    rel_path: String,
+    added_by_kind: Option<String>,
+    added_by_id: Option<String>,
+    origin: Option<String>,
+}
+
+/// Every Asset, newest first, with `used_in` left empty.
+fn file_entries(project: &Project, state: &ProjectState) -> AppResult<Vec<FileEntry>> {
+    let mut stmt = state.conn.prepare(
+        "SELECT id, name, media_type, size_bytes, source, created_at, rel_path, \
+         added_by_kind, added_by_id, origin FROM assets ORDER BY created_at DESC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(AssetRow {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            media_type: row.get(2)?,
+            size_bytes: row.get(3)?,
+            source: row.get(4)?,
+            created_at: row.get(5)?,
+            rel_path: row.get(6)?,
+            added_by_kind: row.get(7)?,
+            added_by_id: row.get(8)?,
+            origin: row.get(9)?,
+        })
+    })?;
     let mut entries = Vec::new();
-    {
-        let mut stmt = state.conn.prepare(
-            "SELECT id, name, media_type, size_bytes, source, created_at, rel_path, \
-             added_by_kind, added_by_id, origin FROM assets ORDER BY created_at DESC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, i64>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, i64>(5)?,
-                row.get::<_, String>(6)?,
-                row.get::<_, Option<String>>(7)?,
-                row.get::<_, Option<String>>(8)?,
-            ), row.get::<_, Option<String>>(9)?))
-        })?;
-        for row in rows {
-            let (columns, origin) = row?;
-            let (id, name, media_type, size_bytes, source, created_at, rel_path, by_kind, by_id) =
-                columns;
-            let added_by = author(by_kind, by_id);
-            let modified_at = project
-                .paths
-                .resolve(&rel_path)
-                .ok()
-                .and_then(|path| std::fs::metadata(path).ok()?.modified().ok())
-                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|since| since.as_millis() as i64);
-            entries.push(FileEntry {
-                asset: AssetRef {
-                    id: Uuid::parse_str(&id).map_err(|_| corrupt())?,
-                    name,
-                    media_type,
-                    size_bytes,
-                },
-                source,
-                origin: origin.and_then(|o| serde_json::from_str(&o).ok()),
-                created_at,
-                modified_at,
-                added_by,
-                used_in: Vec::new(),
-            });
-        }
+    for row in rows {
+        let row = row?;
+        let modified_at = project
+            .paths
+            .resolve(&row.rel_path)
+            .ok()
+            .and_then(|path| std::fs::metadata(path).ok()?.modified().ok())
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|since| since.as_millis() as i64);
+        entries.push(FileEntry {
+            asset: AssetRef {
+                id: parse_id(&row.id, "ID")?,
+                name: row.name,
+                media_type: row.media_type,
+                size_bytes: row.size_bytes,
+            },
+            source: AssetSource::parse(&row.source).ok_or_else(|| unreadable("Asset"))?,
+            origin: row.origin.and_then(|o| serde_json::from_str(&o).ok()),
+            created_at: row.created_at,
+            modified_at,
+            added_by: author(row.added_by_kind, row.added_by_id),
+            used_in: Vec::new(),
+        });
     }
+    Ok(entries)
+}
+
+fn add_used_in(state: &ProjectState, entries: &mut [FileEntry]) -> AppResult<()> {
     let index: HashMap<Uuid, usize> =
         entries.iter().enumerate().map(|(i, e)| (e.asset.id, i)).collect();
-
     let mut stmt = state.conn.prepare(&format!(
         "SELECT m.conversation_id, c.title, m.attachments, m.text_components FROM messages m \
          JOIN conversations c ON c.id = m.conversation_id WHERE {} ORDER BY m.rowid",
@@ -524,7 +565,7 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     })?;
     for row in rows {
         let (conversation, title, attachments, text_components) = row?;
-        let conversation = Uuid::parse_str(&conversation).map_err(|_| corrupt())?;
+        let conversation = parse_id(&conversation, "ID")?;
         let attached: Vec<AssetRef> = serde_json::from_str(&attachments)?;
         let referenced: Vec<TextComponent> = serde_json::from_str(&text_components)?;
         let ids = attached.iter().map(|a| a.id).chain(
@@ -539,7 +580,7 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
             }
         }
     }
-    Ok(entries)
+    Ok(())
 }
 
 /// None for a file whose author was never recorded.
@@ -783,11 +824,11 @@ mod tests {
 
         let entries = project_files(&project).unwrap();
         let entry = |id| entries.iter().find(|e| e.asset.id == id).unwrap();
-        assert_eq!(entry(trial.id).source, "upload");
+        assert_eq!(entry(trial.id).source, AssetSource::Upload);
         assert_eq!(entry(trial.id).added_by.as_ref().unwrap().kind, AuthorKind::User);
         let used: Vec<Uuid> = entry(trial.id).used_in.iter().map(|c| c.id).collect();
         assert_eq!(used, [first, second]);
-        assert_eq!(entry(unused.id).source, "generated");
+        assert_eq!(entry(unused.id).source, AssetSource::Generated);
         assert_eq!(entry(unused.id).added_by, Some(crate::projects::test_support::user()));
         assert!(entry(unused.id).used_in.is_empty());
     }

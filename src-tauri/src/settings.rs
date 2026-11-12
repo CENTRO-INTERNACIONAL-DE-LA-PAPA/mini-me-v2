@@ -2,7 +2,7 @@
 //! folders stay self-contained.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::features::{self, FEATURES, Feature};
 use crate::link::{CallModel, DebugParts};
+use crate::paths::write_atomic;
 use crate::protocol::{Origin, new_id};
 use crate::secrets::is_provider;
 
@@ -170,30 +171,26 @@ impl Settings {
     /// Writes to a temporary file and renames it, so a crash never leaves a half-written file.
     pub fn save(&self, config_dir: &Path) -> AppResult<()> {
         std::fs::create_dir_all(config_dir)?;
-        let tmp: PathBuf = config_dir.join(format!("{FILE_NAME}.tmp"));
-        std::fs::write(&tmp, serde_json::to_string_pretty(self)?)?;
-        std::fs::rename(&tmp, config_dir.join(FILE_NAME))?;
+        write_atomic(&config_dir.join(FILE_NAME), serde_json::to_string_pretty(self)?.as_bytes())?;
         Ok(())
     }
 
     /// Whether to open What's new for the running `version`: it is not the version last shown,
-    /// and this is not Mini-Me Dev (`dev_app`). Records `version` as shown, so the caller saves.
-    pub fn take_whats_new(&mut self, version: &str, dev_app: bool) -> bool {
-        if dev_app || self.last_seen_version.as_deref() == Some(version) {
+    /// and this is not Mini-Me Dev. Records `version` as shown, so the caller saves.
+    pub fn take_whats_new(&mut self, version: &str, is_dev_app: bool) -> bool {
+        if is_dev_app || self.last_seen_version.as_deref() == Some(version) {
             return false;
         }
         self.last_seen_version = Some(version.to_string());
         true
     }
 
-    /// `dev_app` is whether this app is Mini-Me Dev.
-    pub fn developer_mode(&self, dev_app: bool) -> bool {
-        self.developer_mode.unwrap_or(dev_app)
+    pub fn developer_mode(&self, is_dev_app: bool) -> bool {
+        self.developer_mode.unwrap_or(is_dev_app)
     }
 
-    /// The reply debug parts runs collect; `dev_app` is whether this app is Mini-Me Dev.
-    pub fn reply_debug(&self, dev_app: bool) -> DebugParts {
-        let on = self.developer_mode(dev_app);
+    pub fn reply_debug(&self, is_dev_app: bool) -> DebugParts {
+        let on = self.developer_mode(is_dev_app);
         DebugParts {
             input: on && self.debug.reply_input,
             details: on && self.debug.reply_details,
@@ -201,9 +198,8 @@ impl Settings {
         }
     }
 
-    /// The feature flags that are on; `dev_app` is whether this app is Mini-Me Dev.
-    pub fn active_features(&self, dev_app: bool) -> Vec<&'static Feature> {
-        features::active(FEATURES, &self.unlocked_features, &self.locked_features, dev_app)
+    pub fn active_features(&self, is_dev_app: bool) -> Vec<&'static Feature> {
+        features::active(FEATURES, &self.unlocked_features, &self.locked_features, is_dev_app)
     }
 
     /// Records the flag `id` as on, as entering its key does.

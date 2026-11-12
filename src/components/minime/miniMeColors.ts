@@ -3,7 +3,7 @@ import type { MiniMeColors } from "../../protocol/types";
 
 /** A Mini-Me's colours on the surfaces it owns: its stored `tint`, `solid` and `ink`, plus a
  * very light `wash` for its replies and cards and an `edge` for borders on that wash. */
-export interface SurfaceColors extends MiniMeColors {
+interface SurfaceColors extends MiniMeColors {
   wash: string;
   edge: string;
 }
@@ -52,10 +52,16 @@ export function oklchToHex([L, C, h]: Oklch): string {
   );
 }
 
+/** The hue of a colour written as `oklch(L C h)` or `#rrggbb`, in degrees. */
+function hueOf(colour: string): number {
+  const oklch = /^oklch\(\s*\S+\s+\S+\s+([\d.]+)/i.exec(colour);
+  return oklch ? Number(oklch[1]) : hexToOklch(colour)[2];
+}
+
 /** A Mini-Me's surface colours: `wash` and `edge` take the hue of its `solid`, at the
  * lightness and chroma DESIGN.md gives for them. */
 export function surfaceColors(colors: MiniMeColors): SurfaceColors {
-  const [, , hue] = hexToOklch(colors.solid);
+  const hue = hueOf(colors.solid);
   return {
     ...colors,
     wash: oklchToHex([0.985, 0.015, hue]),

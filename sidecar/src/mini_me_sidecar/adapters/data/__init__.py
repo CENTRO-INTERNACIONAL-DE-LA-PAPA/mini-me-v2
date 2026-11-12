@@ -2,15 +2,9 @@
 
 from typing import Any
 
-from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
+from mini_me_sidecar.adapters.base import TEXT_INPUT, Adapter, AdapterInfo
 from mini_me_sidecar.adapters.providers import PROVIDER_NAMES
 from mini_me_sidecar.context import CallContext
-
-INPUT_SCHEMA = {
-    "type": "object",
-    "properties": {"text": {"type": "string"}},
-    "required": ["text"],
-}
 
 
 class ProfileData(Adapter):
@@ -18,7 +12,7 @@ class ProfileData(Adapter):
     info = AdapterInfo(
         id="data-profile",
         description="Describes tables with pandas, without an AI model.",
-        input_schema=INPUT_SCHEMA,
+        input_schema=TEXT_INPUT,
     )
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
@@ -33,7 +27,7 @@ class ValidateData(Adapter):
     info = AdapterInfo(
         id="data-validate",
         description="Runs default and chosen data checks with pointblank.",
-        input_schema=INPUT_SCHEMA,
+        input_schema=TEXT_INPUT,
         providers=tuple(PROVIDER_NAMES),
     )
 
@@ -49,7 +43,7 @@ class CleanData(Adapter):
     info = AdapterInfo(
         id="data-clean",
         description="Applies chosen cleaning actions with pandas and saves a new file.",
-        input_schema=INPUT_SCHEMA,
+        input_schema=TEXT_INPUT,
         providers=tuple(PROVIDER_NAMES),
     )
 
@@ -65,7 +59,7 @@ class JoinData(Adapter):
     info = AdapterInfo(
         id="data-join",
         description="Joins two tables on key columns with pandas.",
-        input_schema=INPUT_SCHEMA,
+        input_schema=TEXT_INPUT,
         providers=tuple(PROVIDER_NAMES),
     )
 
@@ -81,7 +75,7 @@ class PlotData(Adapter):
     info = AdapterInfo(
         id="data-plot",
         description="Draws charts of a table, with values computed by pandas.",
-        input_schema=INPUT_SCHEMA,
+        input_schema=TEXT_INPUT,
         providers=tuple(PROVIDER_NAMES),
     )
 

@@ -1,27 +1,13 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, errorMessage } from "../../api";
+import { useSubscription } from "../../hooks/useSubscription";
 import type { SidecarStatus } from "../../protocol/types";
 import { Button } from "@/components/ui/button";
+import { StatusRow } from "./StatusRow";
 
 /** The sidecar's status, kept current; null until the first status arrives. */
 export function useSidecarStatus(): SidecarStatus | null {
-  const [status, setStatus] = useState<SidecarStatus | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    api
-      .subscribeSidecarStatus((next) => {
-        if (active) {
-          setStatus(next);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  return status;
+  return useSubscription<SidecarStatus | null>(api.subscribeSidecarStatus, null);
 }
 
 export function sidecarReady(status: SidecarStatus | null): boolean {
@@ -46,17 +32,17 @@ export function SidecarStatusLine({ status }: { status: SidecarStatus | null }) 
   }
 
   return (
-    <div role="status" className="flex items-start gap-2 text-meta text-muted-foreground">
-      <span aria-hidden className="mt-1.5 size-[7px] shrink-0 rounded-full bg-off" />
-      <p className="flex-1">
-        {status.detail}
-        {error && <span className="block text-destructive">{error}</span>}
-      </p>
-      {status.state === "stopped" && (
-        <Button variant="outline" size="xs" onClick={restart}>
-          Try again
-        </Button>
-      )}
-    </div>
+    <StatusRow
+      error={error}
+      action={
+        status.state === "stopped" && (
+          <Button variant="outline" size="xs" onClick={restart}>
+            Try again
+          </Button>
+        )
+      }
+    >
+      {status.detail}
+    </StatusRow>
   );
 }

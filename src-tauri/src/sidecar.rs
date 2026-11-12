@@ -12,6 +12,7 @@ use serde::Serialize;
 use crate::link::{self, AdapterInfo, CoreFrame, SIDECAR_PROTOCOL, SidecarFrame};
 use crate::protocol::now_ms;
 use crate::runs::{FrameSink, Runs};
+use crate::sync::{Sink, Watched, locked};
 
 /// Restart delays by consecutive failure; the 5th consecutive failure stops retrying.
 pub const RESTART_DELAYS: [Duration; 4] = [
@@ -182,7 +183,7 @@ impl SidecarLog {
         let Some(path) = &self.path else {
             return;
         };
-        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        let _guard = locked(&self.lock);
         if std::fs::metadata(path).is_ok_and(|m| m.len() >= self.max_bytes) {
             let previous = path.with_extension("log.1");
             let _ = std::fs::remove_file(&previous);
@@ -327,7 +328,7 @@ impl FrameSink for ChildSink {
         if self.log_frames {
             self.log.line(&format!("-> {}", link::redacted(frame)));
         }
-        let mut stdin = self.stdin.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stdin = locked(&self.stdin);
         stdin
             .write_all(link::encode(frame).as_bytes())
             .and_then(|_| stdin.flush())
@@ -341,7 +342,7 @@ enum Outcome {
     Incompatible(String),
 }
 
-type StatusSink = Box<dyn Fn(&SidecarStatus) -> bool + Send>;
+type StatusSink = Sink<SidecarStatus>;
 
 #[derive(Default)]
 struct Control {
@@ -356,8 +357,7 @@ pub struct Supervisor {
     timing: Timing,
     calls: Arc<Runs>,
     log: Arc<SidecarLog>,
-    status: Mutex<SidecarStatus>,
-    subscribers: Mutex<Vec<StatusSink>>,
+    status: Watched<SidecarStatus>,
     control: Mutex<Control>,
     wake: Condvar,
 }
@@ -374,11 +374,10 @@ impl Supervisor {
             timing,
             calls,
             log,
-            status: Mutex::new(SidecarStatus::new(
+            status: Watched::new(SidecarStatus::new(
                 SidecarState::Starting,
                 Some("Mini-Me is starting."),
             )),
-            subscribers: Mutex::new(Vec::new()),
             control: Mutex::new(Control::default()),
             wake: Condvar::new(),
         })
@@ -391,18 +390,12 @@ impl Supervisor {
     }
 
     pub fn status(&self) -> SidecarStatus {
-        self.status.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        self.status.get()
     }
 
     /// Sends the current status, then every change, until `sink` returns `false`.
     pub fn subscribe(&self, sink: StatusSink) {
-        let status = self.status.lock().unwrap_or_else(|p| p.into_inner());
-        if sink(&*status) {
-            self.subscribers
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .push(sink);
-        }
+        self.status.subscribe(sink);
     }
 
     /// Starts the sidecar again after it was `stopped` or `incompatible`.
@@ -428,7 +421,7 @@ impl Supervisor {
         if let Some(child) = child {
             let deadline = Instant::now() + SHUTDOWN_GRACE;
             loop {
-                let mut child = child.lock().unwrap_or_else(|p| p.into_inner());
+                let mut child = locked(&child);
                 if !matches!(child.try_wait(), Ok(None)) {
                     break;
                 }
@@ -444,19 +437,11 @@ impl Supervisor {
     }
 
     fn control(&self) -> MutexGuard<'_, Control> {
-        self.control.lock().unwrap_or_else(|p| p.into_inner())
+        locked(&self.control)
     }
 
     fn set_status(&self, status: SidecarStatus) {
-        let mut current = self.status.lock().unwrap_or_else(|p| p.into_inner());
-        if *current == status {
-            return;
-        }
-        *current = status;
-        self.subscribers
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .retain(|sink| sink(&*current));
+        self.status.set(status);
     }
 
     /// Waits until a restart is requested; `false` when the app is shutting down instead.
@@ -697,13 +682,13 @@ fn spawn_reader(stdout: impl std::io::Read + Send + 'static, tx: Sender<Incoming
 }
 
 fn kill(child: &Arc<Mutex<Child>>) {
-    let mut child = child.lock().unwrap_or_else(|p| p.into_inner());
+    let mut child = locked(&child);
     let _ = child.kill();
     let _ = child.wait();
 }
 
 fn exit(child: &Arc<Mutex<Child>>) -> String {
-    let mut child = child.lock().unwrap_or_else(|p| p.into_inner());
+    let mut child = locked(&child);
     match child.wait() {
         Ok(status) => status.to_string(),
         Err(err) => err.to_string(),

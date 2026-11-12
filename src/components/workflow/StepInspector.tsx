@@ -14,6 +14,7 @@ import { ChevronRightIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { MiniMe, TraitSummary, WorkflowBranch, WorkflowStep } from "../../protocol/types";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
+import { count } from "../../lib/format";
 import { ToolSheet } from "../shell/Sheet";
 import type { View } from "../shell/view";
 import { toolLabel } from "./tools";
@@ -100,7 +101,7 @@ export function StepInspector({
                 <p className="text-ui leading-normal text-foreground">{trait.description}</p>
                 <div className="flex items-center justify-between text-meta">
                   <span className="text-mm-ink">
-                    Used by {trait.used_by.length} Mini-Me{trait.used_by.length === 1 ? "" : "s"}
+                    Used by {count(trait.used_by.length, "Mini-Me")}
                   </span>
                   <Button
                     variant="link"
@@ -314,8 +315,7 @@ function Branches({
 
 /** "1 Step" or "n Steps", counting nested Steps. */
 function stepCount(steps: WorkflowStep[]): string {
-  const n = allIds(steps).length;
-  return n === 1 ? "1 Step" : `${n} Steps`;
+  return count(allIds(steps).length, "Step");
 }
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {

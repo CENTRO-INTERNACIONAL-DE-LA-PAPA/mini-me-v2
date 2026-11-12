@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::assets;
 use crate::comments;
 use crate::components;
-use crate::conversations::{self, ConversationStatus, PausedRun};
+use crate::conversations::{self, ConversationStatus, NewComponent, PausedRun};
 use crate::dataverse;
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
@@ -31,6 +31,7 @@ use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
 use crate::sidecar::SidecarLog;
 use crate::store::Project;
+use crate::sync::locked;
 
 pub const ASSET_CHUNK_BYTES: u64 = 1024 * 1024;
 /// The largest file a Trait may write with `asset.write`.
@@ -72,12 +73,10 @@ pub type DocumentGate = Arc<dyn Fn() -> AppResult<()> + Send + Sync>;
 
 /// What a request to the sidecar fails with when no answer comes.
 struct NoAnswer {
-    /// The sidecar is not running.
-    not_ready: &'static str,
-    /// Code and message when the answer takes longer than the timeout.
-    timeout: (&'static str, &'static str),
-    /// The sidecar stopped before it answered.
-    stopped: &'static str,
+    when_not_ready: &'static str,
+    /// Code and message.
+    when_timed_out: (&'static str, &'static str),
+    when_stopped: &'static str,
 }
 
 /// Returns `false` when the sidecar can no longer be reached.
@@ -155,6 +154,7 @@ struct SavedRun {
 }
 
 /// A Trait call uses its adapter; a condition's or loop's decision may only get the run's AI key.
+#[derive(Clone)]
 enum CallKind {
     Trait { adapter: String },
     Decision,
@@ -306,8 +306,7 @@ struct Place {
     provider: Option<String>,
     /// The Step the call runs.
     step_id: String,
-    /// The adapter of a Trait call; `None` for a decision.
-    call: Option<String>,
+    call: CallKind,
 }
 
 #[derive(Deserialize)]
@@ -338,27 +337,27 @@ impl Runs {
     }
 
     pub fn set_debug(&self, parts: DebugParts) {
-        *self.debug.lock().unwrap_or_else(|p| p.into_inner()) = parts;
+        *locked(&self.debug) = parts;
     }
 
     /// For Traits that ask during a call.
     pub fn set_active_features(&self, ids: Vec<String>) {
-        *self.features.lock().unwrap_or_else(|p| p.into_inner()) = ids;
+        *locked(&self.features) = ids;
     }
 
     pub fn set_document_gate(&self, gate: DocumentGate) {
-        *self.document_gate.lock().unwrap_or_else(|p| p.into_inner()) = Some(gate);
+        *locked(&self.document_gate) = Some(gate);
     }
 
     /// Fails with the gate's error when document work is not possible.
     fn document_allowed(&self) -> AppResult<()> {
-        let gate = self.document_gate.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let gate = locked(&self.document_gate).clone();
         gate.map_or(Ok(()), |check| check())
     }
 
 
     fn lock(&self) -> MutexGuard<'_, Inner> {
-        self.inner.lock().unwrap_or_else(|p| p.into_inner())
+        locked(&self.inner)
     }
 
     /// For a sidecar past the handshake.
@@ -520,7 +519,7 @@ impl Runs {
                 file: spec.file.clone(),
                 mini_mes: mini_me_list(&self.library.current()),
                 document: comments::run_document(&project, conversation_id).ok().flatten(),
-                debug: *self.debug.lock().unwrap_or_else(|p| p.into_inner()),
+                debug: *locked(&self.debug),
             },
         };
         self.lock().runs.insert(
@@ -564,9 +563,9 @@ impl Runs {
         let route_id = new_id();
         let frame = CoreFrame::RouteStart { route_id, state, mini_mes, files, ask };
         let no_answer = NoAnswer {
-            not_ready: "Mini-Me's runtime is not ready.",
-            timeout: ("jev_timeout", "Typesafe did not answer in time."),
-            stopped: "Mini-Me's runtime stopped before choosing a Mini-Me.",
+            when_not_ready: "Mini-Me's runtime is not ready.",
+            when_timed_out: ("jev_timeout", "Typesafe did not answer in time."),
+            when_stopped: "Mini-Me's runtime stopped before choosing a Mini-Me.",
         };
         match self.request(|inner| &mut inner.routes, route_id, frame, timeout, no_answer) {
             Ok((answers, asked)) => Routed {
@@ -589,9 +588,9 @@ impl Runs {
         self.lock().key_providers.insert(summary_id, model.provider.clone());
         let frame = CoreFrame::SummaryStart { summary_id, model, material, kind };
         let no_answer = NoAnswer {
-            not_ready: "Mini-Me's runtime is not ready.",
-            timeout: ("summary_timeout", "The AI model did not answer in time. Try again."),
-            stopped: "Mini-Me's runtime stopped before the AI model answered.",
+            when_not_ready: "Mini-Me's runtime is not ready.",
+            when_timed_out: ("summary_timeout", "The AI model did not answer in time. Try again."),
+            when_stopped: "Mini-Me's runtime stopped before the AI model answered.",
         };
         let summary = self.request(|inner| &mut inner.summaries, summary_id, frame, timeout, no_answer);
         self.lock().key_providers.remove(&summary_id);
@@ -705,7 +704,7 @@ impl Runs {
         let sink = {
             let mut inner = self.lock();
             let Some(sink) = inner.sink.clone() else {
-                return Err(AppError::new(SIDECAR_STOPPED, no_answer.not_ready));
+                return Err(AppError::new(SIDECAR_STOPPED, no_answer.when_not_ready));
             };
             pending(&mut inner).insert(id, tx);
             sink
@@ -720,10 +719,10 @@ impl Runs {
             Ok(Ok(answer)) => Ok(answer),
             Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
             Err(RecvTimeoutError::Timeout) => {
-                Err(AppError::new(no_answer.timeout.0, no_answer.timeout.1))
+                Err(AppError::new(no_answer.when_timed_out.0, no_answer.when_timed_out.1))
             }
             Err(RecvTimeoutError::Disconnected) => {
-                Err(AppError::new(SIDECAR_STOPPED, no_answer.stopped))
+                Err(AppError::new(SIDECAR_STOPPED, no_answer.when_stopped))
             }
         }
     }
@@ -774,7 +773,7 @@ impl Runs {
 
     /// Sends the list now and on every change.
     pub fn subscribe(&self, sink: RunningSink) {
-        let mut subscribers = self.subscribers.lock().unwrap_or_else(|p| p.into_inner());
+        let mut subscribers = locked(&self.subscribers);
         if sink(&self.running()) {
             subscribers.push(sink);
         }
@@ -820,7 +819,7 @@ impl Runs {
     }
 
     fn notify(&self) {
-        let mut subscribers = self.subscribers.lock().unwrap_or_else(|p| p.into_inner());
+        let mut subscribers = locked(&self.subscribers);
         if subscribers.is_empty() {
             return;
         }
@@ -1074,10 +1073,7 @@ impl Runs {
                 author: run.spec.author.clone(),
                 provider: run.provider.clone(),
                 step_id: step_id.to_string(),
-                call: match kind {
-                    CallKind::Trait { adapter } => Some(adapter.clone()),
-                    CallKind::Decision => None,
-                },
+                call: kind.clone(),
             });
             // A summary or a draft may only get its own model's key.
             let summary_provider = inner.key_providers.get(&call_id).cloned();
@@ -1092,110 +1088,102 @@ impl Runs {
             }
             return Err(AppError::new("call_not_active", "This Trait call has ended."));
         };
-        let Some(adapter) = place.call.clone() else {
+        let CallKind::Trait { adapter } = &place.call else {
             return self.answer_key("Workflow decision", place.provider.as_deref(), method, params);
         };
-        let project = Arc::clone(&place.project);
-        let reply = place.reply;
         match method {
-            "asset.read" => read_asset(&project, parse_params(params)?),
-            "conversation.history" => {
-                let messages = project.lock().conversation_messages(place.conversation_id)?;
-                let library = self.library.current();
-                let history = history(&messages, place.answers, &library, HISTORY_BUDGET_CHARS);
-                Ok(serde_json::to_value(history)?)
-            }
-            "features.active" => {
-                let features = self.features.lock().unwrap_or_else(|p| p.into_inner()).clone();
-                Ok(json!({ "features": features }))
-            }
-            "dataverse.search" => {
-                let search: dataverse::Search = parse_params(params)?;
-                Ok(serde_json::to_value(dataverse::search(&search)?)?)
-            }
-            "secret.get" => self.secret(&adapter, place.provider.as_deref(), parse_params(params)?),
-            "asset.write" => {
-                let p: AssetWriteParams = parse_params(params)?;
-                if crate::documents::is_document(&p.name) {
-                    self.document_allowed()?;
-                }
-                let bytes = decode_asset(&p.data)?;
-                let file = (p.name.as_str(), p.media_type.as_str(), bytes.as_slice());
-                let asset = conversations::attach_generated(&project, reply, &place.author, file)
-                    .map_err(reply_ended)?;
-                Ok(json!({ "asset": asset }))
-            }
-            "conversation.results" => {
-                let state = project.lock();
-                let messages = state.conversation_messages(place.conversation_id)?;
-                let library = self.library.current();
-                let mut found = results(&messages, place.answers, reply, &library, |id| {
-                    assets::find(&state, id).ok()
-                });
-                // A thread's document is part of what its comment is about.
-                if let Some(document) = comments::document_of(&state, place.conversation_id)? {
-                    found.assets.retain(|a| a.asset.id != document.id);
-                    let message_id = place.answers;
-                    let listed = ResultAsset { asset: document, message_id, current: true };
-                    found.assets.insert(0, listed);
-                }
-                Ok(serde_json::to_value(found)?)
-            }
-            "component.read" => {
-                let p: ComponentReadParams = parse_params(params)?;
-                components::read(&project.lock(), place.conversation_id, p.component_id)
-            }
-            "component.add" => {
-                let p: ComponentAddParams = parse_params(params)?;
-                let data = match p.kind.as_str() {
-                    "suggestion" => comments::suggestion(&project, place.conversation_id, &p.data)?,
-                    _ => p.data,
-                };
-                let component = (p.kind.as_str(), p.version, data, p.text);
-                let step_id = Some(place.step_id.as_str());
-                let id = conversations::add_component(&project, reply, step_id, component)
-                    .map_err(reply_ended)?;
-                Ok(json!({ "component_id": id }))
-            }
-            "document.edit" => {
-                let p: DocumentEditParams = parse_params(params)?;
-                self.document_allowed()?;
-                let call = comments::EditingCall {
-                    conversation_id: place.conversation_id,
-                    answers: place.answers,
-                    reply,
-                    author: &place.author,
-                    step_id: Some(place.step_id.as_str()),
-                };
-                let edited = comments::edit_document(&project, &call, p.asset_id, &p.edits)
-                    .map_err(reply_ended)?;
-                Ok(serde_json::to_value(edited)?)
-            }
-            "reply.hand_off" => {
-                let p: HandOffParams = parse_params(params)?;
-                let hand_off = self.hand_off_allowed(&place, p)?;
-                let library = self.library.current();
-                let name = library.mini_me(hand_off.mini_me_id).map_or("", |m| m.name.as_str());
-                let data = json!({
-                    "mini_me_id": hand_off.mini_me_id,
-                    "request": hand_off.request,
-                    "file": hand_off.file,
-                });
-                let text = format!("Handed to {name}: {}", hand_off.request);
-                self.hold_hand_off(call_id, hand_off)?;
-                let step_id = Some(place.step_id.as_str());
-                let card = ("hand-off", 1, data, text);
-                if let Err(err) = conversations::add_core_component(&project, reply, step_id, card) {
-                    self.drop_hand_off(call_id);
-                    return Err(reply_ended(err));
-                }
-                Ok(json!({ "ok": true }))
-            }
+            "asset.read" => read_asset(&place.project, parse_params(params)?),
+            "conversation.history" => self.conversation_history(&place),
+            "features.active" => self.active_features(),
+            "dataverse.search" => search_dataverse(parse_params(params)?),
+            "secret.get" => self.secret(adapter, place.provider.as_deref(), parse_params(params)?),
+            "asset.write" => self.write_asset(&place, parse_params(params)?),
+            "conversation.results" => self.conversation_results(&place),
+            "component.read" => read_component(&place, parse_params(params)?),
+            "component.add" => add_component(&place, parse_params(params)?),
+            "document.edit" => self.edit_document(&place, parse_params(params)?),
+            "reply.hand_off" => self.accept_hand_off(call_id, &place, parse_params(params)?),
             other => Err(AppError::new(
                 "unknown_method",
                 format!("The core has no request method called '{other}'."),
             )),
         }
+    }
+
+    fn conversation_history(&self, place: &Place) -> AppResult<Value> {
+        let messages = place.project.lock().conversation_messages(place.conversation_id)?;
+        let library = self.library.current();
+        let history = history(&messages, place.answers, &library, HISTORY_BUDGET_CHARS);
+        Ok(serde_json::to_value(history)?)
+    }
+
+    fn active_features(&self) -> AppResult<Value> {
+        let features = locked(&self.features).clone();
+        Ok(json!({ "features": features }))
+    }
+
+    fn write_asset(&self, place: &Place, p: AssetWriteParams) -> AppResult<Value> {
+        if crate::documents::is_document(&p.name) {
+            self.document_allowed()?;
+        }
+        let bytes = decode_asset(&p.data)?;
+        let file = (p.name.as_str(), p.media_type.as_str(), bytes.as_slice());
+        let asset =
+            conversations::attach_generated(&place.project, place.reply, &place.author, file)
+                .map_err(reply_ended)?;
+        Ok(json!({ "asset": asset }))
+    }
+
+    fn conversation_results(&self, place: &Place) -> AppResult<Value> {
+        let state = place.project.lock();
+        let messages = state.conversation_messages(place.conversation_id)?;
+        let library = self.library.current();
+        let mut found = results(&messages, place.answers, place.reply, &library, |id| {
+            assets::find(&state, id).ok()
+        });
+        // A thread's document is part of what its comment is about.
+        if let Some(document) = comments::document_of(&state, place.conversation_id)? {
+            found.assets.retain(|a| a.asset.id != document.id);
+            let message_id = place.answers;
+            let listed = ResultAsset { asset: document, message_id, current: true };
+            found.assets.insert(0, listed);
+        }
+        Ok(serde_json::to_value(found)?)
+    }
+
+    fn edit_document(&self, place: &Place, p: DocumentEditParams) -> AppResult<Value> {
+        self.document_allowed()?;
+        let call = comments::EditingCall {
+            conversation_id: place.conversation_id,
+            answers: place.answers,
+            reply: place.reply,
+            author: &place.author,
+            step_id: Some(place.step_id.as_str()),
+        };
+        let edited = comments::edit_document(&place.project, &call, p.asset_id, &p.edits)
+            .map_err(reply_ended)?;
+        Ok(serde_json::to_value(edited)?)
+    }
+
+    fn accept_hand_off(&self, call_id: Uuid, place: &Place, p: HandOffParams) -> AppResult<Value> {
+        let hand_off = self.hand_off_allowed(place, p)?;
+        let library = self.library.current();
+        let name = library.mini_me(hand_off.mini_me_id).map_or("", |m| m.name.as_str());
+        let data = json!({
+            "mini_me_id": hand_off.mini_me_id,
+            "request": hand_off.request,
+            "file": hand_off.file,
+        });
+        let text = format!("Handed to {name}: {}", hand_off.request);
+        self.hold_hand_off(call_id, hand_off)?;
+        let step_id = Some(place.step_id.as_str());
+        let card = NewComponent { kind: "hand-off".into(), version: 1, data, text };
+        let added = conversations::add_core_component(&place.project, place.reply, step_id, card);
+        if let Err(err) = added {
+            self.drop_hand_off(call_id);
+            return Err(reply_ended(err));
+        }
+        Ok(json!({ "ok": true }))
     }
 
     /// Not to its own or an unknown Mini-Me, not from a handed-off reply or comment thread,
@@ -1373,6 +1361,26 @@ fn reply_ended(err: AppError) -> AppError {
 
 fn parse_params<T: for<'de> Deserialize<'de>>(params: Value) -> AppResult<T> {
     serde_json::from_value(params).map_err(|e| AppError::invalid_input(e.to_string()))
+}
+
+fn search_dataverse(search: dataverse::Search) -> AppResult<Value> {
+    Ok(serde_json::to_value(dataverse::search(&search)?)?)
+}
+
+fn read_component(place: &Place, p: ComponentReadParams) -> AppResult<Value> {
+    components::read(&place.project.lock(), place.conversation_id, p.component_id)
+}
+
+fn add_component(place: &Place, p: ComponentAddParams) -> AppResult<Value> {
+    let data = match p.kind.as_str() {
+        "suggestion" => comments::suggestion(&place.project, place.conversation_id, &p.data)?,
+        _ => p.data,
+    };
+    let component = NewComponent { kind: p.kind, version: p.version, data, text: p.text };
+    let step_id = Some(place.step_id.as_str());
+    let id = conversations::add_component(&place.project, place.reply, step_id, component)
+        .map_err(reply_ended)?;
+    Ok(json!({ "component_id": id }))
 }
 
 /// Up to one chunk; `assets::file_path` confines the read to this Project's folder.

@@ -10,6 +10,7 @@ import { MINI_ME_GROUPS } from "../../protocol/references";
 import type { LibraryView as Library, MiniMe, TraitSummary } from "../../protocol/types";
 import { List, MiniMeCard, Row, TraitIcon } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { count } from "../../lib/format";
 import { SheetPage } from "../shell/Sheet";
 import type { LibraryTab, View } from "../shell/view";
 import { MetaParts } from "@/components/ui/meta-parts";
@@ -130,11 +131,11 @@ function GroupFilter({
       variant="switch"
       size="switch"
       spacing={1}
-      value={[group ?? ALL]}
-      onValueChange={(value) => value.length > 0 && onSelect(value[0] === ALL ? null : value[0])}
+      value={[group ?? ALL_GROUPS]}
+      onValueChange={(value) => value.length > 0 && onSelect(value[0] === ALL_GROUPS ? null : value[0])}
     >
       {[null, ...groups].map((g) => (
-        <ToggleGroupItem key={g ?? ALL} value={g ?? ALL}>
+        <ToggleGroupItem key={g ?? ALL_GROUPS} value={g ?? ALL_GROUPS}>
           {g === null ? "All" : groupLabel(g)}
           <span className="tabular-nums">{count(g)}</span>
         </ToggleGroupItem>
@@ -143,8 +144,7 @@ function GroupFilter({
   );
 }
 
-/** The filter's value for every group. */
-const ALL = "all";
+const ALL_GROUPS = "all";
 
 function MiniMeLists({
   library,
@@ -212,9 +212,7 @@ function TraitLists({
             )}
             {users.length === 0
               ? "Not used yet"
-              : users.length === 1
-                ? "1 Mini-Me"
-                : `${users.length} Mini-Mes`}
+              : count(users.length, "Mini-Me")}
           </span>
         }
         onOpen={() => onOpen({ kind: "trait", id: t.id })}

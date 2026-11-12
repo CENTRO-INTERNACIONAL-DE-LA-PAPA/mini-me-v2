@@ -1,7 +1,6 @@
 """One model call per `summary.start`: an Overview summary, a Conversation title or a model
 test. Each gets exactly one `summary.done` or `summary.error`."""
 
-import asyncio
 import sys
 import traceback
 from typing import Any
@@ -9,15 +8,16 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from mini_me_sidecar.adapters.prompt import REFUSED, RESEARCH_CONTEXT
+from mini_me_sidecar.adapters.prompt import RESEARCH_CONTEXT
 from mini_me_sidecar.adapters.providers import (
     PROVIDER_NAMES,
     chat_model,
+    filtered,
     provider_error,
     structured_answer,
 )
 from mini_me_sidecar.context import Model, Requests, TraitError
-from mini_me_sidecar.link import Link, log
+from mini_me_sidecar.link import Link, RequestTasks
 
 SUMMARY_RULE = (
     "You write the summary at the top of a research Project's Overview. The user's message "
@@ -85,16 +85,10 @@ class Summarizer:
     def __init__(self, link: Link, requests: Requests) -> None:
         self._link = link
         self._requests = requests
-        self._tasks: set[asyncio.Task[None]] = set()
+        self._tasks = RequestTasks(link, "summary")
 
     def start(self, frame: dict[str, Any]) -> None:
-        summary_id = frame.get("summary_id")
-        if not isinstance(summary_id, str):
-            log(f"ignoring summary.start without a summary_id: {frame!r}")
-            return
-        task = asyncio.create_task(self._summarize(summary_id, frame))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._tasks.start(frame, self._summarize)
 
     async def _summarize(self, summary_id: str, frame: dict[str, Any]) -> None:
         raw = frame.get("model") or {}
@@ -103,18 +97,18 @@ class Summarizer:
         try:
             text = await self._write(summary_id, model, str(frame.get("material") or ""), kind)
         except TraitError as error:
-            self._error(summary_id, error.code, str(error))
+            self._tasks.error(summary_id, error.code, str(error))
         except Exception as error:
             traceback.print_exc(file=sys.stderr)
             mapped = provider_error(error, model) if model.provider in PROVIDER_NAMES else None
             if mapped:
-                self._error(summary_id, mapped.code, str(mapped))
+                self._tasks.error(summary_id, mapped.code, str(mapped))
             else:
                 failed = {
                     "title": "The title could not be written.",
                     "test": "The model could not be tested.",
                 }.get(kind, "The summary could not be written.")
-                self._error(summary_id, "summary_failed", failed)
+                self._tasks.error(summary_id, "summary_failed", failed)
         else:
             self._link.send({"type": "summary.done", "summary_id": summary_id, "text": text})
 
@@ -126,7 +120,7 @@ class Summarizer:
         reply = await chat.ainvoke([SystemMessage(system_prompt(kind)), HumanMessage(material)])
         ending = getattr(reply, "response_metadata", None) or {}
         name = PROVIDER_NAMES[model.provider]
-        if ending.get("finish_reason") in REFUSED or ending.get("stop_reason") in REFUSED:
+        if filtered(ending):
             raise TraitError(
                 "provider_refused",
                 f"{model.model} declined to write the summary: {name}'s content filter stopped "
@@ -142,10 +136,5 @@ class Summarizer:
             )
         return text
 
-    def _error(self, summary_id: str, code: str, message: str) -> None:
-        error = {"code": code, "message": message}
-        self._link.send({"type": "summary.error", "summary_id": summary_id, "error": error})
-
     async def close(self) -> None:
-        for task in list(self._tasks):
-            task.cancel()
+        await self._tasks.close()

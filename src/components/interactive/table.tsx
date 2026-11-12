@@ -50,7 +50,7 @@ export function tableText(
 }
 
 /** Which column the rows are sorted by, and in which direction. */
-export interface Sorting {
+interface Sorting {
   column: number;
   desc: boolean;
 }

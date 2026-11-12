@@ -32,7 +32,7 @@ export type Renderer = ComponentType<RendererProps>;
 export type Renderers = Record<number, Renderer>;
 
 /** Every kind this app can draw. A new kind is one file next to this one and one line here. */
-export const catalogue = new Map<string, Renderers>([
+const catalogue = new Map<string, Renderers>([
   ["paper-sources", paperSources.renderers],
   ["theories", theories.renderers],
   ["table", table.renderers],

@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { PinIcon } from "lucide-react";
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, type ReactNode } from "react";
 import { api, errorMessage } from "../../api";
+import { useLoad } from "../../hooks/useLoad";
 
 interface Featuring {
   featuredId: string | null;
@@ -13,18 +14,11 @@ const FeaturingContext = createContext<Featuring | null>(null);
 
 /** Gives the components of `projectId`'s replies a "Feature on Overview" button. */
 export function FeaturingProvider({ projectId, children }: { projectId: string; children: ReactNode }) {
-  const [featuredId, setFeaturedId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    api
-      .getOverview(projectId)
-      .then((overview) => active && setFeaturedId(overview.featured?.component.id ?? null))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [projectId]);
+  const { value, setValue: setFeaturedId } = useLoad(
+    () => api.getOverview(projectId).then((overview) => overview.featured?.component.id ?? null),
+    [projectId],
+  );
+  const featuredId = value ?? null;
 
   const toggle = useCallback(
     (componentId: string) => {
@@ -40,11 +34,6 @@ export function FeaturingProvider({ projectId, children }: { projectId: string; 
   return (
     <FeaturingContext.Provider value={{ featuredId, toggle }}>{children}</FeaturingContext.Provider>
   );
-}
-
-/** Whether a "Feature on Overview" button can be shown for `componentId`. */
-export function useCanFeature(componentId?: string): boolean {
-  return useContext(FeaturingContext) !== null && componentId !== undefined;
 }
 
 /** Features the component on the Project Overview, or removes it when it is the featured one. */

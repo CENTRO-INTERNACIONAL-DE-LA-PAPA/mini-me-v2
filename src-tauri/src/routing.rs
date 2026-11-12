@@ -19,6 +19,7 @@ use crate::link::{CallModel, RouteComponent, RouteFile, RouteMiniMe, RunFile};
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
 use crate::runs::{RouteAnswers, Routed, RunSpec, Runs};
 use crate::store::Project;
+use crate::sync::{Watched, locked};
 
 /// How long a message waits for Jev before the fallback Mini-Me answers it.
 pub const ROUTE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -74,8 +75,7 @@ pub struct Routing {
     /// Conversations whose latest message is waiting for a routing decision.
     pending: Mutex<HashSet<Uuid>>,
     /// Why Jev cannot choose right now, if it cannot.
-    warning: Mutex<Option<&'static str>>,
-    subscribers: Mutex<Vec<WarningSink>>,
+    warning: Watched<Option<&'static str>>,
 }
 
 impl Routing {
@@ -84,20 +84,13 @@ impl Routing {
         Arc::new(Self {
             library,
             pending: Mutex::new(HashSet::new()),
-            warning: Mutex::new((!has_key).then_some(NO_KEY)),
-            subscribers: Mutex::new(Vec::new()),
+            warning: Watched::new((!has_key).then_some(NO_KEY)),
         })
     }
 
     /// Sends the current warning, then every change, until `sink` returns `false`.
     pub fn subscribe(&self, sink: WarningSink) {
-        let warning = self.warning.lock().unwrap_or_else(|p| p.into_inner());
-        if sink(*warning) {
-            self.subscribers
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .push(sink);
-        }
+        self.warning.subscribe(Box::new(move |warning| sink(*warning)));
     }
 
     /// Saving clears the warning (the next route confirms the key); removing warns.
@@ -106,15 +99,7 @@ impl Routing {
     }
 
     fn warn(&self, next: Option<&'static str>) {
-        let mut warning = self.warning.lock().unwrap_or_else(|p| p.into_inner());
-        if *warning == next {
-            return;
-        }
-        *warning = next;
-        self.subscribers
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .retain(|sink| sink(next));
+        self.warning.set(next);
     }
 
     /// Routes on a background thread; `reply_in_progress` while an earlier message awaits routing.
@@ -133,6 +118,12 @@ impl Routing {
             let message = conversations::send_message(&project, conversation_id, input, user_id)?;
             if let Some(mini_me) = first_mention(&message) {
                 let library = self.library.current();
+                let decision = Decision {
+                    answerer: mini_me,
+                    reaction: None,
+                    needs_context: Some(true),
+                    file: None,
+                };
                 let started = self.start_reply(
                     &library,
                     &calls,
@@ -140,9 +131,7 @@ impl Routing {
                     &project,
                     conversation_id,
                     &message,
-                    mini_me,
-                    Some(true),
-                    None,
+                    &decision,
                 );
                 if let Err(err) = started {
                     explain(&project, conversation_id, message.id, &err);
@@ -151,7 +140,7 @@ impl Routing {
             return Ok(message);
         }
         let message = {
-            let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+            let mut pending = locked(&self.pending);
             if pending.contains(&conversation_id) {
                 return Err(AppError::new(
                     "reply_in_progress",
@@ -166,9 +155,7 @@ impl Routing {
         let sent = message.clone();
         std::thread::spawn(move || {
             this.route(&calls, &settings, &project, conversation_id, &sent);
-            this.pending
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
+            locked(&this.pending)
                 .remove(&conversation_id);
         });
         Ok(message)
@@ -184,29 +171,33 @@ impl Routing {
         message: &Message,
     ) {
         let library = self.library.current();
+        let decision = self.ask_jev(calls, settings, project, conversation_id, message, &library);
+        let model = settings.model.clone();
+        let started =
+            self.start_reply(&library, calls, model, project, conversation_id, message, &decision);
+        match started {
+            Ok(author) => react(project, message.id, decision.reaction, author),
+            Err(err) => explain(project, conversation_id, message.id, &err),
+        }
+    }
+
+    /// Without Jev's answers the mentioned Mini-Me or the fallback answers.
+    fn ask_jev(
+        &self,
+        calls: &Runs,
+        settings: &RouteSettings,
+        project: &Project,
+        conversation_id: Uuid,
+        message: &Message,
+        library: &Library,
+    ) -> Decision {
         let mentioned = first_mention(message);
-        let mut ask = vec!["reaction".to_string(), "needs_context".to_string()];
-        if mentioned.is_none() {
-            ask.insert(0, "mini_me".to_string());
-        }
-        let mini_mes = library
-            .summaries()
-            .into_iter()
-            .map(|m| RouteMiniMe {
-                id: m.id,
-                name: m.name,
-                description: m.description,
-            })
-            .collect();
         let messages = project.lock().conversation_messages(conversation_id).unwrap_or_default();
-        let files = file_options(project, conversation_id, &messages, message, &library);
-        if !files.is_empty() {
-            ask.push("file".to_string());
-        }
-        let recent = recent(&messages, message.id, &library);
-        let state = state(message, recent);
+        let files = file_options(project, conversation_id, &messages, message, library);
+        let ask = questions(mentioned.is_none(), !files.is_empty());
+        let state = state(message, recent(&messages, message.id, library));
         let Routed { answers: routed, asked } =
-            calls.route(state, mini_mes, files.clone(), ask, settings.timeout);
+            calls.route(state, route_mini_mes(library), files.clone(), ask, settings.timeout);
         if let Some(record) = jev_record(&routed, asked, settings) {
             let stored = project.lock().put_debug_record(conversation_id, message.id, "jev", &record);
             if let Err(err) = stored {
@@ -224,37 +215,7 @@ impl Routing {
             }
         };
         let reacts = draw() < settings.reaction_chance;
-        let decision = decide(
-            answers.as_ref(),
-            mentioned,
-            &files,
-            settings.threshold,
-            reacts,
-            &library,
-        );
-        let started = self.start_reply(
-            &library,
-            calls,
-            settings.model.clone(),
-            project,
-            conversation_id,
-            message,
-            decision.answerer,
-            decision.needs_context,
-            decision.file,
-        );
-        match started {
-            Ok(author) => {
-                if let Some(emoji) = decision.reaction {
-                    if let Err(err) =
-                        conversations::add_reaction(project, message.id, &emoji, author)
-                    {
-                        eprintln!("could not add the reaction: {err}");
-                    }
-                }
-            }
-            Err(err) => explain(project, conversation_id, message.id, &err),
-        }
+        decide(answers.as_ref(), mentioned, &files, settings.threshold, reacts, library)
     }
 
     /// Returns the reply's author.
@@ -266,20 +227,55 @@ impl Routing {
         project: &Arc<Project>,
         conversation_id: Uuid,
         message: &Message,
-        mini_me_id: Uuid,
-        needs_context: Option<bool>,
-        file: Option<RunFile>,
+        decision: &Decision,
     ) -> AppResult<Author> {
         let author = Author {
             kind: AuthorKind::MiniMe,
-            id: mini_me_id.to_string(),
+            id: decision.answerer.to_string(),
         };
         let input = json!({ "text": input_text(message) });
-        let mut spec =
-            RunSpec::for_mini_me(library, mini_me_id, author.clone(), input, needs_context)?;
-        spec.file = file;
+        let mut spec = RunSpec::for_mini_me(
+            library,
+            decision.answerer,
+            author.clone(),
+            input,
+            decision.needs_context,
+        )?;
+        spec.file = decision.file.clone();
         calls.start(Arc::clone(project), conversation_id, message, spec, model)?;
         Ok(author)
+    }
+}
+
+/// What Jev is asked: who answers only without a mention, and which file only when there are some.
+fn questions(asks_mini_me: bool, asks_file: bool) -> Vec<String> {
+    let mut ask = vec!["reaction".to_string(), "needs_context".to_string()];
+    if asks_mini_me {
+        ask.insert(0, "mini_me".to_string());
+    }
+    if asks_file {
+        ask.push("file".to_string());
+    }
+    ask
+}
+
+fn route_mini_mes(library: &Library) -> Vec<RouteMiniMe> {
+    library
+        .summaries()
+        .into_iter()
+        .map(|m| RouteMiniMe {
+            id: m.id,
+            name: m.name,
+            description: m.description,
+        })
+        .collect()
+}
+
+fn react(project: &Project, message_id: Uuid, reaction: Option<String>, author: Author) {
+    if let Some(emoji) = reaction {
+        if let Err(err) = conversations::add_reaction(project, message_id, &emoji, author) {
+            eprintln!("could not add the reaction: {err}");
+        }
     }
 }
 
@@ -931,7 +927,12 @@ mod tests {
         for (kind, title) in shown {
             let mut data = source.clone();
             data["title"] = json!(title);
-            let component = (kind, 1, data, title.to_string());
+            let component = conversations::NewComponent {
+                kind: kind.into(),
+                version: 1,
+                data,
+                text: title.to_string(),
+            };
             conversations::add_component(&f.project, reply, None, component).unwrap();
         }
         conversations::complete_reply(&f.project, reply).unwrap();

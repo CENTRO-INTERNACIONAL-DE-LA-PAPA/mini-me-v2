@@ -1,5 +1,6 @@
 //! Project-folder confinement: every Project file path goes through `ProjectPaths::resolve`.
 
+use std::io;
 use std::path::{Component, Path, PathBuf};
 
 use crate::error::{AppError, AppResult};
@@ -60,6 +61,14 @@ impl ProjectPaths {
         }
         Ok(joined)
     }
+}
+
+/// Writes through `<path>.tmp`, so a failed write leaves the previous file whole.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)
 }
 
 #[cfg(test)]

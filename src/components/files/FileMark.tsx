@@ -1,5 +1,4 @@
 import type { LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { MiniMe } from "../../protocol/types";
 import { surfaceStyle } from "../minime/miniMeColors";
 
@@ -7,18 +6,15 @@ import { surfaceStyle } from "../minime/miniMeColors";
 export function FileMark({
   miniMe,
   icon: Icon,
-  size = "sm",
 }: {
   miniMe?: MiniMe;
   icon: LucideIcon;
-  /** The icon's size: `sm` is 16 px, `lg` 20 px. */
-  size?: "sm" | "lg";
 }) {
   return (
     <Icon
       aria-hidden
       style={surfaceStyle(miniMe?.colors)}
-      className={cn("shrink-0 text-(--mm-ink,var(--ink-2))", size === "sm" ? "size-4" : "size-5")}
+      className="shrink-0 text-(--mm-ink,var(--ink-2)) size-4"
     />
   );
 }

@@ -65,7 +65,7 @@ function innerLists(step: WorkflowStep, index: number): Array<[PathPart, Workflo
 }
 
 /** Where the Step with `id` is: its list and its index there. */
-export function locate(steps: WorkflowStep[], id: string, path: ListPath = []): Slot | null {
+function locate(steps: WorkflowStep[], id: string, path: ListPath = []): Slot | null {
   for (const [i, step] of steps.entries()) {
     if (step.id === id) return { list: path, index: i };
     for (const [part, inner] of innerLists(step, i)) {

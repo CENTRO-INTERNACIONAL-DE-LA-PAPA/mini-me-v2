@@ -99,7 +99,7 @@ mod tests {
 
     #[test]
     fn reading_a_table_names_the_asset_of_its_full_table() {
-        use crate::conversations::{add_component, create, send_message, start_reply};
+        use crate::conversations::{NewComponent, add_component, create, send_message, start_reply};
         use crate::protocol::{Author, AuthorKind, new_id};
 
         let (dir, project) = temp_project();
@@ -113,9 +113,11 @@ mod tests {
         let reply = start_reply(&project, conversation, question.id, author).unwrap();
         let columns = json!([{ "name": "yield", "type": "number" }]);
         let preview = json!({ "columns": columns, "rows": [[1]], "source_id": asset.id });
-        let table = add_component(&project, reply, None, ("table", 1, preview, "t".into())).unwrap();
+        let component =
+            |data| NewComponent { kind: "table".into(), version: 1, data, text: "t".into() };
+        let table = add_component(&project, reply, None, component(preview)).unwrap();
         let plain = json!({ "columns": columns, "rows": [[1]] });
-        let other = add_component(&project, reply, None, ("table", 1, plain, "t".into())).unwrap();
+        let other = add_component(&project, reply, None, component(plain)).unwrap();
 
         let state = project.lock();
         let read = read(&state, conversation, table).unwrap();

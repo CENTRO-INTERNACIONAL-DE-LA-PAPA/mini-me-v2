@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { api, errorMessage } from "../../api";
+import { count } from "../../lib/format";
 import type { DebugMessage, ModelCallRecord, ReplyRecord } from "../../protocol/types";
 import { modelCalls } from "./replyDebug";
 
@@ -55,7 +56,7 @@ export function ReplyDebugBlock({
               {input && (
                 <details>
                   <summary className="cursor-pointer select-none">
-                    What the AI read ({input.length} {input.length === 1 ? "message" : "messages"})
+                    What the AI read ({count(input.length, "message")})
                   </summary>
                   <div className="mt-1 ms-3 flex flex-col gap-2">
                     {input.map((message, i) => (

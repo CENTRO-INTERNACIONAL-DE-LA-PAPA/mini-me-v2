@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::library::{Library, MiniMe, PROMPT_ADAPTER, TraitDef};
+use crate::paths::write_atomic;
 
 pub const FILE_NAME: &str = "library.json";
 
@@ -286,9 +287,7 @@ fn write(path: &Path, library: &Library, skipped: &[Skipped]) -> AppResult<()> {
     }
     mini_mes.extend(raw_of(EntryKind::MiniMe));
     let json = serde_json::json!({ "traits": traits, "mini_mes": mini_mes });
-    let tmp = path.with_file_name(format!("{FILE_NAME}.tmp"));
-    std::fs::write(&tmp, serde_json::to_string_pretty(&json)?)?;
-    std::fs::rename(&tmp, path)?;
+    write_atomic(path, serde_json::to_string_pretty(&json)?.as_bytes())?;
     Ok(())
 }
 

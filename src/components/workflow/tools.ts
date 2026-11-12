@@ -1,3 +1,5 @@
+import { count } from "../../lib/format";
+
 /** What each tool lets a Trait do, in plain words. */
 const TOOL_LABELS: Record<string, string> = {
   read_file: "Read files",
@@ -17,4 +19,4 @@ export const toolLabel = (tool: string) => TOOL_LABELS[tool] ?? tool;
 
 /** A Trait node's meta line: how many tools its Trait lists. */
 export const toolCount = (tools: string[]) =>
-  tools.length === 0 ? "No tools" : tools.length === 1 ? "1 tool" : `${tools.length} tools`;
+  tools.length === 0 ? "No tools" : count(tools.length, "tool");

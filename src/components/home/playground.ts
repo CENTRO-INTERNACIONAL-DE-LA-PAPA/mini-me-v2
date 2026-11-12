@@ -12,8 +12,6 @@ const SIZE = 64;
 const RADIUS = SIZE * 0.4;
 /** Thick enough that a thrown Mini-Me cannot pass through in one step. */
 const WALL = 200;
-/** How many of each Mini-Me `spawnAll` drops; raise it to stress-test the playground. */
-const COPIES = 1;
 /** How long a Mini-Me's name stays shown after a click. */
 const NAME_MS = 3000;
 /** Content that keeps its own clicks; a press on it never grabs a Mini-Me. */
@@ -131,10 +129,9 @@ export function startPlayground(layer: HTMLElement) {
     running = true;
   };
 
-  /** Drops `COPIES` of each Mini-Me from above the layer, stacked at random places across it. */
+  /** Drops each Mini-Me from above the layer, stacked at random places across it. */
   const spawnAll = (miniMes: MiniMe[]) => {
-    const dropped = Array.from({ length: COPIES }, () => miniMes).flat();
-    dropped.forEach((miniMe, i) => {
+    miniMes.forEach((miniMe, i) => {
       const x = RADIUS + Math.random() * Math.max(layer.clientWidth - 2 * RADIUS, 0);
       spawn(miniMe, x, -RADIUS - i * RADIUS * 1.5);
     });
@@ -211,5 +208,5 @@ export function startPlayground(layer: HTMLElement) {
     layer.replaceChildren();
   };
 
-  return { spawn, spawnAll, stop };
+  return { spawnAll, stop };
 }

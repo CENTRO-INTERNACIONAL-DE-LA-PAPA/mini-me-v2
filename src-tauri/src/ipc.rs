@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -42,6 +42,7 @@ use crate::settings::{AiSettings, DebugSettings, HomeSettings, Settings};
 use crate::link::SummaryKind;
 use crate::sidecar::{LOG_FILE, Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
+use crate::sync::locked;
 use crate::updates::{UpdateStatus, Updates};
 
 /// Whole Conversations, newest first, up to four times one call's history.
@@ -63,7 +64,7 @@ const TYPESAFE: &str = "typesafe";
 pub struct AppState {
     config_dir: PathBuf,
     /// Mini-Me Dev has Developer mode on until the user turns it off.
-    dev_app: bool,
+    is_dev_app: bool,
     /// From the Tauri configuration.
     app_version: String,
     data_root: PathBuf,
@@ -120,7 +121,7 @@ impl AppState {
         std::thread::spawn(move || {
             warm.status();
         });
-        let dev_app = projects::is_mini_me_dev(&identifier);
+        let is_dev_app = projects::is_mini_me_dev(&identifier);
         let runs = Arc::new(Runs::new(
             Box::new(AppSecrets {
                 ai2: Arc::clone(&ai2),
@@ -131,8 +132,8 @@ impl AppState {
         ));
         let gate = Arc::clone(&quarto);
         runs.set_document_gate(Arc::new(move || gate.require().map(|_| ())));
-        runs.set_active_features(active_feature_ids(&settings, dev_app));
-        runs.set_debug(settings.reply_debug(dev_app));
+        runs.set_active_features(active_feature_ids(&settings, is_dev_app));
+        runs.set_debug(settings.reply_debug(is_dev_app));
         let sidecar = Supervisor::new(
             launch,
             Timing::for_build(),
@@ -146,7 +147,7 @@ impl AppState {
             updates.spawn(app.clone());
         }
         Ok(Self {
-            dev_app,
+            is_dev_app,
             app_version,
             settings: Mutex::new(settings),
             quarto,
@@ -169,25 +170,46 @@ impl AppState {
 
     /// Replaces the previous drop's paths.
     pub fn record_drop(&self, paths: Vec<PathBuf>) {
-        *self.dropped.lock().unwrap_or_else(|p| p.into_inner()) = paths;
+        *locked(&self.dropped) = paths;
     }
 
     /// Whether developer options and the web inspector are available.
     pub fn developer_mode(&self) -> bool {
-        self.settings().developer_mode(self.dev_app)
+        self.settings().developer_mode(self.is_dev_app)
     }
 
     /// Saves the flags, then tells running Traits which are on.
     fn change_features(&self, change: impl FnOnce(&mut Settings)) -> AppResult<()> {
-        let mut settings = self.settings.lock().unwrap_or_else(|p| p.into_inner());
+        let settings = self.updated_settings(change)?;
+        self.runs.set_active_features(active_feature_ids(&settings, self.is_dev_app));
+        Ok(())
+    }
+
+    /// A failed save keeps the change in memory.
+    fn update_settings(&self, change: impl FnOnce(&mut Settings)) -> AppResult<()> {
+        self.updated_settings(change).map(drop)
+    }
+
+    /// Like `update_settings`, but returns the settings still locked.
+    fn updated_settings(
+        &self,
+        change: impl FnOnce(&mut Settings),
+    ) -> AppResult<MutexGuard<'_, Settings>> {
+        let mut settings = locked(&self.settings);
         change(&mut settings);
         settings.save(&self.config_dir)?;
-        self.runs.set_active_features(active_feature_ids(&settings, self.dev_app));
+        Ok(settings)
+    }
+
+    fn stop_replies(&self, project: &Project, conversation_id: Uuid) -> AppResult<()> {
+        for message_id in conversations::stop_reply(project, conversation_id)? {
+            self.runs.cancel_message(message_id);
+        }
         Ok(())
     }
 
     fn settings(&self) -> Settings {
-        self.settings.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        locked(&self.settings).clone()
     }
 
     fn user(&self) -> Author {
@@ -206,7 +228,7 @@ impl AppState {
 
     /// Opens it on first use so every caller shares one instance.
     fn project(&self, project_id: Uuid) -> AppResult<Arc<Project>> {
-        let mut open = self.open_projects.lock().unwrap_or_else(|p| p.into_inner());
+        let mut open = locked(&self.open_projects);
         if let Some(project) = open.get(&project_id) {
             return Ok(Arc::clone(project));
         }
@@ -239,9 +261,9 @@ pub async fn create_project(state: State<'_, AppState>, name: String) -> AppResu
 pub async fn open_project(state: State<'_, AppState>, project_id: Uuid) -> AppResult<ProjectSummary> {
     let summary = state.find_summary(project_id)?;
     state.project(project_id)?;
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
-    settings.recent_projects.insert(project_id, now_ms());
-    settings.save(&state.config_dir)?;
+    state.update_settings(|settings| {
+        settings.recent_projects.insert(project_id, now_ms());
+    })?;
     Ok(summary)
 }
 
@@ -274,11 +296,10 @@ pub async fn name_conversation(
         return Ok(None);
     };
     let runs = Arc::clone(&state.runs);
-    let written = tauri::async_runtime::spawn_blocking(move || {
+    let written = blocking("title_failed", move || {
         runs.summarize(model, material, SummaryKind::Title, TITLE_TIMEOUT)
     })
-    .await
-    .map_err(|e| AppError::new("title_failed", e.to_string()))?;
+    .await?;
     let Ok(title) = written else {
         return Ok(None);
     };
@@ -304,9 +325,7 @@ pub async fn delete_conversation(
     conversation_id: Uuid,
 ) -> AppResult<()> {
     let project = state.project(project_id)?;
-    for message_id in conversations::stop_reply(&project, conversation_id)? {
-        state.runs.cancel_message(message_id);
-    }
+    state.stop_replies(&project, conversation_id)?;
     conversations::delete(&project, conversation_id)
 }
 
@@ -332,29 +351,26 @@ pub async fn delete_project(state: State<'_, AppState>, project_id: Uuid) -> App
     let summary = state.find_summary(project_id)?;
     let project = state.project(project_id)?;
     for conversation in conversations::list(&project)? {
-        for message_id in conversations::stop_reply(&project, conversation.id)? {
-            state.runs.cancel_message(message_id);
-        }
+        state.stop_replies(&project, conversation.id)?;
     }
-    state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).remove(&project_id);
+    locked(&state.open_projects).remove(&project_id);
     // A stopped run holds the database until it ends; removing the folder sooner fails on Windows.
-    let (project, released) = tauri::async_runtime::spawn_blocking(move || {
+    let (project, released) = blocking("storage", move || {
         let released = projects::wait_until_alone(&project, RELEASE_WAIT);
         (project, released)
     })
-    .await
-    .map_err(|e| AppError::storage(e.to_string()))?;
+    .await?;
     if !released {
-        state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).insert(project_id, project);
+        locked(&state.open_projects).insert(project_id, project);
         return Err(AppError::storage(
             "The Project is still stopping its replies, so it was not deleted. Try again in a moment.",
         ));
     }
     drop(project);
     projects::delete(&summary.folder)?;
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
-    settings.recent_projects.remove(&project_id);
-    settings.save(&state.config_dir)
+    state.update_settings(|settings| {
+        settings.recent_projects.remove(&project_id);
+    })
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -391,7 +407,7 @@ pub async fn unsubscribe_conversation(
 /// Called when the UI starts, so subscriptions of a reloaded view end.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn reset_subscriptions(state: State<'_, AppState>) -> AppResult<()> {
-    let open = state.open_projects.lock().unwrap_or_else(|p| p.into_inner());
+    let open = locked(&state.open_projects);
     for project in open.values() {
         project.unsubscribe_all();
     }
@@ -434,30 +450,26 @@ pub async fn send_message(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_routing_threshold(state: State<'_, AppState>, threshold: f64) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     settings.routing.set_threshold(threshold)?;
     settings.save(&state.config_dir)
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
-    settings.routing.show_answers = show;
-    settings.save(&state.config_dir)
+    state.update_settings(|settings| settings.routing.show_answers = show)
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_show_jev_asked(state: State<'_, AppState>, show: bool) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
-    settings.routing.show_asked = show;
-    settings.save(&state.config_dir)
+    state.update_settings(|settings| settings.routing.show_asked = show)
 }
 
 /// True once per new app version, never in Mini-Me Dev.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn take_whats_new(state: State<'_, AppState>) -> AppResult<bool> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
-    if !settings.take_whats_new(&state.app_version, state.dev_app) {
+    let mut settings = locked(&state.settings);
+    if !settings.take_whats_new(&state.app_version, state.is_dev_app) {
         return Ok(false);
     }
     settings.save(&state.config_dir)?;
@@ -471,31 +483,27 @@ pub async fn get_developer_mode(state: State<'_, AppState>) -> AppResult<bool> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
-    settings.developer_mode = Some(on);
-    settings.save(&state.config_dir)?;
-    state.runs.set_debug(settings.reply_debug(state.dev_app));
+    let settings = state.updated_settings(|settings| settings.developer_mode = Some(on))?;
+    state.runs.set_debug(settings.reply_debug(state.is_dev_app));
     Ok(())
 }
 
 /// Applies to runs started from now on.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_reply_debug(state: State<'_, AppState>, debug: DebugSettings) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
-    settings.debug = debug;
-    settings.save(&state.config_dir)?;
-    state.runs.set_debug(settings.reply_debug(state.dev_app));
+    let settings = state.updated_settings(|settings| settings.debug = debug)?;
+    state.runs.set_debug(settings.reply_debug(state.is_dev_app));
     Ok(())
 }
 
-fn active_feature_ids(settings: &Settings, dev_app: bool) -> Vec<String> {
-    let active = settings.active_features(dev_app);
+fn active_feature_ids(settings: &Settings, is_dev_app: bool) -> Vec<String> {
+    let active = settings.active_features(is_dev_app);
     active.iter().map(|feature| feature.id.to_string()).collect()
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_feature_flags(state: State<'_, AppState>) -> AppResult<Vec<FeatureFlag>> {
-    let active = state.settings().active_features(state.dev_app);
+    let active = state.settings().active_features(state.is_dev_app);
     Ok(active.into_iter().map(FeatureFlag::from).collect())
 }
 
@@ -521,9 +529,7 @@ pub async fn get_home_settings(state: State<'_, AppState>) -> AppResult<HomeSett
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_show_home_mini_mes(state: State<'_, AppState>, show: bool) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
-    settings.home.show_mini_mes = show;
-    settings.save(&state.config_dir)
+    state.update_settings(|settings| settings.home.show_mini_mes = show)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -653,11 +659,10 @@ pub async fn test_model(
         .model()
         .ok_or_else(|| AppError::invalid_input("Type a model ID first."))?;
     let runs = Arc::clone(&state.runs);
-    tauri::async_runtime::spawn_blocking(move || {
+    blocking("summary_failed", move || {
         runs.summarize(model, String::new(), SummaryKind::Test, MODEL_TEST_TIMEOUT)
     })
-    .await
-    .map_err(|e| AppError::new("summary_failed", e.to_string()))??;
+    .await??;
     Ok(())
 }
 
@@ -668,18 +673,14 @@ pub async fn set_ai_model(
     model: String,
 ) -> AppResult<()> {
     let ai = AiSettings::new(&provider, &model)?;
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
-    settings.ai = ai;
-    settings.save(&state.config_dir)
+    state.update_settings(|settings| settings.ai = ai)
 }
 
 /// Opens the page where the user confirms the code.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn ai2_start_sign_in(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
     let ai2 = Arc::clone(&state.ai2);
-    let page = tauri::async_runtime::spawn_blocking(move || ai2.start_sign_in())
-        .await
-        .map_err(|e| AppError::new("ai2_unavailable", e.to_string()))??;
+    let page = blocking("ai2_unavailable", move || ai2.start_sign_in()).await??;
     app.opener()
         .open_url(page, None::<&str>)
         .map_err(|e| AppError::new("open_failed", e.to_string()))
@@ -735,11 +736,7 @@ pub async fn stop_reply(
     project_id: Uuid,
     conversation_id: Uuid,
 ) -> AppResult<()> {
-    let stopped = conversations::stop_reply(&*state.project(project_id)?, conversation_id)?;
-    for message_id in stopped {
-        state.runs.cancel_message(message_id);
-    }
-    Ok(())
+    state.stop_replies(&*state.project(project_id)?, conversation_id)
 }
 
 /// Approving resumes the run; rejecting ends the reply with the output so far.
@@ -956,11 +953,10 @@ pub async fn import_assets(
     project_id: Uuid,
 ) -> AppResult<Vec<AssetRef>> {
     let project = state.project(project_id)?;
-    let picked = tauri::async_runtime::spawn_blocking(move || {
+    let picked = blocking("storage", move || {
         app.dialog().file().blocking_pick_files()
     })
-    .await
-    .map_err(|e| AppError::storage(e.to_string()))?
+    .await?
     .unwrap_or_default();
 
     let mut imported = Vec::new();
@@ -1001,7 +997,7 @@ pub async fn import_dropped(
     project_id: Uuid,
     paths: Vec<PathBuf>,
 ) -> AppResult<Vec<AssetRef>> {
-    let dropped = state.dropped.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let dropped = locked(&state.dropped).clone();
     assets::import_dropped(&*state.project(project_id)?, &paths, &dropped, &state.user())
 }
 
@@ -1070,21 +1066,28 @@ pub async fn update_overview_summary(
         return Err(AppError::invalid_input("There are no messages to summarise yet."));
     }
     let runs = Arc::clone(&state.runs);
-    let text = tauri::async_runtime::spawn_blocking(move || {
+    let text = blocking("summary_failed", move || {
         runs.summarize(model, material, SummaryKind::Overview, SUMMARY_TIMEOUT)
     })
-    .await
-    .map_err(|e| AppError::new("summary_failed", e.to_string()))??;
+    .await??;
     overview::save_summary(&project, &text, now_ms())?;
     overview::overview(&project)
+}
+
+/// Runs `work` on a blocking thread; fails with `code` if it panics.
+async fn blocking<T: Send + 'static>(
+    code: &'static str,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> AppResult<T> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|e| AppError::new(code, e.to_string()))
 }
 
 /// From the last lookup; the error says why document work is blocked.
 async fn require_quarto(state: &AppState) -> AppResult<PathBuf> {
     let known = Arc::clone(&state.quarto);
-    tauri::async_runtime::spawn_blocking(move || known.require())
-        .await
-        .map_err(|e| AppError::new("quarto_failed", e.to_string()))?
+    blocking("quarto_failed", move || known.require()).await?
 }
 
 /// Looks Quarto up again when a render could not start it, so the notice shows; returns `result`.
@@ -1099,18 +1102,14 @@ fn looked_again<T>(known: &quarto::Known, result: AppResult<T>) -> AppResult<T> 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn quarto_status(state: State<'_, AppState>) -> AppResult<quarto::Status> {
     let known = Arc::clone(&state.quarto);
-    tauri::async_runtime::spawn_blocking(move || known.status())
-        .await
-        .map_err(|e| AppError::new("quarto_failed", e.to_string()))
+    blocking("quarto_failed", move || known.status()).await
 }
 
 /// For a Quarto installed after the app started.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn recheck_quarto(state: State<'_, AppState>) -> AppResult<quarto::Status> {
     let known = Arc::clone(&state.quarto);
-    tauri::async_runtime::spawn_blocking(move || known.refresh())
-        .await
-        .map_err(|e| AppError::new("quarto_failed", e.to_string()))
+    blocking("quarto_failed", move || known.refresh()).await
 }
 
 /// `None` or an empty path clears it so the app looks again; returns the new status.
@@ -1122,16 +1121,14 @@ pub async fn set_quarto_path(
     let chosen = path.map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
     {
         // Saved before it takes effect, so a failed save leaves the old location in use.
-        let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+        let mut settings = locked(&state.settings);
         let mut updated = settings.clone();
         updated.quarto_path = chosen.clone();
         updated.save(&state.config_dir)?;
         *settings = updated;
     }
     let known = Arc::clone(&state.quarto);
-    tauri::async_runtime::spawn_blocking(move || known.set_setting(chosen))
-        .await
-        .map_err(|e| AppError::new("quarto_failed", e.to_string()))
+    blocking("quarto_failed", move || known.set_setting(chosen)).await
 }
 
 /// The user's name, if set, is the author.
@@ -1175,13 +1172,12 @@ pub async fn draft_document(
     }
     let header = documents::read(&project, asset_id)?;
     let runs = Arc::clone(&state.runs);
-    let (body, ending) = tauri::async_runtime::spawn_blocking(move || {
+    let (body, ending) = blocking("draft_failed", move || {
         runs.draft(draft_id, model, title, material, DRAFT_IDLE, |event| {
             let _ = on_event.send(event.clone());
         })
     })
-    .await
-    .map_err(|e| AppError::new("draft_failed", e.to_string()))?;
+    .await?;
     documents::save_draft(&project, asset_id, &header, &body)?;
     ending.map_or(Ok(()), Err)
 }
@@ -1203,11 +1199,10 @@ pub async fn preview_document(
     let program = require_quarto(&state).await?;
     let project = state.project(project_id)?;
     let known = Arc::clone(&state.quarto);
-    tauri::async_runtime::spawn_blocking(move || {
+    blocking("preview_failed", move || {
         looked_again(&known, quarto::preview_pages(&project, &program, &source))
     })
-    .await
-        .map_err(|e| AppError::new("preview_failed", e.to_string()))?
+    .await?
 }
 
 /// A new PDF Asset named after the document.
@@ -1223,11 +1218,10 @@ pub async fn export_document_pdf(
     let source = documents::read(&project, asset_id)?;
     let rendered = Arc::clone(&project);
     let known = Arc::clone(&state.quarto);
-    let pdf = tauri::async_runtime::spawn_blocking(move || {
+    let pdf = blocking("export_failed", move || {
         looked_again(&known, quarto::export_pdf(&rendered, &program, &source))
     })
-    .await
-    .map_err(|e| AppError::new("export_failed", e.to_string()))??;
+    .await??;
     documents::store_pdf(&project, asset_id, &name, &pdf, &state.user())
 }
 
@@ -1401,9 +1395,7 @@ pub async fn delete_thread(
     thread_id: Uuid,
 ) -> AppResult<()> {
     let project = state.project(project_id)?;
-    for message_id in conversations::stop_reply(&project, thread_id)? {
-        state.runs.cancel_message(message_id);
-    }
+    state.stop_replies(&project, thread_id)?;
     comments::delete(&project, thread_id)
 }
 

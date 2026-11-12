@@ -7,7 +7,7 @@ import type {
 
 /** One model call as the "[DEBUG] AI" block shows it: its record, its whole input rebuilt from
  * the calls it continues (null when the input was not stored), and the tools it asked for. */
-export interface ModelCallView {
+interface ModelCallView {
   call: ModelCallRecord;
   input: DebugMessage[] | null;
   tools: ToolCallRecord[];

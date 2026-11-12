@@ -15,8 +15,13 @@ from langchain_core.messages import (
 )
 
 from mini_me_sidecar import debug
-from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
-from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, chat_model, provider_error
+from mini_me_sidecar.adapters.base import TEXT_INPUT, Adapter, AdapterInfo, require_model
+from mini_me_sidecar.adapters.providers import (
+    PROVIDER_NAMES,
+    chat_model,
+    filtered,
+    provider_error,
+)
 from mini_me_sidecar.context import CallContext, Model, TraitError
 from mini_me_sidecar.tools import CONVERSATION_TOOLS, DEFAULT_TOOLS, THREAD_TOOLS
 
@@ -73,26 +78,17 @@ PARAGRAPH_BREAK = "\n\n"
 # The most files, and the most components, listed for the model.
 MAX_LISTED = 50
 
-# Finish reasons of a provider's safety filter; asking again gets the same verdict.
-REFUSED = {"content_filter", "refusal"}
-
 
 class Prompt(Adapter):
     info = AdapterInfo(
         id="prompt",
         description="Answers with an AI model, following the Trait's instructions.",
-        input_schema={
-            "type": "object",
-            "properties": {"text": {"type": "string"}},
-            "required": ["text"],
-        },
+        input_schema=TEXT_INPUT,
         providers=tuple(PROVIDER_NAMES),
     )
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
-        model = ctx.model
-        if model is None or not model.model:
-            raise TraitError("model_not_set", "Choose an AI model in Settings first.")
+        model = require_model(ctx)
         if model.provider not in PROVIDER_NAMES:
             raise TraitError("provider_unavailable", f"Unknown provider {model.provider!r}.")
         # Imported here: the tools load pandas, which the sidecar starts without.
@@ -232,7 +228,7 @@ async def _answer(
             raise
         except Exception as error:
             raise provider_error(error, model) from None
-        if wrote and _filtered(ending):
+        if wrote and filtered(ending):
             print(f"[prompt] {name} stopped an answer: {ending}", file=sys.stderr, flush=True)
             raise TraitError(
                 "provider_refused",
@@ -244,7 +240,7 @@ async def _answer(
             return reply
         # Some providers end a stream empty, reporting a failure only in the finish reason.
         print(f"[prompt] {name} sent an empty answer: {ending}", file=sys.stderr, flush=True)
-        if _filtered(ending):
+        if filtered(ending):
             raise TraitError(
                 "provider_refused",
                 f"{model.model} declined to answer: {name}'s content filter stopped it. "
@@ -369,11 +365,6 @@ def _system_prompt(mini_me_name: str | None, in_workflow: bool, instructions: st
     elif in_workflow:
         preamble += " " + WORKFLOW_RULE.format(name="this Mini-Me")
     return f"{preamble} {FILES_RULE}\n\n{instructions or ''}"
-
-
-def _filtered(ending: dict[str, Any]) -> bool:
-    """Whether the provider ended the stream because a content filter or refusal stopped it."""
-    return ending.get("finish_reason") in REFUSED or ending.get("stop_reason") in REFUSED
 
 
 def _turns(

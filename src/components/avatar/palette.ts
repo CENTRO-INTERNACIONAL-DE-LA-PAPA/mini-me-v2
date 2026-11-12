@@ -22,7 +22,7 @@ export interface HueColor extends AvatarColor {
   hue: number;
 }
 
-export interface ColorFamily extends HueColor {
+interface ColorFamily extends HueColor {
   name: string;
 }
 

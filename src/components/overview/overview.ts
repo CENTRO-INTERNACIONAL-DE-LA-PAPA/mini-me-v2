@@ -2,7 +2,7 @@ import type { AssetRef, Overview, OverviewOutput } from "../../protocol/types";
 import { formatRelative } from "../../lib/format";
 
 /** How many outputs the Overview shows before "Show all". */
-export const LATEST_SHOWN = 6;
+const LATEST_SHOWN = 6;
 
 /** A past moment as `formatRelative` gives it, for use inside a sentence: "Just now" and
  * "Yesterday" lose their capital, dates keep theirs. */

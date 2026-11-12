@@ -7,7 +7,7 @@ import { approvalState } from "../interactive/approval";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
 import { Markdown } from "./Markdown";
 
-export type StepState = "done" | "running" | "waiting" | "pending";
+type StepState = "done" | "running" | "waiting" | "pending";
 
 /** How a Step is drawn: done once completed; otherwise running while its reply streams,
  * waiting while the reply waits for an approval, and pending after the reply ended. */

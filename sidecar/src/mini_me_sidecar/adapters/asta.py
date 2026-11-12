@@ -8,7 +8,7 @@ import sys
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
-from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
+from mini_me_sidecar.adapters.base import TEXT_INPUT, Adapter, AdapterInfo, component_or_text
 from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import show_papers, show_theories
@@ -16,18 +16,9 @@ from mini_me_sidecar.tools.files import save_file
 
 AI2 = "ai2"
 
-TEXT_INPUT: dict[str, Any] = {
-    "type": "object",
-    "properties": {"text": {"type": "string"}},
-    "required": ["text"],
-}
-
 MAX_PAPERS = 20
 # The most papers a `paper-sources` component holds, which keeps its data small.
 MAX_SOURCES = 50
-
-# Errors with which the core refuses a component; the reply then falls back to its text.
-COMPONENT_REFUSED = {"component_not_allowed", "invalid_component"}
 PAPER_FINDER_TIMEOUT_S = 300
 
 # The end-to-end skill. Ai2 documents 3–8 minutes a run, but real runs take 15–25 minutes.
@@ -79,16 +70,14 @@ class FindPapers(Adapter):
         if result is None:
             return
         widget = result.get("widget") or {}
-        _log_shape("paper finder result", (widget.get("results") or [None])[:1])
         papers = widget.get("results") or []
         narrative = _summary(str(widget.get("response_text") or ""))
         if not papers:
-            ctx.write(papers_reply([], narrative))
+            ctx.write(papers_reply([]))
             return
         count = len(papers)
         ctx.write(narrative or f"Found {count} paper{'' if count == 1 else 's'}.")
-        text = papers_reply(papers, "")
-        await _component_or_text(ctx, show_papers, papers_data(papers), text)
+        await component_or_text(ctx, show_papers, papers_data(papers), papers_reply(papers), "asta")
 
 
 class Theorize(Adapter):
@@ -122,59 +111,68 @@ class Theorize(Adapter):
             return
         _log_task(task)
 
-        loop = asyncio.get_running_loop()
-        started = loop.time()
-        deadline = started + THEORIZER_LIMIT_S
-        seen: set[str] = set()
-        while not _finished(task):
-            if loop.time() > deadline:
-                raise TraitError(
-                    "asta_unavailable", "The Theorizer took too long. Try again later."
-                )
-            try:
-                await asyncio.wait_for(ctx.cancelled.wait(), THEORIZER_POLL_S)
-                return
-            except TimeoutError:
-                pass
-            previous = task
-            task_id = task.get("id") or ""
-            polled = await _until_cancelled(ctx, lambda: _call(ctx, client.get_task, task_id))
-            if polled is None:
-                return
-            task = polled
-            if _task_summary(task) != _task_summary(previous):
-                _log_task(task)
-            minutes = int((loop.time() - started) // 60)
-            state = (task.get("status") or {}).get("state")
-            label = _status_text(task) or STATE_LABELS.get(str(state), "Working")
-            for artifact in task.get("artifacts") or []:
-                name = str(artifact.get("name") or "")
-                if name and name not in seen:
-                    seen.add(name)
-                    label = f"Got {name.replace('_', ' ')}"
-            ctx.progress(f"{label[:140]} ({minutes} min)" if minutes else label[:140])
+        finished = await _poll_theorizer(ctx, client, task)
+        if finished is not None:
+            await _finish_theorizer(ctx, finished)
 
-        state = (task.get("status") or {}).get("state")
-        if state != "completed":
-            detail = _status_text(task)
-            raise TraitError(
-                "asta_unavailable",
-                f"The Theorizer stopped ({state}){': ' + detail if detail else ''}.",
-            )
-        artifacts = task.get("artifacts") or []
-        _log_shape("theorizer artifacts", artifacts)
-        store, texts = theory_store(artifacts)
-        data = theories_data(store)
-        if data is None:
-            ctx.write(_without_theories(texts))
-        else:
-            ctx.write(theories_summary(data, store))
-            await _component_or_text(ctx, show_theories, data, theories_markdown(data))
+
+async def _poll_theorizer(
+    ctx: CallContext, client: Any, task: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Polls `task` until it finishes, reporting progress; None when the call is cancelled."""
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    deadline = started + THEORIZER_LIMIT_S
+    seen: set[str] = set()
+    while not _finished(task):
+        if loop.time() > deadline:
+            raise TraitError("asta_unavailable", "The Theorizer took too long. Try again later.")
         try:
-            content = json.dumps(artifacts, ensure_ascii=False).encode()
-            await save_file(ctx, "theory-store.json", "application/json", content)
-        except ToolError as error:
-            print(f"[asta] could not save the Theory Store: {error}", file=sys.stderr, flush=True)
+            await asyncio.wait_for(ctx.cancelled.wait(), THEORIZER_POLL_S)
+            return None
+        except TimeoutError:
+            pass
+        previous = task
+        task_id = task.get("id") or ""
+        polled = await _until_cancelled(ctx, lambda: _call(ctx, client.get_task, task_id))
+        if polled is None:
+            return None
+        task = polled
+        if _task_summary(task) != _task_summary(previous):
+            _log_task(task)
+        minutes = int((loop.time() - started) // 60)
+        state = (task.get("status") or {}).get("state")
+        label = _status_text(task) or STATE_LABELS.get(str(state), "Working")
+        for artifact in task.get("artifacts") or []:
+            name = str(artifact.get("name") or "")
+            if name and name not in seen:
+                seen.add(name)
+                label = f"Got {name.replace('_', ' ')}"
+        ctx.progress(f"{label[:140]} ({minutes} min)" if minutes else label[:140])
+    return task
+
+
+async def _finish_theorizer(ctx: CallContext, task: dict[str, Any]) -> None:
+    state = (task.get("status") or {}).get("state")
+    if state != "completed":
+        detail = _status_text(task)
+        raise TraitError(
+            "asta_unavailable",
+            f"The Theorizer stopped ({state}){': ' + detail if detail else ''}.",
+        )
+    artifacts = task.get("artifacts") or []
+    store, texts = theory_store(artifacts)
+    data = theories_data(store)
+    if data is None:
+        ctx.write(_without_theories(texts))
+    else:
+        ctx.write(theories_summary(data, store))
+        await component_or_text(ctx, show_theories, data, theories_markdown(data), "asta")
+    try:
+        content = json.dumps(artifacts, ensure_ascii=False).encode()
+        await save_file(ctx, "theory-store.json", "application/json", content)
+    except ToolError as error:
+        print(f"[asta] could not save the Theory Store: {error}", file=sys.stderr, flush=True)
 
 
 async def _token(ctx: CallContext) -> str:
@@ -299,19 +297,6 @@ def _summary(narrative: str) -> str:
     return re.split(r"(?m)^\s*---+\s*$", narrative, maxsplit=1)[0].strip()
 
 
-async def _component_or_text(
-    ctx: CallContext, show: Callable[[CallContext, Any, str], Awaitable[str]], data: Any, text: str
-) -> None:
-    """Shows `data` with `show`, or writes `text` when the core refuses the component."""
-    try:
-        await show(ctx, data, text)
-    except ToolError as error:
-        if error.code not in COMPONENT_REFUSED:
-            raise
-        print(f"[asta] component refused: {error}", file=sys.stderr, flush=True)
-        ctx.write("\n\n" + text)
-
-
 def _paper(paper: dict[str, Any]) -> dict[str, Any]:
     """One Paper Finder result in the fields of a `paper-sources` paper."""
     authors = [
@@ -337,11 +322,11 @@ def papers_data(papers: list[dict[str, Any]]) -> dict[str, Any]:
     return {"papers": [_paper(paper) for paper in papers[:MAX_SOURCES]]}
 
 
-def papers_reply(papers: list[dict[str, Any]], narrative: str) -> str:
+def papers_reply(papers: list[dict[str, Any]]) -> str:
     """Markdown for Paper Finder's results, most relevant first."""
     if not papers:
         return "No papers were found. Try rephrasing the topic or making it more specific."
-    lines = [narrative.strip(), ""] if narrative.strip() else []
+    lines: list[str] = []
     for number, paper in enumerate(map(_paper, papers[:MAX_PAPERS]), start=1):
         authors = paper["authors"]
         names = ", ".join(authors[:3]) + (" et al." if len(authors) > 3 else "")
@@ -480,15 +465,6 @@ def theories_markdown(data: dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
-def theories_reply(artifacts: list[dict[str, Any]]) -> str:
-    """A count line then `theories_markdown`, or the artifacts' text when there are no theories."""
-    store, texts = theory_store(artifacts)
-    data = theories_data(store)
-    if data is None:
-        return _without_theories(texts)
-    return theories_summary(data, store) + "\n\n" + theories_markdown(data)
-
-
 def _without_theories(texts: list[str]) -> str:
     """The reply when the Theory Store holds no theories: its text parts, if any."""
     return "\n\n".join(texts) or "The Theorizer finished without theories."
@@ -579,35 +555,3 @@ def _log_task(task: dict[str, Any]) -> None:
         file=sys.stderr,
         flush=True,
     )
-
-
-def _log_shape(label: str, value: Any) -> None:
-    """Logs a response's keys, never its values: a list's dicts merge into one shape, and a dict
-    of over 30 keys (records by ID) shows only its first."""
-
-    def merge(into: dict[str, Any], entry: dict[str, Any]) -> None:
-        for key, val in entry.items():
-            if isinstance(into.get(key), dict) and isinstance(val, dict):
-                merge(into[key], val)
-            else:
-                into.setdefault(key, val)
-
-    def shape(item: Any, depth: int = 0) -> Any:
-        if depth > 12:
-            return "…"
-        if isinstance(item, dict):
-            if len(item) > 30:
-                first = next(iter(item.items()))
-                return {f"<{len(item)} keys, first {first[0]!r}>": shape(first[1], depth + 1)}
-            return {k: shape(v, depth + 1) for k, v in item.items()}
-        if isinstance(item, list):
-            dicts = [i for i in item if isinstance(i, dict)]
-            if dicts:
-                merged: dict[str, Any] = {}
-                for entry in dicts:
-                    merge(merged, entry)
-                return [shape(merged, depth + 1)]
-            return [shape(item[0], depth + 1)] if item else []
-        return type(item).__name__
-
-    print(f"[asta] {label}: {json.dumps(shape(value))}", file=sys.stderr, flush=True)

@@ -3,15 +3,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PuzzleIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { api, errorMessage } from "../../api";
-import type { LibraryView, MiniMe, TraitDraft, TraitSummary } from "../../protocol/types";
-import { copyName, NIL_ID } from "./library";
+import { api } from "../../api";
+import type { MiniMe, TraitDraft, TraitSummary } from "../../protocol/types";
+import { NIL_ID } from "./library";
 import { DeleteButton, EditorHeader, EditorPage, Field } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { SheetSection } from "../shell/Sheet";
 import type { View } from "../shell/view";
+import { useDefinitionDraft } from "./useDefinitionDraft";
 
 /** The tools a user-made Trait's model may be offered, besides the read tools. */
 const MODEL_TOOLS = [
@@ -56,30 +56,25 @@ export function TraitEditor({
   onOpen: (view: View) => void;
   onBack: () => void;
 }) {
-  const [library, setLibrary] = useState<LibraryView | null>(null);
-  const [draft, setDraft] = useState<TraitDraft | null>(null);
-  const [problems, setProblems] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .listLibrary()
-      .then((loaded) => {
-        setLibrary(loaded);
-        const find = (traitId: string) => loaded.traits.find((t) => t.id === traitId);
-        const source = from ? find(from) : undefined;
-        if (id) {
-          const found = find(id);
-          if (found) setDraft(draftOf(found));
-          else setProblems("This Trait no longer exists.");
-        } else if (source) {
-          const taken = loaded.traits.map((t) => t.name);
-          setDraft({ ...draftOf(source), id: NIL_ID, name: copyName(source.name, taken) });
-        } else {
-          setDraft(EMPTY);
-        }
-      })
-      .catch((e) => setProblems(errorMessage(e)));
-  }, [id, from]);
+  const { library, draft, setDraft, problems, save, remove } = useDefinitionDraft({
+    id,
+    from,
+    open: (id, library) => {
+      const found = library.traits.find((t) => t.id === id);
+      if (!found) throw new Error("This Trait no longer exists.");
+      return draftOf(found);
+    },
+    source: (from, library) => {
+      const found = library.traits.find((t) => t.id === from);
+      return found && draftOf(found);
+    },
+    names: (library) => library.traits.map((t) => t.name),
+    empty: EMPTY,
+    save: api.saveTrait,
+    remove: api.deleteTrait,
+    onSaved: (id) => onOpen({ kind: "trait", id }),
+    onRemoved: onBack,
+  });
 
   if (!library || !draft) {
     return problems ? (
@@ -95,26 +90,6 @@ export function TraitEditor({
   const readOnly = builtIn || !!library.unreadable;
   const users = (saved?.used_by ?? []).map((m) => library.mini_mes.find((x) => x.id === m));
   const update = (change: Partial<TraitDraft>) => setDraft({ ...draft, ...change });
-
-  async function save() {
-    try {
-      const result = await api.saveTrait(draft!);
-      setProblems(null);
-      onOpen({ kind: "trait", id: result.id });
-      setLibrary(result.library);
-    } catch (e) {
-      setProblems(errorMessage(e));
-    }
-  }
-
-  async function remove() {
-    try {
-      await api.deleteTrait(draft!.id);
-      onBack();
-    } catch (e) {
-      setProblems(errorMessage(e));
-    }
-  }
 
   const actions = builtIn ? (
     promptBased && (

@@ -2,11 +2,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PlusIcon } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
-import { api, errorMessage } from "../../api";
+import { useState, type FormEvent } from "react";
+import { api } from "../../api";
 import type {
   MiniMe,
-  PausedApproval,
   ProjectActivity,
   ProjectSummary,
   Uuid,
@@ -16,6 +15,7 @@ import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { relativeInSentence, summaryLine } from "../overview/overview";
 import { SheetSection } from "../shell/Sheet";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { useLoad } from "../../hooks/useLoad";
 import { useRunningReplies } from "../../hooks/useRunningReplies";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { firstName } from "../../lib/names";
@@ -34,6 +34,8 @@ function greeting(now: Date, name: string | null | undefined): string {
   return first ? `Good ${part}, ${first}` : `Good ${part}`;
 }
 
+const NO_ACTIVITY: ReadonlyMap<Uuid, ProjectActivity> = new Map();
+
 /** The screen with no Project open: what waits on you, and the Projects to open or create. */
 export function HomeView({ projects, onOpen, onCreate, onOpenReply }: Props) {
   const name = useUserProfile()?.name;
@@ -41,19 +43,18 @@ export function HomeView({ projects, onOpen, onCreate, onOpenReply }: Props) {
   const [creating, setCreating] = useState(false);
   const miniMes = useMiniMes();
   const running = useRunningReplies();
-  const [activity, setActivity] = useState<ReadonlyMap<Uuid, ProjectActivity>>(new Map());
   // Read again whenever a reply starts or stops, which changes a Project's activity.
   const replies = running.map((reply) => reply.message_id).join();
-  useEffect(() => {
-    let active = true;
-    api
-      .listProjectActivity()
-      .then((list) => active && setActivity(new Map(list.map((a) => [a.project_id, a]))))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [replies, projects]);
+  const { value: activity = NO_ACTIVITY } = useLoad(
+    () =>
+      api
+        .listProjectActivity()
+        .then(
+          (list): ReadonlyMap<Uuid, ProjectActivity> =>
+            new Map(list.map((a) => [a.project_id, a])),
+        ),
+    [replies, projects],
+  );
   return (
     <main className="flex w-full flex-col gap-10 px-14 py-12">
       <header className="flex flex-wrap items-end justify-between gap-6">
@@ -207,19 +208,7 @@ function NeedsYou({
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
 }) {
   const miniMes = useMiniMes();
-  const [approvals, setApprovals] = useState<PausedApproval[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    api
-      .listPausedApprovals()
-      .then((list) => active && setApprovals(list))
-      .catch((e) => active && setError(errorMessage(e)));
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { value: approvals, error } = useLoad(() => api.listPausedApprovals(), []);
 
   return (
     <SheetSection title="Waiting on you">

@@ -2,7 +2,7 @@ import { api } from "../../api";
 import { ItemMenu } from "../shell/ItemMenu";
 
 /** A file's name split at its last dot, so a rename can keep the extension. */
-export function splitName(name: string): { stem: string; suffix: string } {
+function splitName(name: string): { stem: string; suffix: string } {
   const dot = name.lastIndexOf(".");
   return dot > 0 ? { stem: name.slice(0, dot), suffix: name.slice(dot) } : { stem: name, suffix: "" };
 }
