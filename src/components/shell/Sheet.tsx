@@ -19,7 +19,7 @@ export function MainSheet({ className, children }: { className?: string; childre
   );
 }
 
-/** A tool sheet beside the main sheet (Jobs, Comments, an inspector): a serif title, an optional
+/** A tool sheet beside the main sheet (Comments, an inspector): a serif title, an optional
  * line under it, and a close button. Only one is open at a time. */
 export function ToolSheet({
   title,
@@ -105,8 +105,6 @@ export interface ToolOption<Id extends string> {
   id: Id;
   label: string;
   icon: LucideIcon;
-  /** Shown after the label, such as the number of running jobs. */
-  count?: number;
 }
 
 /** A tab switch whose options open and close tool sheets: at most one is pressed, and
@@ -130,11 +128,10 @@ export function ToolSwitch<Id extends string>({
       spacing={1}
       value={value === null ? [] : [value]}
     >
-      {options.map(({ id, label, icon: Icon, count }) => (
+      {options.map(({ id, label, icon: Icon }) => (
         <ToggleGroupItem key={id} value={id} onClick={() => onToggle(id)}>
           <Icon />
           {label}
-          {count !== undefined && <span className="tabular-nums">{count}</span>}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

@@ -498,13 +498,10 @@ export type DraftEvent =
 /** A reply whose Mini-Me run is in flight, in any Project. */
 export interface RunningReply {
   project_id: Uuid;
-  project_name: string;
   conversation_id: Uuid;
   conversation_title: string;
   message_id: Uuid;
   mini_me: { id: Uuid; name: string };
-  /** The Step the run last started; null before its first Step. */
-  step: string | null;
 }
 
 /** How Home looks, from the app's settings. */

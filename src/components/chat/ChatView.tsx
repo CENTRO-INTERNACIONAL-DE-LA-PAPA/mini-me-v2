@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { cn } from "@/lib/utils";
-import { SportShoeIcon, NotebookPenIcon, SummaryIcon, PaperclipIcon } from "lucide-react";
+import { NotebookPenIcon, SummaryIcon, PaperclipIcon } from "lucide-react";
 import { api } from "../../api";
 import type { Uuid } from "../../protocol/types";
 import { chatColumn, Composer, type ComposerHandle } from "./Composer";
@@ -17,12 +17,11 @@ import { ReportPanel } from "../documents/ReportPanel";
 import { componentNames } from "../interactive/component-names";
 import { ComponentReferencesProvider } from "../interactive/component-references";
 import type { ReferenceTarget } from "../../protocol/references";
-import { JobsPanel, OutlinePanel, StepsPanel, type Panel } from "./SidePanels";
+import { OutlinePanel, StepsPanel, type Panel } from "./SidePanels";
 import { outline } from "./outline";
 import { useConversation } from "./useConversation";
 import { useFilesChanged } from "../../hooks/useFilesChanged";
 import { useMiniMes } from "../../hooks/useMiniMes";
-import { useRunningReplies } from "../../hooks/useRunningReplies";
 
 interface Props {
   projectId: string;
@@ -33,7 +32,6 @@ interface Props {
   onActivity: () => void;
   onRename: (title: string) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
-  onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
   /** Opens a document: to be drafted from this Conversation, with the Comments sheet showing a
    * reply's suggested edits (the threads they opened), or as it is. */
   onOpenDocument: (assetId: Uuid, how?: "draft" | { edits: Uuid[] }) => void;
@@ -47,7 +45,6 @@ export function ChatView({
   onActivity,
   onRename,
   onDelete,
-  onOpenReply,
   onOpenDocument,
 }: Props) {
   const { state, error } = useConversation(projectId, conversationId);
@@ -66,20 +63,8 @@ export function ChatView({
   );
   const stepsOf =
     panel?.kind === "steps" ? state.messages.find((m) => m.id === panel.messageId) : undefined;
-  const running = useRunningReplies();
-  // The open Conversation's reply first, then the others in the order their runs started.
-  const jobs = [
-    ...running.filter((reply) => reply.conversation_id === conversationId),
-    ...running.filter((reply) => reply.conversation_id !== conversationId),
-  ];
-  const tools: ToolOption<"outline" | "jobs" | "report">[] = [
+  const tools: ToolOption<"outline" | "report">[] = [
     { id: "outline", label: "Outline", icon: SummaryIcon },
-    {
-      id: "jobs",
-      label: "Jobs",
-      icon: SportShoeIcon,
-      count: jobs.length > 0 ? jobs.length : undefined,
-    },
     { id: "report", label: "Report", icon: NotebookPenIcon },
   ];
   // `pinned`: the user is at the bottom, so new text is followed.
@@ -291,22 +276,6 @@ export function ChatView({
             </MainSheet>
             {panel?.kind === "outline" && (
               <OutlinePanel outline={used} onClose={() => setPanel(null)} />
-            )}
-            {panel?.kind === "jobs" && (
-              <JobsPanel
-                replies={jobs}
-                conversationId={conversationId}
-                onOpen={(reply) => {
-                  if (reply.conversation_id === conversationId) {
-                    document
-                      .querySelector(`[data-message-id="${reply.message_id}"]`)
-                      ?.scrollIntoView({ block: "center", behavior: "smooth" });
-                  } else {
-                    onOpenReply(reply.project_id, reply.conversation_id, reply.message_id);
-                  }
-                }}
-                onClose={() => setPanel(null)}
-              />
             )}
             {panel?.kind === "report" && (
               <ReportPanel

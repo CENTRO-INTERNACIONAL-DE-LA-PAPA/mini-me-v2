@@ -201,7 +201,7 @@ pub fn read_each<T>(
 pub fn open(summary: &ProjectSummary, origin: Origin) -> AppResult<Project> {
     let paths = ProjectPaths::new(&summary.folder)?;
     let conn = db::open(&paths.database())?;
-    let project = Project::new(summary.id, summary.name.clone(), paths, conn, origin);
+    let project = Project::new(summary.id, paths, conn, origin);
     conversations::recover_interrupted(&project)?;
     quarto::remove_stale_renders(&project);
     Ok(project)
@@ -321,7 +321,6 @@ mod tests {
         let project = create(&root, "Trial design").unwrap();
         let opened = open(&project, test_support::origin()).unwrap();
         assert_eq!(opened.rename("  Huancayo 2025 ").unwrap(), "Huancayo 2025");
-        assert_eq!(opened.name(), "Huancayo 2025");
         let listed = list(&root, &HashMap::new()).unwrap();
         assert_eq!(listed[0].name, "Huancayo 2025");
         assert_eq!(listed[0].folder, project.folder);
