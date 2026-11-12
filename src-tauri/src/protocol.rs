@@ -192,11 +192,8 @@ pub struct Message {
     pub attachments: Vec<AssetRef>,
     #[serde(default)]
     pub text_components: Vec<TextComponent>,
-    /// Missing in `message.created` events stored before Interactive Components existed.
-    #[serde(default)]
     pub components: Vec<Component>,
     /// The Steps of the reply's Workflow that have started, in order.
-    #[serde(default)]
     pub steps: Vec<MessageStep>,
 }
 
@@ -354,20 +351,6 @@ mod tests {
 
         let back: Event = serde_json::from_value(value).unwrap();
         assert_eq!(back, event);
-    }
-
-    #[test]
-    fn a_message_stored_without_components_has_none() {
-        let message: Message = serde_json::from_value(json!({
-            "id": new_id(),
-            "author": { "kind": "user", "id": "u" },
-            "content": "late blight",
-            "status": "complete",
-            "attachments": [],
-            "text_components": []
-        }))
-        .unwrap();
-        assert!(message.components.is_empty());
     }
 
     #[test]

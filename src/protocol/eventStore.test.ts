@@ -45,13 +45,6 @@ describe("applyEvent with the shared fixture", () => {
     expect(answer.components).toEqual([]);
   });
 
-  it("gives messages from events without components an empty list", () => {
-    const created = events[0] as ProtocolEvent & { payload: { message: object } };
-    const { components: _, ...message } = created.payload.message as { components?: unknown };
-    const old = { ...created, payload: { message } };
-    expect(replay([old]).messages[0].components).toEqual([]);
-  });
-
   it("adds and removes reactions", () => {
     expect(answer.reactions).toEqual([]);
   });

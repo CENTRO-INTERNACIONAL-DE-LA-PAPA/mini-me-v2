@@ -15,7 +15,7 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
   `conn` argument), make `recent.rs` return the error from reading paused replies instead of
   ignoring it, and remove the missing-table legs of the tests (`recent.rs`
   `a_paused_reply_..._and_a_missing_table_none` and any other); verify with `cargo test`.
-- [ ] 2.2 Remove `#[serde(default)]` and the "stored before Interactive Components" doc from
+- [x] 2.2 Remove `#[serde(default)]` and the "stored before Interactive Components" doc from
   `Message.components` and `Message.steps` in `protocol.rs`, delete
   `a_message_stored_without_components_has_none`; remove the `?? []` defaults and their comment in
   `eventStore.ts` and the test "gives messages from events without components an empty list";
