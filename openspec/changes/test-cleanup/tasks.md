@@ -55,10 +55,12 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 
 ## 5. Rust: real-sidecar tests
 
-- [ ] 5.1 Delete the 7 `real_sidecar_*` tests and the `Real` harness in `sidecar.rs`, and the
-  mentions of `--include-ignored` in `docs/architecture.md` and `docs/development.md`; keep the
-  Dataverse network test; verify with `cargo test` and that `grep -rn include-ignored docs` finds
-  nothing.
+- [x] 5.1 Delete the 7 `real_sidecar_*` tests and the `Real` harness in `sidecar.rs`, the
+  `--test-adapters` path only they used (`adapters/testing.py`, the flag in `__main__.py`, the
+  `test_adapters` parameters in the sidecar and in `Launch::command` and `Supervisor`), and the
+  mentions of both in `docs/architecture.md` and `docs/development.md`; keep the Dataverse
+  network test; verify with `cargo test`, `uv run pytest` and that `grep -rn include-ignored docs`
+  finds nothing.
 
 ## 6. Rust: duplicates
 

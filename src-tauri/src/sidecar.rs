@@ -108,7 +108,7 @@ impl Launch {
 
     /// `-I` keeps the user's `PYTHON*` variables and user site-packages out; `-X utf8` makes
     /// stderr UTF-8 whatever the system code page.
-    pub fn command(&self, test_adapters: bool) -> Command {
+    pub fn command(&self) -> Command {
         let mut command = match self {
             Launch::Dev { project_dir } => {
                 let mut command = Command::new("uv");
@@ -133,9 +133,6 @@ impl Launch {
                 command
             }
         };
-        if test_adapters {
-            command.arg("--test-adapters");
-        }
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -364,7 +361,6 @@ struct Control {
 
 pub struct Supervisor {
     launch: Launch,
-    test_adapters: bool,
     timing: Timing,
     calls: Arc<Runs>,
     log: Arc<SidecarLog>,
@@ -377,14 +373,12 @@ pub struct Supervisor {
 impl Supervisor {
     pub fn new(
         launch: Launch,
-        test_adapters: bool,
         timing: Timing,
         calls: Arc<Runs>,
         log: Arc<SidecarLog>,
     ) -> Arc<Self> {
         Arc::new(Self {
             launch,
-            test_adapters,
             timing,
             calls,
             log,
@@ -567,7 +561,7 @@ impl Supervisor {
     }
 
     fn run_once(&self, backoff: &mut Backoff) -> Outcome {
-        let mut child = match self.launch.command(self.test_adapters).spawn() {
+        let mut child = match self.launch.command().spawn() {
             Ok(child) => child,
             Err(err) => return Outcome::Failed(format!("could not start the process: {err}")),
         };
@@ -835,266 +829,6 @@ mod tests {
         tx.send(Incoming::Closed).unwrap();
         let err = handshake(&rx, &Recorder::default(), soon(), false, &SidecarLog::disabled());
         assert_eq!(err.err(), Some(HandshakeError::Closed));
-    }
-
-    /// A supervisor running the real sidecar from `sidecar/` with the test adapters, plus a
-    /// Project to reply in. Needs `uv`; these tests are `#[ignore]`d for that reason.
-    struct Real {
-        _dir: tempfile::TempDir,
-        project: Arc<crate::store::Project>,
-        calls: Arc<Runs>,
-        supervisor: Arc<Supervisor>,
-    }
-
-    impl Drop for Real {
-        fn drop(&mut self) {
-            self.supervisor.shutdown();
-        }
-    }
-
-    fn wait_for(what: &str, timeout: Duration, mut done: impl FnMut() -> bool) {
-        let deadline = Instant::now() + timeout;
-        while !done() {
-            assert!(Instant::now() < deadline, "timed out waiting for {what}");
-            std::thread::sleep(Duration::from_millis(20));
-        }
-    }
-
-    fn real() -> Real {
-        let (dir, project) = crate::projects::test_support::temp_project();
-        let log = Arc::new(SidecarLog::disabled());
-        let calls = Arc::new(Runs::new(
-            Box::new(crate::secrets::test_support::MemorySecrets::dummy()),
-            Arc::clone(&log),
-            crate::runs::CANCEL_TIMEOUT,
-            crate::user_library::LibraryStore::builtin(),
-        ));
-        let timing = Timing {
-            start_timeout: Duration::from_secs(120),
-            ping_interval: Duration::from_millis(500),
-            ping_timeout: Duration::from_secs(5),
-        };
-        let supervisor = Supervisor::new(Launch::dev(), true, timing, Arc::clone(&calls), log);
-        supervisor.spawn();
-        let real = Real {
-            _dir: dir,
-            project: Arc::new(project),
-            calls,
-            supervisor,
-        };
-        real.wait_ready();
-        real
-    }
-
-    impl Real {
-        fn wait_ready(&self) {
-            wait_for("the sidecar to be ready", Duration::from_secs(120), || {
-                self.supervisor.status().state == SidecarState::Ready
-            });
-        }
-
-        /// Starts `adapter` in a new Conversation; returns the reply's ID.
-        fn start(&self, adapter: &str, input: serde_json::Value) -> uuid::Uuid {
-            use crate::conversations::{SendMessageInput, create, send_message};
-            let conversation = create(&self.project).unwrap().id;
-            let text = input["text"].as_str().unwrap_or("go").to_string();
-            let message = send_message(
-                &self.project,
-                conversation,
-                SendMessageInput {
-                    content: text,
-                    attachments: Vec::new(),
-                    text_components: Vec::new(),
-                },
-                crate::protocol::new_id(),
-            )
-            .unwrap();
-            self.calls
-                .start(
-                    Arc::clone(&self.project),
-                    conversation,
-                    &message,
-                    crate::runs::test_support::spec(adapter, input),
-                    crate::runs::test_support::dummy_model(),
-                )
-                .unwrap()
-        }
-
-        fn reply(&self, reply: uuid::Uuid) -> crate::protocol::Message {
-            self.project.lock().load_message(reply).unwrap().unwrap().1
-        }
-
-        fn wait_ended(&self, reply: uuid::Uuid) -> crate::protocol::Message {
-            use crate::protocol::MessageStatus;
-            wait_for("the reply to end", Duration::from_secs(30), || {
-                self.reply(reply).status != MessageStatus::Streaming
-            });
-            self.reply(reply)
-        }
-
-        fn events(&self, reply: uuid::Uuid) -> Vec<crate::protocol::EventKind> {
-            let conversation = self.project.lock().load_message(reply).unwrap().unwrap().0;
-            self.project
-                .lock()
-                .events_after(conversation, 0)
-                .unwrap()
-                .into_iter()
-                .map(|e| e.kind)
-                .collect()
-        }
-    }
-
-    #[test]
-    #[ignore = "starts the real sidecar through uv"]
-    fn real_sidecar_streams_echo() {
-        use crate::protocol::MessageStatus;
-        let real = real();
-        let reply = real.start("echo", json!({ "text": "late blight spreads" }));
-        let message = real.wait_ended(reply);
-        assert_eq!(message.status, MessageStatus::Complete);
-        assert_eq!(message.content, "late blight spreads");
-        assert_eq!(message.author.id, "echo");
-    }
-
-    #[test]
-    #[ignore = "starts the real sidecar through uv"]
-    fn real_sidecar_cancels_echo() {
-        use crate::protocol::{EventKind, MessageStatus};
-        let real = real();
-        let text = "one two three four five six seven eight nine ten eleven twelve";
-        let reply = real.start("echo", json!({ "text": text }));
-        std::thread::sleep(Duration::from_millis(250));
-        let conversation = real.project.lock().load_message(reply).unwrap().unwrap().0;
-        for id in crate::conversations::stop_reply(&real.project, conversation).unwrap() {
-            real.calls.cancel_message(id);
-        }
-        std::thread::sleep(Duration::from_secs(1));
-        let message = real.reply(reply);
-        assert_eq!(message.status, MessageStatus::Cancelled);
-        assert_ne!(message.content, text);
-        let events = real.events(reply);
-        let cancelled = events
-            .iter()
-            .position(|e| matches!(e, EventKind::MessageCancelled { .. }))
-            .unwrap();
-        assert_eq!(cancelled, events.len() - 1);
-    }
-
-    #[test]
-    #[ignore = "starts the real sidecar through uv"]
-    fn real_sidecar_isolates_a_failing_trait() {
-        use crate::protocol::MessageStatus;
-        let real = real();
-        let echo = real.start("echo", json!({ "text": "a b c d e f g h i j k l m n o p" }));
-        let failing = real.start("test-fail", json!({}));
-        let message = real.wait_ended(failing);
-        assert_eq!(message.status, MessageStatus::Failed);
-        assert_eq!(real.reply(echo).status, MessageStatus::Streaming);
-        assert_eq!(real.wait_ended(echo).status, MessageStatus::Complete);
-        assert_eq!(real.supervisor.status().state, SidecarState::Ready);
-
-        let unknown = real.start("no-such-adapter", json!({}));
-        assert_eq!(real.wait_ended(unknown).status, MessageStatus::Failed);
-    }
-
-    #[test]
-    #[ignore = "starts the real sidecar through uv"]
-    fn real_sidecar_survives_a_trait_that_ignores_cancellation() {
-        use crate::protocol::MessageStatus;
-        let real = real();
-        let stubborn = real.start("test-ignore-cancel", json!({}));
-        std::thread::sleep(Duration::from_millis(300));
-        let conversation = real.project.lock().load_message(stubborn).unwrap().unwrap().0;
-        for id in crate::conversations::stop_reply(&real.project, conversation).unwrap() {
-            real.calls.cancel_message(id);
-        }
-        std::thread::sleep(crate::runs::CANCEL_TIMEOUT + Duration::from_secs(1));
-        assert_eq!(real.reply(stubborn).status, MessageStatus::Cancelled);
-        assert_eq!(real.supervisor.status().state, SidecarState::Ready);
-        let echo = real.start("echo", json!({ "text": "still here" }));
-        assert_eq!(real.wait_ended(echo).content, "still here");
-    }
-
-    #[test]
-    #[ignore = "starts the real sidecar through uv"]
-    fn real_sidecar_keeps_the_dummy_secret_out_of_events() {
-        let real = real();
-        let reply = real.start("test-use-secret", json!({ "provider": "dummy" }));
-        let message = real.wait_ended(reply);
-        assert_eq!(message.content, "secret length 19");
-        assert!(!format!("{:?}", real.events(reply)).contains("sk-dummy"));
-    }
-
-    #[test]
-    #[ignore = "starts the real sidecar through uv"]
-    fn real_sidecar_restarts_after_the_process_exits() {
-        let real = real();
-        let reply = real.start("test-exit", json!({}));
-        let message = real.wait_ended(reply);
-        assert_eq!(message.status, crate::protocol::MessageStatus::Failed);
-        assert!(matches!(
-            real.events(reply).last(),
-            Some(crate::protocol::EventKind::MessageFailed { error, .. }) if error.code == "sidecar_stopped"
-        ));
-        wait_for("the restart", Duration::from_secs(10), || {
-            real.supervisor.status().state == SidecarState::Restarting
-        });
-        real.wait_ready();
-        let echo = real.start("echo", json!({ "text": "back again" }));
-        assert_eq!(real.wait_ended(echo).content, "back again");
-    }
-
-    #[test]
-    #[ignore = "starts the real sidecar through uv"]
-    fn real_sidecar_pauses_a_workflow_and_resumes_it_after_approval() {
-        use crate::library::{Branch, Step, StepKind, Workflow};
-        use crate::protocol::MessageStatus;
-        let real = real();
-        let mut spec = crate::runs::test_support::spec("echo", json!({ "text": "late blight" }));
-        let trait_id = spec.traits[0].id;
-        let echo = |id: &str| Step { id: id.into(), label: None, kind: StepKind::Trait { trait_id } };
-        let branch = |label: &str, id: &str| Branch { label: label.into(), steps: vec![echo(id)] };
-        let approval = StepKind::Approval { prompt: "Go on?".into() };
-        spec.workflow = Workflow {
-            steps: vec![
-                Step {
-                    id: "split".into(),
-                    label: None,
-                    kind: StepKind::Parallel { branches: vec![branch("A", "a"), branch("B", "b")] },
-                },
-                Step { id: "ask".into(), label: None, kind: approval },
-                echo("last"),
-            ],
-        };
-        let conversation = crate::conversations::create(&real.project).unwrap().id;
-        let input = crate::conversations::SendMessageInput {
-            content: "late blight".into(),
-            attachments: Vec::new(),
-            text_components: Vec::new(),
-        };
-        let message = crate::conversations::send_message(
-            &real.project, conversation, input, crate::protocol::new_id(),
-        )
-        .unwrap();
-        let reply = real
-            .calls
-            .start(Arc::clone(&real.project), conversation, &message, spec, None)
-            .unwrap();
-        let paused = real.wait_ended(reply);
-        assert_eq!(paused.status, MessageStatus::Paused);
-        assert_eq!(paused.content, "");
-        let names: Vec<&str> = paused.steps.iter().map(|s| s.step_id.as_str()).collect();
-        assert_eq!(names.len(), 4);
-        assert!(names.contains(&"a") && names.contains(&"b") && names.ends_with(&["ask"]));
-
-        let approval = paused.components[0].id;
-        let saved =
-            crate::conversations::answer_approval(&real.project, reply, approval, true).unwrap();
-        real.calls.resume(Arc::clone(&real.project), conversation, saved, None);
-        let done = real.wait_ended(reply);
-        assert_eq!(done.status, MessageStatus::Complete);
-        assert_eq!(done.content, "late blight");
-        assert!(done.steps.iter().all(|s| s.done));
     }
 
     #[test]
