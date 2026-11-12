@@ -564,15 +564,6 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_group_fails_to_load() {
-        let mut json: serde_json::Value =
-            serde_json::from_str(include_str!("../library/builtin.json")).unwrap();
-        json["mini_mes"][0]["group"] = "other".into();
-        let error = serde_json::from_value::<Library>(json).unwrap_err().to_string();
-        assert!(error.contains("unknown variant"), "{error}");
-    }
-
-    #[test]
     fn mini_mes_run_their_step_trait() {
         let library = Library::builtin();
         let step = |name: &str| {

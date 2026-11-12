@@ -716,12 +716,6 @@ mod tests {
         assert!(names.iter().all(|n| n.to_lowercase().contains("trial")));
     }
 
-    #[test]
-    fn unknown_asset_is_not_found() {
-        let (_dir, project) = temp_project();
-        assert_eq!(find(&project.lock(), new_id()).unwrap_err().code, "not_found");
-    }
-
     fn assets_folder_entries(project: &Project) -> usize {
         let folder = project.paths.root().join("assets");
         std::fs::read_dir(folder).map(|entries| entries.count()).unwrap_or(0)

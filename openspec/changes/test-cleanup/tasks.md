@@ -29,7 +29,7 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 - [x] 3.2 Cut `db.rs` to the migration tests that change data (from versions 6, 10 and 11),
   `newer_database_is_refused_and_unchanged` and `new_database_is_migrated`, built on one
   `at_version(n)` helper; verify with `cargo test`.
-- [ ] 3.3 Delete the dependency and trivial tests: `ai2.rs` `tokens_round_trip_as_json`;
+- [x] 3.3 Delete the dependency and trivial tests: `ai2.rs` `tokens_round_trip_as_json`;
   `protocol.rs` `envelope_serializes_to_spec_shape`, `ids_are_v7_and_ordered`,
   `a_message_view_is_the_message_with_its_shown_state`, and `a_component_reference_round_trips`
   once `fixtures/events.json` holds a component text reference (add one if not); `library.rs`

@@ -243,10 +243,4 @@ mod tests {
         });
         assert!(!updates.should_check());
     }
-
-    #[test]
-    fn nothing_to_install_without_a_download() {
-        let updates = Updates::new(Arc::new(SidecarLog::disabled()));
-        assert!(!updates.install_pending());
-    }
 }
