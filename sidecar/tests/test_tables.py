@@ -1,8 +1,10 @@
+import asyncio
 import io
 
 import pandas as pd
 import pytest
 
+from mini_me_sidecar.adapters.data.replies import read_tables
 from mini_me_sidecar.adapters.data.tables import (
     TableSource,
     fallback_source,
@@ -85,3 +87,16 @@ def test_fallback_reads_the_picked_table_then_the_newest_table():
     assert "newest table" in note
     assert fallback_source(None, [{"id": "a3", "name": "notes.txt"}]) is None
 
+
+class OneFileContext:
+    message: dict = {"text_components": [], "attachments": []}
+    file = {"asset_id": "a1", "name": "trial.csv"}
+
+    async def results(self) -> dict:
+        return {"assets": [{"id": "a1", "name": "trial.csv"}], "components": []}
+
+
+def test_join_data_gets_no_fallback_table():
+    with pytest.raises(TraitError) as raised:
+        asyncio.run(read_tables(OneFileContext(), "join the tables", fallback=False))
+    assert raised.value.code == "no_table"

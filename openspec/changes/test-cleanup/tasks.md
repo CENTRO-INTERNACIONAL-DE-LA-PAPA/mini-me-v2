@@ -117,7 +117,7 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
   `test_providers.py`, the 2 `_test_model` tests in `test_summary.py`, the `_converse` tests in
   `test_prompt_rounds.py` (its two tests without a model move to `test_tools.py`, then the file
   goes), and `test_draft.py` except its two cancellation tests; verify with `uv run pytest`.
-- [ ] 8.3 Delete the trivial tests (the three prompt-text tests, the two "without an id is
+- [x] 8.3 Delete the trivial tests (the three prompt-text tests, the two "without an id is
   ignored" tests, `test_every_call_says_it_serves_agricultural_research`,
   `test_a_content_filter_or_refusal_ending_is_recognised`, `test_plan_parses_entries_by_kind`);
   move `test_routing.py`'s `test_join_data_gets_no_fallback_table` to `test_tables.py` and

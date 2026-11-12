@@ -1,9 +1,7 @@
 import asyncio
 
-import pytest
 
-from mini_me_sidecar.adapters.data.replies import read_tables
-from mini_me_sidecar.context import CoreRequestError, TraitError
+from mini_me_sidecar.context import CoreRequestError
 from mini_me_sidecar.routing import NEEDS_CONTEXT, Router, _asked, _questions
 
 
@@ -64,17 +62,3 @@ def test_a_request_that_was_not_sent_has_nothing_asked():
             "asked": None,
         }
     ]
-
-
-class FakeContext:
-    message: dict = {"text_components": [], "attachments": []}
-    file = {"asset_id": "a1", "name": "trial.csv"}
-
-    async def results(self) -> dict:
-        return {"assets": [{"id": "a1", "name": "trial.csv"}], "components": []}
-
-
-def test_join_data_gets_no_fallback_table():
-    with pytest.raises(TraitError) as raised:
-        asyncio.run(read_tables(FakeContext(), "join the tables", fallback=False))
-    assert raised.value.code == "no_table"
