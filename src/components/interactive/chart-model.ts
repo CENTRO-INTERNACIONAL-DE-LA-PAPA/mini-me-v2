@@ -2,7 +2,7 @@
 
 import { oklchToHex } from "../minime/miniMeColors";
 
-export type ColumnType = "number" | "text" | "date" | "boolean";
+type ColumnType = "number" | "text" | "date" | "boolean";
 
 export interface Column {
   name: string;
@@ -18,7 +18,7 @@ export interface Bin {
   series?: string;
 }
 
-export interface Bar {
+interface Bar {
   x: string;
   y: number | null;
   series?: string;
@@ -120,7 +120,7 @@ export interface ChartState {
   hidden: string[];
 }
 
-export type ChartAction =
+type ChartAction =
   | { type: "toggleSeries"; series: string }
   | { type: "chooseView"; view: number };
 

@@ -12,8 +12,7 @@ interface DocumentEditsData {
   threads?: string[];
 }
 
-/** The card's line on how many of `total` suggested edits wait; `waiting` is null until counted. */
-export function editsWaiting(waiting: number | null, total: number): string {
+export function editsLabel(waiting: number | null, total: number): string {
   const edits = count(total, "suggested edit");
   if (waiting === null) return edits;
   if (waiting === 0) {
@@ -44,7 +43,7 @@ function DocumentEditsV1({ data, projectId }: RendererProps) {
   return (
     <DocumentCard
       title={title || "Untitled document"}
-      meta={editsWaiting(waiting ?? null, threads.length)}
+      meta={editsLabel(waiting ?? null, threads.length)}
       removed={removed || !assetId}
       onOpen={() => assetId && openDocument?.(assetId, threads)}
     />

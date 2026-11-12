@@ -36,11 +36,6 @@ export function FeaturingProvider({ projectId, children }: { projectId: string; 
   );
 }
 
-/** Whether a "Feature on Overview" button can be shown for `componentId`. */
-export function useCanFeature(componentId?: string): boolean {
-  return useContext(FeaturingContext) !== null && componentId !== undefined;
-}
-
 /** Features the component on the Project Overview, or removes it when it is the featured one. */
 export function FeatureButton({ componentId }: { componentId?: string }) {
   const featuring = useContext(FeaturingContext);

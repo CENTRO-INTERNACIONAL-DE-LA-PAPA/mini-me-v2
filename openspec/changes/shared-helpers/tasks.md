@@ -26,7 +26,7 @@ Evidence for each item (copies with `path:line`) is in the scan reports and in P
 - [x] 2.2 One status-line row and subscription hook for the three status lines; one load-and-save
   hook for the Mini-Me and Trait editors; SettingsView's error line as a `SettingRow` prop and one
   `SwitchRow` for its switch rows; verify with `npm test` and `npx tsc --noEmit`.
-- [ ] 2.3 Remove dead code (`useCanFeature`, `useFeatureFlag`, `ui/progress.tsx`, `FileMark`'s
+- [x] 2.3 Remove dead code (`useCanFeature`, `useFeatureFlag`, `ui/progress.tsx`, `FileMark`'s
   `size`, the playground's `COPIES` and returned `spawn`, `export`s used only in their file); the
   renames `editsWaiting` → `editsLabel`, `ALL` → `ALL_GROUPS`, `dragging` → `draggingFiles`; a
   `TheoriesData` type and a `ReactionPills` component; verify with `npm test` and

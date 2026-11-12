@@ -22,7 +22,7 @@ export interface ChartColours {
 export type TipLines = [string, string][];
 
 /** A mark whose shapes show a tooltip. Plot gives each shape the index of its row in `data`. */
-export interface TipSource {
+interface TipSource {
   data: unknown[];
   lines: (row: never) => TipLines;
 }
@@ -35,7 +35,7 @@ export interface ChartSpec {
 
 export const TIP_CLASS = "chart-tip-";
 
-export function tipClass(index: number): string {
+function tipClass(index: number): string {
   return `${TIP_CLASS}${index}`;
 }
 

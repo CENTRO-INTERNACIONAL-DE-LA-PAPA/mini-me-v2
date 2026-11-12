@@ -131,11 +131,11 @@ function GroupFilter({
       variant="switch"
       size="switch"
       spacing={1}
-      value={[group ?? ALL]}
-      onValueChange={(value) => value.length > 0 && onSelect(value[0] === ALL ? null : value[0])}
+      value={[group ?? ALL_GROUPS]}
+      onValueChange={(value) => value.length > 0 && onSelect(value[0] === ALL_GROUPS ? null : value[0])}
     >
       {[null, ...groups].map((g) => (
-        <ToggleGroupItem key={g ?? ALL} value={g ?? ALL}>
+        <ToggleGroupItem key={g ?? ALL_GROUPS} value={g ?? ALL_GROUPS}>
           {g === null ? "All" : groupLabel(g)}
           <span className="tabular-nums">{count(g)}</span>
         </ToggleGroupItem>
@@ -144,8 +144,7 @@ function GroupFilter({
   );
 }
 
-/** The filter's value for every group. */
-const ALL = "all";
+const ALL_GROUPS = "all";
 
 function MiniMeLists({
   library,

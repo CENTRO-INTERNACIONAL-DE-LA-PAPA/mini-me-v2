@@ -10,7 +10,7 @@ import { Composer } from "../chat/Composer";
 import { MessageItem } from "../chat/MessageItem";
 import { useConversation } from "../chat/useConversation";
 import { componentNames } from "../interactive/component-names";
-import { editsWaiting } from "../interactive/document-edits";
+import { editsLabel } from "../interactive/document-edits";
 import { ThreadSuggestionsProvider } from "../interactive/suggestion";
 import { ItemMenu } from "../shell/ItemMenu";
 import { ToolSheet } from "../shell/Sheet";
@@ -201,7 +201,7 @@ function EditsBar({
   return (
     <div className="mb-4 grid gap-2 rounded-xl border border-card-edge bg-card px-4 py-3">
       <span className="text-meta text-muted-foreground">
-        {editsWaiting(waiting.length, threads.length)}
+        {editsLabel(waiting.length, threads.length)}
       </span>
       {notApplied.length > 0 && (
         <div className="grid grid-cols-1 gap-1">

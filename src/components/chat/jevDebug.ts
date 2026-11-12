@@ -14,7 +14,7 @@ export function questionWords(question: string): string {
 
 /** One answered question as the "[DEBUG] Jev" block shows it: the option Jev chose with its
  * confidence, and the other options with their probabilities, highest first. */
-export interface AnswerRow {
+interface AnswerRow {
   question: string;
   choice: string;
   confidence: number;
