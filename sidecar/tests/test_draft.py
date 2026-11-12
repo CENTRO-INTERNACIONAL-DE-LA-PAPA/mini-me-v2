@@ -4,14 +4,6 @@ from mini_me_sidecar import documents as module
 from mini_me_sidecar.documents import Documents
 
 
-class FakeLink:
-    def __init__(self) -> None:
-        self.sent: list[dict] = []
-
-    def send(self, frame: dict) -> None:
-        self.sent.append(frame)
-
-
 class FakeRequests:
     async def send(self, call_id: str, method: str, params: dict) -> dict:
         assert (call_id, method, params) == ("d1", "secret.get", {"provider": "openai"})
@@ -48,9 +40,8 @@ START = {
 }
 
 
-def run_draft(chat: FakeChat, monkeypatch, cancel_after: float | None = None) -> list[dict]:
+def run_draft(chat: FakeChat, link, monkeypatch, cancel_after: float | None = None) -> list[dict]:
     monkeypatch.setattr(module, "chat_model", lambda model, key: chat)
-    link = FakeLink()
 
     async def main() -> None:
         documents = Documents(link, FakeRequests())  # type: ignore[arg-type]
@@ -70,15 +61,15 @@ def run_draft(chat: FakeChat, monkeypatch, cancel_after: float | None = None) ->
     return link.sent
 
 
-def test_a_cancelled_draft_ends_as_done(monkeypatch):
+def test_a_cancelled_draft_ends_as_done(link, monkeypatch):
     chat = FakeChat(["one ", "two ", "three"], pause=0.05)
-    sent = run_draft(chat, monkeypatch, cancel_after=0.08)
+    sent = run_draft(chat, link, monkeypatch, cancel_after=0.08)
     assert sent[-1] == {"type": "draft.done", "draft_id": "d1"}
     assert "three" not in "".join(f.get("text", "") for f in sent)
 
 
-def test_a_draft_cancelled_before_it_starts_ends_as_done(monkeypatch):
-    sent = run_draft(FakeChat(["one"]), monkeypatch, cancel_after=0)
+def test_a_draft_cancelled_before_it_starts_ends_as_done(link, monkeypatch):
+    sent = run_draft(FakeChat(["one"]), link, monkeypatch, cancel_after=0)
     assert sent == [{"type": "draft.done", "draft_id": "d1"}]
 
 

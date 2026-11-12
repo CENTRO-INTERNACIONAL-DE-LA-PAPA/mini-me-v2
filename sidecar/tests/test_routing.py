@@ -42,19 +42,10 @@ class NoKey:
         raise CoreRequestError("key_missing", "No Typesafe key is saved.")
 
 
-class SentFrames:
-    def __init__(self) -> None:
-        self.frames: list[dict] = []
-
-    def send(self, frame: dict) -> None:
-        self.frames.append(frame)
-
-
-def test_a_request_that_was_not_sent_has_nothing_asked():
-    link = SentFrames()
+def test_a_request_that_was_not_sent_has_nothing_asked(link):
     router = Router(link, NoKey())
     asyncio.run(router._route("r1", {"state": {}, "ask": ["reaction"]}))
-    assert link.frames == [
+    assert link.sent == [
         {
             "type": "route.error",
             "route_id": "r1",

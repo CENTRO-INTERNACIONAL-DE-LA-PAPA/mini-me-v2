@@ -110,8 +110,9 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 
 ## 8. Sidecar tests
 
-- [ ] 8.1 Add `sidecar/tests/conftest.py` with `FakeLink`, `FakeContext` and `ECHO`, and use them
-  in place of the copies; verify with `uv run pytest`.
+- [x] 8.1 Add `sidecar/tests/conftest.py` with a `link` fixture that records the frames sent,
+  in place of the copies in `test_draft.py` and `test_routing.py` (done after 8.2 and 8.3, which
+  deleted the other copied fakes with their tests); verify with `uv run pytest`.
 - [x] 8.2 Delete the model-call tests: `test_decide.py` (and `decide.py`'s `make_chat` parameter),
   `test_debug.py` replaced by one test of `Recorder.model_call`, the 4 `structured_answer` tests in
   `test_providers.py`, the 2 `_test_model` tests in `test_summary.py`, the `_converse` tests in
