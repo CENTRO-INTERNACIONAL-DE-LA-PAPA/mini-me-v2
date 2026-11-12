@@ -10,6 +10,7 @@ use crate::assets;
 use crate::comments::{self, Anchor};
 use crate::error::{AppError, AppResult};
 use crate::library::SCRIBE;
+use crate::paths::write_atomic;
 use crate::projects;
 use crate::protocol::{AssetRef, Author, AuthorKind};
 use crate::store::Project;
@@ -96,12 +97,10 @@ fn write(
         return Err(AppError::invalid_input("A document can be at most 2 MiB."));
     }
     let path = document_path(project, id)?;
-    let tmp = path.with_extension("qmd.tmp");
     // Held until the size is recorded, so saves that overlap (typing, closing, exporting, a
     // draft ending) take turns with the temporary file instead of writing it at once.
     let state = project.lock();
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, &path)?;
+    write_atomic(&path, text.as_bytes())?;
     state.conn.execute(
         "UPDATE assets SET size_bytes = ?1, added_by_kind = COALESCE(?2, added_by_kind), \
          added_by_id = COALESCE(?3, added_by_id) WHERE id = ?4",

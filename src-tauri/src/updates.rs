@@ -11,6 +11,7 @@ use tauri::AppHandle;
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::sidecar::SidecarLog;
+use crate::sync::{Sink, Watched, locked};
 
 const CHECK_INTERVAL: Duration = Duration::from_secs(4 * 60 * 60);
 
@@ -22,7 +23,7 @@ pub enum UpdateStatus {
     Ready { version: String },
 }
 
-type StatusSink = Box<dyn Fn(&UpdateStatus) -> bool + Send>;
+type StatusSink = Sink<UpdateStatus>;
 
 /// Whole percent of `downloaded` out of `total`, 100 only once complete; `None` without a total.
 fn percent(downloaded: u64, total: Option<u64>) -> Option<u8> {
@@ -58,8 +59,7 @@ fn register_bundle(log: &SidecarLog) {
 
 pub struct Updates {
     log: Arc<SidecarLog>,
-    status: Mutex<UpdateStatus>,
-    subscribers: Mutex<Vec<StatusSink>>,
+    status: Watched<UpdateStatus>,
     /// A downloaded and verified update, held in memory until it is installed.
     pending: Mutex<Option<(Update, Vec<u8>)>>,
 }
@@ -68,25 +68,18 @@ impl Updates {
     pub fn new(log: Arc<SidecarLog>) -> Arc<Self> {
         Arc::new(Self {
             log,
-            status: Mutex::new(UpdateStatus::None),
-            subscribers: Mutex::new(Vec::new()),
+            status: Watched::new(UpdateStatus::None),
             pending: Mutex::new(None),
         })
     }
 
     pub fn status(&self) -> UpdateStatus {
-        self.status.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        self.status.get()
     }
 
     /// Sends the current status, then every change; `sink` returns `false` once gone.
     pub fn subscribe(&self, sink: StatusSink) {
-        let status = self.status.lock().unwrap_or_else(|p| p.into_inner());
-        if sink(&*status) {
-            self.subscribers
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .push(sink);
-        }
+        self.status.subscribe(sink);
     }
 
     /// Checks now and then every `CHECK_INTERVAL`, on a background thread.
@@ -107,7 +100,7 @@ impl Updates {
     /// Installs the downloaded update, if any; `true` when it was installed. On Windows this
     /// starts the installer and ends the process, so the sidecar must already be stopped.
     pub fn install_pending(&self) -> bool {
-        let Some((update, bytes)) = self.pending.lock().unwrap_or_else(|p| p.into_inner()).take()
+        let Some((update, bytes)) = locked(&self.pending).take()
         else {
             return false;
         };
@@ -159,7 +152,7 @@ impl Updates {
                 || {},
             )
             .await?;
-        *self.pending.lock().unwrap_or_else(|p| p.into_inner()) = Some((update, bytes));
+        *locked(&self.pending) = Some((update, bytes));
         self.log.line(&format!("update: {version} ready"));
         self.set_status(UpdateStatus::Ready { version });
         Ok(())
@@ -168,15 +161,7 @@ impl Updates {
     /// Publishes `status` only when it differs from the current one, so download progress
     /// reaches the UI at most once per percent.
     fn set_status(&self, status: UpdateStatus) {
-        let mut current = self.status.lock().unwrap_or_else(|p| p.into_inner());
-        if *current == status {
-            return;
-        }
-        *current = status;
-        self.subscribers
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .retain(|sink| sink(&*current));
+        self.status.set(status);
     }
 }
 

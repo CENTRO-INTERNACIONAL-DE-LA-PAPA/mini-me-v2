@@ -9,6 +9,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::error::{AppError, AppResult};
+use crate::paths::write_atomic;
 
 pub const FILE_NAME: &str = "user-profile.json";
 
@@ -102,9 +103,7 @@ fn load(path: &Path) -> State {
 
 /// Writes through a temporary file so a failed write leaves the previous file whole.
 fn write(path: &Path, raw: &Map<String, Value>) -> AppResult<()> {
-    let tmp = path.with_file_name(format!("{FILE_NAME}.tmp"));
-    std::fs::write(&tmp, serde_json::to_string_pretty(raw)?)?;
-    std::fs::rename(&tmp, path)?;
+    write_atomic(path, serde_json::to_string_pretty(raw)?.as_bytes())?;
     Ok(())
 }
 

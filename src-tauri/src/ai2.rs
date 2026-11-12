@@ -11,6 +11,7 @@ use serde_json::Value;
 use crate::error::{AppError, AppResult};
 use crate::protocol::now_ms;
 use crate::secrets::{KeychainSecrets, Secret, SecretSource};
+use crate::sync::{Sink, Watched, locked};
 
 /// The key account the tokens are stored under, and the provider adapters ask for.
 pub const AI2_ACCOUNT: &str = "ai2";
@@ -95,13 +96,12 @@ pub trait TokenStore: Send + Sync {
     fn delete(&self) -> AppResult<()>;
 }
 
-type StatusSink = Box<dyn Fn(&Ai2Status) -> bool + Send>;
+type StatusSink = Sink<Ai2Status>;
 
 pub struct Ai2 {
     auth0: Box<dyn Auth0>,
     store: Box<dyn TokenStore>,
-    status: Mutex<Ai2Status>,
-    subscribers: Mutex<Vec<StatusSink>>,
+    status: Watched<Ai2Status>,
     /// Serializes refreshes: a rotated refresh token is single-use, so two calls must not
     /// refresh with the same one.
     refreshing: Mutex<()>,
@@ -118,8 +118,7 @@ impl Ai2 {
         Arc::new(Self {
             auth0,
             store,
-            status: Mutex::new(status),
-            subscribers: Mutex::new(Vec::new()),
+            status: Watched::new(status),
             refreshing: Mutex::new(()),
         })
     }
@@ -130,27 +129,16 @@ impl Ai2 {
     }
 
     pub fn status(&self) -> Ai2Status {
-        self.status.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        self.status.get()
     }
 
     /// Sends the current status, then every change; `sink` returns `false` once gone.
     pub fn subscribe(&self, sink: StatusSink) {
-        let status = self.status.lock().unwrap_or_else(|p| p.into_inner());
-        if sink(&*status) {
-            self.subscribers
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .push(sink);
-        }
+        self.status.subscribe(sink);
     }
 
     fn set_status(&self, status: Ai2Status) {
-        let mut current = self.status.lock().unwrap_or_else(|p| p.into_inner());
-        *current = status;
-        self.subscribers
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .retain(|sink| sink(&*current));
+        self.status.send(status);
     }
 
     /// Starts the device flow and waits for the user's confirmation on a background thread.
@@ -222,7 +210,7 @@ impl Ai2 {
 
     /// Refreshed first when about to expire; `None` when signed out or the refresh failed.
     pub fn access_token(&self) -> Option<String> {
-        let _refreshing = self.refreshing.lock().unwrap_or_else(|p| p.into_inner());
+        let _refreshing = locked(&self.refreshing);
         let tokens = self.store.load()?;
         if now_ms() < tokens.expires_at - REFRESH_MARGIN_MS {
             return Some(tokens.access_token);

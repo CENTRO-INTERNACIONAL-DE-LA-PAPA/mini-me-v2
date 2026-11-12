@@ -31,6 +31,7 @@ use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
 use crate::sidecar::SidecarLog;
 use crate::store::Project;
+use crate::sync::locked;
 
 pub const ASSET_CHUNK_BYTES: u64 = 1024 * 1024;
 /// The largest file a Trait may write with `asset.write`.
@@ -338,27 +339,27 @@ impl Runs {
     }
 
     pub fn set_debug(&self, parts: DebugParts) {
-        *self.debug.lock().unwrap_or_else(|p| p.into_inner()) = parts;
+        *locked(&self.debug) = parts;
     }
 
     /// For Traits that ask during a call.
     pub fn set_active_features(&self, ids: Vec<String>) {
-        *self.features.lock().unwrap_or_else(|p| p.into_inner()) = ids;
+        *locked(&self.features) = ids;
     }
 
     pub fn set_document_gate(&self, gate: DocumentGate) {
-        *self.document_gate.lock().unwrap_or_else(|p| p.into_inner()) = Some(gate);
+        *locked(&self.document_gate) = Some(gate);
     }
 
     /// Fails with the gate's error when document work is not possible.
     fn document_allowed(&self) -> AppResult<()> {
-        let gate = self.document_gate.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let gate = locked(&self.document_gate).clone();
         gate.map_or(Ok(()), |check| check())
     }
 
 
     fn lock(&self) -> MutexGuard<'_, Inner> {
-        self.inner.lock().unwrap_or_else(|p| p.into_inner())
+        locked(&self.inner)
     }
 
     /// For a sidecar past the handshake.
@@ -520,7 +521,7 @@ impl Runs {
                 file: spec.file.clone(),
                 mini_mes: mini_me_list(&self.library.current()),
                 document: comments::run_document(&project, conversation_id).ok().flatten(),
-                debug: *self.debug.lock().unwrap_or_else(|p| p.into_inner()),
+                debug: *locked(&self.debug),
             },
         };
         self.lock().runs.insert(
@@ -774,7 +775,7 @@ impl Runs {
 
     /// Sends the list now and on every change.
     pub fn subscribe(&self, sink: RunningSink) {
-        let mut subscribers = self.subscribers.lock().unwrap_or_else(|p| p.into_inner());
+        let mut subscribers = locked(&self.subscribers);
         if sink(&self.running()) {
             subscribers.push(sink);
         }
@@ -820,7 +821,7 @@ impl Runs {
     }
 
     fn notify(&self) {
-        let mut subscribers = self.subscribers.lock().unwrap_or_else(|p| p.into_inner());
+        let mut subscribers = locked(&self.subscribers);
         if subscribers.is_empty() {
             return;
         }
@@ -1106,7 +1107,7 @@ impl Runs {
                 Ok(serde_json::to_value(history)?)
             }
             "features.active" => {
-                let features = self.features.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                let features = locked(&self.features).clone();
                 Ok(json!({ "features": features }))
             }
             "dataverse.search" => {

@@ -13,7 +13,7 @@ use crate::error::{AppError, AppResult};
 use crate::protocol::{
     AssetRef, Author, AuthorKind, TextComponent, TextComponentKind, new_id, now_ms,
 };
-use crate::store::{Project, ProjectState};
+use crate::store::{Project, ProjectState, parse_id};
 
 /// Where an Asset downloaded from outside the Project came from.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -420,7 +420,7 @@ pub fn list(project: &Project, query: Option<&str>) -> AppResult<Vec<AssetRef>> 
             continue;
         }
         assets.push(AssetRef {
-            id: Uuid::parse_str(&id).map_err(|_| AppError::storage("stored ID is not readable"))?,
+            id: parse_id(&id, "ID")?,
             name,
             media_type,
             size_bytes,
@@ -458,7 +458,6 @@ pub struct ConversationRef {
 /// Every Asset of the Project, newest first, with who added it and where it is used.
 pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     let state = project.lock();
-    let corrupt = || AppError::storage("stored ID is not readable");
     let mut entries = Vec::new();
     {
         let mut stmt = state.conn.prepare(
@@ -492,7 +491,7 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
                 .map(|since| since.as_millis() as i64);
             entries.push(FileEntry {
                 asset: AssetRef {
-                    id: Uuid::parse_str(&id).map_err(|_| corrupt())?,
+                    id: parse_id(&id, "ID")?,
                     name,
                     media_type,
                     size_bytes,
@@ -524,7 +523,7 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     })?;
     for row in rows {
         let (conversation, title, attachments, text_components) = row?;
-        let conversation = Uuid::parse_str(&conversation).map_err(|_| corrupt())?;
+        let conversation = parse_id(&conversation, "ID")?;
         let attached: Vec<AssetRef> = serde_json::from_str(&attachments)?;
         let referenced: Vec<TextComponent> = serde_json::from_str(&text_components)?;
         let ids = attached.iter().map(|a| a.id).chain(

@@ -2,7 +2,7 @@
 //! folders stay self-contained.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::features::{self, FEATURES, Feature};
 use crate::link::{CallModel, DebugParts};
+use crate::paths::write_atomic;
 use crate::protocol::{Origin, new_id};
 use crate::secrets::is_provider;
 
@@ -170,9 +171,7 @@ impl Settings {
     /// Writes to a temporary file and renames it, so a crash never leaves a half-written file.
     pub fn save(&self, config_dir: &Path) -> AppResult<()> {
         std::fs::create_dir_all(config_dir)?;
-        let tmp: PathBuf = config_dir.join(format!("{FILE_NAME}.tmp"));
-        std::fs::write(&tmp, serde_json::to_string_pretty(self)?)?;
-        std::fs::rename(&tmp, config_dir.join(FILE_NAME))?;
+        write_atomic(&config_dir.join(FILE_NAME), serde_json::to_string_pretty(self)?.as_bytes())?;
         Ok(())
     }
 

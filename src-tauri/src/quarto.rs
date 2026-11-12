@@ -16,6 +16,7 @@ use crate::assets;
 use crate::error::{AppError, AppResult};
 use crate::protocol::{AssetRef, new_id};
 use crate::store::Project;
+use crate::sync::locked;
 
 /// The oldest Quarto the app renders with: the version `keep-typ` and `quarto typst compile` were
 /// checked on.
@@ -190,7 +191,7 @@ impl Known {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, (Option<String>, Option<Status>)> {
-        self.state.lock().unwrap_or_else(|p| p.into_inner())
+        locked(&self.state)
     }
 
     /// Looks it up first if it never was, without the lock, since the lookup can take seconds.

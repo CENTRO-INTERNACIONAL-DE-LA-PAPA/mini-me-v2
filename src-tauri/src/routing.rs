@@ -19,6 +19,7 @@ use crate::link::{CallModel, RouteComponent, RouteFile, RouteMiniMe, RunFile};
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
 use crate::runs::{RouteAnswers, Routed, RunSpec, Runs};
 use crate::store::Project;
+use crate::sync::{Watched, locked};
 
 /// How long a message waits for Jev before the fallback Mini-Me answers it.
 pub const ROUTE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -74,8 +75,7 @@ pub struct Routing {
     /// Conversations whose latest message is waiting for a routing decision.
     pending: Mutex<HashSet<Uuid>>,
     /// Why Jev cannot choose right now, if it cannot.
-    warning: Mutex<Option<&'static str>>,
-    subscribers: Mutex<Vec<WarningSink>>,
+    warning: Watched<Option<&'static str>>,
 }
 
 impl Routing {
@@ -84,20 +84,13 @@ impl Routing {
         Arc::new(Self {
             library,
             pending: Mutex::new(HashSet::new()),
-            warning: Mutex::new((!has_key).then_some(NO_KEY)),
-            subscribers: Mutex::new(Vec::new()),
+            warning: Watched::new((!has_key).then_some(NO_KEY)),
         })
     }
 
     /// Sends the current warning, then every change, until `sink` returns `false`.
     pub fn subscribe(&self, sink: WarningSink) {
-        let warning = self.warning.lock().unwrap_or_else(|p| p.into_inner());
-        if sink(*warning) {
-            self.subscribers
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .push(sink);
-        }
+        self.warning.subscribe(Box::new(move |warning| sink(*warning)));
     }
 
     /// Saving clears the warning (the next route confirms the key); removing warns.
@@ -106,15 +99,7 @@ impl Routing {
     }
 
     fn warn(&self, next: Option<&'static str>) {
-        let mut warning = self.warning.lock().unwrap_or_else(|p| p.into_inner());
-        if *warning == next {
-            return;
-        }
-        *warning = next;
-        self.subscribers
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .retain(|sink| sink(next));
+        self.warning.set(next);
     }
 
     /// Routes on a background thread; `reply_in_progress` while an earlier message awaits routing.
@@ -151,7 +136,7 @@ impl Routing {
             return Ok(message);
         }
         let message = {
-            let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+            let mut pending = locked(&self.pending);
             if pending.contains(&conversation_id) {
                 return Err(AppError::new(
                     "reply_in_progress",
@@ -166,9 +151,7 @@ impl Routing {
         let sent = message.clone();
         std::thread::spawn(move || {
             this.route(&calls, &settings, &project, conversation_id, &sent);
-            this.pending
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
+            locked(&this.pending)
                 .remove(&conversation_id);
         });
         Ok(message)

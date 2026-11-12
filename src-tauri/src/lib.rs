@@ -26,6 +26,7 @@ mod secrets;
 mod settings;
 mod sidecar;
 mod store;
+mod sync;
 mod updates;
 mod user_library;
 mod user_profile;

@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::paths::ProjectPaths;
+use crate::sync::locked;
 use crate::protocol::{
     AssetRef, Author, AuthorKind, Component, ENVELOPE_VERSION, Event, EventKind,
     Message, MessageStatus, MessageStep, MessageView, OpenedConversation, Origin, Progress,
@@ -91,19 +92,19 @@ impl Project {
     }
 
     pub fn name(&self) -> String {
-        self.name.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        locked(&self.name).clone()
     }
 
     /// Stored in the database only; no folder is renamed. Returns the trimmed name.
     pub fn rename(&self, name: &str) -> AppResult<String> {
         let name = crate::projects::validate_name(name)?;
         self.lock().conn.execute("UPDATE project SET name = ?1", rusqlite::params![name])?;
-        *self.name.lock().unwrap_or_else(|p| p.into_inner()) = name.clone();
+        *locked(&self.name) = name.clone();
         Ok(name)
     }
 
     pub fn lock(&self) -> MutexGuard<'_, ProjectState> {
-        self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        locked(&self.inner)
     }
 
     /// Stored events after `after_seq`, then new ones; queued under the lock, so none is missed.
@@ -305,9 +306,9 @@ impl ProjectState {
         let Some((conversation, status)) = row else {
             return Ok(None);
         };
-        let corrupt = || AppError::storage("stored message is not readable");
-        let conversation = Uuid::parse_str(&conversation).map_err(|_| corrupt())?;
-        Ok(Some((conversation, MessageStatus::parse(&status).ok_or_else(corrupt)?)))
+        let conversation = parse_id(&conversation, "message")?;
+        let status = MessageStatus::parse(&status).ok_or_else(|| unreadable("message"))?;
+        Ok(Some((conversation, status)))
     }
 
     /// A message with all of its components' data.
@@ -348,30 +349,26 @@ impl ProjectState {
                 row.get::<_, String>(8)?,
             ))
         })?;
-        let corrupt = || AppError::storage("stored message is not readable");
         let mut messages = Vec::new();
         for row in rows {
             let (id, conversation, kind, author_id, content, status, reply_to, attachments, refs) =
                 row?;
-            let id = Uuid::parse_str(&id).map_err(|_| corrupt())?;
+            let id = parse_id(&id, "message")?;
             let message = Message {
                 id,
                 author: Author {
-                    kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?,
+                    kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("message"))?,
                     id: author_id,
                 },
                 content,
-                status: MessageStatus::parse(&status).ok_or_else(corrupt)?,
-                reply_to: reply_to
-                    .map(|id| Uuid::parse_str(&id))
-                    .transpose()
-                    .map_err(|_| corrupt())?,
+                status: MessageStatus::parse(&status).ok_or_else(|| unreadable("message"))?,
+                reply_to: reply_to.map(|id| parse_id(&id, "message")).transpose()?,
                 attachments: serde_json::from_str::<Vec<AssetRef>>(&attachments)?,
                 text_components: serde_json::from_str::<Vec<TextComponent>>(&refs)?,
                 components: components.remove(&id).unwrap_or_default(),
                 steps: steps.remove(&id).unwrap_or_default(),
             };
-            messages.push((Uuid::parse_str(&conversation).map_err(|_| corrupt())?, message));
+            messages.push((parse_id(&conversation, "message")?, message));
         }
         Ok(messages)
     }
@@ -394,8 +391,7 @@ impl ProjectState {
         let mut components: HashMap<Uuid, Vec<Component>> = HashMap::new();
         for row in rows {
             let (message_id, raw) = row?;
-            let message_id = Uuid::parse_str(&message_id)
-                .map_err(|_| AppError::storage("stored component is not readable"))?;
+            let message_id = parse_id(&message_id, "component")?;
             components.entry(message_id).or_default().push(component(raw)?);
         }
         Ok(components)
@@ -424,8 +420,7 @@ impl ProjectState {
         let mut steps: HashMap<Uuid, Vec<MessageStep>> = HashMap::new();
         for row in rows {
             let (message_id, step) = row?;
-            let message_id = Uuid::parse_str(&message_id)
-                .map_err(|_| AppError::storage("stored Step is not readable"))?;
+            let message_id = parse_id(&message_id, "Step")?;
             steps.entry(message_id).or_default().push(step);
         }
         Ok(steps)
@@ -582,10 +577,7 @@ impl ProjectState {
         let mut result = Vec::new();
         for row in rows {
             let (conversation, message) = row?;
-            let parse = |s: &str| {
-                Uuid::parse_str(s).map_err(|_| AppError::storage("stored ID is not readable"))
-            };
-            result.push((parse(&conversation)?, parse(&message)?));
+            result.push((parse_id(&conversation, "ID")?, parse_id(&message, "ID")?));
         }
         Ok(result)
     }
@@ -636,10 +628,9 @@ impl ProjectState {
         })?;
         for row in rows {
             let (message_id, emoji, kind, by_id) = row?;
-            let corrupt = || AppError::storage("stored reaction is not readable");
-            let message_id = Uuid::parse_str(&message_id).map_err(|_| corrupt())?;
+            let message_id = parse_id(&message_id, "reaction")?;
             let by = Author {
-                kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?,
+                kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("reaction"))?,
                 id: by_id,
             };
             if let Some(&i) = index.get(&message_id) {
@@ -750,12 +741,20 @@ fn component_row(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Comp
     ))
 }
 
+/// The error for a stored `what` that cannot be read back: "stored `what` is not readable".
+pub(crate) fn unreadable(what: &str) -> AppError {
+    AppError::storage(format!("stored {what} is not readable"))
+}
+
+pub(crate) fn parse_id(value: &str, what: &str) -> AppResult<Uuid> {
+    Uuid::parse_str(value).map_err(|_| unreadable(what))
+}
+
 fn component(
     (id, kind, version, data, text, answer, step_index): ComponentRow,
 ) -> AppResult<Component> {
     Ok(Component {
-        id: Uuid::parse_str(&id)
-            .map_err(|_| AppError::storage("stored component is not readable"))?,
+        id: parse_id(&id, "component")?,
         kind,
         version,
         data: serde_json::from_str(&data)?,

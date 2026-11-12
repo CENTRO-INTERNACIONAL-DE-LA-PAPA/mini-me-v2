@@ -12,7 +12,7 @@ use crate::comments;
 use crate::error::{AppError, AppResult};
 use crate::library::Library;
 use crate::protocol::{AssetRef, Author, AuthorKind, Component};
-use crate::store::{Project, ProjectState};
+use crate::store::{Project, ProjectState, parse_id};
 
 /// Component kinds that can be featured on the Overview.
 const FEATURABLE: [&str; 2] = ["chart", "table"];
@@ -50,10 +50,6 @@ pub struct Output {
     pub conversation_title: String,
     pub message_id: Uuid,
     pub created_at: i64,
-}
-
-fn parse_id(value: &str) -> AppResult<Uuid> {
-    Uuid::parse_str(value).map_err(|_| AppError::storage("stored ID is not readable"))
 }
 
 fn author(kind: &str, id: String) -> AppResult<Author> {
@@ -124,7 +120,7 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
             .map(|(id, kind, version, data, text, answer, a_kind, a_id, conversation, message)| {
                 AppResult::Ok(Featured {
                     component: Component {
-                        id: parse_id(&id)?,
+                        id: parse_id(&id, "ID")?,
                         kind,
                         version,
                         data: serde_json::from_str(&data)?,
@@ -137,8 +133,8 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
                         step_index: None,
                     },
                     author: author(&a_kind, a_id)?,
-                    conversation_id: parse_id(&conversation)?,
-                    message_id: parse_id(&message)?,
+                    conversation_id: parse_id(&conversation, "ID")?,
+                    message_id: parse_id(&message, "ID")?,
                 })
             })
             .transpose()?,
@@ -176,11 +172,11 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
         outputs.push(Output {
             title: component_title(&kind, title, count, &text),
             kind,
-            id: parse_id(&id)?,
+            id: parse_id(&id, "ID")?,
             author: author(&a_kind, a_id)?,
-            conversation_id: parse_id(&conversation)?,
+            conversation_id: parse_id(&conversation, "ID")?,
             conversation_title: c_title,
-            message_id: parse_id(&message)?,
+            message_id: parse_id(&message, "ID")?,
             created_at: at,
         });
     }
@@ -195,7 +191,7 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
         let mut generated = HashMap::new();
         for row in rows {
             let (id, name, at) = row?;
-            generated.insert(parse_id(&id)?, (name, at));
+            generated.insert(parse_id(&id, "ID")?, (name, at));
         }
         generated
     };
@@ -229,9 +225,9 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
                     id: asset.id,
                     title: name.clone(),
                     author: author(&a_kind, a_id.clone())?,
-                    conversation_id: parse_id(&conversation)?,
+                    conversation_id: parse_id(&conversation, "ID")?,
                     conversation_title: c_title.clone(),
-                    message_id: parse_id(&message)?,
+                    message_id: parse_id(&message, "ID")?,
                     created_at: *at,
                 });
             }
@@ -304,7 +300,7 @@ pub fn summary_material(project: &Project, library: &Library, budget: usize) -> 
     let mut material = String::new();
     for (id, title) in conversations {
         let mut block = format!("## {title}\n");
-        for line in message_lines(&state, library, parse_id(&id)?)? {
+        for line in message_lines(&state, library, parse_id(&id, "ID")?)? {
             block.push_str(&line);
             block.push('\n');
         }

@@ -42,6 +42,7 @@ use crate::settings::{AiSettings, DebugSettings, HomeSettings, Settings};
 use crate::link::SummaryKind;
 use crate::sidecar::{LOG_FILE, Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
+use crate::sync::locked;
 use crate::updates::{UpdateStatus, Updates};
 
 /// Whole Conversations, newest first, up to four times one call's history.
@@ -169,7 +170,7 @@ impl AppState {
 
     /// Replaces the previous drop's paths.
     pub fn record_drop(&self, paths: Vec<PathBuf>) {
-        *self.dropped.lock().unwrap_or_else(|p| p.into_inner()) = paths;
+        *locked(&self.dropped) = paths;
     }
 
     /// Whether developer options and the web inspector are available.
@@ -179,7 +180,7 @@ impl AppState {
 
     /// Saves the flags, then tells running Traits which are on.
     fn change_features(&self, change: impl FnOnce(&mut Settings)) -> AppResult<()> {
-        let mut settings = self.settings.lock().unwrap_or_else(|p| p.into_inner());
+        let mut settings = locked(&self.settings);
         change(&mut settings);
         settings.save(&self.config_dir)?;
         self.runs.set_active_features(active_feature_ids(&settings, self.dev_app));
@@ -187,7 +188,7 @@ impl AppState {
     }
 
     fn settings(&self) -> Settings {
-        self.settings.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        locked(&self.settings).clone()
     }
 
     fn user(&self) -> Author {
@@ -206,7 +207,7 @@ impl AppState {
 
     /// Opens it on first use so every caller shares one instance.
     fn project(&self, project_id: Uuid) -> AppResult<Arc<Project>> {
-        let mut open = self.open_projects.lock().unwrap_or_else(|p| p.into_inner());
+        let mut open = locked(&self.open_projects);
         if let Some(project) = open.get(&project_id) {
             return Ok(Arc::clone(project));
         }
@@ -239,7 +240,7 @@ pub async fn create_project(state: State<'_, AppState>, name: String) -> AppResu
 pub async fn open_project(state: State<'_, AppState>, project_id: Uuid) -> AppResult<ProjectSummary> {
     let summary = state.find_summary(project_id)?;
     state.project(project_id)?;
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     settings.recent_projects.insert(project_id, now_ms());
     settings.save(&state.config_dir)?;
     Ok(summary)
@@ -336,7 +337,7 @@ pub async fn delete_project(state: State<'_, AppState>, project_id: Uuid) -> App
             state.runs.cancel_message(message_id);
         }
     }
-    state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).remove(&project_id);
+    locked(&state.open_projects).remove(&project_id);
     // A stopped run holds the database until it ends; removing the folder sooner fails on Windows.
     let (project, released) = tauri::async_runtime::spawn_blocking(move || {
         let released = projects::wait_until_alone(&project, RELEASE_WAIT);
@@ -345,14 +346,14 @@ pub async fn delete_project(state: State<'_, AppState>, project_id: Uuid) -> App
     .await
     .map_err(|e| AppError::storage(e.to_string()))?;
     if !released {
-        state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).insert(project_id, project);
+        locked(&state.open_projects).insert(project_id, project);
         return Err(AppError::storage(
             "The Project is still stopping its replies, so it was not deleted. Try again in a moment.",
         ));
     }
     drop(project);
     projects::delete(&summary.folder)?;
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     settings.recent_projects.remove(&project_id);
     settings.save(&state.config_dir)
 }
@@ -391,7 +392,7 @@ pub async fn unsubscribe_conversation(
 /// Called when the UI starts, so subscriptions of a reloaded view end.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn reset_subscriptions(state: State<'_, AppState>) -> AppResult<()> {
-    let open = state.open_projects.lock().unwrap_or_else(|p| p.into_inner());
+    let open = locked(&state.open_projects);
     for project in open.values() {
         project.unsubscribe_all();
     }
@@ -434,21 +435,21 @@ pub async fn send_message(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_routing_threshold(state: State<'_, AppState>, threshold: f64) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     settings.routing.set_threshold(threshold)?;
     settings.save(&state.config_dir)
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_show_jev_answers(state: State<'_, AppState>, show: bool) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     settings.routing.show_answers = show;
     settings.save(&state.config_dir)
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_show_jev_asked(state: State<'_, AppState>, show: bool) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     settings.routing.show_asked = show;
     settings.save(&state.config_dir)
 }
@@ -456,7 +457,7 @@ pub async fn set_show_jev_asked(state: State<'_, AppState>, show: bool) -> AppRe
 /// True once per new app version, never in Mini-Me Dev.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn take_whats_new(state: State<'_, AppState>) -> AppResult<bool> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     if !settings.take_whats_new(&state.app_version, state.dev_app) {
         return Ok(false);
     }
@@ -471,7 +472,7 @@ pub async fn get_developer_mode(state: State<'_, AppState>) -> AppResult<bool> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     settings.developer_mode = Some(on);
     settings.save(&state.config_dir)?;
     state.runs.set_debug(settings.reply_debug(state.dev_app));
@@ -481,7 +482,7 @@ pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResu
 /// Applies to runs started from now on.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_reply_debug(state: State<'_, AppState>, debug: DebugSettings) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     settings.debug = debug;
     settings.save(&state.config_dir)?;
     state.runs.set_debug(settings.reply_debug(state.dev_app));
@@ -521,7 +522,7 @@ pub async fn get_home_settings(state: State<'_, AppState>) -> AppResult<HomeSett
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_show_home_mini_mes(state: State<'_, AppState>, show: bool) -> AppResult<()> {
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     settings.home.show_mini_mes = show;
     settings.save(&state.config_dir)
 }
@@ -668,7 +669,7 @@ pub async fn set_ai_model(
     model: String,
 ) -> AppResult<()> {
     let ai = AiSettings::new(&provider, &model)?;
-    let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+    let mut settings = locked(&state.settings);
     settings.ai = ai;
     settings.save(&state.config_dir)
 }
@@ -1001,7 +1002,7 @@ pub async fn import_dropped(
     project_id: Uuid,
     paths: Vec<PathBuf>,
 ) -> AppResult<Vec<AssetRef>> {
-    let dropped = state.dropped.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let dropped = locked(&state.dropped).clone();
     assets::import_dropped(&*state.project(project_id)?, &paths, &dropped, &state.user())
 }
 
@@ -1122,7 +1123,7 @@ pub async fn set_quarto_path(
     let chosen = path.map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
     {
         // Saved before it takes effect, so a failed save leaves the old location in use.
-        let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
+        let mut settings = locked(&state.settings);
         let mut updated = settings.clone();
         updated.quarto_path = chosen.clone();
         updated.save(&state.config_dir)?;

@@ -15,7 +15,7 @@ use crate::protocol::{
     AssetRef, Author, AuthorKind, Component, EventKind, Message, MessageStatus, TextComponentKind,
     new_id,
 };
-use crate::store::{Project, ProjectState};
+use crate::store::{Project, ProjectState, parse_id, unreadable};
 
 /// `start` and `end` are UTF-16 offsets in the document's source; `quote` is the passage's text
 /// when the thread was last anchored.
@@ -612,22 +612,21 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
             ),
         ))
     })?;
-    let corrupt = || AppError::storage("stored ID is not readable");
     let mut threads = Vec::new();
     for row in rows {
         let ((conversation_id, asset_id, start, end, quote, resolved, created_at, comments), from) =
             row?;
         let opened_from = match from {
             (Some(conversation), title, Some(kind), Some(id)) => Some(OpenedFrom {
-                conversation_id: Uuid::parse_str(&conversation).map_err(|_| corrupt())?,
+                conversation_id: parse_id(&conversation, "ID")?,
                 title,
-                by: Author { kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?, id },
+                by: Author { kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("ID"))?, id },
             }),
             _ => None,
         };
         threads.push(CommentThread {
-            conversation_id: Uuid::parse_str(&conversation_id).map_err(|_| corrupt())?,
-            asset_id: Uuid::parse_str(&asset_id).map_err(|_| corrupt())?,
+            conversation_id: parse_id(&conversation_id, "ID")?,
+            asset_id: parse_id(&asset_id, "ID")?,
             start,
             end,
             quote,
@@ -667,12 +666,14 @@ fn pending(state: &ProjectState, conversation_id: Uuid) -> AppResult<Option<Pend
     let Some((component_id, message_id, data, kind, author_id)) = row else {
         return Ok(None);
     };
-    let corrupt = || AppError::storage("stored suggestion is not readable");
     let data: Value = serde_json::from_str(&data)?;
     Ok(Some(PendingSuggestion {
-        message_id: Uuid::parse_str(&message_id).map_err(|_| corrupt())?,
-        component_id: Uuid::parse_str(&component_id).map_err(|_| corrupt())?,
-        author: Author { kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?, id: author_id },
+        message_id: parse_id(&message_id, "suggestion")?,
+        component_id: parse_id(&component_id, "suggestion")?,
+        author: Author {
+            kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("suggestion"))?,
+            id: author_id,
+        },
         text: data["text"].as_str().unwrap_or_default().to_string(),
     }))
 }

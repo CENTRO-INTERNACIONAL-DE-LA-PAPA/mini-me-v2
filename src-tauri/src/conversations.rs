@@ -15,7 +15,7 @@ use crate::protocol::{
     AssetRef, Author, AuthorKind, Component, ErrorInfo, EventKind, Message, MessageStatus,
     TextComponent, TextComponentKind, new_id, now_ms,
 };
-use crate::store::{Project, ProjectState};
+use crate::store::{Project, ProjectState, parse_id};
 
 pub const DEFAULT_TITLE: &str = "New conversation";
 const MAX_EMOJI_CHARS: usize = 16;
@@ -176,7 +176,7 @@ pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
     let mut conversations = Vec::new();
     for row in rows {
         let (id, title, created_at, last_activity_at) = row?;
-        let id = Uuid::parse_str(&id).map_err(|_| AppError::storage("stored ID is not readable"))?;
+        let id = parse_id(&id, "ID")?;
         conversations.push(ConversationSummary {
             id,
             title,
