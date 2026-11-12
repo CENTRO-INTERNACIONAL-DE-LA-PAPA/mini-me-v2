@@ -26,7 +26,7 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 - [x] 3.1 Delete the version tests: `sidecar.rs` `a_version_14_sidecar_is_refused_naming_both_versions`,
   `lib.rs` `the_app_version_is_the_one_in_package_json` with the `app_context()` wrapper it exists
   for, and `quarto.rs` `a_version_before_the_minimum_is_too_old`; verify with `cargo test`.
-- [ ] 3.2 Cut `db.rs` to the migration tests that change data (from versions 6, 10 and 11),
+- [x] 3.2 Cut `db.rs` to the migration tests that change data (from versions 6, 10 and 11),
   `newer_database_is_refused_and_unchanged` and `new_database_is_migrated`, built on one
   `at_version(n)` helper; verify with `cargo test`.
 - [ ] 3.3 Delete the dependency and trivial tests: `ai2.rs` `tokens_round_trip_as_json`;
