@@ -4,9 +4,8 @@ import { useMiniMes } from "../../hooks/useMiniMes";
 import { startPlayground } from "./playground";
 import { pressKey } from "./sequence";
 
-/** The Mini-Me playground (`playground.ts`) behind Home's content. Every Mini-Me drops in
- * when Home opens if the "Show Mini-Mes on Home" setting is on, and again whenever the summon
- * key sequence is pressed. Nothing is remembered between visits. */
+/** The playground behind Home; drops every Mini-Me on open (if the setting is on) and on the
+ * summon keys. Nothing is remembered between visits. */
 export function MiniMePlayground() {
   const miniMes = useMiniMes();
   const layer = useRef<HTMLDivElement>(null);

@@ -9,9 +9,7 @@ export interface ComponentName {
 
 const TABLE_EXTENSION = /\.(csv|tsv|xlsx)$/i;
 
-/** The name a component goes by before repeats are numbered. A table takes its file's name
- * without the extension, else its title without a table extension, else "table"; a chart
- * takes its title, else "chart". */
+/** The name before numbering repeats: a table's file or title, a chart's title, else the kind. */
 function baseName(kind: ComponentName["kind"], data: { source?: unknown; title?: unknown }) {
   const title = typeof data.title === "string" ? data.title : "";
   const name =
@@ -23,9 +21,7 @@ function baseName(kind: ComponentName["kind"], data: { source?: unknown; title?:
   return name.replace(/[^\p{L}\p{N}._-]/gu, "-").replace(/-{2,}/g, "-");
 }
 
-/** The name of each `table` and `chart` component of a Conversation, by component ID, in the
- * order they were shown. A component whose name an earlier one already has takes it with
- * "-2", "-3" and so on. */
+/** Each table and chart's name by component ID; later repeats get "-2", "-3" and so on. */
 export function componentNames(messages: MessageView[]): Map<string, ComponentName> {
   const names = new Map<string, ComponentName>();
   const taken = new Set<string>();

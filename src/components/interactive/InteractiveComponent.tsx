@@ -2,8 +2,7 @@ import { Component as ReactComponent, type ReactNode } from "react";
 import type { Component, MessageStatus } from "../../protocol/types";
 import { rendererFor } from "./catalogue";
 
-/** A component's plain-text version, shown when its kind or version has no renderer here
- * or its renderer fails. */
+/** A component's plain text, shown when it has no renderer here or its renderer fails. */
 function Fallback({ text }: { text: string }) {
   return (
     <div className="rounded-xl border border-card-edge bg-card px-4 py-3 text-ui text-ink-2 whitespace-pre-wrap wrap-anywhere">

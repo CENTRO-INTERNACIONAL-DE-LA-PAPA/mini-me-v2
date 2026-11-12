@@ -11,10 +11,8 @@ import * as suggestion from "./suggestion";
 import * as table from "./table";
 import * as theories from "./theories";
 
-/** What a renderer gets. `data` comes from the adapter of a built-in Trait that lists the
- * kind, or from the core for kinds it creates; renderers still treat optional fields as
- * possibly missing. The other props say where the component is, for kinds that take an
- * answer; renderers of other kinds ignore them. */
+/** What a renderer gets. Any field of `data` may be missing; only kinds that take an answer
+ * use the IDs and `replyStatus`. */
 export interface RendererProps {
   data: unknown;
   /** The user's answer; null until answered. */
@@ -30,8 +28,7 @@ export interface RendererProps {
 /** Draws one version of a kind. */
 export type Renderer = ComponentType<RendererProps>;
 
-/** What a kind's file exports: a renderer for each version its adapter has produced. Older
- * versions stay, so stored replies still render. */
+/** A kind's renderer per data version; old versions stay so stored replies still render. */
 export type Renderers = Record<number, Renderer>;
 
 /** Every kind this app can draw. A new kind is one file next to this one and one line here. */

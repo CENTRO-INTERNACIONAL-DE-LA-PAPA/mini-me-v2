@@ -63,8 +63,7 @@ export function surfaceColors(colors: MiniMeColors): SurfaceColors {
   };
 }
 
-/** The colours as CSS variables (`--mm-tint`, `--mm-solid`, `--mm-ink`, `--mm-wash`,
- * `--mm-edge`), for a surface that takes a Mini-Me's colour and the elements inside it. */
+/** The colours as `--mm-*` CSS variables, for a Mini-Me-coloured surface and its content. */
 export function surfaceStyle(colors: MiniMeColors | undefined): CSSProperties | undefined {
   if (!colors) return undefined;
   const { tint, solid, ink, wash, edge } = surfaceColors(colors);

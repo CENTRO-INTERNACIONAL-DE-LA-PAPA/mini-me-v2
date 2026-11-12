@@ -5,8 +5,7 @@ import type { Slot, StepKind } from "./workflowEdit";
 export type DragPayload =
   { kind: "new"; step: StepKind; label: string } | { kind: "move"; id: string; label: string };
 
-/** A drag in progress. It changes only when the drop target under the pointer does, so
- * whatever reads it redraws only then. */
+/** A drag in progress; changes only when the drop target under the pointer does. */
 export interface DragState {
   payload: DragPayload;
   /** The `data-slot` of the drop target under the pointer. */
@@ -21,11 +20,8 @@ function slotUnder(x: number, y: number): string | null {
   return target?.dataset.slot ?? null;
 }
 
-/**
- * Dragging Steps with pointer events. Tauri takes native drag events over for file drops, so
- * HTML drag and drop does not fire inside the page on Windows. Drop targets are elements with
- * a `data-slot` holding a JSON `Slot`.
- */
+/** Drags Steps with pointer events: Tauri's file drop stops HTML drag and drop on Windows.
+ * Drop targets are elements whose `data-slot` holds a JSON `Slot`. */
 export function useStepDrag({
   onDrop,
   onPress,

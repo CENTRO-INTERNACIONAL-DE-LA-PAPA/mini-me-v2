@@ -29,9 +29,8 @@ function display(value: Cell): string {
   return String(value);
 }
 
-/** The table as text a spreadsheet takes: tab-separated for the clipboard, or CSV for a file.
- * Values are written as stored, not as shown, so numbers keep their full precision and no
- * thousands separators. */
+/** The table as TSV for the clipboard or CSV for a file. Values are written as stored, so
+ * numbers keep full precision and no thousands separators. */
 export function tableText(
   columns: TableData["columns"],
   rows: Cell[][],

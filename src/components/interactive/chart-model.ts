@@ -1,5 +1,4 @@
-/** `chart` version 1 data, as *Plot* builds it, and the state of a chart's controls. The
- * controls only change what the UI shows; nothing here is saved. */
+/** `chart` version 1 data, as *Plot* builds it, and the controls' state, which is never saved. */
 
 export type ColumnType = "number" | "text" | "date" | "boolean";
 
@@ -73,8 +72,7 @@ export interface ChartData {
 
 const TYPES = new Set(["histogram", "bar", "line", "scatter", "box", "heatmap"]);
 
-/** The chart's data, or an error for data no view can be drawn from, so the component
- * shows its text instead. */
+/** The chart's data; throws when no view can be drawn, so the component shows its text. */
 export function parseChart(data: unknown): ChartData {
   const chart = data as Partial<ChartData> | null;
   const views = Array.isArray(chart?.views) ? chart.views : [];
@@ -110,8 +108,7 @@ function linearToSrgb(c: number): number {
   return Math.round(Math.min(1, Math.max(0, v)) * 255);
 }
 
-/** An oklch colour as hex; Plot writes colours as SVG attributes, which may not parse
- * `oklch()`. */
+/** An oklch colour as hex, since Plot's SVG attributes may not parse `oklch()`. */
 export function oklchToHex(lightness: number, chroma: number, hue: number): string {
   const a = chroma * Math.cos((hue * Math.PI) / 180);
   const b = chroma * Math.sin((hue * Math.PI) / 180);
@@ -126,8 +123,7 @@ export function oklchToHex(lightness: number, chroma: number, hue: number): stri
   return `#${rgb.map((c) => linearToSrgb(c).toString(16).padStart(2, "0")).join("")}`;
 }
 
-/** The colour of the series at `index`: the Mini-Me's colour, then `palette` (the values of
- * `SERIES_TOKENS`), then generated colours, so every series has one. */
+/** Series `index`'s colour: the Mini-Me's (`first`), then `palette`, then generated ones. */
 export function seriesColour(index: number, first: string, palette: string[]): string {
   if (index === 0) return first;
   if (index <= palette.length) return palette[index - 1];

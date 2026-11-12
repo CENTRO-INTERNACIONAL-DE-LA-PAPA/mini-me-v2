@@ -272,8 +272,7 @@ export function OverviewView({
   );
 }
 
-/** An output as a row: an icon tile in the tint of the Mini-Me that made it, then its title
- * and where it came from. */
+/** An output's row: its icon in its maker's ink, its title, and the Conversation it came from. */
 function OutputRow({
   output,
   miniMe,

@@ -4,15 +4,14 @@ import { useOpenDocument } from "../documents/openDocument";
 import type { Renderers, RendererProps } from "./catalogue";
 import { DocumentCard, useRemoved } from "./document";
 
-/** `document-edits` version 1 data, as the core adds it: the edited document, its title, and
- * the comment threads its edits opened. */
+/** `document-edits` version 1 data; `threads` are the comment threads the edits opened. */
 interface DocumentEditsData {
   asset_id?: string;
   title?: string;
   threads?: string[];
 }
 
-/** How many of a card's `total` suggested edits still wait, as its card says it. */
+/** The card's line on how many of `total` suggested edits wait; `waiting` is null until counted. */
 export function editsWaiting(waiting: number | null, total: number): string {
   const edits = total === 1 ? "suggested edit" : "suggested edits";
   if (waiting === null) return `${total} ${edits}`;
@@ -22,14 +21,12 @@ export function editsWaiting(waiting: number | null, total: number): string {
   return `${waiting} of ${total} ${edits} waiting`;
 }
 
-/** The edits a reply suggested to a document: its title, how many still wait for an answer,
- * and Open, which shows them in the document's Comments sheet. */
+/** A reply's suggested edits to a document, with Open to answer them in its Comments sheet. */
 function DocumentEditsV1({ data, projectId }: RendererProps) {
   const { asset_id: assetId, title, threads = [] } = (data ?? {}) as DocumentEditsData;
   const openDocument = useOpenDocument();
   const removed = useRemoved(projectId, assetId);
-  // Counted when the card is shown; answering happens in the document view, which the
-  // Conversation is left for.
+  // Counted once when shown: edits are answered in the document view, outside the Conversation.
   const [waiting, setWaiting] = useState<number | null>(null);
 
   useEffect(() => {

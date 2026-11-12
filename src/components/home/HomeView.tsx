@@ -34,8 +34,7 @@ function greeting(now: Date, name: string | null | undefined): string {
   return first ? `Good ${part}, ${first}` : `Good ${part}`;
 }
 
-/** The screen shown when no Project is open: what waits on you, and the Projects to open or
- * create. */
+/** The screen with no Project open: what waits on you, and the Projects to open or create. */
 export function HomeView({ projects, onOpen, onCreate, onOpenReply }: Props) {
   const name = useUserProfile()?.name;
   // The "New project" tile is showing its name field; the header button opens it too.
@@ -201,8 +200,7 @@ function NewProjectCard({
   );
 }
 
-/** Replies paused at an approval in any Project, each in the colour of the Mini-Me waiting
- * on the user. Fetched each time Home is shown. */
+/** Replies paused at an approval in any Project, fetched each time Home is shown. */
 function NeedsYou({
   onOpenReply,
 }: {

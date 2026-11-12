@@ -19,7 +19,7 @@ decision 1). Each is reviewed uncommitted before its commit. The scan's "Comment
   `components/{chat,documents,shell}` (including the misplaced docs in `api.ts` and `types.ts`,
   and `Sheet.tsx`'s To-do panel); verify with `npm test`, `npx tsc --noEmit` and that `git diff`
   touches only comment lines.
-- [ ] 2.2 Comments in the other folders of `src/components/`, leaving `ui/` alone; verify with
+- [x] 2.2 Comments in the other folders of `src/components/`, leaving `ui/` alone; verify with
   `npm test`, `npx tsc --noEmit` and that `git diff` touches only comment lines.
 
 ## 3. Sidecar

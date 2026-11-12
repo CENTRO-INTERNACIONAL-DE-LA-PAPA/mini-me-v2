@@ -3,8 +3,7 @@ import { cn } from "@/lib/utils";
 import type { MiniMe } from "../../protocol/types";
 import { surfaceStyle } from "../minime/miniMeColors";
 
-/** A file's or output's icon: in the ink of the Mini-Me that made it, or neutral for your
- * own. */
+/** A file's or output's icon, in the ink of the Mini-Me that made it, or neutral for your own. */
 export function FileMark({
   miniMe,
   icon: Icon,
@@ -12,7 +11,7 @@ export function FileMark({
 }: {
   miniMe?: MiniMe;
   icon: LucideIcon;
-  /** `sm` for rows in a column, `lg` for the Files list. */
+  /** The icon's size: `sm` is 16 px, `lg` 20 px. */
   size?: "sm" | "lg";
 }) {
   return (

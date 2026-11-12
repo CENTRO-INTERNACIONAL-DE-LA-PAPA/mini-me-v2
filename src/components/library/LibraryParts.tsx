@@ -26,10 +26,8 @@ interface HeaderProps {
   onBack: () => void;
 }
 
-/** An editor's identity header: a back link, the avatar or mark with the serif name and a line
- * under it, and the tab switch and actions on the right; then the problems with the last
- * save. The problems scroll within a fixed height, so a long list never pushes the rest of
- * the editor out of view. */
+/** An editor's header: back link, name, actions, and the last save's problems, which scroll
+ * within a fixed height so a long list never pushes the editor out of view. */
 export function EditorHeader({
   title,
   icon,
@@ -120,9 +118,8 @@ export function Field({
   );
 }
 
-/** A Delete button that asks `question` in a popover below it before calling `onDelete`. Keep,
- * Escape and clicking outside all close it, and Keep has the focus. `variant` styles the button,
- * such as `mini-me` to stand out on a grey background. */
+/** A Delete button that asks `question` in a popover before calling `onDelete`; Keep has the
+ * focus, and Keep, Escape or a click outside close it. */
 export function DeleteButton({
   question,
   onDelete,
@@ -158,12 +155,11 @@ export function DeleteButton({
   );
 }
 
-/** Flat rows on the sheet, divided by hairlines. */
 export function List({ children }: { children: ReactNode }) {
   return <ul className="divide-y divide-border">{children}</ul>;
 }
 
-/** A Trait's mark: a puzzle piece, the same piece a Trait Step shows. */
+/** A Trait's mark, the same puzzle piece a Trait Step shows. */
 export function TraitIcon() {
   return <PuzzleIcon aria-hidden className="size-5 shrink-0 text-ink-2" strokeWidth={1.6} />;
 }
@@ -202,8 +198,7 @@ export function Row({
   );
 }
 
-/** A Mini-Me as a library card: in its own wash when built in, neutral when it is yours, with
- * its avatar, name, description and Trait count, opening its editor. */
+/** A Mini-Me's library card: in its own wash when built in, neutral when it is yours. */
 export function MiniMeCard({
   miniMe,
   traitCount,

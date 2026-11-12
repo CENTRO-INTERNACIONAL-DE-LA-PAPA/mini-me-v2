@@ -4,12 +4,8 @@ import { cn } from "@/lib/utils";
 import type { MiniMe } from "../../protocol/types";
 import { surfaceStyle } from "./miniMeColors";
 
-/**
- * A card in a Mini-Me's colour: its wash, outlined in its edge, with the `--mm-*` variables
- * set for what is inside it (its ink text, white buttons outlined in its edge). Without a
- * Mini-Me it is a neutral card. Replies, handed-back tasks, running jobs and library cards
- * are drawn on it.
- */
+/** A card in a Mini-Me's wash that sets the `--mm-*` variables for its content; neutral without
+ * a Mini-Me. */
 export function MiniMeSurface({
   miniMe,
   className,

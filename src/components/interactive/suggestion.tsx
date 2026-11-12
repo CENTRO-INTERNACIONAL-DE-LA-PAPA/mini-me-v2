@@ -4,8 +4,7 @@ import { api, errorCode, errorMessage } from "../../api";
 import type { SuggestionDecision } from "../../protocol/types";
 import type { RendererProps, Renderers } from "./catalogue";
 
-/** `suggestion` version 1 data, as the core completes it: the document, the passage the
- * suggestion was based on, and the suggested text. */
+/** `suggestion` version 1 data, as the core completes it; `base` is the passage it was based on. */
 interface SuggestionData {
   document_id?: string;
   base?: string;
@@ -27,8 +26,7 @@ export function suggestionDecision(answer: unknown): SuggestionDecision | null {
   return null;
 }
 
-/** What a thread lets its suggestions do: accept one into the open document, which only the
- * document view can, and whether the thread's passage is lost. */
+/** What a thread lets its suggestions do; `detached` means the thread's passage is lost. */
 interface ThreadSuggestions {
   accept: (messageId: string, componentId: string) => Promise<void>;
   detached: boolean;
@@ -49,8 +47,7 @@ export function ThreadSuggestionsProvider({
   );
 }
 
-/** A suggestion in its Mini-Me's reply: the suggested text with Accept and resolve and Discard
- * while it waits, then with the decision. */
+/** A suggestion in a reply: Accept and resolve and Discard while it waits, then its decision. */
 function SuggestionV1({ data, answer, projectId, messageId, componentId }: RendererProps) {
   const { text = "" } = (data ?? {}) as SuggestionData;
   const thread = useContext(ThreadSuggestionsContext);
@@ -92,8 +89,7 @@ function SuggestionV1({ data, answer, projectId, messageId, componentId }: Rende
 
 export const renderers: Renderers = { 1: SuggestionV1 };
 
-/** A suggestion's text, labelled with its decision once answered, or with the answers it can
- * still take and why one failed. */
+/** A suggestion's text with its decision, or with its remaining answers and why one failed. */
 export function SuggestionCard({
   text,
   decision,

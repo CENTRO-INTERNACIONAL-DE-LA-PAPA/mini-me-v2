@@ -11,8 +11,7 @@ interface DocumentData {
   title?: string;
 }
 
-/** A document a reply wrote or edited: its title, `meta` below it, and an Open button, or a
- * note that it was removed. */
+/** A document a reply wrote or edited, with an Open button, or a note that it was removed. */
 export function DocumentCard({
   title,
   meta = "Quarto document",

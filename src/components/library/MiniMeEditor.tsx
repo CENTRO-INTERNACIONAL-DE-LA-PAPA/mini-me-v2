@@ -210,7 +210,6 @@ export function MiniMeEditor({
           </div>
         </TabsContent>
       </MainSheet>
-      {/* The selected Step's inspector opens as a tool sheet beside the board. */}
       {tab === "workflow" && (
         <StepInspector
           miniMe={draft}

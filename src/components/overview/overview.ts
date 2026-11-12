@@ -52,8 +52,8 @@ export function summaryLine(summary: string): string {
   return text.match(/^[\s\S]*?[.!?](?=\s|$)/)?.[0] ?? text;
 }
 
-/** A name as `$` references write it: other characters than letters, digits, `.`, `_` and `-`
- * become `-`, a run of `-` one, and case is ignored. */
+/** A name as `$` references spell it, lower-cased and without its `#` or `$`; characters other than
+ * letters, digits, `.`, `_` and `-` become `-`, and a run of `-` one. */
 const asReference = (name: string) =>
   name
     .replace(/^[#$]/, "")
