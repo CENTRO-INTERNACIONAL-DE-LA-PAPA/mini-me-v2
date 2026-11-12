@@ -144,9 +144,19 @@ Risks, follow-ups, decisions the reviewer should know about, screenshots.
   a package that is slow to load and that most runs never use, or an import that must run
   after something else (such as reserving stdout in the sidecar). In TypeScript the
   equivalent is a dynamic `import()`, used only to split off code that loads on demand.
-- Keep tests minimal and concise (Rust unit tests, frontend tests for core logic, and
-  pytest tests for the sidecar's Python tools) until the user says the architecture is
-  stable.
+- A test checks our own behaviour. Do not write tests that pin a version number, restate data
+  (the built-in library, lists of names), check what a dependency already guarantees (that serde
+  round-trips a derived type, that pydantic validates a field), drive a fake AI model, or only
+  check a constant or a one-line lookup. Testing how our code uses a dependency is fine.
+- Tests of the built-in Mini-Mes and Traits check their format, never their content, so editing
+  them never breaks a test.
+- Cases of one rule go in one test, not one test each. No skipped or `#[ignore]`d tests that
+  nothing runs.
+- Write a block of code once: its second copy becomes a helper in the file of its concern, never
+  in a catch-all module.
+- Read rows and other positional data into named structs or types, not tuples of more than three.
+- A function that does several things in turn is split into named steps.
+- Delete code nothing calls, exports nothing imports, and code that exists only for a test.
 
 ## Comments
 
@@ -163,6 +173,8 @@ it is. It must still be true and useful if the git history and the conversation 
 - Don't narrate the obvious, don't restate names or types, and don't hedge ("not sure why
   this works"). Improve a name rather than explain it.
 - One line by default. Not every function needs a comment.
+- New code adds no comment unless its contract cannot be shown by its name and signature, and
+  then one line. Prefer a better name over any comment.
 - No divider or banner comments. If a file seems to need sections, say so to the user.
 - When a change makes an existing comment wrong, reword it. Leave other existing comments
   alone; list any that break these rules (`path:line` and why) for the user.
