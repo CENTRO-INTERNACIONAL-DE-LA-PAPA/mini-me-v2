@@ -275,6 +275,9 @@ mod tests {
         assert!(history.messages[1].complete);
         assert!(!history.messages[3].complete);
         assert_eq!(history.messages[3].content, "The main cause");
+
+        let first = super::history(&all, all[0].id, &Library::builtin(), HISTORY_BUDGET_CHARS);
+        assert!(first.messages.is_empty() && !first.truncated);
     }
 
     #[test]
@@ -418,13 +421,5 @@ mod tests {
         let results = results(&[question], answers, new_id(), &Library::builtin(), find);
         assert_eq!(results.assets.len(), 1);
         assert_eq!(lookups.get(), 0);
-    }
-
-    #[test]
-    fn the_first_message_has_no_history() {
-        let all = [user("hello")];
-        let history = history(&all, all[0].id, &Library::builtin(), HISTORY_BUDGET_CHARS);
-        assert_eq!(history.messages, Vec::new());
-        assert!(!history.truncated);
     }
 }

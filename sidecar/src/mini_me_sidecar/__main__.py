@@ -1,12 +1,10 @@
-"""`python -I -m mini_me_sidecar [--test-adapters]`: the sidecar started by the Rust core."""
+"""`python -I -m mini_me_sidecar`: the sidecar started by the Rust core."""
 
 import sys
 
-USAGE = """usage: python -I -m mini_me_sidecar [--test-adapters]
+USAGE = """usage: python -I -m mini_me_sidecar
 
 Speaks the Mini-Me link protocol on standard input and output. Started by the Rust core.
-
-  --test-adapters  also register the adapters used by the Rust tests
 """
 
 
@@ -24,7 +22,7 @@ def main() -> None:
 
     from mini_me_sidecar.app import run
 
-    run(link_out, test_adapters="--test-adapters" in args)
+    run(link_out)
 
 
 if __name__ == "__main__":

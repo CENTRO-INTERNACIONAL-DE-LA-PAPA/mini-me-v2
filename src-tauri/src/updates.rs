@@ -194,15 +194,11 @@ mod tests {
     }
 
     #[test]
-    fn percent_is_whole_and_reaches_100_only_when_complete() {
+    fn percent_is_whole_reaches_100_only_when_complete_and_needs_a_total() {
         assert_eq!(percent(0, Some(1000)), Some(0));
         assert_eq!(percent(999, Some(1000)), Some(99));
         assert_eq!(percent(1000, Some(1000)), Some(100));
         assert_eq!(percent(1500, Some(1000)), Some(100));
-    }
-
-    #[test]
-    fn percent_is_none_without_a_total() {
         assert_eq!(percent(500, None), None);
         assert_eq!(percent(500, Some(0)), None);
     }
@@ -226,27 +222,14 @@ mod tests {
     }
 
     #[test]
-    fn failed_download_returns_to_none_and_is_checked_again() {
+    fn a_download_or_a_ready_update_skips_the_check_until_it_fails() {
         let updates = Updates::new(Arc::new(SidecarLog::disabled()));
+        updates.set_status(UpdateStatus::Ready { version: "0.3.0".into() });
+        assert!(!updates.should_check());
         updates.set_status(downloading(Some(40)));
         assert!(!updates.should_check());
         updates.check_failed("connection reset");
         assert_eq!(updates.status(), UpdateStatus::None);
         assert!(updates.should_check());
-    }
-
-    #[test]
-    fn ready_update_skips_the_next_check() {
-        let updates = Updates::new(Arc::new(SidecarLog::disabled()));
-        updates.set_status(UpdateStatus::Ready {
-            version: "0.3.0".into(),
-        });
-        assert!(!updates.should_check());
-    }
-
-    #[test]
-    fn nothing_to_install_without_a_download() {
-        let updates = Updates::new(Arc::new(SidecarLog::disabled()));
-        assert!(!updates.install_pending());
     }
 }

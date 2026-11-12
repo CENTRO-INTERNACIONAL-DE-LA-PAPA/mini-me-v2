@@ -238,23 +238,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ids_are_stable_across_loads() {
+    fn ids_and_recent_projects_are_kept_across_loads() {
         let dir = tempfile::tempdir().unwrap();
-        let first = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
+        let mut first = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
+        let project = new_id();
+        first.recent_projects.insert(project, 42);
+        first.save(dir.path()).unwrap();
         let second = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
         assert_eq!(first.installation_id, second.installation_id);
         assert_eq!(first.user_id, second.user_id);
-    }
-
-    #[test]
-    fn recent_projects_persist() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut settings = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
-        let project = new_id();
-        settings.recent_projects.insert(project, 42);
-        settings.save(dir.path()).unwrap();
-        let loaded = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
-        assert_eq!(loaded.recent_projects.get(&project), Some(&42));
+        assert_eq!(second.recent_projects.get(&project), Some(&42));
     }
 
     #[test]

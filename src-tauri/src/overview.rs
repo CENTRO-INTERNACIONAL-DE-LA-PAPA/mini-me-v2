@@ -82,7 +82,7 @@ fn component_title(kind: &str, title: Option<String>, count: Option<i64>, text: 
 pub fn overview(project: &Project) -> AppResult<Overview> {
     let state = project.lock();
     let conn = &state.conn;
-    let conversations_only = comments::not_a_thread(conn, "id")?;
+    let conversations_only = comments::not_a_thread("id");
     let (conversations, last_activity_at): (i64, Option<i64>) = conn.query_row(
         &format!(
             "SELECT COUNT(*), MAX(last_activity_at) FROM conversations WHERE {conversations_only}"
@@ -146,7 +146,7 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
 
     let mut outputs = Vec::new();
     // Only the title and the list lengths are read from `data`, which can be large.
-    let in_conversations = comments::not_a_thread(conn, "v.id")?;
+    let in_conversations = comments::not_a_thread("v.id");
     let mut stmt = conn.prepare(&format!(
         "SELECT c.kind, c.id, json_extract(c.data, '$.title'), \
          COALESCE(json_array_length(c.data, '$.papers'), json_array_length(c.data, '$.theories'), \
@@ -298,7 +298,7 @@ pub fn summary_material(project: &Project, library: &Library, budget: usize) -> 
         let mut stmt = state.conn.prepare(&format!(
             "SELECT id, title FROM conversations WHERE {} \
              ORDER BY last_activity_at DESC, rowid DESC",
-            comments::not_a_thread(&state.conn, "id")?
+            comments::not_a_thread("id")
         ))?;
         stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<_, _>>()?

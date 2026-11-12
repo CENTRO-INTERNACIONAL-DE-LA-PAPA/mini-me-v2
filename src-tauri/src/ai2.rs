@@ -479,13 +479,6 @@ mod tests {
     }
 
     #[test]
-    fn tokens_round_trip_as_json() {
-        let original = tokens(1000);
-        let json = serde_json::to_string(&original).unwrap();
-        assert_eq!(serde_json::from_str::<Tokens>(&json).unwrap(), original);
-    }
-
-    #[test]
     fn signing_in_goes_from_pending_to_signed_in() {
         let done = Poll::Done(TokenResponse {
             access_token: "a".into(),

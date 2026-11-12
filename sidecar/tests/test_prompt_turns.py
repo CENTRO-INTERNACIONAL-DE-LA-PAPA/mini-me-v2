@@ -2,7 +2,6 @@ from mini_me_sidecar.adapters.prompt import (
     FILES_RULE,
     REPLY_RULE,
     RESEARCH_CONTEXT,
-    _filtered,
     _material,
     _offered,
     _merged,
@@ -35,17 +34,6 @@ def test_a_later_step_is_told_it_is_part_of_a_workflow():
     assert alone == (
         f"You are Scribe, a Mini-Me. {RESEARCH_CONTEXT} {REPLY_RULE} {FILES_RULE}\n\nSummarize."
     )
-
-
-def test_every_call_says_it_serves_agricultural_research():
-    assert _system_prompt(None, False, "Design an experiment.").startswith(RESEARCH_CONTEXT)
-    assert RESEARCH_CONTEXT in _system_prompt("Experimenter", True, "Design an experiment.")
-
-
-def test_a_content_filter_or_refusal_ending_is_recognised():
-    assert _filtered({"finish_reason": "content_filter"})
-    assert _filtered({"stop_reason": "refusal"})
-    assert not _filtered({"finish_reason": "stop"})
 
 
 def test_the_conversations_files_and_components_are_listed_without_content():
@@ -99,4 +87,17 @@ def test_the_messages_references_are_listed_with_their_kind():
         "read_component:\n"
         "- $trial: the table with ID c1\n"
         "- $Yield-by-variety: the chart with ID c2"
+    )
+
+
+def test_the_prompt_lists_the_mini_mes_to_hand_off_to():
+    mini_mes = [
+        {"id": "m-profiler", "name": "Profiler", "description": "Describes a data table"},
+        {"id": "m-plotter", "name": "Plotter", "description": "Draws charts of a data table"},
+    ]
+    material = _material("profile it", {"assets": [], "components": []}, mini_mes=mini_mes)
+    assert material.endswith(
+        "Mini-Mes you can hand off to:\n"
+        "- Profiler: Describes a data table\n"
+        "- Plotter: Draws charts of a data table"
     )

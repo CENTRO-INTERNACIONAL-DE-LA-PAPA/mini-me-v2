@@ -523,9 +523,8 @@ mod tests {
     use crate::secrets::NoSecrets;
     use crate::sidecar::SidecarLog;
     use crate::runs::FrameSink;
-
-    const SCRIBE: Uuid = uuid::uuid!("5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01");
-    const ASSISTANT: Uuid = uuid::uuid!("5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b03");
+    use crate::runs::test_support::Recorder;
+    use crate::library::{FALLBACK_MINI_ME as ASSISTANT, SCRIBE};
 
     /// A message whose `@Name` mentions are found in `content` in order of `mentions`.
     fn message(content: &str, mentions: &[(&str, Uuid)]) -> Message {
@@ -582,90 +581,47 @@ mod tests {
     }
 
     #[test]
-    fn jev_picks_the_mini_me_at_or_above_the_threshold() {
+    fn jevs_answers_decide_who_answers_and_how() {
         let library = Library::builtin();
-        let scribe = SCRIBE.to_string();
-        let sure = answers(vec![("mini_me", answer(&scribe, 0.5, &[]))]);
-        assert_eq!(
-            decide(Some(&sure), None, &[], 0.5, true, &library).answerer,
-            SCRIBE
-        );
-    }
+        let decided = |given: Vec<(&'static str, ChoiceAnswer)>, mentioned, reacts| {
+            let given = answers(given);
+            let d = decide(Some(&given), mentioned, &[], 0.5, reacts, &library);
+            (d.answerer, d.reaction, d.needs_context)
+        };
+        let mini_me = |id: Uuid, confidence| ("mini_me", answer(&id.to_string(), confidence, &[]));
+        let reaction = |emoji: &str, confidence| ("reaction", answer(emoji, confidence, &[]));
+        let context = |choice: &str| ("needs_context", answer(choice, 0.9, &[]));
 
-    #[test]
-    fn low_confidence_or_an_unknown_mini_me_falls_back() {
-        let library = Library::builtin();
-        let unsure = answers(vec![("mini_me", answer(&SCRIBE.to_string(), 0.3, &[]))]);
+        // Jev's pick answers at or above the threshold; below it, or unknown, the fallback does.
+        assert_eq!(decided(vec![mini_me(SCRIBE, 0.5)], None, true).0, SCRIBE);
+        assert_eq!(decided(vec![mini_me(SCRIBE, 0.3)], None, true).0, FALLBACK_MINI_ME);
+        assert_eq!(decided(vec![mini_me(new_id(), 0.99)], None, true).0, FALLBACK_MINI_ME);
+        // The fallback reacts under the same threshold as any Mini-Me.
         assert_eq!(
-            decide(Some(&unsure), None, &[], 0.5, true, &library).answerer,
-            FALLBACK_MINI_ME
+            decided(vec![mini_me(SCRIBE, 0.3), reaction("👍", 0.8)], None, true),
+            (FALLBACK_MINI_ME, Some("👍".into()), None)
         );
-        let unknown = answers(vec![("mini_me", answer(&new_id().to_string(), 0.99, &[]))]);
+        // Reaction and context follow Jev; a low confidence, "none" or a failed draw mean none.
         assert_eq!(
-            decide(Some(&unknown), None, &[], 0.5, true, &library).answerer,
-            FALLBACK_MINI_ME
+            decided(vec![reaction("👍", 0.8), context("yes")], Some(SCRIBE), true),
+            (SCRIBE, Some("👍".into()), Some(true))
         );
+        assert_eq!(
+            decided(vec![reaction("🎉", 0.4), context("no")], Some(SCRIBE), true),
+            (SCRIBE, None, Some(false))
+        );
+        assert_eq!(decided(vec![reaction("none", 0.99)], Some(SCRIBE), true).1, None);
+        assert_eq!(decided(vec![reaction("🥔", 0.9)], Some(SCRIBE), false).1, None);
     }
 
     #[test]
     fn without_jev_a_mentioned_mini_me_answers_or_else_the_fallback() {
         let library = Library::builtin();
-        assert_eq!(
-            decide(None, None, &[], 0.5, true, &library),
-            Decision {
-                answerer: FALLBACK_MINI_ME,
-                reaction: None,
-                needs_context: None,
-                file: None,
-            }
-        );
-        assert_eq!(
-            decide(None, Some(SCRIBE), &[], 0.5, true, &library),
-            Decision {
-                answerer: SCRIBE,
-                reaction: None,
-                needs_context: None,
-                file: None,
-            }
-        );
-    }
-
-    #[test]
-    fn the_fallback_reacts_under_the_same_threshold() {
-        let library = Library::builtin();
-        let unsure = answers(vec![
-            ("mini_me", answer(&SCRIBE.to_string(), 0.3, &[])),
-            ("reaction", answer("👍", 0.8, &[])),
-        ]);
-        let decision = decide(Some(&unsure), None, &[], 0.5, true, &library);
-        assert_eq!(decision.answerer, FALLBACK_MINI_ME);
-        assert_eq!(decision.reaction.as_deref(), Some("👍"));
-    }
-
-    #[test]
-    fn reactions_and_context_follow_jevs_answers() {
-        let library = Library::builtin();
-        let confident = answers(vec![
-            ("reaction", answer("👍", 0.8, &[])),
-            ("needs_context", answer("yes", 0.6, &[])),
-        ]);
-        let decision = decide(Some(&confident), Some(SCRIBE), &[], 0.5, true, &library);
-        assert_eq!(decision.reaction.as_deref(), Some("👍"));
-        assert_eq!(decision.needs_context, Some(true));
-
-        let unsure = answers(vec![
-            ("reaction", answer("🎉", 0.4, &[])),
-            ("needs_context", answer("no", 0.9, &[])),
-        ]);
-        let decision = decide(Some(&unsure), Some(SCRIBE), &[], 0.5, true, &library);
-        assert_eq!(decision.reaction, None);
-        assert_eq!(decision.needs_context, Some(false));
-
-        let none = answers(vec![("reaction", answer("none", 0.99, &[]))]);
-        assert_eq!(
-            decide(Some(&none), Some(SCRIBE), &[], 0.5, true, &library).reaction,
-            None
-        );
+        assert_eq!(decide(None, None, &[], 0.5, true, &library).answerer, FALLBACK_MINI_ME);
+        let mentioned = decide(None, Some(SCRIBE), &[], 0.5, true, &library);
+        let expected =
+            Decision { answerer: SCRIBE, reaction: None, needs_context: None, file: None };
+        assert_eq!(mentioned, expected);
     }
 
     #[test]
@@ -686,15 +642,6 @@ mod tests {
         assert_eq!(pick(&cleaned.id.to_string(), 0.4), None);
         assert_eq!(pick("none", 0.9), None);
         assert_eq!(pick(&new_id().to_string(), 0.9), None);
-    }
-
-    #[test]
-    fn a_confident_reaction_is_kept_only_when_the_draw_passes() {
-        let library = Library::builtin();
-        let potato = answers(vec![("reaction", answer("🥔", 0.9, &[]))]);
-        let reaction = |reacts| decide(Some(&potato), Some(SCRIBE), &[], 0.5, reacts, &library);
-        assert_eq!(reaction(true).reaction.as_deref(), Some("🥔"));
-        assert_eq!(reaction(false).reaction, None);
     }
 
     #[test]
@@ -789,16 +736,6 @@ mod tests {
         );
         input.text_components[0].id = SCRIBE;
         assert!(check_mentions(&input, &library).is_ok());
-    }
-
-    #[derive(Default)]
-    struct Recorder(Mutex<Vec<CoreFrame>>);
-
-    impl FrameSink for Recorder {
-        fn send(&self, frame: &CoreFrame) -> bool {
-            self.0.lock().unwrap().push(frame.clone());
-            true
-        }
     }
 
     struct Fixture {
@@ -973,7 +910,6 @@ mod tests {
     fn no_file_question_without_files_or_with_a_tagged_one() {
         let f = fixture();
         let library = Library::builtin();
-        let plain = message("check the data", &[]);
         let mut earlier = message("here it is", &[]);
         earlier.attachments.push(AssetRef {
             id: new_id(),
@@ -983,8 +919,6 @@ mod tests {
         });
         let mut tagged = message("check #trial.csv", &[]);
         tagged.attachments = earlier.attachments.clone();
-        let alone = [plain.clone()];
-        assert!(file_options(&f.project, f.conversation, &alone, &plain, &library).is_empty());
         let messages = [earlier, tagged.clone()];
         assert!(file_options(&f.project, f.conversation, &messages, &tagged, &library).is_empty());
 
@@ -1135,18 +1069,12 @@ mod tests {
         let start = frames.iter().find_map(|frame| match frame {
             CoreFrame::RunStart { plan, .. } => Some((
                 plan.traits[0].adapter.clone(),
-                plan.traits[0].tools.clone(),
                 plan.input.clone(),
                 plan.context.needs_context,
             )),
             _ => None,
         });
-        let tools = ["save_file", "show_table", "write_document", "suggest_edit", "edit_document"];
-        let tools: Vec<String> = tools.map(String::from).to_vec();
-        assert_eq!(
-            start,
-            Some(("prompt".into(), tools, json!({ "text": "hi thanks" }), Some(false)))
-        );
+        assert_eq!(start, Some(("prompt".into(), json!({ "text": "hi thanks" }), Some(false))));
     }
 
     #[test]

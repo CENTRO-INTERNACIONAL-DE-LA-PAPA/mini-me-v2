@@ -2,8 +2,10 @@ import asyncio
 import uuid
 from typing import Any
 
+import pytest
 from langgraph.types import Command
 
+from mini_me_sidecar.context import TraitError
 from mini_me_sidecar.workflow import state as saved_state
 from mini_me_sidecar.workflow.graph import compile_workflow, workflow_output
 from mini_me_sidecar.workflow.model import Step, parse_steps
@@ -136,9 +138,6 @@ def test_a_run_paused_at_an_approval_resumes_from_its_saved_state():
 
 
 def test_a_state_that_cannot_be_read_fails_to_resume():
-    try:
+    with pytest.raises(TraitError) as raised:
         asyncio.run(saved_state.restore('{"format": 99}', "t"))
-    except Exception as error:
-        assert getattr(error, "code", None) == "resume_failed"
-    else:
-        raise AssertionError("restore accepted a state of another format")
+    assert raised.value.code == "resume_failed"

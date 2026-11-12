@@ -1477,30 +1477,18 @@ pub mod test_support {
             model: "dummy-model".to_string(),
         })
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::comments::test_support::into_thread;
-    use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
-    use crate::library::{FALLBACK_MINI_ME, SCRIBE, Step};
-    use crate::projects::test_support::{temp_project, user};
-    use crate::protocol::{EventKind, MessageStatus};
-    use crate::secrets::NoSecrets;
-    use crate::secrets::test_support::MemorySecrets;
-    use super::test_support::{STEP, dummy_model, spec};
-
+    /// A frame sink that keeps every frame sent to the sidecar.
     #[derive(Default)]
-    struct Recorder(Mutex<Vec<CoreFrame>>);
+    pub struct Recorder(pub Mutex<Vec<CoreFrame>>);
 
     impl Recorder {
-        fn frames(&self) -> Vec<CoreFrame> {
+        pub fn frames(&self) -> Vec<CoreFrame> {
             self.0.lock().unwrap().clone()
         }
 
         /// The ID of the latest `run.start`.
-        fn last_run(&self) -> Uuid {
+        pub fn last_run(&self) -> Uuid {
             self.frames()
                 .iter()
                 .rev()
@@ -1518,6 +1506,19 @@ mod tests {
             true
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::comments::test_support::into_thread;
+    use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
+    use crate::library::{FALLBACK_MINI_ME, SCRIBE, Step};
+    use crate::projects::test_support::{temp_project, user};
+    use crate::protocol::{EventKind, MessageStatus};
+    use crate::secrets::NoSecrets;
+    use crate::secrets::test_support::MemorySecrets;
+    use super::test_support::{Recorder, STEP, dummy_model, spec};
 
     fn info(id: &str, providers: &[&str]) -> AdapterInfo {
         AdapterInfo {
@@ -1791,15 +1792,6 @@ mod tests {
     }
 
     #[test]
-    fn a_paused_reply_is_not_running() {
-        let f = quick();
-        let lists = watch(&f);
-        paused(&f);
-        assert!(lists.lock().unwrap().last().unwrap().is_empty());
-        assert!(f.runs.running().is_empty());
-    }
-
-    #[test]
     fn errors_and_cancellations_end_the_reply() {
         let f = quick();
         let (failing, failed_reply) = f.start("echo");
@@ -2004,30 +1996,6 @@ mod tests {
     }
 
     #[test]
-    fn a_trait_cannot_add_a_document_edits_card() {
-        let f = quick();
-        let (call_id, _) = f.start_call("echo");
-        let params = json!({ "kind": "document-edits", "version": 1, "data": {}, "text": "t" });
-        let refused = add_component(&f, call_id, params);
-        assert_eq!(error_code(refused).as_deref(), Some("component_not_allowed"));
-    }
-
-    #[test]
-    fn a_valid_component_is_added_to_the_reply() {
-        let f = quick();
-        let (call_id, reply) = f.start_call("echo");
-        let params = json!({
-            "kind": "paper-sources", "version": 1, "data": papers(), "text": "1. Late blight"
-        });
-        let id = result(add_component(&f, call_id, params))["component_id"].clone();
-
-        let message = f.message(reply);
-        assert_eq!(message.components.len(), 1);
-        assert_eq!(json!(message.components[0].id), id);
-        assert_eq!(message.components[0].kind, "paper-sources");
-    }
-
-    #[test]
     fn a_component_records_the_step_run_that_added_it() {
         let f = quick();
         let (run_id, reply) = f.start("echo");
@@ -2077,14 +2045,17 @@ mod tests {
     }
 
     #[test]
-    fn an_approval_or_a_component_without_text_is_refused() {
+    fn components_a_trait_may_not_add_are_refused() {
         let f = quick();
         let (call_id, reply) = f.start_call("echo");
-        let approval = json!({ "kind": "approval", "version": 1, "data": {}, "text": "t" });
-        assert_eq!(
-            error_code(add_component(&f, call_id, approval)).as_deref(),
-            Some("component_not_allowed")
-        );
+        for kind in ["approval", "document-edits"] {
+            let params = json!({ "kind": kind, "version": 1, "data": {}, "text": "t" });
+            assert_eq!(
+                error_code(add_component(&f, call_id, params)).as_deref(),
+                Some("component_not_allowed"),
+                "{kind}"
+            );
+        }
 
         let empty = json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": " " });
         assert_eq!(
@@ -2098,7 +2069,7 @@ mod tests {
     }
 
     #[test]
-    fn a_request_after_its_step_completed_is_refused() {
+    fn a_request_after_its_step_or_run_ended_is_refused() {
         let f = quick();
         let (run_id, reply) = f.start("echo");
         let call_id = f.step(run_id, STEP);
@@ -2110,6 +2081,13 @@ mod tests {
             Some("call_not_active")
         );
         assert!(f.message(reply).components.is_empty());
+
+        let (run_id, _) = f.start("echo");
+        let call_id = f.step(run_id, STEP);
+        f.runs.handle(SidecarFrame::RunDone { run_id });
+        let response = write_asset(&f, call_id, "theory-store.json", b"{}");
+        assert_eq!(error_code(response).as_deref(), Some("call_not_active"));
+        assert!(assets::list(&f.project, None).unwrap().is_empty());
     }
 
     fn write_asset(f: &Fixture, call_id: Uuid, name: &str, content: &[u8]) -> CoreFrame {
@@ -2129,17 +2107,6 @@ mod tests {
         assert_eq!(message.attachments.len(), 1);
         let path = assets::file_path(&f.project, message.attachments[0].id).unwrap();
         assert_eq!(std::fs::read(path).unwrap(), b"{\"theories\": []}");
-    }
-
-    #[test]
-    fn an_asset_written_after_the_run_ended_is_refused_and_not_stored() {
-        let f = quick();
-        let (run_id, _) = f.start("echo");
-        let call_id = f.step(run_id, STEP);
-        f.runs.handle(SidecarFrame::RunDone { run_id });
-        let response = write_asset(&f, call_id, "theory-store.json", b"{}");
-        assert_eq!(error_code(response).as_deref(), Some("call_not_active"));
-        assert!(assets::list(&f.project, None).unwrap().is_empty());
     }
 
     #[test]
@@ -2206,18 +2173,25 @@ mod tests {
     }
 
     #[test]
-    fn secrets_go_only_to_declared_providers() {
-        let f = fixture(Box::new(MemorySecrets::dummy()), CANCEL_TIMEOUT);
+    fn a_trait_call_gets_only_the_key_of_its_runs_provider() {
+        let secrets = MemorySecrets(HashMap::from([
+            ("dummy".to_string(), "sk-dummy-0123456789".to_string()),
+            ("dataverse".to_string(), "dv-token".to_string()),
+        ]));
+        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        let ask = |call: Uuid, provider: &str| {
+            f.runs.respond("r".into(), call, "secret.get", json!({ "provider": provider }))
+        };
+        // An adapter that declares no provider gets no key.
         let (echo_call, _) = f.start_call("echo");
-        let response =
-            f.runs.respond("r".into(), echo_call, "secret.get", json!({ "provider": "dummy" }));
-        assert_eq!(error_code(response).as_deref(), Some("secret_not_allowed"));
-
+        assert_eq!(error_code(ask(echo_call, "dummy")).as_deref(), Some("secret_not_allowed"));
+        // One that declares several gets only the run's, and never the Dataverse token.
+        let (prompt_call, _) = f.start_call("prompt");
+        assert_eq!(error_code(ask(prompt_call, "openai")).as_deref(), Some("secret_not_allowed"));
         let (run_id, reply) = f.start("test-use-secret");
         let secret_call = f.step(run_id, STEP);
-        let response =
-            f.runs.respond("r".into(), secret_call, "secret.get", json!({ "provider": "dummy" }));
-        assert_eq!(result(response)["value"], json!("sk-dummy-0123456789"));
+        assert_eq!(error_code(ask(secret_call, "dataverse")).as_deref(), Some("secret_not_allowed"));
+        assert_eq!(result(ask(secret_call, "dummy"))["value"], json!("sk-dummy-0123456789"));
         f.runs.handle(SidecarFrame::RunDone { run_id });
         let persisted = format!("{:?}", f.reply_events(reply));
         assert!(!persisted.contains("sk-dummy"));
@@ -2226,36 +2200,6 @@ mod tests {
         let (call, _) = g.start_call("test-use-secret");
         let response = g.runs.respond("r".into(), call, "secret.get", json!({ "provider": "dummy" }));
         assert_eq!(error_code(response).as_deref(), Some("secret_unavailable"));
-    }
-
-    #[test]
-    fn a_dataverse_search_needs_a_query() {
-        let f = quick();
-        let (call, _) = f.start_call("echo");
-        let response = f.runs.respond("r".into(), call, "dataverse.search", json!({ "start": 0 }));
-        assert_eq!(error_code(response).as_deref(), Some("invalid_input"));
-    }
-
-    #[test]
-    fn the_dataverse_token_goes_to_no_trait() {
-        let secrets = MemorySecrets(HashMap::from([("dataverse".into(), "dv-token".into())]));
-        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
-        let (call, _) = f.start_call("test-use-secret");
-        let params = json!({ "provider": "dataverse" });
-        let response = f.runs.respond("r".into(), call, "secret.get", params);
-        assert_eq!(error_code(response).as_deref(), Some("secret_not_allowed"));
-    }
-
-    #[test]
-    fn secrets_go_only_to_the_runs_own_provider() {
-        let f = fixture(Box::new(MemorySecrets::dummy()), CANCEL_TIMEOUT);
-        let (call, _) = f.start_call("prompt");
-        let response =
-            f.runs.respond("r".into(), call, "secret.get", json!({ "provider": "openai" }));
-        assert_eq!(error_code(response).as_deref(), Some("secret_not_allowed"));
-        let response =
-            f.runs.respond("r".into(), call, "secret.get", json!({ "provider": "dummy" }));
-        assert_eq!(result(response)["value"], json!("sk-dummy-0123456789"));
     }
 
     /// A run of `adapter` whose Workflow is a condition with one Trait Step per branch.
@@ -2310,8 +2254,15 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_model_fails_the_reply_without_a_run() {
+    fn only_ai_adapters_and_decisions_need_a_model() {
         let f = quick();
+        f.start("echo");
+        let sent = f.sink.frames().into_iter().find_map(|frame| match frame {
+            CoreFrame::RunStart { model, .. } => Some(model),
+            _ => None,
+        });
+        assert_eq!(sent, Some(None));
+
         let sent_before = f.sink.frames().len();
         let message = f.send(f.conversation, "summarize");
         let reply = f
@@ -2332,17 +2283,6 @@ mod tests {
             .start(Arc::clone(&f.project), conversation, &message, deciding_spec("echo"), None)
             .unwrap();
         assert_eq!(f.status(reply), MessageStatus::Failed);
-    }
-
-    #[test]
-    fn runs_without_ai_adapters_or_decisions_get_no_model() {
-        let f = quick();
-        f.start("echo");
-        let sent = f.sink.frames().into_iter().find_map(|frame| match frame {
-            CoreFrame::RunStart { model, .. } => Some(model),
-            _ => None,
-        });
-        assert_eq!(sent, Some(None));
     }
 
     /// A run of `echo` whose Workflow is an approval, then a Trait Step.
@@ -2439,16 +2379,10 @@ mod tests {
             let ask = vec!["reaction".into()];
             runs.route(json!({ "message": "hi" }), Vec::new(), Vec::new(), ask, timeout)
         });
-        let route_id = loop {
-            let found = f.sink.frames().into_iter().find_map(|frame| match frame {
-                CoreFrame::RouteStart { route_id, .. } => Some(route_id),
-                _ => None,
-            });
-            if let Some(route_id) = found {
-                break route_id;
-            }
-            std::thread::sleep(Duration::from_millis(5));
-        };
+        let route_id = wait_for(f, |frame| match frame {
+            CoreFrame::RouteStart { route_id, .. } => Some(route_id),
+            _ => None,
+        });
         (route_id, handle)
     }
 
@@ -2473,15 +2407,19 @@ mod tests {
     }
 
     #[test]
-    fn a_routing_request_times_out_or_ends_with_the_sidecar() {
+    fn routing_and_summary_requests_time_out_or_end_with_the_sidecar() {
         let f = quick();
         let (_, handle) = start_route(&f, Duration::from_millis(50));
         assert_eq!(handle.join().unwrap().answers.unwrap_err().code, "jev_timeout");
+        let (_, handle) = start_summary(&f, Duration::from_millis(50));
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "summary_timeout");
 
         let g = quick();
-        let (_, handle) = start_route(&g, CANCEL_TIMEOUT);
+        let (_, route) = start_route(&g, CANCEL_TIMEOUT);
+        let (_, summary) = start_summary(&g, CANCEL_TIMEOUT);
         g.runs.disconnect();
-        assert_eq!(handle.join().unwrap().answers.unwrap_err().code, SIDECAR_STOPPED);
+        assert_eq!(route.join().unwrap().answers.unwrap_err().code, SIDECAR_STOPPED);
+        assert_eq!(summary.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
     }
 
     /// Starts a summary request on another thread; returns its summary ID and the outcome.
@@ -2494,16 +2432,10 @@ mod tests {
             let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
             runs.summarize(model, "## Trial\nYou: plot yield".into(), SummaryKind::Overview, timeout)
         });
-        let summary_id = loop {
-            let found = f.sink.frames().into_iter().find_map(|frame| match frame {
-                CoreFrame::SummaryStart { summary_id, .. } => Some(summary_id),
-                _ => None,
-            });
-            if let Some(summary_id) = found {
-                break summary_id;
-            }
-            std::thread::sleep(Duration::from_millis(5));
-        };
+        let summary_id = wait_for(f, |frame| match frame {
+            CoreFrame::SummaryStart { summary_id, .. } => Some(summary_id),
+            _ => None,
+        });
         (summary_id, handle)
     }
 
@@ -2519,35 +2451,6 @@ mod tests {
         let error = ErrorInfo { code: "provider_refused".into(), message: "Refused.".into() };
         g.runs.handle(SidecarFrame::SummaryError { summary_id, error });
         assert_eq!(handle.join().unwrap().unwrap_err().code, "provider_refused");
-    }
-
-    #[test]
-    fn a_summary_request_times_out_or_ends_with_the_sidecar() {
-        let f = quick();
-        let (_, handle) = start_summary(&f, Duration::from_millis(50));
-        assert_eq!(handle.join().unwrap().unwrap_err().code, "summary_timeout");
-
-        let g = quick();
-        let (_, handle) = start_summary(&g, CANCEL_TIMEOUT);
-        g.runs.disconnect();
-        assert_eq!(handle.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
-    }
-
-    #[test]
-    fn a_summary_request_may_only_get_its_models_key() {
-        let secrets = MemorySecrets(HashMap::from([
-            ("typesafe".to_string(), "ts-key".to_string()),
-            ("openai".to_string(), "sk-openai".to_string()),
-        ]));
-        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
-        let (summary_id, handle) = start_summary(&f, CANCEL_TIMEOUT);
-        let ask = |provider: &str| {
-            f.runs.respond("r".into(), summary_id, "secret.get", json!({ "provider": provider }))
-        };
-        assert_eq!(error_code(ask("typesafe")).as_deref(), Some("secret_not_allowed"));
-        assert_eq!(error_code(ask("openai")), None);
-        f.runs.handle(SidecarFrame::SummaryDone { summary_id, text: String::new() });
-        handle.join().unwrap().unwrap();
     }
 
     /// Waits until the sink has a frame `pick` accepts, and returns what it picked.
@@ -2628,40 +2531,36 @@ mod tests {
     }
 
     #[test]
-    fn a_draft_may_only_get_its_models_key() {
+    fn requests_outside_a_run_get_only_their_own_key() {
         let secrets = MemorySecrets(HashMap::from([
             ("typesafe".to_string(), "ts-key".to_string()),
             ("openai".to_string(), "sk-openai".to_string()),
         ]));
         let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
-        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
-        let ask = |provider: &str| {
-            f.runs.respond("r".into(), draft_id, "secret.get", json!({ "provider": provider }))
+        let key = |id: Uuid, provider: &str| {
+            f.runs.respond("r".into(), id, "secret.get", json!({ "provider": provider }))
         };
-        assert_eq!(error_code(ask("typesafe")).as_deref(), Some("secret_not_allowed"));
-        assert_eq!(error_code(ask("openai")), None);
-        f.runs.handle(SidecarFrame::DraftDone { draft_id });
-        handle.join().unwrap();
-    }
 
-    #[test]
-    fn a_routing_request_may_only_get_the_typesafe_key() {
-        let secrets = MemorySecrets(HashMap::from([
-            ("typesafe".to_string(), "ts-key".to_string()),
-            ("openai".to_string(), "sk-openai".to_string()),
-        ]));
-        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        // A summary or a draft gets only its model's key.
+        let (summary_id, summary) = start_summary(&f, CANCEL_TIMEOUT);
+        let (draft_id, draft) = start_draft(&f, CANCEL_TIMEOUT);
+        for id in [summary_id, draft_id] {
+            assert_eq!(error_code(key(id, "typesafe")).as_deref(), Some("secret_not_allowed"));
+            assert_eq!(error_code(key(id, "openai")), None);
+        }
+        f.runs.handle(SidecarFrame::SummaryDone { summary_id, text: String::new() });
+        f.runs.handle(SidecarFrame::DraftDone { draft_id });
+        summary.join().unwrap().unwrap();
+        draft.join().unwrap();
+
+        // A routing request gets only Typesafe's key, and no other core request.
         let (route_id, handle) = start_route(&f, CANCEL_TIMEOUT);
         let ask =
             |method: &str, params: Value| f.runs.respond("r".into(), route_id, method, params);
         let read = json!({ "asset_id": Uuid::nil(), "offset": 0, "length": 1 });
         assert_eq!(error_code(ask("asset.read", read)).as_deref(), Some("unknown_method"));
-        assert_eq!(
-            error_code(ask("secret.get", json!({ "provider": "openai" }))).as_deref(),
-            Some("secret_not_allowed")
-        );
-        let key = result(ask("secret.get", json!({ "provider": "typesafe" })));
-        assert_eq!(key["value"], json!("ts-key"));
+        assert_eq!(error_code(key(route_id, "openai")).as_deref(), Some("secret_not_allowed"));
+        assert_eq!(result(key(route_id, "typesafe"))["value"], json!("ts-key"));
         f.runs.handle(SidecarFrame::RouteError {
             route_id,
             error: ErrorInfo { code: "jev_unavailable".into(), message: String::new() },

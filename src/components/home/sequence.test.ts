@@ -17,18 +17,15 @@ describe("pressKey", () => {
     expect(press(SUMMON)).toEqual([false, false, false, false, false, false, false, true]);
   });
 
-  it("matches after other keys came first", () => {
+  it("matches after other keys came first, and starts over after a match", () => {
     const matches = press(["a", "ArrowUp", ...SUMMON]);
     expect(matches[matches.length - 1]).toBe(true);
+    expect(press([...SUMMON, ...SUMMON.slice(0, 4)]).filter(Boolean)).toHaveLength(1);
   });
 
   it("does not match a sequence with a wrong key in it", () => {
     const wrong = [...SUMMON];
     wrong[4] = "ArrowRight";
     expect(press(wrong)).not.toContain(true);
-  });
-
-  it("starts over after a match", () => {
-    expect(press([...SUMMON, ...SUMMON.slice(0, 4)]).filter(Boolean)).toHaveLength(1);
   });
 });

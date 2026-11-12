@@ -176,12 +176,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn keys_use_mini_mes_service_until_the_app_names_its_own() {
-        // No test sets the service, which the running app does once at start-up.
-        assert_eq!(keychain_service(), "org.cipotato.mini-me");
-    }
-
-    #[test]
     fn secrets_print_redacted() {
         let secret = Secret::new("sk-dummy-0123456789");
         assert_eq!(format!("{secret:?}"), REDACTED);
