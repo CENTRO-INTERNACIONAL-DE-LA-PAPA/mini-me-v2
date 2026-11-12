@@ -1,7 +1,5 @@
-//! Which Mini-Me answers a user message, whether it also reacts to it, whether the message
-//! needs earlier context, and which of the Conversation's files it means when it tags none, as
-//! decided by Typesafe's Jev. When Jev is unsure or cannot be asked, the fallback Mini-Me
-//! answers.
+//! Jev decides who answers, any reaction, whether context is needed and which file is meant;
+//! when Jev is unsure or cannot be asked, the fallback Mini-Me answers.
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -30,11 +28,10 @@ const REACTIONS: [&str; 16] = [
     "👍", "🎉", "💛", "😄", "😡", "😢", "🥔", "🤔", "😮", "💪", "🌱", "😅", "🙏", "☕", "🧪", "🌧️",
 ];
 
-/// The share of Jev's confident reactions that are added, so that a Conversation about one
-/// topic does not get the same reaction on every message.
+/// Below 1 so a one-topic Conversation does not get the same reaction on every message.
 pub const REACTION_CHANCE: f64 = 0.5;
 
-/// How many earlier messages Jev sees, and how many characters of each.
+/// Earlier messages Jev sees, and characters of each.
 const RECENT_TURNS: usize = 4;
 const RECENT_CHARS: usize = 200;
 
@@ -48,7 +45,7 @@ pub struct RouteSettings {
     pub show_answers: bool,
     /// Store what was sent to Jev in the message's debug record (a developer setting).
     pub show_asked: bool,
-    /// The share of confident reactions that are added, from 0 to 1.
+    /// Share of confident reactions added, from 0 to 1.
     pub reaction_chance: f64,
 }
 
@@ -57,7 +54,6 @@ const ROUTING_AUTHOR: &str = "routing";
 
 #[derive(Debug, Clone, PartialEq)]
 struct Decision {
-    /// The Mini-Me that answers.
     answerer: Uuid,
     reaction: Option<String>,
     needs_context: Option<bool>,
@@ -65,8 +61,7 @@ struct Decision {
     file: Option<RunFile>,
 }
 
-/// The warnings shown while Jev cannot choose, so the fallback Mini-Me answers every message
-/// without a mention.
+/// Shown while Jev cannot choose, so the fallback answers every message without a mention.
 const NO_KEY: &str = "Mini-Mes aren't chosen automatically: there is no Typesafe key. Add one \
     in Settings → Accounts.";
 const NOT_ANSWERING: &str = "Mini-Mes aren't chosen automatically: Typesafe isn't answering. \
@@ -94,8 +89,7 @@ impl Routing {
         })
     }
 
-    /// Sends the current warning to `sink` and then every change. `sink` returns `false`
-    /// when it is gone.
+    /// Sends the current warning, then every change, until `sink` returns `false`.
     pub fn subscribe(&self, sink: WarningSink) {
         let warning = self.warning.lock().unwrap_or_else(|p| p.into_inner());
         if sink(*warning) {
@@ -106,8 +100,7 @@ impl Routing {
         }
     }
 
-    /// Clears the warning when a Typesafe key is saved, which the next route confirms, and
-    /// warns when it is removed.
+    /// Saving clears the warning (the next route confirms the key); removing warns.
     pub fn key_saved(&self, saved: bool) {
         self.warn(if saved { None } else { Some(NO_KEY) });
     }
@@ -124,10 +117,8 @@ impl Routing {
             .retain(|sink| sink(next));
     }
 
-    /// Validates and persists a user message, then decides on a background thread who
-    /// answers it. Fails with `reply_in_progress` while an earlier message of the
-    /// Conversation is still waiting for its decision. In a comment thread, Jev is not asked:
-    /// the first Mini-Me the comment mentions answers, and a comment without one is a note.
+    /// Routes on a background thread; `reply_in_progress` while an earlier message awaits routing.
+    /// In a comment thread Jev is not asked: the first mentioned Mini-Me answers, or it is a note.
     pub fn send(
         self: &Arc<Self>,
         calls: Arc<Runs>,
@@ -266,8 +257,7 @@ impl Routing {
         }
     }
 
-    /// Starts `mini_me_id`'s reply to `message`, with `file` as its picked file; returns the
-    /// reply's author.
+    /// Returns the reply's author.
     fn start_reply(
         &self,
         library: &Library,
@@ -325,8 +315,7 @@ fn first_mention(message: &Message) -> Option<Uuid> {
         .map(|c| c.id)
 }
 
-/// What Jev sees of a message: its text without mentions, the names of its files, and the
-/// recent turns before it. File contents stay on the user's computer.
+/// What Jev sees of a message; file contents stay on the user's computer.
 fn state(message: &Message, recent: Value) -> Value {
     json!({
         "message": input_text(message),
@@ -335,9 +324,7 @@ fn state(message: &Message, recent: Value) -> Value {
     })
 }
 
-/// The last `RECENT_TURNS` messages before `before` in `messages` (a whole Conversation in
-/// creation order), oldest first, each as its author's name, the start of its text and its
-/// file names. Interactive Components are left out, since their text can hold table data.
+/// Up to `RECENT_TURNS` turns before `before`, oldest first, without components (table data).
 fn recent(messages: &[Message], before: Uuid, library: &Library) -> Value {
     let earlier: Vec<&Message> = messages
         .iter()
@@ -362,8 +349,7 @@ fn recent(messages: &[Message], before: Uuid, library: &Library) -> Value {
     json!(turns)
 }
 
-/// The warning a route's outcome calls for, or `None` to keep the current one. A stopped
-/// runtime keeps it, since the sidecar's own status explains that.
+/// `None` keeps the current warning, as for a stopped runtime, which the sidecar status explains.
 fn warning_after(routed: &AppResult<RouteAnswers>) -> Option<Option<&'static str>> {
     match routed {
         Ok(_) => Some(None),
@@ -373,9 +359,7 @@ fn warning_after(routed: &AppResult<RouteAnswers>) -> Option<Option<&'static str
     }
 }
 
-/// The options of Jev's `file` question: the Assets of `messages`, the Conversation
-/// `conversation_id`, newest first, each with the tables and charts shown from it; or none
-/// when `message` references or attaches a file of its own, which always wins.
+/// Files Jev may pick, newest first, with their tables and charts; none if the message has one.
 fn file_options(
     project: &Project,
     conversation_id: Uuid,
@@ -407,8 +391,7 @@ fn file_options(
         .collect()
 }
 
-/// The `jev` debug record of a routing request, `{ asked, answers, error }`, holding only the
-/// parts whose developer setting is on; `None` when both are off.
+/// `{ asked, answers, error }`, only parts whose developer setting is on; `None` if both are off.
 fn jev_record(
     routed: &AppResult<RouteAnswers>,
     asked: Value,
@@ -438,10 +421,8 @@ fn draw() -> f64 {
     (random & ((1 << 53) - 1)) as f64 / (1u64 << 53) as f64
 }
 
-/// Turns Jev's answers (`None` when Jev could not be asked) into who answers, the reaction,
-/// the context answer and the picked file, one of `files`. A confidence equal to the
-/// threshold passes; below it, or without an answer, the fallback Mini-Me answers and no file
-/// is picked. A confident reaction is kept only when `reacts`.
+/// A confidence equal to the threshold passes, and a reaction only when `reacts`; else the
+/// fallback answers and no file is picked.
 fn decide(
     answers: Option<&RouteAnswers>,
     mentioned: Option<Uuid>,
@@ -482,9 +463,7 @@ fn decide(
     }
 }
 
-/// The message content without its Mini-Me mentions, trimmed. A mention between two spaces
-/// takes one of them along, so no double space is left behind. Offsets are UTF-16 code
-/// units, as in `TextComponent`.
+/// A mention between two spaces takes one along, leaving no double space; offsets are UTF-16 units.
 fn input_text(message: &Message) -> String {
     let units: Vec<u16> = message.content.encode_utf16().collect();
     let mut mentions: Vec<(usize, usize)> = message

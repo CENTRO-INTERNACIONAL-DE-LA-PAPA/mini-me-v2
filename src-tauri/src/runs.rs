@@ -1,6 +1,4 @@
-//! Mini-Me runs in flight: starting and resuming them, turning their frames into reply
-//! events, pausing them at approvals, cancelling them, and answering the requests their
-//! Trait calls and model decisions make to the core.
+//! Mini-Me runs in flight: start, resume, pause, cancel, and the core requests their calls make.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
@@ -51,8 +49,7 @@ const ROUTING_KEY: &str = "typesafe";
 /// Jev's answers to a routing request, by question ID.
 pub type RouteAnswers = BTreeMap<String, ChoiceAnswer>;
 
-/// The end of a routing request: Jev's answers or why there are none, and what was sent to
-/// Jev (`null` when nothing was).
+/// Jev's answers or why there are none, and what was sent (`null` when nothing was).
 pub struct Routed {
     pub answers: AppResult<RouteAnswers>,
     pub asked: Value,
@@ -67,30 +64,28 @@ pub enum DraftEvent {
     Error { error: ErrorInfo },
 }
 
-/// The sender each request waiting for the sidecar's answer is listed under, by its ID.
+/// Requests waiting for the sidecar's answer, by ID.
 type Pending<T> = HashMap<Uuid, mpsc::Sender<Result<T, ErrorInfo>>>;
 
-/// Checks that document work is possible, which the app sets once it knows where Quarto is.
+/// Set by the app once it knows where Quarto is.
 pub type DocumentGate = Arc<dyn Fn() -> AppResult<()> + Send + Sync>;
 
 /// What a request to the sidecar fails with when no answer comes.
 struct NoAnswer {
     /// The sidecar is not running.
     not_ready: &'static str,
-    /// The code and message when the answer takes longer than the request's timeout.
+    /// Code and message when the answer takes longer than the timeout.
     timeout: (&'static str, &'static str),
     /// The sidecar stopped before it answered.
     stopped: &'static str,
 }
 
-/// The writing end of the link to a running sidecar. Returns `false` when the sidecar can
-/// no longer be reached.
+/// Returns `false` when the sidecar can no longer be reached.
 pub trait FrameSink: Send + Sync {
     fn send(&self, frame: &CoreFrame) -> bool;
 }
 
-/// What a reply is produced by. A paused run stores it, so the run resumes with the
-/// definitions it started with.
+/// Stored with a paused run, so it resumes with the definitions it started with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunSpec {
     pub author: Author,
@@ -100,15 +95,14 @@ pub struct RunSpec {
     pub traits: Vec<TraitDef>,
     /// The input of every Trait Step.
     pub input: Value,
-    /// The routing decision's answer to whether the message needs earlier context.
+    /// Routing's answer to whether the message needs earlier context.
     pub needs_context: Option<bool>,
-    /// The file the routing decision picked as the one the message means.
+    /// The file routing picked as the one the message means.
     pub file: Option<RunFile>,
 }
 
 impl RunSpec {
-    /// The run of `mini_me_id`'s Workflow, with the Traits it uses from `library`, and no
-    /// picked file.
+    /// A run of `mini_me_id` with no picked file.
     pub fn for_mini_me(
         library: &Library,
         mini_me_id: Uuid,
@@ -137,7 +131,7 @@ impl RunSpec {
         }
     }
 
-    /// The name a Step is shown with: its Trait's name, else its label, else its type.
+    /// Its Trait's name, else its label, else its type.
     fn step_name(&self, step_id: &str) -> Option<String> {
         let step = self.workflow.step(step_id)?;
         let name = match (self.trait_of(step_id), &step.label) {
@@ -160,8 +154,7 @@ struct SavedRun {
     answers: Uuid,
 }
 
-/// What a call inside a run may do: a Trait call works through its Trait's adapter; a
-/// condition's or loop's model decision may only get the run's AI key.
+/// A Trait call uses its adapter; a condition's or loop's decision may only get the run's AI key.
 enum CallKind {
     Trait { adapter: String },
     Decision,
@@ -180,8 +173,7 @@ pub struct RunningReply {
     pub step: Option<String>,
 }
 
-/// The status of Conversation `conversation_id` of Project `project_id` given the replies
-/// `running`: `running` with the Mini-Me of its reply, or none when no reply of it is running.
+/// `Running` with its Mini-Me while a reply of the Conversation is in flight.
 pub fn running_status(
     running: &[RunningReply],
     project_id: Uuid,
@@ -203,16 +195,15 @@ struct Run {
     answers: Uuid,
     message_id: Uuid,
     spec: RunSpec,
-    /// The provider of the run's model; the only AI provider whose secret it may get.
+    /// The only AI provider whose secret the run may get.
     provider: Option<String>,
     /// Calls that have started and whose Step has not completed, by call ID.
     calls: HashMap<Uuid, (String, CallKind)>,
     cancelling: bool,
     step: Option<String>,
-    /// The model chosen in Settings, even when the run needs none, for the reply it hands off
-    /// to.
+    /// Kept even when the run needs none, for the reply it hands off to.
     model: Option<CallModel>,
-    /// The hand-off a call of the run asked for, started when the reply completes.
+    /// Started when the reply completes.
     hand_off: Option<HandOff>,
 }
 
@@ -235,7 +226,7 @@ struct Inner {
     summaries: Pending<String>,
     /// Drafts being written.
     drafts: HashMap<Uuid, mpsc::Sender<DraftEvent>>,
-    /// The provider whose key each summary and draft may get, by its ID.
+    /// The only provider whose key each summary or draft may get.
     key_providers: HashMap<Uuid, String>,
     /// Drafts stopped before they were sent to the sidecar; `draft` ends them at once.
     stopped_drafts: HashSet<Uuid>,
@@ -252,8 +243,7 @@ impl Inner {
 
 pub struct Runs {
     inner: Mutex<Inner>,
-    /// Held while a list is built and sent, so subscribers get lists in the order the runs
-    /// changed.
+    /// Held while a list is built and sent, so subscribers get lists in change order.
     subscribers: Mutex<Vec<RunningSink>>,
     library: Arc<LibraryStore>,
     secrets: Box<dyn SecretSource>,
@@ -261,9 +251,9 @@ pub struct Runs {
     cancel_timeout: Duration,
     /// Asked before a Mini-Me writes or edits a document; none until the app sets one.
     document_gate: Mutex<Option<DocumentGate>>,
-    /// The IDs of the feature flags that are on, as the app last set them.
+    /// Feature flags that are on.
     features: Mutex<Vec<String>>,
-    /// The parts of reply debug records new runs collect, as the app last set them.
+    /// What new runs collect for reply debug records.
     debug: Mutex<DebugParts>,
 }
 
@@ -311,7 +301,7 @@ struct Place {
     conversation_id: Uuid,
     answers: Uuid,
     reply: Uuid,
-    /// The reply's author, the Mini-Me that adds what the call saves.
+    /// The Mini-Me that adds what the call saves.
     author: Author,
     provider: Option<String>,
     /// The Step the call runs.
@@ -351,12 +341,11 @@ impl Runs {
         *self.debug.lock().unwrap_or_else(|p| p.into_inner()) = parts;
     }
 
-    /// Sets which feature flags are on, for Traits that ask during a call.
+    /// For Traits that ask during a call.
     pub fn set_active_features(&self, ids: Vec<String>) {
         *self.features.lock().unwrap_or_else(|p| p.into_inner()) = ids;
     }
 
-    /// Sets the check that a Mini-Me may write or edit documents.
     pub fn set_document_gate(&self, gate: DocumentGate) {
         *self.document_gate.lock().unwrap_or_else(|p| p.into_inner()) = Some(gate);
     }
@@ -372,21 +361,19 @@ impl Runs {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Starts using a sidecar that has completed the handshake and listed its adapters.
+    /// For a sidecar past the handshake.
     pub fn connect(&self, sink: Arc<dyn FrameSink>, adapters: Vec<AdapterInfo>) {
         let mut inner = self.lock();
         inner.sink = Some(sink);
         inner.adapters = adapters.into_iter().map(|a| (a.id.clone(), a)).collect();
     }
 
-    /// Forgets the sidecar and fails every reply whose run was still open. Paused replies
-    /// have no open run, so they stay paused.
+    /// Fails every reply with an open run; paused replies have none, so they stay paused.
     pub fn disconnect(&self) {
         let runs: Vec<Run> = {
             let mut inner = self.lock();
             inner.sink = None;
-            // Dropping the senders wakes every waiting routing, summary, draft and export
-            // request.
+            // Dropping the senders wakes every waiting request.
             inner.routes.clear();
             inner.summaries.clear();
             inner.drafts.clear();
@@ -410,9 +397,7 @@ impl Runs {
         })
     }
 
-    /// Whether a run of `spec` needs the model chosen in Settings: when one of its Traits'
-    /// adapters calls an AI provider, or a condition or loop asks the model to decide.
-    /// Adapters may declare other keys, such as the Ai2 account, without needing a model.
+    /// When an adapter calls an AI provider or a condition or loop decides; Ai2 and such need none.
     fn needs_model(&self, spec: &RunSpec) -> bool {
         let inner = self.lock();
         spec.workflow.has_decisions()
@@ -424,9 +409,7 @@ impl Runs {
             })
     }
 
-    /// Creates the reply to `message` and starts the run that produces it. When the run
-    /// needs a model and Settings has none, the reply fails with `model_not_set` and no run
-    /// is started.
+    /// When the run needs a model and Settings has none, the reply fails with `model_not_set`.
     pub fn start(
         &self,
         project: Arc<Project>,
@@ -442,8 +425,7 @@ impl Runs {
         Ok(reply)
     }
 
-    /// Resumes the run of a reply whose approval was just approved, from its saved state.
-    /// The model is the one chosen in Settings now.
+    /// Uses the model chosen in Settings now, not at start.
     pub fn resume(
         &self,
         project: Arc<Project>,
@@ -570,10 +552,7 @@ impl Runs {
         }
     }
 
-    /// Asks the sidecar for Jev's answers to the `ask` questions about `state`, waiting at
-    /// most `timeout`; `mini_mes` and `files` are the options of the `mini_me` and `file`
-    /// questions. The answers fail with the sidecar's error, `jev_timeout`, or
-    /// `sidecar_stopped`.
+    /// Fails with the sidecar's error, `jev_timeout` or `sidecar_stopped`.
     pub fn route(
         &self,
         state: Value,
@@ -598,8 +577,7 @@ impl Runs {
         }
     }
 
-    /// Asks the sidecar to summarise `material` with `model`, waiting at most `timeout`.
-    /// Fails with the sidecar's error, `summary_timeout`, or `sidecar_stopped`.
+    /// Fails with the sidecar's error, `summary_timeout` or `sidecar_stopped`.
     pub fn summarize(
         &self,
         model: CallModel,
@@ -620,10 +598,7 @@ impl Runs {
         summary
     }
 
-    /// Drafts a report titled `title` from `material` with `model`, passing each piece of text
-    /// to `on_event` as it arrives, until the draft ends, is cancelled with `cancel_draft`, or
-    /// no text arrives for `idle`. Returns the whole text, and the error that ended it if one
-    /// did; the text written before an error is kept.
+    /// Ends when done, on `cancel_draft` or after `idle` without text; returns text and any error.
     pub fn draft(
         &self,
         draft_id: Uuid,
@@ -690,9 +665,7 @@ impl Runs {
         (text, ending)
     }
 
-    /// Asks the sidecar to stop the draft `draft_id`; it then ends as `Done`. A draft not yet
-    /// sent to the sidecar, because the core is still gathering its material, ends empty when
-    /// it would start.
+    /// It then ends as `Done`; a draft not yet sent to the sidecar ends empty when it would start.
     pub fn cancel_draft(&self, draft_id: Uuid) {
         let sink = {
             let mut inner = self.lock();
@@ -719,8 +692,7 @@ impl Runs {
         }
     }
 
-    /// Sends `frame` for the request `id`, listed in `pending` until it ends, and waits at most
-    /// `timeout` for the sidecar's answer, which `answered` passes on.
+    /// Lists `id` in `pending` until it ends; `answered` passes the answer on.
     fn request<T>(
         &self,
         pending: fn(&mut Inner) -> &mut Pending<T>,
@@ -756,7 +728,7 @@ impl Runs {
         }
     }
 
-    /// Passes the sidecar's answer to the request `id` of `pending`, named `what` in the log.
+    /// `what` names the request in the log.
     fn answered<T>(
         &self,
         pending: fn(&mut Inner) -> &mut Pending<T>,
@@ -772,8 +744,7 @@ impl Runs {
         }
     }
 
-    /// Asks the sidecar to cancel the run producing `message_id`, and closes the run if it
-    /// has not ended within the cancel timeout.
+    /// Closes the run itself if it has not ended within `CANCEL_TIMEOUT`.
     pub fn cancel_message(self: &Arc<Self>, message_id: Uuid) {
         let (run_id, sink) = {
             let mut inner = self.lock();
@@ -801,7 +772,7 @@ impl Runs {
         });
     }
 
-    /// Sends the running replies to `sink` and then every change to them.
+    /// Sends the list now and on every change.
     pub fn subscribe(&self, sink: RunningSink) {
         let mut subscribers = self.subscribers.lock().unwrap_or_else(|p| p.into_inner());
         if sink(&self.running()) {
@@ -809,7 +780,7 @@ impl Runs {
         }
     }
 
-    /// Every reply whose run is in flight, oldest run first.
+    /// Oldest run first.
     pub fn running(&self) -> Vec<RunningReply> {
         let mut runs: Vec<_> = {
             let inner = self.lock();
@@ -830,8 +801,7 @@ impl Runs {
         };
         // Run IDs are UUIDv7, so they sort by start time.
         runs.sort_by_key(|run| run.0);
-        // Titles are read after the runs lock is released, so no Project lock is taken
-        // while it is held.
+        // Titles are read after the runs lock is released, so no Project lock is taken under it.
         runs.into_iter()
             .filter(|(_, project, conversation_id, ..)| {
                 !comments::is_thread(&project.lock(), *conversation_id).unwrap_or(false)
@@ -880,8 +850,7 @@ impl Runs {
         run
     }
 
-    /// Removes the run `run_id` without telling anyone, for a caller that stores what became of
-    /// it before the running list changes.
+    /// Does not notify, so the caller can store the outcome before the running list changes.
     fn take(&self, run_id: Uuid) -> Option<Run> {
         let run = self.lock().runs.remove(&run_id);
         if run.is_none() {
@@ -936,7 +905,6 @@ impl Runs {
         }
     }
 
-    /// Saves a run that reached an approval, so the reply waits for the user's answer.
     fn paused(&self, run_id: Uuid, step_id: String, output: Option<String>, state: String) {
         let Some(run) = self.take(run_id) else {
             return;
@@ -980,8 +948,7 @@ impl Runs {
         let _ = conversations::pause_reply(&run.project, paused, &prompt);
     }
 
-    /// Applies a run frame from the sidecar. Updates to a reply that has already ended are
-    /// rejected by `conversations` and dropped here.
+    /// Updates to a reply that has already ended are rejected by `conversations` and dropped.
     pub fn handle(self: &Arc<Self>, frame: SidecarFrame) {
         match frame {
             SidecarFrame::RunDelta { run_id, text } => {
@@ -1063,8 +1030,7 @@ impl Runs {
                 method,
                 params,
             } => {
-                // Asset reads touch the disk; answering on another thread keeps the link's
-                // reader free for other runs.
+                // Asset reads touch the disk; another thread keeps the link's reader free.
                 let this = Arc::clone(self);
                 std::thread::spawn(move || {
                     let response = this.respond(request_id, call_id, &method, params);
@@ -1232,9 +1198,8 @@ impl Runs {
         }
     }
 
-    /// The hand-off `params` asks for, when the reply in `place` may make it: not to its own
-    /// Mini-Me or one the library lacks, not from a reply a hand-off started or a comment
-    /// thread, and with a file of the Conversation or none.
+    /// Not to its own or an unknown Mini-Me, not from a handed-off reply or comment thread,
+    /// and only with a file of the Conversation.
     fn hand_off_allowed(&self, place: &Place, params: HandOffParams) -> AppResult<HandOff> {
         let library = self.library.current();
         if library.mini_me(params.mini_me_id).is_none() {
@@ -1270,7 +1235,7 @@ impl Runs {
         Ok(HandOff { mini_me_id: params.mini_me_id, request, file })
     }
 
-    /// Holds `hand_off` on the run of the call `call_id`, which may hand off once.
+    /// A run may hand off once.
     fn hold_hand_off(&self, call_id: Uuid, hand_off: HandOff) -> AppResult<()> {
         let mut inner = self.lock();
         let run = inner
@@ -1292,9 +1257,7 @@ impl Runs {
         }
     }
 
-    /// Starts the reply of the Mini-Me the completed `reply` hands off to, with the run's model,
-    /// as if the user had sent the request: with the earlier messages, and the handed file as
-    /// its picked file. Notes why when it cannot start.
+    /// As if the user sent the request, with the run's model; notes why when it cannot start.
     fn hand_off(&self, run: &Run, reply: &Message, hand_off: HandOff) {
         let library = self.library.current();
         let author = Author { kind: AuthorKind::MiniMe, id: hand_off.mini_me_id.to_string() };
@@ -1310,8 +1273,7 @@ impl Runs {
         }
     }
 
-    /// A request that may only get the `allowed` API key, such as a routing request, which
-    /// may only get Typesafe's. `what` names the request in errors.
+    /// Answers a routing, summary or decision request: only `secret.get` for `allowed`.
     fn answer_key(
         &self,
         what: &str,
@@ -1335,8 +1297,7 @@ impl Runs {
         self.secret_value(&params.provider)
     }
 
-    /// A Trait call may get only secrets its adapter declared: for an AI provider, only the
-    /// one of its run's model; other keys, such as the Ai2 account, whenever declared.
+    /// Only declared secrets; for an AI provider, only the run model's.
     fn secret(
         &self,
         adapter: &str,
@@ -1393,7 +1354,6 @@ fn hand_off_refused(message: &str) -> AppError {
     AppError::new("hand_off_not_allowed", message)
 }
 
-/// Every Mini-Me of `library`, as a run's `mini_mes`.
 fn mini_me_list(library: &Library) -> Vec<RouteMiniMe> {
     library
         .summaries()
@@ -1402,8 +1362,7 @@ fn mini_me_list(library: &Library) -> Vec<RouteMiniMe> {
         .collect()
 }
 
-/// A reply that was stopped while its call winds down takes no more output, as if the call
-/// had ended.
+/// A reply stopped while its call winds down takes no more output, as if the call had ended.
 fn reply_ended(err: AppError) -> AppError {
     if err.code == "reply_finished" {
         AppError::new("call_not_active", "This Trait call has ended.")
@@ -1416,8 +1375,7 @@ fn parse_params<T: for<'de> Deserialize<'de>>(params: Value) -> AppResult<T> {
     serde_json::from_value(params).map_err(|e| AppError::invalid_input(e.to_string()))
 }
 
-/// Reads up to one chunk of an Asset. `assets::file_path` only finds Assets of this Project
-/// and resolves them through the Project-folder confinement check.
+/// Up to one chunk; `assets::file_path` confines the read to this Project's folder.
 fn read_asset(project: &Project, params: AssetReadParams) -> AppResult<Value> {
     let path = assets::file_path(project, params.asset_id)?;
     let mut file = File::open(&path)?;
@@ -1565,8 +1523,7 @@ mod tests {
     }
 
     impl Fixture {
-        /// Sends a user message and starts a run of `adapter` for it; returns (run ID,
-        /// reply ID).
+        /// Returns (run ID, reply ID).
         fn start(&self, adapter: &str) -> (Uuid, Uuid) {
             self.start_spec(spec(adapter, json!({ "text": "late blight spreads" })), dummy_model())
         }
@@ -1591,8 +1548,7 @@ mod tests {
             send_message(&self.project, conversation, input, new_id()).unwrap()
         }
 
-        /// Starts a run of `adapter` and its one Step's Trait call; returns (call ID, reply
-        /// ID).
+        /// Starts the run and its one Trait call; returns (call ID, reply ID).
         fn start_call(&self, adapter: &str) -> (Uuid, Uuid) {
             let (run_id, reply) = self.start(adapter);
             (self.step(run_id, STEP), reply)
@@ -1710,7 +1666,7 @@ mod tests {
         assert_eq!((steps[0].output.as_deref(), steps[0].done), (Some("late blight"), true));
     }
 
-    /// Subscribes to the running replies; returns every list sent so far.
+    /// Every list sent so far.
     fn watch(f: &Fixture) -> Arc<Mutex<Vec<Vec<RunningReply>>>> {
         let lists = Arc::new(Mutex::new(Vec::new()));
         let sent = Arc::clone(&lists);
@@ -1740,8 +1696,7 @@ mod tests {
             output: None,
             state: "opaque".into(),
         });
-        // The Conversation had no status while running, and none is missing when the reply
-        // leaves the running list.
+        // When the reply leaves the running list, its paused status is already stored.
         let seen = seen.lock().unwrap().clone();
         assert_eq!(seen.last(), Some(&(0, true)), "{seen:?}");
     }
@@ -1912,7 +1867,7 @@ mod tests {
             .collect()
     }
 
-    /// Asks to hand `request` off to the Mini-Me `mini_me` for the call `call_id`.
+    /// Asks to hand off to `mini_me` from `call_id`.
     fn hand_off(f: &Fixture, call_id: Uuid, mini_me: Uuid, asset: Option<Uuid>) -> CoreFrame {
         let params = json!({ "mini_me_id": mini_me, "request": "profile\n this", "asset_id": asset });
         f.runs.respond("r".into(), call_id, "reply.hand_off", params)
@@ -2357,8 +2312,7 @@ mod tests {
         run
     }
 
-    /// Starts an approving run and pauses it at its approval; returns the reply and its
-    /// approval's ID.
+    /// Returns the paused reply and its approval's ID.
     fn paused(f: &Fixture) -> (Uuid, Uuid) {
         let (run_id, reply) = f.start_spec(approving_spec(), None);
         f.runs.handle(SidecarFrame::StepStarted { run_id, step_id: "ask".into(), call_id: None });
