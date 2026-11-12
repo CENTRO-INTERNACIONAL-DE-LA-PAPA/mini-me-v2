@@ -1,6 +1,5 @@
-"""Search CIP Dataverse: the AI model turns the message into a search, the core searches CIP's
-Dataverse, and the datasets show as a `dataset-results` component, whose card downloads their
-files through the core."""
+"""Searches CIP Dataverse: the model writes the search, the core runs it, and the datasets show
+as a `dataset-results` component."""
 
 import sys
 from typing import Any
@@ -25,7 +24,7 @@ TEXT_INPUT: dict[str, Any] = {
     "required": ["text"],
 }
 
-# The codes with which the core refuses a component, when the reply lists the datasets instead.
+# Codes of a refused component, after which the reply lists the datasets as text.
 COMPONENT_REFUSED = {"component_not_allowed", "invalid_component"}
 
 

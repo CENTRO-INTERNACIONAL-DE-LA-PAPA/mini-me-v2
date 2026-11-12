@@ -44,8 +44,7 @@ use crate::sidecar::{LOG_FILE, Launch, SidecarLog, SidecarState, SidecarStatus, 
 use crate::store::{EventSink, Project};
 use crate::updates::{UpdateStatus, Updates};
 
-/// How much of a Project's message text a summary is written from: whole Conversations,
-/// newest first, up to four times the history of one call.
+/// Whole Conversations, newest first, up to four times one call's history.
 const SUMMARY_BUDGET_CHARS: usize = HISTORY_BUDGET_CHARS * 4;
 
 /// How long a summary may take; long material can keep the model writing for a while.
@@ -63,14 +62,13 @@ const TYPESAFE: &str = "typesafe";
 
 pub struct AppState {
     config_dir: PathBuf,
-    /// Whether this app is Mini-Me Dev, which has Developer mode on until the user turns it off.
+    /// Mini-Me Dev has Developer mode on until the user turns it off.
     dev_app: bool,
-    /// The version this app is running, as its Tauri configuration says.
+    /// From the Tauri configuration.
     app_version: String,
     data_root: PathBuf,
     settings: Mutex<Settings>,
-    /// The user's Quarto as last looked up, shared with the check that gates the document
-    /// tools of a running Mini-Me.
+    /// The last Quarto lookup, shared with the check that gates a running Mini-Me's document tools.
     quarto: Arc<quarto::Known>,
     open_projects: Mutex<HashMap<Uuid, Arc<Project>>>,
     runs: Arc<Runs>,
@@ -80,14 +78,13 @@ pub struct AppState {
     pub sidecar: Arc<Supervisor>,
     pub updates: Arc<Updates>,
     ai2: Arc<Ai2>,
-    /// The paths of the latest drop on the window, as the operating system reported them.
+    /// The latest drop's paths, as the operating system reported them.
     dropped: Mutex<Vec<PathBuf>>,
 }
 
 impl AppState {
     pub fn init(app: &AppHandle) -> AppResult<Self> {
-        // The identifier tells Mini-Me from Mini-Me Dev; Tauri already keeps each one's
-        // settings and logs apart by it, and the Projects folder and keychain follow it here.
+        // Separates Mini-Me from Mini-Me Dev: settings, logs, Projects folder and keychain.
         let identifier = app.config().identifier.clone();
         secrets::use_keychain_service(&identifier);
         let path = app.path();
@@ -170,7 +167,7 @@ impl AppState {
         })
     }
 
-    /// Remembers the paths of a drop on the window, replacing those of the previous drop.
+    /// Replaces the previous drop's paths.
     pub fn record_drop(&self, paths: Vec<PathBuf>) {
         *self.dropped.lock().unwrap_or_else(|p| p.into_inner()) = paths;
     }
@@ -180,8 +177,7 @@ impl AppState {
         self.settings().developer_mode(self.dev_app)
     }
 
-    /// Applies `change` to the stored feature flags and saves them, then tells running Traits
-    /// which flags are on.
+    /// Saves the flags, then tells running Traits which are on.
     fn change_features(&self, change: impl FnOnce(&mut Settings)) -> AppResult<()> {
         let mut settings = self.settings.lock().unwrap_or_else(|p| p.into_inner());
         change(&mut settings);
@@ -208,7 +204,7 @@ impl AppState {
             .ok_or_else(|| AppError::not_found("Project not found"))
     }
 
-    /// Returns the open Project, opening it on first use so every caller shares one instance.
+    /// Opens it on first use so every caller shares one instance.
     fn project(&self, project_id: Uuid) -> AppResult<Arc<Project>> {
         let mut open = self.open_projects.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(project) = open.get(&project_id) {
@@ -262,11 +258,8 @@ pub async fn list_conversations(
     Ok(list)
 }
 
-/// Names a new Conversation from its first message, as soon as it is sent and while the reply is
-/// still being written, with the AI model chosen in Settings, and returns the title. Returns
-/// `None`, and changes nothing, when the Conversation is already titled or has had more than one
-/// message, when no model is set, or when the model cannot answer, so a missing key never fails
-/// anything.
+/// `None`, changing nothing, when already titled, no model is set or the model fails, so a missing
+/// key never fails anything.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn name_conversation(
     state: State<'_, AppState>,
@@ -293,7 +286,6 @@ pub async fn name_conversation(
     Ok(named.then(|| title.trim().to_string()))
 }
 
-/// Gives the Conversation a new title.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn rename_conversation(
     state: State<'_, AppState>,
@@ -304,7 +296,7 @@ pub async fn rename_conversation(
     conversations::rename(&*state.project(project_id)?, conversation_id, &title)
 }
 
-/// Deletes the Conversation after stopping its running reply.
+/// Stops its running reply first.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn delete_conversation(
     state: State<'_, AppState>,
@@ -318,7 +310,7 @@ pub async fn delete_conversation(
     conversations::delete(&project, conversation_id)
 }
 
-/// Renames the Project; only its name changes, never its folder.
+/// Only the name changes, never the folder.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn rename_project(
     state: State<'_, AppState>,
@@ -331,11 +323,10 @@ pub async fn rename_project(
     Ok(ProjectSummary { name, ..summary })
 }
 
-/// How long a Project's delete waits for its stopped replies to let go of it: the cancel timeout,
-/// which closes a run that does not end, and a margin.
+/// How long a delete waits for stopped replies to release the Project: cancel timeout plus margin.
 const RELEASE_WAIT: Duration = Duration::from_secs(CANCEL_TIMEOUT.as_secs() + 3);
 
-/// Deletes the Project with its folder, after stopping every running reply in it.
+/// Deletes the folder too, after stopping every running reply.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn delete_project(state: State<'_, AppState>, project_id: Uuid) -> AppResult<()> {
     let summary = state.find_summary(project_id)?;
@@ -346,8 +337,7 @@ pub async fn delete_project(state: State<'_, AppState>, project_id: Uuid) -> App
         }
     }
     state.open_projects.lock().unwrap_or_else(|p| p.into_inner()).remove(&project_id);
-    // A stopped run holds the Project, and its database, until it ends or the cancel timeout
-    // closes it; removing the folder before then fails on Windows.
+    // A stopped run holds the database until it ends; removing the folder sooner fails on Windows.
     let (project, released) = tauri::async_runtime::spawn_blocking(move || {
         let released = projects::wait_until_alone(&project, RELEASE_WAIT);
         (project, released)
@@ -375,8 +365,7 @@ pub async fn create_conversation(
     conversations::create(&*state.project(project_id)?)
 }
 
-/// The Conversation as stored, and a subscription that sends `on_events` every event
-/// persisted after it.
+/// The stored Conversation, then every later event to `on_events`.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn open_conversation(
     state: State<'_, AppState>,
@@ -399,8 +388,7 @@ pub async fn unsubscribe_conversation(
     Ok(())
 }
 
-/// Ends every Conversation subscription of every open Project. The UI calls it when it
-/// starts, so subscriptions held for a view that was reloaded end.
+/// Called when the UI starts, so subscriptions of a reloaded view end.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn reset_subscriptions(state: State<'_, AppState>) -> AppResult<()> {
     let open = state.open_projects.lock().unwrap_or_else(|p| p.into_inner());
@@ -465,8 +453,7 @@ pub async fn set_show_jev_asked(state: State<'_, AppState>, show: bool) -> AppRe
     settings.save(&state.config_dir)
 }
 
-/// Whether to open What's new now: the first start after the app updated to a new version. It
-/// answers true once per version, and never in Mini-Me Dev.
+/// True once per new app version, never in Mini-Me Dev.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn take_whats_new(state: State<'_, AppState>) -> AppResult<bool> {
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
@@ -491,7 +478,7 @@ pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResu
     Ok(())
 }
 
-/// Saves the reply debug switches; runs started from now on collect the parts that are on.
+/// Applies to runs started from now on.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_reply_debug(state: State<'_, AppState>, debug: DebugSettings) -> AppResult<()> {
     let mut settings = state.settings.lock().unwrap_or_else(|p| p.into_inner());
@@ -506,14 +493,13 @@ fn active_feature_ids(settings: &Settings, dev_app: bool) -> Vec<String> {
     active.iter().map(|feature| feature.id.to_string()).collect()
 }
 
-/// The feature flags that are on.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_feature_flags(state: State<'_, AppState>) -> AppResult<Vec<FeatureFlag>> {
     let active = state.settings().active_features(state.dev_app);
     Ok(active.into_iter().map(FeatureFlag::from).collect())
 }
 
-/// Turns on the feature flag that `key` belongs to; fails with `wrong_key` when it is none.
+/// Fails with `wrong_key` when `key` belongs to no flag.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn unlock_feature_flag(state: State<'_, AppState>, key: String) -> AppResult<FeatureFlag> {
     let feature = features::matching(FEATURES, &key)
@@ -522,7 +508,7 @@ pub async fn unlock_feature_flag(state: State<'_, AppState>, key: String) -> App
     Ok(FeatureFlag::from(feature))
 }
 
-/// Turns off the feature flag `id`, so only its key turns it on again.
+/// Only its key turns it on again.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn lock_feature_flag(state: State<'_, AppState>, id: String) -> AppResult<()> {
     state.change_features(|settings| settings.lock_feature(&id))
@@ -552,8 +538,7 @@ pub struct LibraryView {
     traits: Vec<TraitSummary>,
     /// User-made entries left out because they break a rule.
     skipped: Vec<Skipped>,
-    /// Why `library.json` could not be read; user-made definitions cannot be changed
-    /// while it is set.
+    /// Why `library.json` could not be read; user-made definitions are read-only while set.
     unreadable: Option<String>,
 }
 
@@ -594,14 +579,14 @@ pub async fn get_mini_me(state: State<'_, AppState>, id: Uuid) -> AppResult<Mini
     Ok(MiniMeDetail { mini_me: mini_me.clone(), built_in: library.is_built_in(id) })
 }
 
-/// Creates (with a nil ID) or replaces a user-made Mini-Me.
+/// A nil ID creates; any other replaces.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn save_mini_me(state: State<'_, AppState>, mini_me: MiniMe) -> AppResult<Saved> {
     let id = state.library.save_mini_me(mini_me)?.id;
     Ok(Saved { id, library: library_view(&state.library) })
 }
 
-/// Creates (with a nil ID) or replaces a user-made Trait.
+/// A nil ID creates; any other replaces.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn save_trait(state: State<'_, AppState>, draft: TraitDraft) -> AppResult<Saved> {
     let id = state.library.save_trait(draft)?.id;
@@ -620,8 +605,7 @@ pub async fn delete_trait(state: State<'_, AppState>, id: Uuid) -> AppResult<Lib
     Ok(library_view(&state.library))
 }
 
-/// The AI settings and which providers have a saved key. Keys themselves never leave the
-/// core.
+/// Keys themselves never leave the core.
 #[derive(serde::Serialize)]
 pub struct AiSettingsView {
     provider: String,
@@ -638,7 +622,7 @@ pub async fn get_user_profile(state: State<'_, AppState>) -> AppResult<UserProfi
     Ok(state.profile.current())
 }
 
-/// Saves the user's name, or clears it when `name` is empty.
+/// An empty `name` clears it.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn save_user_name(state: State<'_, AppState>, name: String) -> AppResult<UserProfile> {
     state.profile.save_name(&name)
@@ -658,8 +642,7 @@ pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettings
     })
 }
 
-/// Tests `model` of `provider` with one small request that needs a tool call, which Mini-Mes
-/// depend on, so that a model can be checked before it is used. Fails with why it did not pass.
+/// One small request needing a tool call, which Mini-Mes depend on; fails with why it did not pass.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn test_model(
     state: State<'_, AppState>,
@@ -690,7 +673,7 @@ pub async fn set_ai_model(
     settings.save(&state.config_dir)
 }
 
-/// Starts signing in to the Ai2 account and opens the page where the user confirms the code.
+/// Opens the page where the user confirms the code.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn ai2_start_sign_in(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
     let ai2 = Arc::clone(&state.ai2);
@@ -759,8 +742,7 @@ pub async fn stop_reply(
     Ok(())
 }
 
-/// Answers the approval a paused reply waits for. Approving resumes its run; rejecting ends
-/// the reply with the Workflow's output so far.
+/// Approving resumes the run; rejecting ends the reply with the output so far.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn answer_approval(
     state: State<'_, AppState>,
@@ -790,14 +772,13 @@ pub async fn answer_approval(
     Ok(())
 }
 
-/// Every reply paused at an approval, across all Projects, newest first.
+/// Across all Projects, newest first.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_paused_approvals(state: State<'_, AppState>) -> AppResult<Vec<PausedApproval>> {
     approvals::list(&state.data_root)
 }
 
-/// The status of the message `message_id`; none once it no longer exists. A reply's final
-/// status is stored before it leaves the running replies.
+/// `None` once the message is gone; a final status is stored before the reply stops running.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_message_status(
     state: State<'_, AppState>,
@@ -809,7 +790,7 @@ pub async fn get_message_status(
     Ok(place.map(|(_, status)| status))
 }
 
-/// The most recently active Conversations across all Projects, newest first.
+/// Across all Projects, newest first.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_recent_conversations(
     state: State<'_, AppState>,
@@ -829,7 +810,7 @@ pub async fn list_project_activity(state: State<'_, AppState>) -> AppResult<Vec<
     project_activity::list(&state.data_root)
 }
 
-/// Sends the running replies now and the whole list again each time it changes.
+/// Sends the whole list now and on every change.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn subscribe_running_replies(
     state: State<'_, AppState>,
@@ -852,8 +833,7 @@ pub async fn subscribe_sidecar_status(
     Ok(())
 }
 
-/// Sends why Mini-Mes are not chosen automatically, or `None` while Jev chooses them, now and
-/// on every change.
+/// `None` while Jev chooses; sent now and on every change.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn subscribe_routing_warning(
     state: State<'_, AppState>,
@@ -882,8 +862,7 @@ pub async fn subscribe_update_status(
     Ok(())
 }
 
-/// Stops the sidecar, installs the downloaded update and restarts. If the install fails the
-/// app still restarts, on the version it was running.
+/// Stops the sidecar first; a failed install still restarts, on the old version.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn restart_to_update(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
     state.sidecar.shutdown();
@@ -905,7 +884,7 @@ pub struct DatasetFile {
     pub asset: Option<AssetRef>,
 }
 
-/// The files of the CIP Dataverse dataset `dataset_id`, marking those already in the Project.
+/// Marks the files already in the Project.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn dataverse_files(
     state: State<'_, AppState>,
@@ -937,8 +916,7 @@ pub struct Downloaded {
     pub error: Option<String>,
 }
 
-/// Downloads `files` of the CIP Dataverse `dataset` into the Project's Files, one at a time;
-/// a file that fails leaves the others downloaded.
+/// One at a time; a file that fails leaves the others downloaded.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn dataverse_download(
     state: State<'_, AppState>,
@@ -970,8 +948,7 @@ pub async fn dataverse_download(
     Ok(results)
 }
 
-/// Opens the native file picker and imports every picked file. Paths come only from the
-/// dialog, never from the UI, which keeps imports the single exception to confinement.
+/// Paths come only from the native dialog, never the UI: the single exception to confinement.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn import_assets(
     app: AppHandle,
@@ -996,8 +973,7 @@ pub async fn import_assets(
     Ok(imported)
 }
 
-/// Imports an image pasted into the composer. The bytes are the raw request body; the
-/// headers carry `project-id`, `media-type` and the clipboard's percent-encoded `name`.
+/// Raw body bytes; headers carry `project-id`, `media-type` and a percent-encoded `name`.
 #[tauri::command]
 pub async fn import_pasted_image(
     state: State<'_, AppState>,
@@ -1018,7 +994,7 @@ pub async fn import_pasted_image(
     assets::import_bytes(&project, &name, media_type, bytes, &state.user())
 }
 
-/// Imports files dropped on the window; only paths of the latest drop are accepted.
+/// Only paths of the latest drop are accepted.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn import_dropped(
     state: State<'_, AppState>,
@@ -1076,8 +1052,7 @@ pub async fn feature_component(
     overview::feature(&*state.project(project_id)?, component_id)
 }
 
-/// Asks the model chosen in Settings to summarise the Project's Conversations and saves the
-/// summary. On any failure the previous summary stays. Returns the updated Overview.
+/// On any failure the previous summary stays; returns the updated Overview.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn update_overview_summary(
     state: State<'_, AppState>,
@@ -1104,8 +1079,7 @@ pub async fn update_overview_summary(
     overview::overview(&project)
 }
 
-/// The Quarto program documents render with, or the error that says why document work is
-/// blocked, from the last lookup.
+/// From the last lookup; the error says why document work is blocked.
 async fn require_quarto(state: &AppState) -> AppResult<PathBuf> {
     let known = Arc::clone(&state.quarto);
     tauri::async_runtime::spawn_blocking(move || known.require())
@@ -1113,8 +1087,7 @@ async fn require_quarto(state: &AppState) -> AppResult<PathBuf> {
         .map_err(|e| AppError::new("quarto_failed", e.to_string()))?
 }
 
-/// Looks Quarto up again when a render found that it can no longer be started, so the notice
-/// shows from then on; `result` is returned as it is.
+/// Looks Quarto up again when a render could not start it, so the notice shows; returns `result`.
 fn looked_again<T>(known: &quarto::Known, result: AppResult<T>) -> AppResult<T> {
     if result.as_ref().is_err_and(|e| e.code == quarto::NOT_STARTED) {
         known.refresh();
@@ -1122,8 +1095,7 @@ fn looked_again<T>(known: &quarto::Known, result: AppResult<T>) -> AppResult<T> 
     result
 }
 
-/// Whether Quarto is usable, its version and where it is, as of the last lookup, which is made
-/// when the app starts, when the user asks, and when its location changes.
+/// As of the last lookup: at start, on request, and when its location changes.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn quarto_status(state: State<'_, AppState>) -> AppResult<quarto::Status> {
     let known = Arc::clone(&state.quarto);
@@ -1132,7 +1104,7 @@ pub async fn quarto_status(state: State<'_, AppState>) -> AppResult<quarto::Stat
         .map_err(|e| AppError::new("quarto_failed", e.to_string()))
 }
 
-/// Looks for Quarto again, as when it was installed after the app started.
+/// For a Quarto installed after the app started.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn recheck_quarto(state: State<'_, AppState>) -> AppResult<quarto::Status> {
     let known = Arc::clone(&state.quarto);
@@ -1141,8 +1113,7 @@ pub async fn recheck_quarto(state: State<'_, AppState>) -> AppResult<quarto::Sta
         .map_err(|e| AppError::new("quarto_failed", e.to_string()))
 }
 
-/// Sets the Quarto program to use, or clears it with `None` or an empty path so the app looks
-/// for one again; returns the status that results.
+/// `None` or an empty path clears it so the app looks again; returns the new status.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_quarto_path(
     state: State<'_, AppState>,
@@ -1163,7 +1134,7 @@ pub async fn set_quarto_path(
         .map_err(|e| AppError::new("quarto_failed", e.to_string()))
 }
 
-/// Creates an empty document titled `title`, with the user's name as author when they have one.
+/// The user's name, if set, is the author.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn create_document(
     state: State<'_, AppState>,
@@ -1175,9 +1146,7 @@ pub async fn create_document(
     documents::create(&*state.project(project_id)?, &title, author.as_deref(), &state.user())
 }
 
-/// Drafts the document `asset_id`, just created, from the Conversation `conversation_id`,
-/// sending each piece of text to `on_event` as it arrives. Whatever was written is saved after
-/// the document's header when the draft ends, fails or is stopped with `stop_draft`.
+/// Streams text to `on_event`; what was written is saved after the header however the draft ends.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn draft_document(
     state: State<'_, AppState>,
@@ -1224,8 +1193,7 @@ pub async fn stop_draft(state: State<'_, AppState>, draft_id: Uuid) -> AppResult
     Ok(())
 }
 
-/// The document text `source` as Quarto renders it, one SVG image per page. Project files the
-/// text names are available to the render.
+/// One SVG per page; Project files the text names are available to the render.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn preview_document(
     state: State<'_, AppState>,
@@ -1242,7 +1210,7 @@ pub async fn preview_document(
         .map_err(|e| AppError::new("preview_failed", e.to_string()))?
 }
 
-/// Exports the document `asset_id` as a PDF Asset named after it, and returns that Asset.
+/// A new PDF Asset named after the document.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn export_document_pdf(
     state: State<'_, AppState>,
@@ -1283,7 +1251,7 @@ pub async fn save_document(
     documents::save(&*state.project(project_id)?, asset_id, &text, &anchors)
 }
 
-/// Renames the file `asset_id`, keeping its extension.
+/// Keeps the extension.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn rename_asset(
     state: State<'_, AppState>,
@@ -1304,7 +1272,6 @@ pub async fn duplicate_asset(
     assets::duplicate(&*state.project(project_id)?, asset_id, &state.user())
 }
 
-/// Deletes the file `asset_id` from the Project.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn delete_asset(
     state: State<'_, AppState>,
@@ -1314,13 +1281,12 @@ pub async fn delete_asset(
     assets::delete(&*state.project(project_id)?, asset_id)
 }
 
-/// Deletes every debug record of Project `project_id`.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn clear_debug_records(state: State<'_, AppState>, project_id: Uuid) -> AppResult<()> {
     state.project(project_id)?.lock().clear_debug_records()
 }
 
-/// Opens the sidecar log in the system's default app for it.
+/// In the system's default app.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn open_sidecar_log(app: AppHandle) -> AppResult<()> {
     let dir = app.path().app_log_dir().map_err(|e| AppError::storage(e.to_string()))?;
@@ -1333,9 +1299,7 @@ pub async fn open_sidecar_log(app: AppHandle) -> AppResult<()> {
         .map_err(|e| AppError::new("open_failed", e.to_string()))
 }
 
-/// The third-party software a release build collected (`scripts/third-party.mjs`), as the
-/// "Third-party Software" page shows it; `null` in a build without it, such as a development
-/// build.
+/// `third-party.json` written by `scripts/third-party.mjs`; `None` in dev builds.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_third_party(app: AppHandle) -> AppResult<Option<Value>> {
     let dir = app.path().resource_dir().map_err(|e| AppError::storage(e.to_string()))?;
@@ -1346,8 +1310,7 @@ pub async fn get_third_party(app: AppHandle) -> AppResult<Option<Value>> {
     Ok(Some(serde_json::from_str(&std::fs::read_to_string(path)?)?))
 }
 
-/// Message `message_id`'s debug records of `kind`, in the order they were written, read when
-/// its debug block is expanded.
+/// In the order written; read when the debug block is expanded.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_debug_records(
     state: State<'_, AppState>,
@@ -1358,7 +1321,7 @@ pub async fn get_debug_records(
     state.project(project_id)?.lock().debug_records(message_id, &kind)
 }
 
-/// Shows the file `asset_id` in the system's file manager.
+/// In the system's file manager.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn reveal_asset(
     app: AppHandle,
@@ -1385,8 +1348,7 @@ pub async fn open_asset(
         .map_err(|e| AppError::new("open_failed", e.to_string()))
 }
 
-/// Saves a table's rows, already written as CSV, as a file of the Project named after `title`,
-/// added by the user.
+/// `csv` is already written; the file is named after `title` and added by the user.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn save_table_csv(
     state: State<'_, AppState>,
@@ -1399,8 +1361,7 @@ pub async fn save_table_csv(
     assets::import_bytes(&project, &name, "text/csv", csv.as_bytes(), &state.user())
 }
 
-/// Starts a comment thread on the passage `start..end` of the document `asset_id`, which reads
-/// `quote`. Its comments are sent with `send_message` on its `conversation_id`.
+/// On `start..end`, which reads `quote`; comments go through `send_message` on its Conversation.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn create_thread(
     state: State<'_, AppState>,
@@ -1432,7 +1393,7 @@ pub async fn set_thread_resolved(
     comments::set_resolved(&*state.project(project_id)?, thread_id, resolved)
 }
 
-/// Stops the thread's running reply, if any, then deletes the thread.
+/// Stops its running reply first.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn delete_thread(
     state: State<'_, AppState>,
@@ -1456,7 +1417,7 @@ pub async fn accept_suggestion(
     comments::accept_suggestion(&*state.project(project_id)?, message_id, component_id)
 }
 
-/// Rejects or dismisses a suggestion, leaving the document as it is.
+/// Leaves the document as it is.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn answer_suggestion(
     state: State<'_, AppState>,

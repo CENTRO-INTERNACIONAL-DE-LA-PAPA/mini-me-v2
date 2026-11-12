@@ -6,9 +6,8 @@ import { MiniMePill } from "../minime/MiniMePill";
 import { ReferenceChip } from "./ReferenceChip";
 import { useFileExists } from "./existingFiles";
 
-/** A Text Component: a Mini-Me's pill, a `$` table or chart chip that opens the component
- * when `onOpenComponent` is given, or a file chip that opens the file when `onOpenAsset` is.
- * Outside a Conversation, `componentKind` says whether a `$` chip names a chart. */
+/** A Text Component: a Mini-Me's pill, or a `$` or file chip that opens it when `onOpenComponent`
+ * or `onOpenAsset` is given. Outside a Conversation, `componentKind` marks a `$` chart. */
 export function TextComponentChip({
   component,
   miniMes,

@@ -1,8 +1,6 @@
-//! Quarto, the user's own install, which renders documents: finding it, checking its version and
-//! rendering a document's source to a PDF or to page images. Quarto is an optional add-on: without
-//! a usable one, document work is blocked and the rest of the app is unchanged. It never runs
-//! code here (`--no-execute`) and works only in a temporary folder inside the Project, which is
-//! removed afterwards.
+//! Quarto, the user's own install: finding it, checking its version, and rendering a source to a
+//! PDF or page images. It is optional: without it only document work is blocked. It never runs
+//! code (`--no-execute`) and works in a temporary folder inside the Project, removed afterwards.
 
 use std::ffi::OsStr;
 use std::io::Read;
@@ -20,11 +18,11 @@ use crate::protocol::{AssetRef, new_id};
 use crate::store::Project;
 
 /// The oldest Quarto the app renders with: the version `keep-typ` and `quarto typst compile` were
-/// checked on. Quarto's release notes do not say which release added them.
+/// checked on.
 pub const MINIMUM: (u32, u32) = (1, 10);
 
 const INSTALL_URL: &str = "https://quarto.org/docs/download/";
-/// The error code of a Quarto that could not be started, which says it was moved or removed.
+/// The error code for a Quarto that could not start, meaning it was moved or removed.
 pub const NOT_STARTED: &str = "quarto_not_started";
 const VERSION_LIMIT: Duration = Duration::from_secs(10);
 const RENDER_LIMIT: Duration = Duration::from_secs(120);
@@ -62,7 +60,7 @@ pub struct Status {
     pub state: State,
     pub version: Option<String>,
     pub path: Option<String>,
-    /// Whether `path` is the location the user chose in Settings, as opposed to one found.
+    /// Whether `path` was chosen in Settings rather than found.
     pub chosen: bool,
     pub minimum: String,
     pub install_url: String,
@@ -80,7 +78,7 @@ impl Status {
         }
     }
 
-    /// The error that blocks document work, or `None` when Quarto is usable.
+    /// `None` when Quarto is usable.
     fn blocking(&self) -> Option<AppError> {
         let message = match self.state {
             State::Found => return None,
@@ -133,9 +131,8 @@ fn install_candidates() -> Vec<PathBuf> {
     found
 }
 
-/// The Quarto program to use: the `setting` the user chose in Settings, else the first on the PATH,
-/// else the first of `candidates`. A path from Settings is returned even when nothing is there, so
-/// that it is reported as not working instead of being ignored.
+/// The `setting` from Settings, else the first Quarto on the PATH, else the first of `candidates`.
+/// A chosen path is returned even when missing, so it is reported as broken rather than ignored.
 pub fn locate(
     setting: Option<&str>,
     path_var: Option<&OsStr>,
@@ -150,8 +147,7 @@ pub fn locate(
     on_path.or_else(|| candidates.iter().find(|c| c.is_file()).cloned())
 }
 
-/// The state of the user's Quarto, looked up afresh each time so a Quarto installed or moved
-/// since the last call is seen.
+/// Looked up afresh each time, so a Quarto installed or moved since is seen.
 pub fn status(setting: Option<&str>) -> Status {
     let path_var = std::env::var_os("PATH");
     let chosen = setting.is_some_and(|s| !s.trim().is_empty());
@@ -173,9 +169,8 @@ pub fn status(setting: Option<&str>) -> Status {
     }
 }
 
-/// The user's Quarto as last looked up, which every document action reads instead of looking again.
-/// It is looked up the first time it is needed (the app asks at startup), and again only when
-/// the user asks, changes the location in Settings, or a render finds that Quarto cannot start.
+/// The Quarto as last looked up, which document actions read instead of looking again. Looked up
+/// again only when the user asks, changes the location, or a render cannot start it.
 pub struct Known {
     lookup: Box<dyn Fn(Option<&str>) -> Status + Send + Sync>,
     /// The location chosen in Settings, and the status found for it so far.
@@ -198,8 +193,7 @@ impl Known {
         self.state.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// The status as last looked up, looking it up first if it never was. The lookup runs
-    /// without the lock, since it can take seconds and others only want the kept result.
+    /// Looks it up first if it never was, without the lock, since the lookup can take seconds.
     pub fn status(&self) -> Status {
         let setting = {
             let state = self.lock();
@@ -220,13 +214,13 @@ impl Known {
         found
     }
 
-    /// Uses the location the user chose in Settings, or none to look for one, and looks again.
+    /// Uses the location chosen in Settings, or none to search, and looks again.
     pub fn set_setting(&self, setting: Option<String>) -> Status {
         self.lock().0 = setting;
         self.refresh()
     }
 
-    /// The Quarto program to render with, or the error that says why document work is blocked.
+    /// The program to render with, or the error saying why document work is blocked.
     pub fn require(&self) -> AppResult<PathBuf> {
         let status = self.status();
         match status.blocking() {
@@ -341,7 +335,7 @@ fn last_lines(output: &str, count: usize) -> String {
 /// A render's temporary folder inside the Project, removed when this is dropped.
 struct RenderFolder {
     path: PathBuf,
-    /// The Project files copied in, which are not what Quarto made.
+    /// Project files copied in, as opposed to what Quarto made.
     copied: Vec<String>,
 }
 
@@ -353,9 +347,8 @@ impl RenderFolder {
     }
 }
 
-/// Removes the render folders that an earlier run left in the Project, such as after a crash.
-/// Only for when no render is running: a Project is opened once per run, before its first render.
-/// A folder that cannot be removed is left for the next run.
+/// Removes render folders an earlier run left, as after a crash; one that cannot be removed is left
+/// for the next run. Only while no render runs: a Project opens once per run, before any render.
 pub fn remove_stale_renders(project: &Project) {
     if let Ok(folder) = project.paths.resolve("render") {
         let _ = std::fs::remove_dir_all(folder);
@@ -377,9 +370,8 @@ fn front_matter(source: &str) -> Option<&str> {
     Some(&rest[..end])
 }
 
-/// Refuses a source that makes Quarto read files outside the render folder or run code, which
-/// `--no-execute` does not stop: a path that leaves the folder, shortcodes that include files or
-/// read the environment, and header keys that run filters or insert files.
+/// Refuses a source that makes Quarto read files outside the render folder or run code despite
+/// `--no-execute`: an escaping path, file or environment shortcodes, filter or include keys.
 fn check_source(source: &str) -> AppResult<()> {
     let refuse = |what: String| {
         Err(AppError::new(
@@ -412,9 +404,8 @@ fn check_source(source: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Whether a Project file of this name must stay out of a render: the files the render makes,
-/// files that change how Quarto renders (`_quarto.yml`, `_metadata.yml`, `_extensions`), Lua
-/// filters, and the preview's page images.
+/// The files a render makes, files that change how Quarto renders (`_quarto.yml`, `_metadata.yml`,
+/// `_extensions`), Lua filters, and the preview's page images.
 fn is_reserved(name: &str) -> bool {
     RESERVED.contains(&name)
         || name.starts_with('_')
@@ -444,8 +435,8 @@ fn prepare(project: &Project, source: &str) -> AppResult<RenderFolder> {
     Ok(folder)
 }
 
-/// The file with extension `ext` that Quarto made in `folder`: `document.<ext>`, or the name the
-/// document's `output-file` gave it. Files copied from the Project are not Quarto's.
+/// The `ext` file Quarto made in `folder`: `document.<ext>` or the name the document's
+/// `output-file` gave it, never a file copied from the Project.
 fn output_file(folder: &RenderFolder, ext: &str) -> AppResult<PathBuf> {
     let expected = folder.path.join(format!("document.{ext}"));
     if expected.is_file() {
@@ -462,9 +453,8 @@ fn output_file(folder: &RenderFolder, ext: &str) -> AppResult<PathBuf> {
     Err(AppError::new("quarto_failed", format!("Quarto made no .{ext} file for this document.")))
 }
 
-/// Renders `document.qmd` in `folder` to Typst, without running any code cell. `metadata` is a
-/// `key:value` option for the render: `keep-typ:true` makes the PDF and keeps the Typst source,
-/// `output-ext:typ` stops at the Typst source.
+/// Renders `document.qmd` to Typst without running code. `metadata` is one `key:value` option:
+/// `keep-typ:true` makes the PDF and keeps the Typst, `output-ext:typ` stops at the Typst.
 fn render(quarto: &Path, folder: &Path, metadata: &str) -> AppResult<()> {
     let args = ["render", "document.qmd", "--to", "typst", "--no-execute", "-M", metadata];
     let finished = run_limited(command(quarto, &args, Some(folder)), RENDER_LIMIT)?;

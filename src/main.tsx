@@ -5,8 +5,7 @@ import App from "./App";
 import "@xyflow/react/dist/base.css";
 import "./index.css";
 
-// Subscriptions still held for this window's previous view, before a reload, end before
-// this view opens any Conversation.
+// End the subscriptions this window's view held before a reload, before any Conversation opens.
 api
   .resetSubscriptions()
   .catch(() => {})

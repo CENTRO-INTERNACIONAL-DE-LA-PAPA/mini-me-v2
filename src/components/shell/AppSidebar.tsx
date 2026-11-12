@@ -94,8 +94,7 @@ export function AppSidebar({
 
   const loadRecent = useCallback(() => api.listRecentConversations().then(setRecent), []);
 
-  // Fetched each time Home is shown and each time a reply starts or stops running, so it follows
-  // activity, and the statuses of Conversations, in any Project.
+  // Refetched when Home shows and when a reply starts or stops, so activity and statuses follow.
   const runningKey = useRunningKey();
   useEffect(() => {
     if (onHome) loadRecent().catch(() => {});
@@ -414,8 +413,7 @@ function ProjectSwitcher({
   );
 }
 
-/** A Conversation's title in the sidebar, with a dot when its reply ended while it was not
- * open. */
+/** A Conversation's title in the sidebar, with a dot when its reply ended while not open. */
 function ConversationTitle({ title, unseen }: { title: string; unseen: boolean }) {
   return (
     <span className="flex w-full items-center gap-1.5 text-foreground">

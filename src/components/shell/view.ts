@@ -1,10 +1,8 @@
-/** What the main area shows. The Overview, Files, a Conversation and a document need an open
- * Project; the others do not. A Conversation opened at `messageId` scrolls to that message. A
- * Mini-Me or Trait editor opens `id`, starts a copy of `from`, or, with neither, starts a new
- * one. What's new returns to `from` when closed, or to Home; License and Third-party Software
- * return to Settings → About. A document returns to `from` when closed, is drafted from the
- * Conversation `draftFrom` when given, and opens its Comments sheet on a reply's suggested
- * `edits` (the threads they opened) when given. */
+/** What the main area shows; the Overview, Files, a Conversation and a document need a Project.
+ * A Conversation scrolls to `messageId`. An editor opens `id`, copies `from`, or starts anew.
+ * Elsewhere closing returns to `from` (What's new: else Home); License and Third-party return to
+ * Settings → About. A document is drafted from the Conversation `draftFrom`, and opens its
+ * Comments sheet on a reply's `edits`. */
 export type View =
   | { kind: "home" }
   | { kind: "overview" }

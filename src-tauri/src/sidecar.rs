@@ -1,5 +1,4 @@
-//! The sidecar process: launching it, the version handshake, the responsiveness check,
-//! restarts with backoff, the status shown to the user, and the sidecar log.
+//! The sidecar process: launch, version handshake, liveness check, restarts, status and log.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -14,8 +13,7 @@ use crate::link::{self, AdapterInfo, CoreFrame, SIDECAR_PROTOCOL, SidecarFrame};
 use crate::protocol::now_ms;
 use crate::runs::{FrameSink, Runs};
 
-/// Delays before restarting after the 1st, 2nd, 3rd and 4th consecutive failure. The 5th
-/// consecutive failure stops the retries.
+/// Restart delays by consecutive failure; the 5th consecutive failure stops retrying.
 pub const RESTART_DELAYS: [Duration; 4] = [
     Duration::from_millis(500),
     Duration::from_secs(1),
@@ -40,8 +38,7 @@ pub struct Timing {
 }
 
 impl Timing {
-    /// A first `uv run` in development may need to create the environment, so it gets
-    /// longer to start.
+    /// A first `uv run` in development may have to create the environment, so it gets longer.
     pub fn for_build() -> Self {
         Self {
             start_timeout: if cfg!(debug_assertions) {
@@ -106,8 +103,7 @@ impl Launch {
         }
     }
 
-    /// `-I` keeps the user's `PYTHON*` variables and user site-packages out; `-X utf8` makes
-    /// stderr UTF-8 whatever the system code page.
+    /// `-I` keeps the user's `PYTHON*` and site-packages out; `-X utf8` makes stderr UTF-8.
     pub fn command(&self) -> Command {
         let mut command = match self {
             Launch::Dev { project_dir } => {
@@ -147,8 +143,7 @@ impl Launch {
     }
 }
 
-/// The sidecar log in the app's log directory, rotated once at a size limit. Never inside
-/// the Mini-Me Data folder.
+/// Rotated once at a size limit; never inside the Mini-Me Data folder.
 pub struct SidecarLog {
     path: Option<PathBuf>,
     max_bytes: u64,
@@ -211,8 +206,7 @@ impl Backoff {
         self.ready_since = Some(now);
     }
 
-    /// Records a failure at `now`; returns the delay before the next start, or `None` when
-    /// it is time to stop retrying.
+    /// The delay before the next start, or `None` to stop retrying.
     pub fn failed(&mut self, now: Instant) -> Option<Duration> {
         if let Some(since) = self.ready_since.take() {
             if now.duration_since(since) >= STABLE_AFTER {
@@ -228,8 +222,7 @@ impl Backoff {
     }
 }
 
-/// Checks the sidecar's protocol version; on a mismatch, the text shown to the user. Protocol
-/// versions only increase, so in development the lower side is the stale one.
+/// Errs with the text shown to the user; versions only increase, so in dev the lower side is stale.
 pub fn check_protocol(theirs: u32, ours: u32, dev: bool) -> Result<(), String> {
     if theirs == ours {
         return Ok(());
@@ -266,8 +259,7 @@ pub struct Handshake {
     pub adapters: Vec<AdapterInfo>,
 }
 
-/// Waits for `hello`, checks the protocol version, then lists the adapters. Frames other than
-/// the ones expected are logged and skipped.
+/// Waits for `hello`, checks the protocol, lists adapters; other frames are logged and skipped.
 pub fn handshake(
     rx: &Receiver<Incoming>,
     sink: &dyn FrameSink,
@@ -402,8 +394,7 @@ impl Supervisor {
         self.status.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
-    /// Sends the current status to `sink` and then every change. `sink` returns `false`
-    /// when it is gone.
+    /// Sends the current status, then every change, until `sink` returns `false`.
     pub fn subscribe(&self, sink: StatusSink) {
         let status = self.status.lock().unwrap_or_else(|p| p.into_inner());
         if sink(&*status) {
@@ -684,8 +675,7 @@ impl Supervisor {
     }
 }
 
-/// Forwards each stdout line to `tx`, then `Closed` at end of stream. Invalid UTF-8 is kept
-/// lossily so the line can still be logged.
+/// Forwards stdout lines to `tx`, then `Closed`; invalid UTF-8 is decoded lossily for the log.
 fn spawn_reader(stdout: impl std::io::Read + Send + 'static, tx: Sender<Incoming>) {
     std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);

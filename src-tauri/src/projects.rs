@@ -36,7 +36,7 @@ pub struct ProjectSummary {
     pub folder: PathBuf,
 }
 
-/// Whether `identifier` is Mini-Me Dev's, the development app kept apart from Mini-Me.
+/// Mini-Me Dev is the development app, kept apart from Mini-Me.
 pub fn is_mini_me_dev(identifier: &str) -> bool {
     identifier.ends_with(".dev")
 }
@@ -72,8 +72,7 @@ pub fn validate_name(name: &str) -> AppResult<String> {
     Ok(trimmed.to_string())
 }
 
-/// Turns a title into a name that is valid for a file or folder on Windows, macOS and Linux, as
-/// documents are named after theirs.
+/// A name valid for a file or folder on Windows, macOS and Linux; documents are named this way too.
 pub fn folder_name(name: &str) -> String {
     let replaced: String = name
         .chars()
@@ -117,9 +116,8 @@ pub fn create(data_root: &Path, name: &str) -> AppResult<ProjectSummary> {
     Ok(summary)
 }
 
-/// Waits until nothing but `project` holds the Project, so that its database is closed once
-/// `project` is dropped: a run that was cancelled still holds it until it ends. Returns whether
-/// that happened within `limit`.
+/// Waits up to `limit` until only `project` holds the Project, so dropping it closes the database;
+/// a cancelled run holds it until it ends. Returns whether that happened.
 pub fn wait_until_alone(project: &Arc<Project>, limit: Duration) -> bool {
     let started = Instant::now();
     while Arc::strong_count(project) > 1 {
@@ -131,8 +129,7 @@ pub fn wait_until_alone(project: &Arc<Project>, limit: Duration) -> bool {
     true
 }
 
-/// Removes the Project in `folder` with everything in it. Its running replies must be stopped
-/// and the Project closed first.
+/// Running replies must be stopped and the Project closed first.
 pub fn delete(folder: &Path) -> AppResult<()> {
     Ok(std::fs::remove_dir_all(folder)?)
 }
@@ -179,9 +176,8 @@ pub fn list(
     Ok(projects)
 }
 
-/// Reads every Project in `data_root` with `read`, merging what it returns. Each database is
-/// opened read-only, so nothing is migrated or written; a Project that cannot be read, or
-/// whose schema is newer than this app's, is left out.
+/// Merges what `read` returns for every Project, each opened read-only so nothing is migrated or
+/// written; a Project that cannot be read, or is from a newer app, is left out.
 pub fn read_each<T>(
     data_root: &Path,
     read: impl Fn(&ProjectSummary, &Connection) -> AppResult<Vec<T>>,

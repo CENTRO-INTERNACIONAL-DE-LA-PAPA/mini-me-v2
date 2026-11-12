@@ -12,9 +12,8 @@ const PARTS: { part: ThirdPartyComponent["part"]; title: string }[] = [
 
 const anchor = (index: number) => `third-party-${index}`;
 
-/** The third-party software this build ships, from Settings → About: a
- * table of contents by part of the app, then each component with its license texts. Its column
- * is centred in the sheet, like What's new. */
+/** The third-party software this build ships, from Settings → About: a table of contents by
+ * part of the app, then each component with its license texts. */
 export function ThirdPartyView({ onClose }: { onClose: () => void }) {
   // `undefined` while loading; `null` in a build without the list.
   const [list, setList] = useState<ThirdParty | null | undefined>(undefined);

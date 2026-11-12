@@ -3,9 +3,8 @@ import { api } from "../../api";
 
 const ExistingFiles = createContext<ReadonlySet<string> | null>(null);
 
-/** Tells the chips inside which of the Project's files still exist. The list is read again when
- * `refreshKey` changes, such as when a message or an attachment arrives, and until it has been
- * read again every file is taken to exist, so a new file is never shown as removed. */
+/** Tells the chips inside which Project files still exist, rereading when `refreshKey` changes;
+ * until reread, every file counts as existing, so a new file never shows as removed. */
 export function ExistingFilesProvider({
   projectId,
   refreshKey,

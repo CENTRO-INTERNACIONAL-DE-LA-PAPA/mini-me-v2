@@ -8,8 +8,7 @@ COLUMNS = ["Column", "Type", "Missing", "Missing %", "Distinct", "Min", "Max"]
 
 
 def profile(frame: pd.DataFrame) -> pd.DataFrame:
-    """One row per column: type, missing values, distinct values and, for numbers and dates,
-    the range."""
+    """One row per column: type, missing, distinct, and the range of numbers and dates."""
     rows = []
     for name in frame.columns:
         series = frame[name]

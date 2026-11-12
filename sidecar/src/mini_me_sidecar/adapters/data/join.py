@@ -20,8 +20,7 @@ class JoinStats:
 
 
 def shared_key(left: pd.DataFrame, right: pd.DataFrame) -> JoinPlan | None:
-    """A left join on the one column both tables have, or None when they share none or
-    several."""
+    """A left join on the one shared column; None when the tables share none or several."""
     shared = [c for c in left.columns if c in right.columns]
     if len(shared) != 1:
         return None

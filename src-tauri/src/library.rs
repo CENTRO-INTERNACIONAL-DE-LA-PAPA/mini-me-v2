@@ -32,8 +32,7 @@ pub const TOOLS: [&str; 13] = [
 pub const MODEL_TOOLS: [&str; 5] =
     ["save_file", "show_table", "write_document", "suggest_edit", "edit_document"];
 
-/// The adapter that offers a Trait's tools to its AI model, and the only one user-made
-/// Traits run on.
+/// Offers a Trait's tools to its AI model; the only adapter user-made Traits run on.
 pub const PROMPT_ADAPTER: &str = "prompt";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -46,8 +45,7 @@ pub struct TraitDef {
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
     pub instructions: Option<String>,
-    /// The tools this Trait may use: those its adapter's code uses, or, for a prompt-based
-    /// Trait, those its model is offered besides the read tools.
+    /// Tools its adapter's code uses; for a prompt-based Trait, those offered besides read tools.
     #[serde(default)]
     pub tools: Vec<String>,
 }
@@ -141,7 +139,7 @@ impl TryFrom<serde_json::Map<String, serde_json::Value>> for Step {
 }
 
 impl Step {
-    /// The name of this Step's type, as in its JSON `type`.
+    /// As in its JSON `type`.
     pub fn type_name(&self) -> &'static str {
         match self.kind {
             StepKind::Trait { .. } => "trait",
@@ -253,8 +251,7 @@ pub struct Library {
 }
 
 impl Library {
-    /// The built-in library. Its content is checked by this module's tests, so parsing it
-    /// cannot fail at run time.
+    /// Checked by this module's tests, so parsing cannot fail at run time.
     pub fn builtin() -> Self {
         let mut library: Self = serde_json::from_str(include_str!("../library/builtin.json"))
             .expect("library/builtin.json is valid");
@@ -319,7 +316,7 @@ impl Library {
             .collect()
     }
 
-    /// Every problem with the definitions, empty when they are consistent.
+    /// Empty when the definitions are consistent.
     pub(crate) fn problems(&self) -> Vec<String> {
         let mut problems = Vec::new();
         let mut ids: Vec<Uuid> = self.traits.iter().map(|t| t.id).collect();
@@ -436,7 +433,7 @@ impl Library {
     }
 }
 
-/// Whether two names are the same, ignoring case.
+/// Case-insensitive.
 fn same_name(a: &str, b: &str) -> bool {
     a.to_lowercase() == b.to_lowercase()
 }

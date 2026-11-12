@@ -5,11 +5,8 @@ import type { MiniMe } from "../../protocol/types";
 import { surfaceStyle } from "./miniMeColors";
 import { MiniMeAvatar } from "./MiniMeAvatar";
 
-/**
- * A Mini-Me named inline: its avatar and name on a pill in its tint with ink text, neutral
- * when it is unknown. `children` is the text shown, so a mention keeps the label it was sent
- * with. The `tag` size is the larger name tag under a Conversation's title.
- */
+/** A Mini-Me named inline on its tint, neutral when unknown. `children` is the label shown, so a
+ * mention keeps the one it was sent with; `tag` is the name tag under a Conversation's title. */
 export function MiniMePill({
   miniMe,
   size = "inline",

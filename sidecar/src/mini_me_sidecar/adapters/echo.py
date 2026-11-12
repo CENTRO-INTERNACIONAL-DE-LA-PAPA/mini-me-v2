@@ -7,8 +7,7 @@ from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 
 CHUNK_DELAY_S = 0.06
 
-# Each chunk is a word with the whitespace after it, so the chunks concatenate back to the
-# original text exactly.
+# A word and the whitespace after it, so the chunks join back into the exact text.
 CHUNKS = re.compile(r"\S*\s+|\S+")
 
 

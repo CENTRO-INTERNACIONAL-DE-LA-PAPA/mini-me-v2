@@ -12,8 +12,7 @@ import { isDocument } from "../files/files";
 import type { Renderers, RendererProps } from "./catalogue";
 import { openLink, webUrl } from "./links";
 
-/** `dataset-results` version 1 data, as *Search CIP Dataverse* adds it: the search, how many
- * datasets match, and its first page. */
+/** `dataset-results` version 1 data from *Search CIP Dataverse*; `datasets` is the first page. */
 interface DatasetResultsData {
   query: string;
   from_year: number | null;
@@ -30,7 +29,7 @@ export function datasetByline(dataset: Dataset): string {
   return (names + year).trim();
 }
 
-/** A file of an opened dataset: being downloaded, already in Files, or failed. */
+/** A file of an opened dataset; `error` is why its last download failed. */
 type FileState = { file: DatasetFile; error?: string };
 
 function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Dataset }) {

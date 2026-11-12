@@ -9,7 +9,7 @@ import { useId, useState } from "react";
 import type { Renderers } from "./catalogue";
 import { openLink, webUrl } from "./links";
 
-/** `theories` version 1 data, `{ theories, references }`, as *Theorize* builds it. */
+/** A text in `theories` version 1 data, as *Theorize* builds it: plain, and maybe technical. */
 interface Wording {
   plain: string;
   technical?: string | null;

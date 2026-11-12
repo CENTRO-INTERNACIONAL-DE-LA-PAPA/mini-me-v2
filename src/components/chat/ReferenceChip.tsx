@@ -3,12 +3,8 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-/**
- * A chip naming a file, table or chart: white with an outline, so it reads on a bubble, a
- * reply or the composer alike. With `onOpen` it is a button that opens what it names. Files
- * attached to or referenced in a message, `#` and `$` references and the composer's
- * attachments all use it; Mini-Mes use `MiniMePill` instead.
- */
+/** A chip naming a file, table or chart, outlined so it reads on a bubble, a reply or the
+ * composer alike; with `onOpen` it is a button. Mini-Mes use `MiniMePill` instead. */
 export function ReferenceChip({
   icon: Icon,
   title,

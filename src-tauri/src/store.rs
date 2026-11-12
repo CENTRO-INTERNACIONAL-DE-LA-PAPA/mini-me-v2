@@ -1,8 +1,7 @@
 //! An open Project: its database, the event log, and delivery to subscribers.
 //!
-//! One lock per Project covers sequence assignment, the database transaction and queuing
-//! events for subscribers, so events are queued only after they are committed, and always in
-//! `seq` order. Each subscription's own thread sends its queue to the UI, outside the lock.
+//! One lock per Project covers seq assignment, the transaction and queuing, so events are queued
+//! only once committed, in `seq` order; each subscription's thread delivers outside the lock.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,18 +22,15 @@ use crate::protocol::{
     Reaction, TextComponent, new_id, now_ms,
 };
 
-/// How long a subscription gathers events before delivering them as one batch: about one
-/// screen refresh, so a fast reply updates the UI at most once per frame.
+/// About one screen refresh, so a fast reply updates the UI at most once per frame.
 pub const BATCH_WINDOW: Duration = Duration::from_millis(16);
 
-/// Receives delivered events, in batches of consecutive events. Returns `false` when the
-/// subscriber is gone and should be dropped.
+/// Receives batches of consecutive events; returns `false` when the subscriber is gone.
 pub trait EventSink: Send {
     fn send(&self, events: &[Event]) -> bool;
 }
 
-/// A subscriber's queue, which its delivery thread sends to the subscriber's sink. Dropping
-/// it ends the subscription: the thread delivers nothing more, then ends.
+/// Dropping it ends the subscription and its delivery thread.
 struct Subscription {
     id: Uuid,
     queue: Sender<Event>,
@@ -47,8 +43,7 @@ impl Drop for Subscription {
     }
 }
 
-/// A subscription's delivery thread: waits for an event, gathers what follows it within
-/// `BATCH_WINDOW`, and sends them together, until the subscription ends or a send fails.
+/// Sends each event with those within `BATCH_WINDOW` after it, until unsubscribed or a send fails.
 fn deliver(queue: Receiver<Event>, active: Arc<AtomicBool>, sink: Box<dyn EventSink>) {
     while let Ok(first) = queue.recv() {
         let mut batch = vec![first];
@@ -95,13 +90,11 @@ impl Project {
         }
     }
 
-    /// The Project's name as it is now.
     pub fn name(&self) -> String {
         self.name.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
-    /// Gives the Project a new name, stored in its database through this open Project; no folder
-    /// is renamed or moved. Returns the name as trimmed.
+    /// Stored in the database only; no folder is renamed. Returns the trimmed name.
     pub fn rename(&self, name: &str) -> AppResult<String> {
         let name = crate::projects::validate_name(name)?;
         self.lock().conn.execute("UPDATE project SET name = ?1", rusqlite::params![name])?;
@@ -113,9 +106,7 @@ impl Project {
         self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// Delivers every stored event after `after_seq`, then every new event, and returns the
-    /// subscription's ID. Both are queued under the Project lock, so no event is missed or
-    /// duplicated. The app opens Conversations with `open`; tests subscribe from a sequence.
+    /// Stored events after `after_seq`, then new ones; queued under the lock, so none is missed.
     #[cfg(test)]
     pub fn subscribe(
         &self,
@@ -129,8 +120,7 @@ impl Project {
         state.add_subscription(conversation_id, stored, sink)
     }
 
-    /// The Conversation as stored, and a subscription that delivers every event persisted
-    /// after it. Both are read under the Project lock, so no event is missed or duplicated.
+    /// The stored Conversation and a subscription from there, read under the lock: none is missed.
     pub fn open(
         &self,
         conversation_id: Uuid,
@@ -148,7 +138,7 @@ impl Project {
         })
     }
 
-    /// Ends a subscription, whatever its Conversation; an unknown ID is ignored.
+    /// An unknown ID is ignored.
     pub fn unsubscribe(&self, subscription_id: Uuid) {
         for subscriptions in self.lock().subscribers.values_mut() {
             subscriptions.retain(|s| s.id != subscription_id);
@@ -176,8 +166,7 @@ impl ProjectState {
             .ok_or_else(|| AppError::not_found("Conversation not found"))
     }
 
-    /// Queues `stored` for `sink`, then starts the thread that delivers the subscription's
-    /// queue, and returns its ID.
+    /// Queues `stored`, then starts the delivery thread; returns the subscription's ID.
     fn add_subscription(
         &mut self,
         conversation_id: Uuid,
@@ -231,15 +220,13 @@ impl ProjectState {
         Ok(events)
     }
 
-    /// Assigns the next sequence number, stores the event and its projection in one
-    /// transaction, and only then queues it for delivery.
+    /// Stores the event and its projection in one transaction, and only then queues it.
     pub fn persist(&mut self, conversation_id: Uuid, kind: EventKind) -> AppResult<Event> {
         let mut events = self.persist_all(conversation_id, vec![kind], |_| Ok(()))?;
         Ok(events.remove(0))
     }
 
-    /// Stores `kinds` as consecutive events, their projections and whatever `also` writes,
-    /// all in one transaction, then queues the events for delivery in order.
+    /// Stores `kinds`, their projections and `also`'s writes in one transaction, then queues them.
     pub fn persist_all(
         &mut self,
         conversation_id: Uuid,
@@ -298,8 +285,7 @@ impl ProjectState {
         }
         tx.commit()?;
 
-        // Queuing never waits on a subscriber. A queue whose thread has ended refuses the
-        // event, and its subscription is dropped.
+        // Never waits on a subscriber; a queue whose thread has ended is dropped.
         if let Some(subscriptions) = self.subscribers.get_mut(&conversation_id) {
             subscriptions.retain(|s| events.iter().all(|e| s.queue.send(e.clone()).is_ok()));
         }
@@ -324,15 +310,13 @@ impl ProjectState {
         Ok(Some((conversation, MessageStatus::parse(&status).ok_or_else(corrupt)?)))
     }
 
-    /// A message with all of its components' data; the app itself reads messages through
-    /// `message_place` and `load_message_with`.
+    /// A message with all of its components' data.
     #[cfg(test)]
     pub fn load_message(&self, message_id: Uuid) -> AppResult<Option<(Uuid, Message)>> {
         self.load_message_with(message_id, true)
     }
 
-    /// A message, with its components' `data` when `component_data` is set and `null` instead
-    /// otherwise (their `text` is always read).
+    /// Components' `data` is `null` unless `component_data` is set; `text` is always read.
     pub fn load_message_with(
         &self,
         message_id: Uuid,
@@ -341,9 +325,7 @@ impl ProjectState {
         Ok(self.messages_in(Scope::Message(message_id), component_data)?.into_iter().next())
     }
 
-    /// The messages of `scope` with their Conversation, in the order they were created, with
-    /// their components and Steps; components carry `data` only when `component_data` is set
-    /// (`null` instead). Three queries, whatever the number of messages.
+    /// `scope`'s messages in creation order, with components (`data` if asked) and Steps.
     fn messages_in(&self, scope: Scope, component_data: bool) -> AppResult<Vec<(Uuid, Message)>> {
         let mut components = self.components_in(scope, component_data)?;
         let mut steps = self.steps_in(scope)?;
@@ -394,8 +376,7 @@ impl ProjectState {
         Ok(messages)
     }
 
-    /// The Interactive Components of `scope`'s messages by message, each message's in the
-    /// order they were added; with `data` `null` unless `with_data` is set.
+    /// By message, in the order added; `data` is `null` unless `with_data` is set.
     fn components_in(
         &self,
         scope: Scope,
@@ -420,7 +401,7 @@ impl ProjectState {
         Ok(components)
     }
 
-    /// The Steps each of `scope`'s replies has started, by message, in order.
+    /// Started Steps by message, in order.
     fn steps_in(&self, scope: Scope) -> AppResult<HashMap<Uuid, Vec<MessageStep>>> {
         let mut stmt = self.conn.prepare(&format!(
             "SELECT s.message_id, s.step_id, s.type, s.name, s.output, s.done \
@@ -450,8 +431,7 @@ impl ProjectState {
         Ok(steps)
     }
 
-    /// The position, from 0, of the latest run of `step_id` among `message_id`'s started
-    /// Steps; `None` when that Step has not started.
+    /// 0-based index of `step_id`'s latest run among started Steps; `None` if it has not started.
     pub fn latest_step_index(&self, message_id: Uuid, step_id: &str) -> AppResult<Option<u32>> {
         let position: Option<u32> = self.conn.query_row(
             "SELECT MAX(position) FROM message_steps WHERE message_id = ?1 AND step_id = ?2",
@@ -461,8 +441,7 @@ impl ProjectState {
         Ok(position.map(|p| p - 1))
     }
 
-    /// The Interactive Component `component_id` with its data, when a message of the
-    /// Conversation holds it.
+    /// `None` unless a message of the Conversation holds it.
     pub fn conversation_component(
         &self,
         conversation_id: Uuid,
@@ -483,9 +462,7 @@ impl ProjectState {
         raw.map(component).transpose()
     }
 
-    /// The `table` and `chart` components of the Conversation shown from a file, by that
-    /// file's Asset ID (their `source_id`), each file's newest first, as `(kind, title)`.
-    /// Only `source_id` and `title` are read from each component's data.
+    /// `(kind, title)` of tables and charts by source Asset ID, newest first; reads no other data.
     pub fn file_components(
         &self,
         conversation_id: Uuid,
@@ -514,8 +491,7 @@ impl ProjectState {
         Ok(shown)
     }
 
-    /// Stores `content` as `message_id`'s only debug record of `kind`, at position 0, replacing
-    /// the one it had.
+    /// Replaces the message's only debug record of `kind`.
     pub fn put_debug_record(
         &self,
         conversation_id: Uuid,
@@ -538,7 +514,6 @@ impl ProjectState {
         Ok(())
     }
 
-    /// Stores `content` as `message_id`'s next debug record of `kind`, after the ones it has.
     pub fn append_debug_record(
         &self,
         conversation_id: Uuid,
@@ -562,7 +537,7 @@ impl ProjectState {
         Ok(())
     }
 
-    /// `message_id`'s debug records of `kind`, in the order they were written.
+    /// In the order they were written.
     pub fn debug_records(&self, message_id: Uuid, kind: &str) -> AppResult<Vec<Value>> {
         let mut statement = self.conn.prepare(
             "SELECT content FROM debug_records WHERE message_id = ?1 AND kind = ?2 \
@@ -578,19 +553,17 @@ impl ProjectState {
         Ok(records)
     }
 
-    /// Deletes every debug record of the Project.
     pub fn clear_debug_records(&self) -> AppResult<()> {
         self.conn.execute("DELETE FROM debug_records", [])?;
         Ok(())
     }
 
-    /// IDs of messages still streaming, optionally limited to one Conversation.
+    /// `(conversation, message)` IDs.
     pub fn streaming_messages(&self, conversation_id: Option<Uuid>) -> AppResult<Vec<(Uuid, Uuid)>> {
         self.messages_with_status(&[MessageStatus::Streaming], conversation_id)
     }
 
-    /// `(conversation, message)` IDs of the messages whose status is one of `statuses`,
-    /// optionally limited to one Conversation.
+    /// `(conversation, message)` IDs.
     pub fn messages_with_status(
         &self,
         statuses: &[MessageStatus],
@@ -617,17 +590,14 @@ impl ProjectState {
         Ok(result)
     }
 
-    /// Every message of the Conversation, in the order they were created. Their components
-    /// carry only `text` (`data` is `null`), which is all a history needs.
+    /// In creation order; components carry only `text`, which is all a history needs.
     pub fn conversation_messages(&self, conversation_id: Uuid) -> AppResult<Vec<Message>> {
         let messages = self.messages_in(Scope::Conversation(conversation_id), false)?;
         Ok(messages.into_iter().map(|(_, message)| message).collect())
     }
 
-    /// Every message of the Conversation as the UI shows it, in the order they were created:
-    /// the stored messages with their components' data and reactions, plus the failures,
-    /// Jev's answers and progress that only events record. Matches what folding the
-    /// Conversation's events gives (`src/protocol/eventStore.ts`).
+    /// Messages as the UI shows them, including what only events record; must match the fold in
+    /// `src/protocol/eventStore.ts`.
     fn message_views(&self, conversation_id: Uuid) -> AppResult<Vec<MessageView>> {
         let messages = self.messages_in(Scope::Conversation(conversation_id), true)?;
         let created: HashMap<String, i64> = self
@@ -650,8 +620,7 @@ impl ProjectState {
         let index: HashMap<Uuid, usize> =
             views.iter().enumerate().map(|(i, v)| (v.message.id, i)).collect();
 
-        // A reaction removed and added again is a new row, so `rowid` order is the order in
-        // which the UI adds them.
+        // A re-added reaction is a new row, so `rowid` order is the UI's order.
         let mut stmt = self.conn.prepare(
             "SELECT r.message_id, r.emoji, r.by_kind, r.by_id FROM reactions r \
              JOIN messages m ON m.id = r.message_id WHERE m.conversation_id = ?1 \
@@ -696,8 +665,7 @@ impl ProjectState {
                         views[i].failure = Some(error);
                     }
                 }
-                // Pausing clears a reply's progress; it stays empty after resuming until the
-                // next progress event.
+                // Progress stays empty after resuming until the next progress event.
                 EventKind::MessagePaused { message_id } => {
                     paused.insert(message_id);
                     if let Some(i) = view(&message_id) {
@@ -761,14 +729,13 @@ impl Scope {
     }
 }
 
-/// The columns of a `components` row `c` that `component_row` reads; `data` reads as `null`
-/// unless `with_data` is set.
+/// The columns `component_row` reads; `data` reads as `null` unless `with_data` is set.
 fn component_columns(with_data: bool) -> String {
     let data = if with_data { "c.data" } else { "'null'" };
     format!("c.id, c.kind, c.version, {data}, c.text, c.answer, c.step_index")
 }
 
-/// The raw `component_columns`, starting at column `first`.
+/// The raw values of `component_columns`, in order.
 type ComponentRow = (String, String, u32, String, String, Option<String>, Option<u32>);
 
 fn component_row(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<ComponentRow> {
@@ -825,8 +792,7 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
                 params![message_id.to_string(), text],
             )?;
         }
-        // Progress has no projection: opening a Conversation reads it from its events
-        // (`message_views`), as it does a failure's details.
+        // No projection: `message_views` reads progress from the events.
         EventKind::MessageProgress { .. } => {}
         EventKind::MessagePaused { message_id } => {
             tx.execute(
@@ -954,8 +920,7 @@ pub mod test_support {
             self.0.lock().unwrap().clone()
         }
 
-        /// The delivered events, once at least `count` arrived and no more followed within a
-        /// few batch windows; panics after two seconds without `count`.
+        /// Waits for `count` events and a few quiet batch windows; panics after two seconds.
         pub fn settled(&self, count: usize) -> Vec<Event> {
             let start = std::time::Instant::now();
             while self.events().len() < count {
@@ -1086,8 +1051,7 @@ mod tests {
         assert_eq!(project.lock().subscription_count(), 0);
     }
 
-    /// Takes the Project lock on every delivery, which would deadlock if delivery ran under
-    /// that lock.
+    /// Takes the Project lock on delivery, so it deadlocks if delivery runs under that lock.
     struct Locking(Arc<Project>, Collector);
 
     impl EventSink for Locking {
@@ -1155,8 +1119,7 @@ mod tests {
         let opened = project.open(conversation, Box::new(Collector::default())).unwrap();
         let mut opened = serde_json::to_value(&opened).unwrap();
         assert_eq!(opened["last_seq"], fixture["opened"]["lastSeq"]);
-        // Persisting stamps events with the current time rather than the fixture's `ts`, so
-        // `created_at` is checked for presence and left out of the comparison.
+        // Persisting stamps the current time, so `created_at` is only checked for presence.
         let mut expected = fixture["opened"]["messages"].clone();
         for list in [&mut opened["messages"], &mut expected] {
             for message in list.as_array_mut().unwrap() {

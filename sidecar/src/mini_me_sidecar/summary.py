@@ -1,6 +1,5 @@
-"""Short texts written from one piece of material by one model call: the Project Overview's
-summary of its Conversations, and a Conversation's title from its first message. Each
-`summary.start` gets exactly one `summary.done` or `summary.error`."""
+"""One model call per `summary.start`: an Overview summary, a Conversation title or a model
+test. Each gets exactly one `summary.done` or `summary.error`."""
 
 import asyncio
 import sys
@@ -44,18 +43,16 @@ TITLE_RULE = (
     "formatting."
 )
 
-# The longest title kept, in characters. A longer one is cut at a word, never in the middle of one.
+# In characters; `clean_title` cuts a longer title.
 MAX_TITLE_CHARS = 60
 
 
 def system_prompt(kind: str = "overview") -> str:
-    """Who the model works for, then how to write the summary or the title."""
     return f"{RESEARCH_CONTEXT} {TITLE_RULE if kind == 'title' else SUMMARY_RULE}"
 
 
 def clean_title(text: str) -> str:
-    """The first line of a model's `text` as a title: without surrounding quotes, a closing full
-    stop or extra spaces, and if longer than `MAX_TITLE_CHARS`, cut after a whole word."""
+    """The first line of `text`, unquoted, without a closing full stop, cut to `MAX_TITLE_CHARS`."""
     line = next((l for l in text.strip().splitlines() if l.strip()), "")
     line = line.strip().strip("\"'“”‘’«»`*#").strip().rstrip(".").strip()
     if len(line) > MAX_TITLE_CHARS:
@@ -73,8 +70,7 @@ class ModelTest(BaseModel):
 
 
 async def _test_model(chat: Any, model: Model) -> str:
-    """"ok" when `model` calls the tool it is offered, which Mini-Mes need of every model;
-    otherwise raises why it did not."""
+    """"ok" when `model` calls the tool offered, as Mini-Mes need; else `tools_unsupported`."""
     turns = [("system", "Call the tool you are given."), ("human", "Call it now with ok true.")]
     if not isinstance(await structured_answer(chat, ModelTest, turns), ModelTest):
         raise TraitError(

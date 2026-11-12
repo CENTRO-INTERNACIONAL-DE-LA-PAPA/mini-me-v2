@@ -1,8 +1,7 @@
 import { createCn } from "cn/config";
 
-// The theme in src/index.css adds these font sizes, radii and shadows. Without registering
-// them, `text-ui` would be taken for a text colour and dropped when merged with
-// `text-foreground`, and a `rounded-card` passed in would not replace a component's own radius.
+// Registers the theme's font sizes, radii and shadows (src/index.css): otherwise `text-ui` reads
+// as a colour and is dropped beside `text-foreground`, and a passed `rounded-card` would not win.
 export const cn = createCn({
   extend: {
     classGroups: {

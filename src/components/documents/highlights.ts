@@ -111,8 +111,7 @@ function decorations(state: EditorState): DecorationSet {
   return Decoration.set(marks, true);
 }
 
-/** The threads' passages and number badges in the source, following their placements as the
- * user edits. */
+/** The threads' passages and number badges in the source, following their placements. */
 export const threadHighlights = [
   highlighted,
   StateField.define<DecorationSet>({

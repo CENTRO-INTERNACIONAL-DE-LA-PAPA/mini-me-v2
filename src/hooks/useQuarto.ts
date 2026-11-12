@@ -4,8 +4,7 @@ import { sharedValue } from "./sharedValue";
 
 const quarto = sharedValue<QuartoStatus | null>(() => api.quartoStatus(), null);
 
-/** The user's Quarto, which documents need, as looked up when the app started; null until the
- * app answers. */
+/** The user's Quarto, which documents need, as looked up at start; null until the app answers. */
 export const useQuarto = quarto.use;
 
 /** Looks for Quarto again and shows the result wherever `useQuarto` is used. */

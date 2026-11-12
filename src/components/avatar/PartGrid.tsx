@@ -12,7 +12,6 @@ interface GridProps {
   onSelect: (id: string | null) => void;
 }
 
-// An option is a square outlined tile; the chosen one is outlined in ink.
 const TILE =
   "aspect-square h-auto w-full flex-col gap-1 rounded-card border-border bg-card py-2 font-normal hover:bg-muted aria-pressed:border-foreground aria-pressed:bg-card aria-pressed:text-foreground";
 

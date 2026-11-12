@@ -1,7 +1,6 @@
-//! The check an Interactive Component from a Trait passes before it is stored. Each kind is
-//! hand-coded in the UI (`src/components/interactive/<kind>.tsx`); which kinds a Trait adds
-//! is up to the show tools its adapter uses, so the core does not check the kind against the
-//! Trait.
+//! The check an Interactive Component from a Trait passes before it is stored. Each kind is drawn
+//! by `src/components/interactive/<kind>.tsx`; the kind is not checked against the Trait, since
+//! its adapter's show tools decide which kinds it adds.
 
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -13,8 +12,7 @@ use crate::store::ProjectState;
 /// The most bytes a component's `data` may take as JSON.
 pub const MAX_DATA_BYTES: usize = 2 * 1024 * 1024;
 
-/// Kinds only the core creates, such as the approval a paused Workflow waits on and a
-/// reply's hand-off.
+/// Kinds only the core creates, such as a paused Workflow's approval and a reply's hand-off.
 const CORE_KINDS: [&str; 3] = ["approval", "document-edits", "hand-off"];
 
 /// Refuses a component of a kind only the core creates (`component_not_allowed`), and one
@@ -38,8 +36,7 @@ pub fn check(kind: &str, data: &Value, text: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// The Asset holding a `table` component's full table: its `source_id`, when that is an Asset
-/// of the Project.
+/// A `table`'s `source_id`, when it is an Asset of the Project.
 pub fn source_asset_id(state: &ProjectState, data: &Value) -> Option<Uuid> {
     data["source_id"]
         .as_str()

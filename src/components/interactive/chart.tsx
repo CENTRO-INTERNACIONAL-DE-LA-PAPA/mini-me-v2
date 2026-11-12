@@ -21,8 +21,7 @@ const numberFormat = new Intl.NumberFormat();
 
 const PALETTE = SERIES_TOKENS.map((name) => `var(${name})`);
 
-/** A chart in a card: its title, a toggle between its views, the figure, and a legend whose
- * entries hide and show series. */
+/** A chart card: title, view toggle, figure, and a legend that hides and shows series. */
 export function ChartView({
   data,
   color,

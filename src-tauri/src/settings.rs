@@ -30,15 +30,14 @@ pub struct Settings {
     pub debug: DebugSettings,
     #[serde(default)]
     pub home: HomeSettings,
-    /// Shows developer options when set; until the user sets it, it follows the app (on in
-    /// Mini-Me Dev, off in Mini-Me).
+    /// Shows developer options; while unset it follows the app (on in Mini-Me Dev, off in Mini-Me).
     #[serde(default)]
     pub developer_mode: Option<bool>,
     /// The Quarto program the user chose in Settings; when unset, the app looks for one.
     #[serde(default)]
     pub quarto_path: Option<String>,
-    /// The app version whose What's new was last shown, or that was running when the settings
-    /// were created. Settings from before this field existed hold none.
+    /// The version whose What's new was last shown, or that ran when settings were created; none
+    /// shows What's new on the next launch.
     #[serde(default)]
     pub last_seen_version: Option<String>,
     /// The feature flags whose key was entered, which are on in Mini-Me.
@@ -93,7 +92,7 @@ impl Default for RoutingSettings {
 }
 
 impl RoutingSettings {
-    /// Sets the threshold, clamped to 0..=1.
+    /// Clamped to 0..=1; a value that is not finite is refused.
     pub fn set_threshold(&mut self, threshold: f64) -> AppResult<()> {
         if !threshold.is_finite() {
             return Err(AppError::invalid_input("The threshold must be a number from 0 to 1."));
@@ -142,8 +141,8 @@ impl AiSettings {
 }
 
 impl Settings {
-    /// Loads the settings from `config_dir`, creating them with fresh IDs on first launch, when
-    /// the running `version` counts as already shown, since a new install has nothing to announce.
+    /// Creates settings with fresh IDs on first launch, recording `version` as shown: a new install
+    /// has nothing to announce.
     pub fn load_or_create(config_dir: &Path, version: &str) -> AppResult<Self> {
         let path = config_dir.join(FILE_NAME);
         if path.exists() {
@@ -187,14 +186,12 @@ impl Settings {
         true
     }
 
-    /// Whether developer options are shown, for an app that is (`dev_app`) or is not
-    /// Mini-Me Dev.
+    /// `dev_app` is whether this app is Mini-Me Dev.
     pub fn developer_mode(&self, dev_app: bool) -> bool {
         self.developer_mode.unwrap_or(dev_app)
     }
 
-    /// The parts of reply debug records runs collect, for an app that is (`dev_app`) or is not
-    /// Mini-Me Dev.
+    /// The reply debug parts runs collect; `dev_app` is whether this app is Mini-Me Dev.
     pub fn reply_debug(&self, dev_app: bool) -> DebugParts {
         let on = self.developer_mode(dev_app);
         DebugParts {
@@ -204,7 +201,7 @@ impl Settings {
         }
     }
 
-    /// The feature flags that are on, for an app that is (`dev_app`) or is not Mini-Me Dev.
+    /// The feature flags that are on; `dev_app` is whether this app is Mini-Me Dev.
     pub fn active_features(&self, dev_app: bool) -> Vec<&'static Feature> {
         features::active(FEATURES, &self.unlocked_features, &self.locked_features, dev_app)
     }

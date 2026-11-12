@@ -24,8 +24,7 @@ pub enum UpdateStatus {
 
 type StatusSink = Box<dyn Fn(&UpdateStatus) -> bool + Send>;
 
-/// Whole percent of `downloaded` out of `total`; `None` when the total is unknown. Reaches
-/// 100 only once everything has arrived.
+/// Whole percent of `downloaded` out of `total`, 100 only once complete; `None` without a total.
 fn percent(downloaded: u64, total: Option<u64>) -> Option<u8> {
     let total = total.filter(|&t| t > 0)?;
     Some((downloaded.min(total) * 100 / total) as u8)
@@ -79,8 +78,7 @@ impl Updates {
         self.status.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
-    /// Sends the current status to `sink` and then every change. `sink` returns `false`
-    /// when it is gone.
+    /// Sends the current status, then every change; `sink` returns `false` once gone.
     pub fn subscribe(&self, sink: StatusSink) {
         let status = self.status.lock().unwrap_or_else(|p| p.into_inner());
         if sink(&*status) {

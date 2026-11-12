@@ -78,10 +78,7 @@ const PAGES: Section<Page>[] = [
   { id: "about", name: "About", icon: InfoIcon },
 ];
 
-/** `onOpenAvatars` opens the avatar parts page, a developer option, `onOpenWhatsNew` the page
- * of the version's changes, `onOpenLicense` Mini-Me's license, and `onOpenThirdParty` the
- * third-party software page. Settings opens at `initialPage`, General unless given. `projectId`
- * is the open Project, whose debug records the Developer page can clear. */
+/** Settings, opening at `initialPage`; the Developer page can clear `projectId`'s debug records. */
 export function SettingsView({
   onOpenAvatars,
   onOpenWhatsNew,
@@ -203,8 +200,7 @@ function SettingRow({
   );
 }
 
-/** An account or key in Settings: a white outlined card, so the well-filled buttons and
- * inputs inside it stand out. */
+/** An account or key's card, outlined on white so the well-filled controls inside stand out. */
 function AccountCard({ render, children }: { render?: ReactElement; children: ReactNode }) {
   return (
     <Card render={render} className="gap-0 rounded-2xl border border-border bg-card px-4 py-3.5">
@@ -282,8 +278,7 @@ function DeveloperPage({
   );
 }
 
-/** Turns feature flags on with their keys and lists the ones that are on, each of which can be
- * turned off again. */
+/** Turns feature flags on by key, and lists the ones that are on, each with Turn off. */
 function FeatureFlagsSection() {
   const flags = useFeatureFlags();
   const [key, setKey] = useState("");
@@ -609,7 +604,7 @@ function DeveloperModeRow() {
   );
 }
 
-/** The two institutions that make Mini-Me, as a lockup: both logos, one height, an × between. */
+/** The logos of the two institutions that make Mini-Me. */
 function Collaboration() {
   return (
     <figure className="flex flex-col items-center gap-4 py-8">
@@ -845,7 +840,6 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
           <Button type="submit" disabled={!changed}>
             Save
           </Button>
-          {/* Says how the test went; clicking outside closes it. */}
           <Popover open={tested !== null} onOpenChange={(open) => !open && setTested(null)}>
             <PopoverTrigger
               render={
@@ -993,8 +987,7 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
   );
 }
 
-/** The two switches for Jev's debug record under each message: its answers, and what was
- * sent to it. Each part is stored only while its switch is on. */
+/** Switches for Jev's debug record under each message; each part is stored only while on. */
 function JevDebugRows({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
   const [error, setError] = useState<{ part: keyof JevDebug; text: string } | null>(null);
 
@@ -1191,10 +1184,7 @@ function SidecarLogRow() {
   );
 }
 
-/**
- * A provider or service in a list: a letter tile, its name, whether its key is saved, and a
- * button that opens a field to add, replace or remove the key.
- */
+/** A provider or service: whether its key is saved, and a field to add, replace or remove it. */
 function KeyRow({
   account,
   saved,

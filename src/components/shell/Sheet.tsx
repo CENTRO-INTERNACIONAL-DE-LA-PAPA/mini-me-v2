@@ -19,8 +19,8 @@ export function MainSheet({ className, children }: { className?: string; childre
   );
 }
 
-/** A tool sheet beside the main sheet (To-do, Jobs, a Workflow, an inspector): a serif title,
- * an optional line under it, and a close button. Only one is open at a time. */
+/** A tool sheet beside the main sheet (Jobs, Comments, an inspector): a serif title, an optional
+ * line under it, and a close button. Only one is open at a time. */
 export function ToolSheet({
   title,
   meta,
@@ -105,7 +105,7 @@ export interface ToolOption<Id extends string> {
   id: Id;
   label: string;
   icon: LucideIcon;
-  /** Shown after the label, such as the number of open to-dos. */
+  /** Shown after the label, such as the number of running jobs. */
   count?: number;
 }
 

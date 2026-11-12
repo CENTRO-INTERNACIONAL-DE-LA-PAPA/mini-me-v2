@@ -20,7 +20,7 @@ const FEATURABLE: [&str; 2] = ["chart", "table"];
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Overview {
     pub conversations: i64,
-    /// The latest activity of any Conversation, in milliseconds; `None` without Conversations.
+    /// In milliseconds; `None` without Conversations.
     pub last_activity_at: Option<i64>,
     pub summary: Option<String>,
     pub summary_at: Option<i64>,
@@ -249,8 +249,7 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
     })
 }
 
-/// Features a chart or table on the Overview, replacing any other, or clears the featured
-/// component with `None`.
+/// Features a chart or table, replacing any other; `None` clears it.
 pub fn feature(project: &Project, component_id: Option<Uuid>) -> AppResult<()> {
     let state = project.lock();
     if let Some(id) = component_id {
@@ -279,7 +278,7 @@ pub fn feature(project: &Project, component_id: Option<Uuid>) -> AppResult<()> {
     Ok(())
 }
 
-/// Saves a summary the model wrote, with the time it was written in milliseconds.
+/// `at` is when it was written, in milliseconds.
 pub fn save_summary(project: &Project, summary: &str, at: i64) -> AppResult<()> {
     project.lock().conn.execute(
         "UPDATE overview SET summary = ?1, summary_at = ?2 WHERE id = 1",
@@ -288,10 +287,9 @@ pub fn save_summary(project: &Project, summary: &str, at: i64) -> AppResult<()> 
     Ok(())
 }
 
-/// The text a summary is written from: each Conversation's title and its messages as
-/// `You:` or `<Mini-Me name>:` lines, newest Conversation first. Conversations are added whole
-/// while the total stays within `budget` characters; the rest are left out. Messages without
-/// text stand in with their components' text. File contents are never included.
+/// Each Conversation's title and messages as `You:` or `<Mini-Me name>:` lines, newest first, added
+/// whole while within `budget` characters. Messages without text use their components' text; file
+/// contents are never included.
 pub fn summary_material(project: &Project, library: &Library, budget: usize) -> AppResult<String> {
     let state = project.lock();
     let conversations: Vec<(String, String)> = {
@@ -319,9 +317,8 @@ pub fn summary_material(project: &Project, library: &Library, budget: usize) -> 
     Ok(material.trim_end().to_string())
 }
 
-/// The text a document is drafted from: one Conversation's messages, oldest first, each as
-/// "<speaker>: <text>". When they exceed `budget` characters the oldest are left out, and a
-/// newest message longer than `budget` is cut to its first `budget` characters.
+/// One Conversation's messages, oldest first, as "<speaker>: <text>". Over `budget` characters the
+/// oldest are dropped, and a newest message longer than `budget` is cut to it.
 pub fn conversation_material(
     project: &Project,
     library: &Library,
@@ -345,8 +342,8 @@ pub fn conversation_material(
     Ok(kept.join("\n"))
 }
 
-/// A Conversation's messages as "<speaker>: <text>" lines, oldest first: the user is "You", a
-/// Mini-Me is its name, and a message with no text stands for its components' text.
+/// Messages as "<speaker>: <text>", oldest first, the user as "You"; a message without text uses
+/// its components' text.
 fn message_lines(
     state: &ProjectState,
     library: &Library,

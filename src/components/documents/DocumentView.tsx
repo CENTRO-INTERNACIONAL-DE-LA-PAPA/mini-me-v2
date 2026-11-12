@@ -89,10 +89,8 @@ const theme = EditorView.theme({
   },
 });
 
-/** A document across the whole main sheet: its Quarto source, edited and saved as the user
- * types, beside a preview rendered by the same engine as the PDF export, with the comment
- * threads on its passages in a sheet of their own. A document being drafted fills as Scribe
- * writes and can be edited once the draft ends. */
+/** A document's Quarto source, saved as the user types, beside a preview rendered like the PDF
+ * export, and its comment threads; a draft fills as Scribe writes, editable once it ends. */
 export function DocumentView({
   projectId,
   assetId,
@@ -158,8 +156,7 @@ export function DocumentView({
   const saveRef = useRef(save);
   saveRef.current = save;
 
-  /** Shows `next` as the source without saving it, with the threads' `placements` in it when
-   * given. */
+  /** Shows `next` as the source without saving it, with the threads' `placements` if given. */
   const replace = (next: string, placements?: Map<Uuid, Placement>) => {
     const editor = view.current;
     if (!editor) return;
@@ -340,7 +337,6 @@ export function DocumentView({
     if (left && left !== selected && thread?.comments === 0) void remove(left);
   }, [selected]);
 
-  /** Places `next` as the threads' placements in the source. */
   const place = (next: Map<Uuid, Placement>) =>
     view.current?.dispatch({ effects: setPlacements.of(next) });
 
@@ -394,9 +390,8 @@ export function DocumentView({
   const waiting = (ids: Uuid[]) =>
     threads.filter((t) => t.pending && ids.includes(t.conversation_id));
 
-  /** Accepts the waiting suggestion of each thread among `ids` in turn, as `accept` does one.
-   * Returns the threads left waiting because their edit conflicts with the user's or their
-   * passage is lost; any other failure stops it. */
+  /** Accepts each waiting suggestion among `ids` in turn, as `accept` does; returns the threads
+   * left waiting (edit conflicts or passage lost). Any other failure stops it. */
   async function acceptAll(ids: Uuid[]): Promise<Uuid[]> {
     const left: Uuid[] = [];
     for (const thread of waiting(ids)) {

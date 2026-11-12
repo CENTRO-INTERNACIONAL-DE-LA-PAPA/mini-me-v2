@@ -1,6 +1,5 @@
-"""Adapters for Ai2's Asta services: Paper Finder (*Find Papers*) and the Theorizer
-(*Theorize*). Both use the Ai2 account's access token, which the core refreshes; Asta's own
-token storage and CLI are never used."""
+"""Ai2's Asta Paper Finder and Theorizer. Both use the Ai2 access token the core refreshes,
+never Asta's own token storage or CLI."""
 
 import asyncio
 import json
@@ -31,16 +30,14 @@ MAX_SOURCES = 50
 COMPONENT_REFUSED = {"component_not_allowed", "invalid_component"}
 PAPER_FINDER_TIMEOUT_S = 300
 
-# The Theorizer's end-to-end skill: it finds papers, extracts evidence and forms theories.
-# Ai2 documents 3–8 minutes for a run, but real runs take 15–25 minutes.
+# The end-to-end skill. Ai2 documents 3–8 minutes a run, but real runs take 15–25 minutes.
 THEORIZER_SKILL = "literature-theory-generation"
 
 # Poll the Theorizer's task this often, and give up after this long.
 THEORIZER_POLL_S = 5.0
 THEORIZER_LIMIT_S = 60 * 60
 
-# A failed Asta request that may succeed later (a dropped connection, or a 5xx or 429 answer)
-# is tried again after each of these delays.
+# Retry delays for a failure that may pass: a dropped connection, a 5xx or a 429.
 RETRY_DELAYS_S = (2.0, 5.0)
 
 T = TypeVar("T")
@@ -59,8 +56,7 @@ class FindPapers(Adapter):
     )
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
-        # Asta's packages load only when a call runs, so the sidecar starts quickly and
-        # sessions that never use Asta never load them.
+        # Imported here so the sidecar starts quickly and sessions without Asta never load it.
         from asta.literature.client import AstaPaperFinder
         from asta.utils.config import get_api_config
 
@@ -113,8 +109,7 @@ class Theorize(Adapter):
         client = A2AClient(get_api_config("theorizer")["base_url"], api_key=token)
         ctx.progress("Starting the Theorizer (this can take 20 minutes or more)…")
 
-        # Naming the skill keeps the request from being routed to a narrower skill that takes
-        # the same input.
+        # Naming the skill keeps the request from going to a narrower skill with the same input.
         envelope = {
             "kind": THEORIZER_SKILL,
             "data": {"theory_query": str(input.get("text", ""))},
@@ -197,9 +192,8 @@ async def _token(ctx: CallContext) -> str:
 async def _call(
     ctx: CallContext, function: Callable[..., T], *args: Any, retry: bool = True, **kwargs: Any
 ) -> T:
-    """Runs one of Asta's blocking client calls off the event loop and turns its error into
-    one the user can act on. With `retry`, a failure that may pass is tried again after each
-    of `RETRY_DELAYS_S`; a cancelled call stops waiting and raises the last error."""
+    """Runs a blocking Asta call in a thread, failing with an error the user can act on. With
+    `retry`, a failure that may pass is retried after each `RETRY_DELAYS_S`, unless cancelled."""
     for delay in (*(RETRY_DELAYS_S if retry else ()), None):
         try:
             return await asyncio.to_thread(function, *args, **kwargs)
@@ -217,7 +211,7 @@ async def _call(
 
 
 async def _cancelled_within(ctx: CallContext, seconds: float) -> bool:
-    """Waits up to `seconds`, and whether the call was cancelled meanwhile."""
+    """Waits up to `seconds`; True when the call is cancelled meanwhile."""
     try:
         await asyncio.wait_for(ctx.cancelled.wait(), seconds)
         return True
@@ -226,8 +220,7 @@ async def _cancelled_within(ctx: CallContext, seconds: float) -> bool:
 
 
 def _status(error: BaseException) -> int | None:
-    """The HTTP status of an Asta client error: urllib's HTTPError raised directly, wrapped,
-    or carried as `code`."""
+    """The int `code` of `error` or its cause, as urllib's HTTPError carries the status."""
     for source in (error, error.__cause__):
         code = getattr(source, "code", None)
         if isinstance(code, int):
@@ -302,16 +295,14 @@ def _get(data: dict[str, Any], *keys: str) -> Any:
 
 
 def _summary(narrative: str) -> str:
-    """The verdict at the top of Paper Finder's `response_text`, such as "I found 18 papers
-    that look like perfect matches". The rest, after a `---` line, restates the query."""
+    """Paper Finder's verdict, before the `---` line that precedes a restated query."""
     return re.split(r"(?m)^\s*---+\s*$", narrative, maxsplit=1)[0].strip()
 
 
 async def _component_or_text(
     ctx: CallContext, show: Callable[[CallContext, Any, str], Awaitable[str]], data: Any, text: str
 ) -> None:
-    """Shows a component with the show tool `show`, or writes `text` below the reply's first
-    line when the core refuses the component."""
+    """Shows `data` with `show`, or writes `text` when the core refuses the component."""
     try:
         await show(ctx, data, text)
     except ToolError as error:
@@ -382,12 +373,8 @@ def _relevance(paper: dict[str, Any]) -> str:
 
 
 def theory_store(artifacts: list[dict[str, Any]]) -> tuple[dict[str, list[Any]], list[str]]:
-    """The Theorizer's Theory Store gathered by section (`theories`, `paperstore`,
-    `extractionresults`, …, names reduced by `_norm`), and the text parts of its artifacts.
-
-    The store arrives as parts that each hold some sections, and a section can appear in
-    several parts as it is updated; entries are merged by their ID, a later part replacing an
-    earlier one."""
+    """The Theory Store's entries by `_norm`ed section name, and the artifacts' text parts.
+    A section recurs across parts as it updates, so entries merge by ID, a later part winning."""
     sections: dict[str, dict[str, dict[str, Any]]] = {}
     texts: list[str] = []
     for artifact in artifacts:
@@ -415,9 +402,8 @@ def theory_store(artifacts: list[dict[str, Any]]) -> tuple[dict[str, list[Any]],
 
 
 def theories_data(store: dict[str, list[Any]]) -> dict[str, Any] | None:
-    """The `theories` version 1 data for a Theory Store: each theory's wording, statements
-    and supporting evidence, with `refs` numbering the cited papers in `references` in the
-    order they are first cited. None when the store holds no theories."""
+    """`theories` version 1 data, `refs` numbering papers in `references` by first citation.
+    None when the store holds no theories."""
     if not store.get("theories"):
         return None
     paper_of_evidence = {
@@ -473,8 +459,7 @@ def theories_data(store: dict[str, list[Any]]) -> dict[str, Any] | None:
 
 
 def theories_markdown(data: dict[str, Any]) -> str:
-    """Markdown for `theories` data in plain language: each theory, its statements with their
-    evidence cited by number, and the cited papers at the end."""
+    """Plain-language Markdown: theories, statements with numbered citations, then references."""
     lines: list[str] = []
     for number, theory in enumerate(data["theories"], start=1):
         lines += [f"## {number}. {theory['name']['plain']}"]
@@ -496,8 +481,7 @@ def theories_markdown(data: dict[str, Any]) -> str:
 
 
 def theories_reply(artifacts: list[dict[str, Any]]) -> str:
-    """The whole reply as Markdown: a line counting the theories, then `theories_markdown`,
-    or the artifacts' text when there are no theories."""
+    """A count line then `theories_markdown`, or the artifacts' text when there are no theories."""
     store, texts = theory_store(artifacts)
     data = theories_data(store)
     if data is None:
@@ -518,8 +502,7 @@ def theories_summary(data: dict[str, Any], store: dict[str, list[Any]]) -> str:
 
 
 def _norm(key: Any) -> str:
-    """A field name reduced to lowercase letters and digits, so `paper_id`, `paperId` and
-    `Paper ID` match: the Theory Store mixes snake_case and camelCase."""
+    """Lowercase letters and digits only, so `paper_id`, `paperId` and `Paper ID` match."""
     return "".join(c for c in str(key).lower() if c.isalnum())
 
 
@@ -562,8 +545,7 @@ def _paper_key(paper_id: Any) -> str:
 
 
 def _reference(paper: dict[str, Any]) -> dict[str, Any]:
-    """A cited paper as a `theories` reference: title, year and a DOI or Semantic Scholar
-    link."""
+    """A `theories` reference: title, year and a DOI or Semantic Scholar link."""
     metadata = _field(paper, "s2_metadata") or {}
     title = str(_field(paper, "title") or _field(metadata, "title") or "Untitled").strip()
     year = _field(paper, "publication_year") or _field(metadata, "year")
@@ -600,9 +582,8 @@ def _log_task(task: dict[str, Any]) -> None:
 
 
 def _log_shape(label: str, value: Any) -> None:
-    """Logs the keys (never the values) of a response, for checking against what the
-    adapters expect. A list's dict items are merged into one shape, and a dict with many
-    keys (records keyed by ID) shows only its first."""
+    """Logs a response's keys, never its values: a list's dicts merge into one shape, and a dict
+    of over 30 keys (records by ID) shows only its first."""
 
     def merge(into: dict[str, Any], entry: dict[str, Any]) -> None:
         for key, val in entry.items():

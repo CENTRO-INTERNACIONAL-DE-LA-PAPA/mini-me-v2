@@ -14,8 +14,7 @@ Frame = dict[str, Any]
 
 
 def redact(frame: Frame) -> Frame:
-    """A copy of `frame` that is safe to log: `core.response` results carrying a secret
-    `value` (the answer to `secret.get`) have it replaced."""
+    """A copy safe to log: a `core.response` result's secret `value` is replaced."""
     result = frame.get("result")
     if frame.get("type") == "core.response" and isinstance(result, dict) and "value" in result:
         return {**frame, "result": {**result, "value": REDACTED}}

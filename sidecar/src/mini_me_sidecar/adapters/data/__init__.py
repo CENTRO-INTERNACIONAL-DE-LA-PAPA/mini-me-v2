@@ -1,5 +1,4 @@
-"""The data Traits' adapters: fixed tools over CSV, TSV and Excel tables. The AI model only
-chooses entries from fixed lists; pandas and pointblank compute every result."""
+"""The data Traits: the model only picks from fixed lists; pandas and pointblank compute results."""
 
 from typing import Any
 
@@ -23,8 +22,7 @@ class ProfileData(Adapter):
     )
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
-        # Imported on demand: pandas and pointblank take about a second to load, and most
-        # calls never need them.
+        # Imported here: pandas and pointblank take a second to load, and most calls skip them.
         from mini_me_sidecar.adapters.data import replies
 
         await replies.profile(ctx, str(input.get("text", "")))

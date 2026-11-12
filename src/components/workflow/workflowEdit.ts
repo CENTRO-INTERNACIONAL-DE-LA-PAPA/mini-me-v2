@@ -1,8 +1,7 @@
 import type { WorkflowStep } from "../../protocol/types";
 import { nextStepId } from "../library/library";
 
-/** One level down from a list of Steps: into a branch of the Step at `step`, or into the
- * Steps of the loop at `step`. */
+/** One level down from a list of Steps: into a branch or the loop of the Step at `step`. */
 export type PathPart = { step: number; branch: number } | { step: number; loop: true };
 
 /** A list of Steps, by the path from the Workflow's top-level list (`[]`). */

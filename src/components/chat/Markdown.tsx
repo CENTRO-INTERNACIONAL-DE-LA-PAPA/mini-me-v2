@@ -114,10 +114,8 @@ const ELEMENTS: Components = {
   img: ({ src, alt }) => link(typeof src === "string" ? src : undefined, alt || src || "image"),
 };
 
-/**
- * A Mini-Me's text rendered as Markdown: raw HTML is shown as text, images as links, links
- * open in the browser, and Text Components stay chips.
- */
+/** A Mini-Me's text as Markdown: raw HTML shows as text, images as links, links open in the
+ * browser, and Text Components stay chips. */
 export const Markdown = memo(
   function Markdown({
     content,
@@ -164,9 +162,8 @@ export const Markdown = memo(
       </div>
     );
   },
-  // `onOpenAsset` is left out: it only changes with its message's re-render, and every
-  // instance of it opens the same Asset in the same Project, so a finished reply isn't parsed
-  // again.
+  // `onOpenAsset` is left out so a finished reply isn't parsed again: it changes only with its
+  // message's re-render, and every instance opens the same Asset in the same Project.
   (before, after) =>
     before.content === after.content &&
     before.textComponents === after.textComponents &&

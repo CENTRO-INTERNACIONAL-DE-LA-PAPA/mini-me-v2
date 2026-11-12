@@ -10,5 +10,5 @@ const replyDebug = sharedValue<ReplyDebugSettings>(
 /** The reply debug settings; all off until they have loaded. */
 export const useReplyDebug = replyDebug.use;
 
-/** Shows `settings` wherever `useReplyDebug` is used; Settings calls it after a change. */
+/** Shows `settings` wherever `useReplyDebug` is used. */
 export const refreshReplyDebug = replyDebug.show;

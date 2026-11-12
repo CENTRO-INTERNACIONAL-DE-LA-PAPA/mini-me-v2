@@ -134,8 +134,7 @@ export const MessageItem = memo(function MessageItem({
     </div>
   );
 
-  // A white pill per emoji over the bubble's bottom-left corner, with the avatars of the
-  // Mini-Mes that reacted with it; the tooltip names every reactor.
+  // One pill per emoji with the avatars of the Mini-Mes that reacted; the tooltip names them all.
   const reactionPills = counts.size > 0 && (
     <ul aria-label="Reactions" className="pointer-events-none absolute -bottom-3 left-3 flex gap-1">
       {[...counts].map(([emoji, count]) => {

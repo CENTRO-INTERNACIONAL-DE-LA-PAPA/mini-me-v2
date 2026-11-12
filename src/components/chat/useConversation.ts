@@ -3,8 +3,7 @@ import { api, errorMessage } from "../../api";
 import { ConversationStore } from "../../protocol/eventStore";
 import type { ProtocolEvent } from "../../protocol/types";
 
-/** A Conversation's messages, kept current as its events arrive, and why it could not be
- * opened. A comment thread is a Conversation too, so its card uses this as well. */
+/** A Conversation's messages, kept current as events arrive, and why it could not be opened. */
 export function useConversation(projectId: string, conversationId: string) {
   const store = useMemo(() => new ConversationStore(), [projectId, conversationId]);
   const [error, setError] = useState<string | null>(null);

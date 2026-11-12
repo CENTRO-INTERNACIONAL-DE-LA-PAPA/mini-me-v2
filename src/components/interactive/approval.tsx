@@ -9,8 +9,7 @@ interface ApprovalData {
   prompt?: string;
 }
 
-/** Whether an approval asks, or what it was answered; `closed` when its reply ended first. A
- * reply shows the component only while it asks. */
+/** Whether an approval asks, or what it was answered; `closed` when its reply ended first. */
 export function approvalState(
   answer: unknown,
   replyStatus: RendererProps["replyStatus"],
@@ -21,8 +20,7 @@ export function approvalState(
   return replyStatus === "paused" ? "asking" : "closed";
 }
 
-/** A Workflow's approval Step while the reply waits: its prompt, with Approve and Reject.
- * Draws nothing once answered or once the reply ended. */
+/** A Workflow's approval Step with Approve and Reject; draws nothing unless it is asking. */
 function Approval({ data, answer, projectId, messageId, componentId, replyStatus }: RendererProps) {
   const { prompt } = (data ?? {}) as ApprovalData;
   const [sending, setSending] = useState(false);

@@ -19,13 +19,11 @@ use crate::store::{Project, ProjectState};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AssetOrigin {
-    /// A file of a dataset in CIP's Dataverse: its file ID there, the dataset's persistent ID,
-    /// title and web address.
+    /// A Dataverse file: its file ID there, and its dataset's persistent ID, title and web address.
     Dataverse { file_id: u64, dataset_id: String, title: String, url: String },
 }
 
-/// Copies a file the user picked into the Project and registers it as added by `user`. The
-/// original file is only read.
+/// Copies a file the user picked into the Project; the original is only read.
 pub fn import(project: &Project, source: &Path, user: &Author) -> AppResult<AssetRef> {
     let name = source
         .file_name()
@@ -35,8 +33,7 @@ pub fn import(project: &Project, source: &Path, user: &Author) -> AppResult<Asse
     copy_in(project, source, &name, ("upload", user), None)
 }
 
-/// Copies the downloaded file at `source` into the Project as `name`, added by `user`, and
-/// records where it came from.
+/// Copies a downloaded file into the Project as `name` and records where it came from.
 pub fn import_downloaded(
     project: &Project,
     source: &Path,
@@ -51,7 +48,7 @@ pub fn import_downloaded(
     copy_in(project, source, name, (kind, user), Some(origin))
 }
 
-/// The Assets downloaded from CIP's Dataverse, by their file ID there.
+/// Assets downloaded from CIP's Dataverse, keyed by their file ID there.
 pub fn dataverse_files(state: &ProjectState) -> AppResult<HashMap<u64, AssetRef>> {
     let mut stmt = state.conn.prepare(
         "SELECT id, name, media_type, size_bytes, origin FROM assets \
@@ -100,9 +97,8 @@ fn copy_in(
     })
 }
 
-/// Imports the files of `paths` that the user dropped on the window. Every path must be one of
-/// `dropped`, the paths the operating system reported for the latest drop, so the UI cannot
-/// name a file of its own; folders are skipped.
+/// Skips folders. Every path must be one of `dropped`, the paths the OS reported for the latest
+/// drop, so the UI cannot name a file of its own.
 pub fn import_dropped(
     project: &Project,
     paths: &[PathBuf],
@@ -121,8 +117,7 @@ pub fn import_dropped(
 /// Media types every webview the app runs in can draw as an image.
 pub const THUMBNAIL_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
-/// The media type and bytes of an image Asset, for its thumbnail. Other media types are
-/// refused.
+/// An image Asset's media type and bytes, for its thumbnail; other media types are refused.
 pub fn read_image(project: &Project, id: Uuid) -> AppResult<(String, Vec<u8>)> {
     let asset = find(&project.lock(), id)?;
     if !THUMBNAIL_TYPES.contains(&asset.media_type.as_str()) {
@@ -140,9 +135,8 @@ const WINDOWS_DEVICES: &[&str] = &[
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
-/// Refuses a name for a stored Asset that is empty, longer than 255 characters, or could
-/// leave its folder or fail on Windows: `.` or `..`, path separators, control characters, the
-/// characters Windows forbids, a Windows device name, and a trailing dot or space.
+/// Refuses an Asset name that is empty, over 255 characters, or could leave its folder or fail on
+/// Windows.
 pub fn check_name(name: &str) -> AppResult<()> {
     let stem = name.split('.').next().unwrap_or_default().trim_end();
     let invalid = name.is_empty()
@@ -162,8 +156,8 @@ pub fn check_name(name: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Stores a file the app made, such as a Trait's output, as a `generated` Asset added by
-/// `author`. `media_type` falls back to one guessed from the name when empty.
+/// Stores a file the app made, such as a Trait's output, as a `generated` Asset. An empty
+/// `media_type` is guessed from the name.
 pub fn write_generated(
     project: &Project,
     name: &str,
@@ -174,8 +168,7 @@ pub fn write_generated(
     store(project, name, media_type, bytes, ("generated", author))
 }
 
-/// Stores bytes the user pasted or started, such as a blank document, as an `upload` Asset
-/// named `name` and added by `user`.
+/// Stores bytes the user pasted or started, such as a blank document, as an `upload` Asset.
 pub fn import_bytes(
     project: &Project,
     name: &str,
@@ -186,9 +179,8 @@ pub fn import_bytes(
     store(project, name, media_type, bytes, ("upload", user))
 }
 
-/// The file name a table's rows are saved under: its title made safe for a file name, or
-/// `Table` without one, with `.csv`. A title that is a table file's name, as for a table shown
-/// from a file, loses its extension, so `trial.csv` is not saved as `trial.csv.csv`.
+/// The title made safe plus `.csv`, or `Table.csv` without one. A title that is a table file's name
+/// loses its extension, so `trial.csv` is not saved as `trial.csv.csv`.
 pub fn table_file_name(title: &str) -> String {
     let title = title.trim();
     let lower = title.to_lowercase();
@@ -204,8 +196,7 @@ pub fn table_file_name(title: &str) -> String {
     format!("{stem}.csv")
 }
 
-/// The name of a pasted image: the clipboard's file name when it gives a usable one, else
-/// `Pasted image` with the usual extension of `media_type`.
+/// The clipboard's file name when usable, else `Pasted image` with `media_type`'s usual extension.
 pub fn pasted_name(clipboard_name: &str, media_type: &str) -> String {
     let clipboard_name = clipboard_name.trim();
     if !clipboard_name.is_empty() && check_name(clipboard_name).is_ok() {
@@ -221,8 +212,8 @@ pub fn pasted_name(clipboard_name: &str, media_type: &str) -> String {
     }
 }
 
-/// Writes `bytes` to a new folder under `assets` and registers them with their `source` and
-/// author. `media_type` falls back to one guessed from the name when empty.
+/// Writes `bytes` to a new folder under `assets` and registers them. An empty `media_type` is
+/// guessed from the name.
 fn store(
     project: &Project,
     name: &str,
@@ -249,8 +240,7 @@ fn store(
     })
 }
 
-/// The name that `typed` gives a file now called `current`: the extension stays, whether or not
-/// `typed` repeats it.
+/// The new name for `current`: its extension stays, whether or not `typed` repeats it.
 fn renamed(current: &str, typed: &str) -> String {
     let typed = typed.trim();
     let Some(extension) = Path::new(current).extension().and_then(|e| e.to_str()) else {
@@ -266,8 +256,7 @@ fn renamed(current: &str, typed: &str) -> String {
     format!("{stem}{dotted}")
 }
 
-/// Renames the file `id`, keeping its extension, and returns it. The file keeps its ID, so
-/// references to it keep working.
+/// Keeps the extension and the ID, so references to the file keep working.
 pub fn rename(project: &Project, id: Uuid, typed: &str) -> AppResult<AssetRef> {
     let current = find(&project.lock(), id)?;
     let name = renamed(&current.name, typed);
@@ -294,8 +283,8 @@ pub fn rename(project: &Project, id: Uuid, typed: &str) -> AppResult<AssetRef> {
     Ok(AssetRef { name, ..current })
 }
 
-/// The first of "<stem> copy", "<stem> copy 2", ... that no name in `taken` has, with
-/// `extension` after it. A stem that already ends in " copy" or " copy N" is not extended again.
+/// The first of "<stem> copy", "<stem> copy 2", ... not in `taken`, with `extension`. A stem that
+/// already ends in " copy" or " copy N" is not extended again.
 fn copy_name(stem: &str, extension: Option<&str>, taken: &[String]) -> String {
     let base = match stem.rsplit_once(" copy") {
         Some((base, rest)) if rest.is_empty() || rest.trim().parse::<u32>().is_ok() => base,
@@ -314,9 +303,8 @@ fn copy_name(stem: &str, extension: Option<&str>, taken: &[String]) -> String {
         .expect("an unbounded range always yields a free name")
 }
 
-/// Adds a copy of the file `id` named "<name> copy" before its extension, numbered when that name
-/// is taken, added by `user`. Only the bytes are copied: a document's comment threads stay with
-/// the original.
+/// Adds "<name> copy", numbered when taken. Only the bytes are copied: a document's comment threads
+/// stay with the original.
 pub fn duplicate(project: &Project, id: Uuid, user: &Author) -> AppResult<AssetRef> {
     let asset = find(&project.lock(), id)?;
     let bytes = std::fs::read(file_path(project, id)?)?;
@@ -327,7 +315,7 @@ pub fn duplicate(project: &Project, id: Uuid, user: &Author) -> AppResult<AssetR
     import_bytes(project, &name, &asset.media_type, &bytes, user)
 }
 
-/// Deletes the file `id` with its folder, and the comment threads of a document.
+/// Deletes the file with its folder, and a document's comment threads.
 pub fn delete(project: &Project, id: Uuid) -> AppResult<()> {
     let threads: Vec<String> = {
         let state = project.lock();
@@ -390,7 +378,7 @@ fn register(
     Ok(asset)
 }
 
-/// Looks up an Asset by ID, failing with `not_found` if it is not in this Project.
+/// Fails with `not_found` if the Asset is not in this Project.
 pub fn find(state: &ProjectState, id: Uuid) -> AppResult<AssetRef> {
     state
         .conn
@@ -446,20 +434,18 @@ pub fn list(project: &Project, query: Option<&str>) -> AppResult<Vec<AssetRef>> 
 pub struct FileEntry {
     #[serde(flatten)]
     pub asset: AssetRef,
-    /// `upload` for a file the user imported or started, `generated` for one the app made,
-    /// such as a Mini-Me's output or an exported PDF, `dataverse` for one downloaded from CIP's
-    /// Dataverse.
+    /// `upload` (imported or started by the user), `generated` (made by the app, such as a
+    /// Mini-Me's output or an exported PDF) or `dataverse`.
     pub source: String,
     /// Where a downloaded file came from.
     pub origin: Option<AssetOrigin>,
-    /// When the Asset was registered, in milliseconds.
+    /// When the Asset was registered, in milliseconds since the epoch.
     pub created_at: i64,
-    /// When its file last changed, in milliseconds; none when the file is missing.
+    /// When its file last changed, in milliseconds since the epoch; none when the file is missing.
     pub modified_at: Option<i64>,
-    /// Who added the Asset; none for a file whose author was never recorded.
+    /// None for a file whose author was never recorded.
     pub added_by: Option<Author>,
-    /// The Conversations whose messages attach or reference the Asset, in the order it first
-    /// appeared in them.
+    /// Conversations whose messages attach or reference the Asset, in order of first appearance.
     pub used_in: Vec<ConversationRef>,
 }
 
@@ -556,7 +542,7 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     Ok(entries)
 }
 
-/// Who added the Asset `id`; none for a file whose author was never recorded.
+/// None for a file whose author was never recorded.
 pub fn added_by(project: &Project, id: Uuid) -> AppResult<Option<Author>> {
     let (kind, author_id) = project.lock().conn.query_row(
         "SELECT added_by_kind, added_by_id FROM assets WHERE id = ?1",

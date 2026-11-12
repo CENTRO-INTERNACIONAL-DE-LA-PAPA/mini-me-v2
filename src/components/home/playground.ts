@@ -50,9 +50,8 @@ function avatar(miniMe: MiniMe): HTMLElement {
   return element;
 }
 
-/** A small physics game on `layer`: spawned Mini-Mes fall, pile up along the bottom and can
- * be grabbed and thrown; a click shows a Mini-Me's name. Presses reach it through `layer`'s
- * parent, outside the buttons, links and fields there. */
+/** A physics game on `layer`: Mini-Mes fall, pile up and can be thrown; a click shows a name.
+ * Presses come through `layer`'s parent, except on its buttons, links and fields. */
 export function startPlayground(layer: HTMLElement) {
   const sheet = layer.parentElement ?? layer;
   const engine = Engine.create();
@@ -132,8 +131,7 @@ export function startPlayground(layer: HTMLElement) {
     running = true;
   };
 
-  /** Drops `COPIES` of each of `miniMes` from above the layer, at random places across it,
-   * one above another. */
+  /** Drops `COPIES` of each Mini-Me from above the layer, stacked at random places across it. */
   const spawnAll = (miniMes: MiniMe[]) => {
     const dropped = Array.from({ length: COPIES }, () => miniMes).flat();
     dropped.forEach((miniMe, i) => {

@@ -3,9 +3,8 @@ import { statusLabel } from "../../lib/conversationStatus";
 import type { ConversationStatus } from "../../protocol/types";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 
-/** The line under a Conversation in the sidebar while its latest reply is running or waits: the
- * working Mini-Me's avatar and what it is doing, in its colours. A Mini-Me the library no longer
- * holds gets the neutral avatar and the neutral text colour. */
+/** The sidebar line under a Conversation while its reply runs or waits: the Mini-Me's avatar and
+ * what it does, in its colours; a Mini-Me the library no longer holds is drawn neutral. */
 export function ConversationStatusLine({ status }: { status: ConversationStatus }) {
   const miniMe = useMiniMes().find((m) => m.id === status.mini_me.id);
   return (

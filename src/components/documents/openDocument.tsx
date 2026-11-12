@@ -1,11 +1,9 @@
 import { createContext, useContext, type ReactNode } from "react";
 
-/** Opens the document `assetId` in the document view. `edits`, the threads a reply's suggested
- * edits opened, also shows the Comments sheet, with Accept all and Discard all for them. */
+/** Opens `assetId` in the document view, with the Comments sheet on `edits` when given. */
 type OpenDocument = (assetId: string, edits?: string[]) => void;
 
-// Provided around a Conversation, so a reply's document card and attachments can open a
-// document in the document view; elsewhere documents open in the system's default app.
+// Provided around a Conversation; elsewhere documents open in the system's default app.
 const OpenDocumentContext = createContext<OpenDocument | null>(null);
 
 export function OpenDocumentProvider({
