@@ -8,7 +8,7 @@ Evidence for each item (copies with `path:line`) is in the scan reports and in P
 - [x] 1.1 Add `sync.rs` with `locked(&mutex)` and `Watched<T>` and use them for every lock
   fallback and the five status-and-subscribers copies; add write-then-rename to `paths.rs` and
   stored-ID parsing to `store.rs`, used by their copies; verify with `cargo test`.
-- [ ] 1.2 In `ipc.rs`, one settings update-and-save helper, one `spawn_blocking` error wrapper and
+- [x] 1.2 In `ipc.rs`, one settings update-and-save helper, one `spawn_blocking` error wrapper and
   one "stop replies, then cancel runs" helper; split `runs::answer` into one function per method
   and `routing::route` into its steps, with `start_reply` taking a `Decision`; rename `NoAnswer`'s
   fields and replace `CallKind`/`Place::call`'s `Option` with an enum; verify with `cargo test`.
