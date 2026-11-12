@@ -19,7 +19,7 @@ Evidence for each item (copies with `path:line`) is in the scan reports and in P
 
 ## 2. UI
 
-- [ ] 2.1 One colour module in `minime/miniMeColors.ts` used by `chart-model.ts`, reading
+- [x] 2.1 One colour module in `minime/miniMeColors.ts` used by `chart-model.ts`, reading
   `oklch(...)` solids too, with a test that an `oklch` solid gets real wash and edge colours; one
   "open a file" hook; a `count(n, noun)` helper in `lib/format.ts`; a `useLoad` hook for the
   fetch-on-mount effects; verify with `npm test` and `npx tsc --noEmit`.

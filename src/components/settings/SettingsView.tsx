@@ -31,6 +31,7 @@ import {
 } from "react";
 import { getName, getVersion } from "@tauri-apps/api/app";
 import { api, errorMessage } from "../../api";
+import { useLoad } from "../../hooks/useLoad";
 import ai2Logo from "../../assets/logos/ai2-logo.png";
 import cipLogo from "../../assets/logos/cip-logo.png";
 import type {
@@ -624,17 +625,10 @@ function Collaboration() {
 
 /** Which app and version is running, such as "Mini-Me Dev 0.4.0". */
 function AboutRow({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
-  const [about, setAbout] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    Promise.all([getName(), getVersion()])
-      .then(([name, version]) => active && setAbout(`${name} ${version}`))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { value: about } = useLoad(
+    () => Promise.all([getName(), getVersion()]).then(([name, version]) => `${name} ${version}`),
+    [],
+  );
 
   return (
     <SettingRow label="Version">
@@ -647,19 +641,12 @@ function AboutRow({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
 }
 
 function HomeMiniMesRow() {
-  const [show, setShow] = useState<boolean | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    api
-      .getHomeSettings()
-      .then((home) => active && setShow(home.show_mini_mes))
-      .catch((e) => active && setError(errorMessage(e)));
-    return () => {
-      active = false;
-    };
-  }, []);
+  const {
+    value: show,
+    setValue: setShow,
+    error,
+    setError,
+  } = useLoad(() => api.getHomeSettings().then((home) => home.show_mini_mes), []);
 
   return (
     <SettingRow
@@ -675,7 +662,7 @@ function HomeMiniMesRow() {
       <Switch
         id="home-mini-mes"
         checked={show ?? false}
-        disabled={show === null}
+        disabled={show === undefined}
         onCheckedChange={async (checked) => {
           try {
             setError(null);

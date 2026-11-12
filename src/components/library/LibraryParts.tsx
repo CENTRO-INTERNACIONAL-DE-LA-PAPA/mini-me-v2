@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon, PuzzleIcon } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import type { MiniMe } from "../../protocol/types";
+import { count } from "../../lib/format";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 
@@ -236,7 +237,7 @@ export function MiniMeCard({
           <span className="line-clamp-3 text-ui text-pretty text-ink-2">{miniMe.description}</span>
         </span>
         <span className="flex items-center justify-between text-meta text-mm-ink">
-          {traitCount === 1 ? "1 Trait" : `${traitCount} Traits`}
+          {count(traitCount, "Trait")}
           <span className="flex items-center gap-1 font-medium">
             Open
             <ArrowRightIcon className="size-3.5" />

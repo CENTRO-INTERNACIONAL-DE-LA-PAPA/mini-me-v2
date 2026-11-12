@@ -1,4 +1,5 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useRef, type ReactNode } from "react";
+import { api } from "../../api";
 
 /** Opens `assetId` in the document view, with the Comments sheet on `edits` when given. */
 type OpenDocument = (assetId: string, edits?: string[]) => void;
@@ -18,3 +19,26 @@ export function OpenDocumentProvider({
 
 /** Opens a document in the document view, or null outside a Conversation. */
 export const useOpenDocument = () => useContext(OpenDocumentContext);
+
+interface OpenFileOptions {
+  /** Opens documents where there is no Conversation's document view. */
+  openDocument?: (assetId: string) => void;
+  /** Hears why the system's default app could not open a file; failures are dropped without it. */
+  onError?: (e: unknown) => void;
+}
+
+/** Opens a file in the document view when `asDocument` and a document view is at hand, else in
+ * the system's default app. */
+export function useOpenFile(projectId: string | undefined, options: OpenFileOptions = {}) {
+  const fromConversation = useOpenDocument();
+  const latest = useRef(options);
+  latest.current = options;
+  return useCallback(
+    (assetId: string, asDocument: boolean) => {
+      const { openDocument = fromConversation, onError = () => {} } = latest.current;
+      if (openDocument && asDocument) openDocument(assetId);
+      else if (projectId) void api.openAsset(projectId, assetId).catch(onError);
+    },
+    [projectId, fromConversation],
+  );
+}

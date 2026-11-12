@@ -1,7 +1,7 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { memo, useCallback, useState } from "react";
-import { api, errorMessage } from "../../api";
+import { errorMessage } from "../../api";
 import type { MessageView } from "../../protocol/eventStore";
 import { segments } from "../../protocol/references";
 import type { AssetRef, MiniMe } from "../../protocol/types";
@@ -21,7 +21,7 @@ import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useJevDebug } from "../../hooks/useJevDebug";
 import { useReplyDebug } from "../../hooks/useReplyDebug";
 import { useMiniMes } from "../../hooks/useMiniMes";
-import { useOpenDocument } from "../documents/openDocument";
+import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
 import { MetaParts } from "@/components/ui/meta-parts";
@@ -86,21 +86,13 @@ export const MessageItem = memo(function MessageItem({
     (c) => c.kind !== "approval" || approvalState(c.answer, message.status) === "asking",
   );
 
-  const openDocument = useOpenDocument();
+  const openFile = useOpenFile(projectId, { onError: (e) => setError(errorMessage(e)) });
   const open = useCallback(
-    async (assetId: string) => {
+    (assetId: string) => {
       const name = message.attachments.find((a) => a.id === assetId)?.name;
-      if (openDocument && name && isDocument(name)) {
-        openDocument(assetId);
-        return;
-      }
-      try {
-        await api.openAsset(projectId, assetId);
-      } catch (e) {
-        setError(errorMessage(e));
-      }
+      openFile(assetId, !!name && isDocument(name));
     },
-    [projectId, message.attachments, openDocument],
+    [message.attachments, openFile],
   );
 
   const status = STATUS_LABEL[message.status];

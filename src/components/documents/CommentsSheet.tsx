@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { ChevronDownIcon, ChevronLeftIcon, ChevronUpIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "../../api";
-import { formatClock } from "../../lib/format";
+import { count, formatClock } from "../../lib/format";
 import type { CommentThread, Component, Message, Uuid } from "../../protocol/types";
 import { Composer } from "../chat/Composer";
 import { MessageItem } from "../chat/MessageItem";
@@ -372,9 +372,7 @@ function ThreadView({
                   : []
             }
             remove={{
-              question: `Delete this thread and its ${thread.comments} comment${
-                thread.comments === 1 ? "" : "s"
-              }?`,
+              question: `Delete this thread and its ${count(thread.comments, "comment")}?`,
               onDelete: async () => onDelete(),
             }}
           />

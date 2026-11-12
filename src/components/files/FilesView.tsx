@@ -12,13 +12,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileIcon, FileTextIcon, ImageIcon, SearchIcon, Table2Icon, UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { DOTS_HOVER } from "../shell/ItemMenu";
+import { useOpenFile } from "../documents/openDocument";
 import { FileMenu } from "./FileMenu";
 import { api, errorMessage } from "../../api";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { initials } from "../../lib/names";
 import type { FileEntry, ProjectSummary } from "../../protocol/types";
 import { fileKind, isDocument, type FileKind } from "./files";
-import { formatRelative, formatSize } from "../../lib/format";
+import { count, formatRelative, formatSize } from "../../lib/format";
 import { FileMark } from "./FileMark";
 import { surfaceStyle } from "../minime/miniMeColors";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
@@ -57,6 +58,10 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
   const [tab, setTab] = useState<Tab>("all");
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const open = useOpenFile(project.id, {
+    openDocument: onOpenDocument,
+    onError: (e) => setError(errorMessage(e)),
+  });
 
   const refresh = useCallback(async () => {
     try {
@@ -82,13 +87,6 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
     }
   }
 
-  async function open(id: string) {
-    try {
-      await api.openAsset(project.id, id);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
 
   const needle = query.trim().toLowerCase();
   const shown = entries.filter(
@@ -103,7 +101,7 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
     <SheetPage
       title="Files"
       description={
-        `${entries.length} ${entries.length === 1 ? "file" : "files"} (${formatSize(total)})`
+        `${count(entries.length, "file")} (${formatSize(total)})`
       }
       actions={
         <Button onClick={upload}>
@@ -154,9 +152,7 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
                 key={entry.id}
                 projectId={project.id}
                 entry={entry}
-                onOpen={() =>
-                  isDocument(entry.name) ? onOpenDocument(entry.id) : open(entry.id)
-                }
+                onOpen={() => open(entry.id, isDocument(entry.name))}
                 onChanged={() => {
                   void refresh();
                   onChanged();
