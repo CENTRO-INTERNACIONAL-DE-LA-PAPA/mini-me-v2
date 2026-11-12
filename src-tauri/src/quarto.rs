@@ -529,13 +529,6 @@ mod tests {
     }
 
     #[test]
-    fn a_version_before_the_minimum_is_too_old() {
-        assert!((1, 9) < MINIMUM);
-        assert!((1, 10) >= MINIMUM);
-        assert!((2, 0) >= MINIMUM);
-    }
-
-    #[test]
     fn a_path_from_settings_wins_over_the_path_and_the_folders() {
         let dir = tempfile::tempdir().unwrap();
         let on_path = dir.path().join(NAMES[0]);

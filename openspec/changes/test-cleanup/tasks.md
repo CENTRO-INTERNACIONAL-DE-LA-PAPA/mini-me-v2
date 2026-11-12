@@ -23,7 +23,7 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 
 ## 3. Rust: version, dependency and trivial tests
 
-- [ ] 3.1 Delete the version tests: `sidecar.rs` `a_version_14_sidecar_is_refused_naming_both_versions`,
+- [x] 3.1 Delete the version tests: `sidecar.rs` `a_version_14_sidecar_is_refused_naming_both_versions`,
   `lib.rs` `the_app_version_is_the_one_in_package_json` with the `app_context()` wrapper it exists
   for, and `quarto.rs` `a_version_before_the_minimum_is_too_old`; verify with `cargo test`.
 - [ ] 3.2 Cut `db.rs` to the migration tests that change data (from versions 6, 10 and 11),
