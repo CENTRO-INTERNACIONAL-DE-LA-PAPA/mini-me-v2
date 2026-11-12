@@ -133,8 +133,7 @@ impl Ai2 {
         self.status.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
-    /// Sends the current status to `sink` and then every change. `sink` returns `false`
-    /// when it is gone.
+    /// Sends the current status, then every change; `sink` returns `false` once gone.
     pub fn subscribe(&self, sink: StatusSink) {
         let status = self.status.lock().unwrap_or_else(|p| p.into_inner());
         if sink(&*status) {
@@ -221,8 +220,7 @@ impl Ai2 {
         Ok(())
     }
 
-    /// A current access token, refreshed first when it is about to expire; `None` when not
-    /// signed in or when the refresh failed.
+    /// Refreshed first when about to expire; `None` when signed out or the refresh failed.
     pub fn access_token(&self) -> Option<String> {
         let _refreshing = self.refreshing.lock().unwrap_or_else(|p| p.into_inner());
         let tokens = self.store.load()?;

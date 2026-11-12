@@ -9,7 +9,7 @@ decision 1). Each is reviewed uncommitted before its commit. The scan's "Comment
 - [x] 1.1 Comments in `runs.rs`, `ipc.rs`, `store.rs`, `routing.rs`, `conversations.rs` and
   `sidecar.rs` (including the wrong "export" request at `runs.rs:390`); verify with `cargo test`
   and that `git diff` touches only comment lines.
-- [ ] 1.2 Comments in the other files of `src-tauri/src/` (including the misplaced `CoreFrame` doc
+- [x] 1.2 Comments in the other files of `src-tauri/src/` (including the misplaced `CoreFrame` doc
   at `link.rs:163` and the stale frame names in `link.rs`'s `SidecarFrame` doc); verify with
   `cargo test` and that `git diff` touches only comment lines.
 

@@ -76,8 +76,7 @@ pub enum EventKind {
         component_id: Uuid,
         answer: Value,
     },
-    /// A Step of the reply's Workflow started. `name` is the Trait's name for a Trait Step,
-    /// otherwise the Step's label or its type.
+    /// A Step started. `name` is the Trait's name for a Trait Step, else the Step's label or type.
     #[serde(rename = "step.started")]
     StepStarted {
         message_id: Uuid,
@@ -248,8 +247,8 @@ pub struct Component {
     /// The user's answer, for kinds that ask for one; `null` until answered.
     #[serde(default)]
     pub answer: Value,
-    /// The position, from 0, in the reply's started Steps of the Step run whose Trait call
-    /// added it; absent when no Trait Step added it.
+    /// Position from 0 among the reply's started Steps of the Step run whose Trait call added it;
+    /// absent when no Trait Step added it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_index: Option<u32>,
 }
@@ -274,14 +273,13 @@ pub struct TextComponent {
     pub end: u32,
 }
 
-/// A message as the UI shows it: what its Conversation's events give when folded in order.
-/// `src/protocol/eventStore.ts` builds the same shape from events; `src-tauri/fixtures/
-/// replay.json` keeps the two in agreement.
+/// A message as the UI shows it, folded from its Conversation's events in order. The same shape
+/// is built by `src/protocol/eventStore.ts`; `src-tauri/fixtures/replay.json` checks both.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct MessageView {
     #[serde(flatten)]
     pub message: Message,
-    /// When the message was created: its `message.created` event's `ts`, in milliseconds.
+    /// Its `message.created` event's `ts`, in milliseconds.
     pub created_at: i64,
     pub reactions: Vec<Reaction>,
     /// The latest progress of a streaming reply; `null` once it has ended or paused.

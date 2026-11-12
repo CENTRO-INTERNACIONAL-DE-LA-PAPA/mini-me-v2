@@ -27,7 +27,7 @@ pub struct PausedApproval {
     pub paused_at: i64,
 }
 
-/// The Mini-Me a saved run belongs to. The saved run is a `RunSpec` under `spec`, which names it.
+/// The saved run is a `RunSpec` under `spec`, which names its Mini-Me.
 fn mini_me_of(run: &Value) -> Option<RunMiniMe> {
     serde_json::from_value(run.pointer("/spec/mini_me")?.clone()).ok()
 }

@@ -14,8 +14,7 @@ use crate::library::{Library, MiniMe, PROMPT_ADAPTER, TraitDef};
 
 pub const FILE_NAME: &str = "library.json";
 
-/// The fill every user-made Trait gets. Trait colours are not shown, but the format keeps the
-/// field.
+/// The fill of every user-made Trait; colours are not shown, but the format keeps the field.
 const TRAIT_COLOR: &str = "oklch(0.86 0 0)";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -59,8 +58,7 @@ struct RawFile {
 struct State {
     library: Arc<Library>,
     skipped: Vec<Skipped>,
-    /// Why the file could not be read. While set, edits are refused so the file is not
-    /// overwritten.
+    /// Why the file could not be read; while set, edits are refused so the file is not overwritten.
     unreadable: Option<String>,
 }
 
@@ -104,7 +102,7 @@ impl LibraryStore {
         self.read().unreadable.clone()
     }
 
-    /// Creates or replaces a user-made Trait, returning it as saved.
+    /// Returns the Trait as saved.
     pub fn save_trait(&self, draft: TraitDraft) -> AppResult<TraitDef> {
         let id = if draft.id.is_nil() { Uuid::now_v7() } else { draft.id };
         let saved = TraitDef {
@@ -128,7 +126,7 @@ impl LibraryStore {
         Ok(saved)
     }
 
-    /// Creates or replaces a user-made Mini-Me, returning it as saved.
+    /// Returns the Mini-Me as saved.
     pub fn save_mini_me(&self, mut mini_me: MiniMe) -> AppResult<MiniMe> {
         if mini_me.id.is_nil() {
             mini_me.id = Uuid::now_v7();
@@ -147,7 +145,7 @@ impl LibraryStore {
         Ok(mini_me)
     }
 
-    /// Deletes a user-made Trait, refusing while a Mini-Me runs it.
+    /// Refused while a Mini-Me runs the Trait.
     pub fn delete_trait(&self, id: Uuid) -> AppResult<()> {
         self.edit(|library| {
             refuse_built_in(library, id)?;

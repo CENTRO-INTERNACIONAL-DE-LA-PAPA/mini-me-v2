@@ -32,8 +32,7 @@ mod user_profile;
 
 use tauri::{DragDropEvent, Manager, RunEvent, WindowEvent};
 
-/// The app's build-time context. `generate_context!` can be expanded once per crate, so the app
-/// and the test of its version both come here.
+/// `generate_context!` can be expanded once per crate, so the app and its version test share this.
 fn app_context() -> tauri::Context {
     tauri::generate_context!()
 }
@@ -182,7 +181,7 @@ pub fn run() {
 mod tests {
     use super::app_context;
 
-    /// The app's version is set in package.json, which tauri.conf.json reads; Cargo.toml's is not it.
+    /// The version comes from package.json, which tauri.conf.json reads, not from Cargo.toml.
     #[test]
     fn the_app_version_is_the_one_in_package_json() {
         let package: serde_json::Value =
