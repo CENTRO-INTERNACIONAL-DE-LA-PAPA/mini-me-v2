@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Overview, OverviewOutput } from "../../protocol/types";
-import { findNamed, headerLine, shownOutputs, summaryLine, summaryParts } from "./overview";
+import { findNamed, headerLine, summaryLine, summaryParts } from "./overview";
 
 const now = new Date(2026, 9, 21, 15, 0).getTime();
 const base: Overview = {
@@ -27,14 +27,6 @@ describe("headerLine", () => {
   });
 });
 
-describe("shownOutputs", () => {
-  it("shows six, then all", () => {
-    const outputs = Array.from({ length: 8 }, (_, i) => ({ id: String(i) }) as OverviewOutput);
-    expect(shownOutputs(outputs, false)).toHaveLength(6);
-    expect(shownOutputs(outputs, true)).toHaveLength(8);
-  });
-});
-
 describe("summaryParts", () => {
   it("splits a summary into its text and its names", () => {
     expect(summaryParts("Cleaned [trial.csv]() and drew [Yield by variety]().")).toEqual([
@@ -57,25 +49,19 @@ describe("findNamed", () => {
   const file = { id: "f1", name: "trial.csv", media_type: "text/csv", size_bytes: 1 };
   const chart = { kind: "chart", id: "c1", title: "Yield by variety" } as OverviewOutput;
 
-  it("finds a file, then a table or chart, by the name references give it", () => {
+  it("finds a file, then a table or chart, by the name references give it, or nothing", () => {
     expect(findNamed("trial.csv", [file], [chart])).toEqual({ file });
     expect(findNamed("$Yield-by-variety", [file], [chart])).toEqual({ component: chart });
     expect(findNamed("yield by variety", [file], [chart])).toEqual({ component: chart });
-  });
-
-  it("finds nothing for a name the Project does not have", () => {
     expect(findNamed("old.csv", [file], [chart])).toBeUndefined();
   });
 });
 
 describe("summaryLine", () => {
-  it("keeps the first sentence, with names unmarked", () => {
+  it("keeps the first sentence, with names unmarked, or a summary without an ending whole", () => {
     expect(summaryLine("Yield rose in [trial.csv](). Two plots are pending.")).toBe(
       "Yield rose in trial.csv.",
     );
-  });
-
-  it("keeps a summary without an ending whole", () => {
     expect(summaryLine("Yield rose")).toBe("Yield rose");
   });
 });

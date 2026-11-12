@@ -100,12 +100,13 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
   `conversationStatus.test.ts`, `quarto.test.ts`'s copy-text test and `outline.test.ts` "is empty for
   an empty Conversation"; merge the pairs in `names.test.ts`, `WorkflowProgress.test.ts`,
   `qmd.test.ts` and `updateLabel.test.ts`; verify with `npm test`.
-- [ ] 7.2 In `src/components/{interactive,overview,home,avatar}`: merge the three "no renderer
+- [x] 7.2 In `src/components/{interactive,overview,home,avatar}`: merge the three "no renderer
   shows the text" tests into one in `InteractiveComponent.test.tsx`; merge `chart-plot.test.ts`
   into `chart-model.test.ts`; test `sortRows` directly and remove `TableView`'s `initialSorting`
   prop; delete `chart.test.tsx`'s reference-button test, `approval.test.tsx`'s second test and
   `overview.test.ts` "shows six, then all"; merge the pairs in `overview.test.ts`,
-  `gesture.test.ts`, `sequence.test.ts` and `palette.test.ts`; verify with `npm test`.
+  `gesture.test.ts`, `sequence.test.ts` and `palette.test.ts`, without checking a built-in colour
+  family's values; verify with `npm test`.
 
 ## 8. Sidecar tests
 

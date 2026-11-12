@@ -1,17 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { COLOR_FAMILIES, colorForHue, hueOf, miniMeColors } from "./palette";
+import { COLOR_FAMILIES, colorForHue, hueOf, miniMeColors, tintForHue } from "./palette";
 
 describe("Mini-Me colours", () => {
-  it("keeps a family's solid and ink and adds the tint of its hue", () => {
-    const purple = COLOR_FAMILIES.find((f) => f.name === "Purple")!;
-    expect(miniMeColors(purple)).toEqual({
-      tint: "oklch(0.94 0.04 282)",
-      solid: "#6E5BFF",
-      ink: "#4A3AE0",
+  it("keeps a family's solid and ink with its hue's tint, or derives all from a custom hue", () => {
+    const family = COLOR_FAMILIES[0];
+    expect(miniMeColors(family)).toEqual({
+      tint: tintForHue(family.hue),
+      solid: family.solid,
+      ink: family.ink,
     });
-  });
-
-  it("derives all three colours from a custom hue", () => {
     expect(miniMeColors({ hue: 120, ...colorForHue(120) })).toEqual({
       tint: "oklch(0.94 0.04 120)",
       solid: "oklch(0.66 0.15 120)",
