@@ -39,13 +39,14 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 
 ## 4. Rust: snapshot tests
 
-- [ ] 4.1 Replace `library.rs`'s six tests that restate `builtin.json` (`builtin_library_is_consistent`,
+- [x] 4.1 Replace `library.rs`'s six tests that restate `builtin.json` (`builtin_library_is_consistent`,
   `built_in_traits_list_their_tools`, `mini_mes_run_their_step_trait`,
   `sixteen_mini_mes_ship_and_investigator_uses_every_control_step`,
   `placeholder_traits_run_on_echo_without_instructions`, `mini_mes_have_groups`) with one test that
-  the built-in library has no problems and Investigator uses every control Step; in
+  the built-in library has no problems, checking its format and never its content; in
   `user_library.rs`, use `Library::builtin().mini_mes.len()` instead of `16`; verify with
   `cargo test`.
+
 - [ ] 4.2 Remove the hand-written name lists: the exact tool list asserted in `routing.rs`
   `a_mention_with_a_thumbs_up_gets_a_reply_and_a_reaction_from_that_mini_me`, the event-type
   list in `protocol.rs` `fixture_round_trips_every_event_type` and the frame-type list in `link.rs`
