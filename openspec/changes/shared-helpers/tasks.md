@@ -38,7 +38,7 @@ Evidence for each item (copies with `path:line`) is in the scan reports and in P
   skeleton, the structured-answer error mapping, the `model_not_set` check, the text input schema
   and `component_or_text`; remove `theories_reply`, `papers_reply`'s narrative branch and
   `_log_shape`; verify with `uv run pytest`.
-- [ ] 3.2 Split `graph.py`'s `_Builder.step` into one method per Step kind and Theorize's `run`
+- [x] 3.2 Split `graph.py`'s `_Builder.step` into one method per Step kind and Theorize's `run`
   into polling and finishing; TypedDicts for the shapes `results()` returns; verify with
   `uv run pytest`.
 

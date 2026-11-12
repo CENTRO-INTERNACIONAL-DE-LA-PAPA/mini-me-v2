@@ -5,7 +5,7 @@ import base64
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict, cast
 
 from mini_me_sidecar.link import REDACTED, Link
 
@@ -13,6 +13,29 @@ ASSET_CHUNK_BYTES = 1024 * 1024
 
 # Progress frames per call are spaced at least this far apart (four per second).
 PROGRESS_INTERVAL_S = 0.25
+
+
+class ResultAsset(TypedDict):
+    id: str
+    name: str
+    media_type: str
+    size_bytes: int
+    message_id: str
+    current: bool
+
+
+class ResultComponent(TypedDict):
+    id: str
+    kind: str
+    version: int
+    message_id: str
+    author: str
+    current: bool
+
+
+class Results(TypedDict):
+    assets: list[ResultAsset]
+    components: list[ResultComponent]
 
 
 class Secret:
@@ -119,7 +142,7 @@ class CallContext:
         self._stream = stream
         self._written: list[str] = []
         # Cached `results()`; cleared when the call adds a file or component.
-        self._results: dict[str, Any] | None = None
+        self._results: Results | None = None
         # Parsed files by kind and Asset ID, so a file read in parts is read once per call;
         # an Asset's content never changes.
         self.reads: dict[tuple[str, str], Any] = {}
@@ -178,12 +201,11 @@ class CallContext:
         """The Conversation's earlier messages, `{ messages, truncated }`, oldest first."""
         return await self._requests.send(self.call_id, "conversation.history", {})
 
-    async def results(self) -> dict[str, Any]:
-        """`{ assets, components }`, newest first; cached until the call adds a file or component.
-        Assets: `{ id, name, media_type, size_bytes, message_id, current }` (`current`: this
-        message's files); components: `{ id, kind, version, message_id, author }`."""
+    async def results(self) -> Results:
+        """Newest first; cached until the call adds a file or component."""
         if self._results is None:
-            self._results = await self._requests.send(self.call_id, "conversation.results", {})
+            found = await self._requests.send(self.call_id, "conversation.results", {})
+            self._results = cast(Results, found)
         return self._results
 
     async def read_component(self, component_id: str) -> dict[str, Any]:

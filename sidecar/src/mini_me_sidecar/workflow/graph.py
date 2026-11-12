@@ -64,6 +64,10 @@ def _log(state: RunState) -> list[Entry]:
     return [Entry.from_json(e) for e in state.get("log") or []]
 
 
+def _decision(step_id: str) -> Callable[[RunState], str]:
+    return lambda state: (state.get("decisions") or {})[step_id]
+
+
 class _Builder:
     def __init__(self, env: Env, trait_names: dict[str, str], steps: tuple[Step, ...]) -> None:
         self.env = env
@@ -97,141 +101,166 @@ class _Builder:
     def step(
         self, step: Step, parent: str, scope: dict[str, str]
     ) -> tuple[str, Callable[[str], None]]:
+        match step.type:
+            case "trait":
+                return self._trait(step, parent, scope)
+            case "approval":
+                return self._approval(step)
+            case "condition":
+                return self._condition(step, parent, scope)
+            case "loop":
+                return self._loop(step, parent, scope)
+            case "parallel":
+                return self._parallel(step, parent, scope)
+        raise ValueError(f"unknown Step type {step.type!r}")
+
+    def _entry(
+        self, step: Step, parent: str, scope: dict[str, str]
+    ) -> Callable[..., dict[str, Any]]:
+        """Returns `entry(output, **fields)`, which builds `step`'s `Entry` as JSON."""
         name = step.name(self.names)
-        env = self.env
 
         def entry(output: str | None, **extra: Any) -> dict[str, Any]:
             return Entry(step.id, name, output, parent, dict(scope), **extra).to_json()
 
-        def marker() -> dict[str, Any]:
-            return Entry(step.id, name, None, parent, dict(scope), marker=True).to_json()
+        return entry
 
-        match step.type:
-            case "trait":
-                stream = step.id in self.finals
+    def _trait(
+        self, step: Step, parent: str, scope: dict[str, str]
+    ) -> tuple[str, Callable[[str], None]]:
+        env = self.env
+        entry = self._entry(step, parent, scope)
+        stream = step.id in self.finals
 
-                async def run_trait(state: RunState) -> dict[str, Any]:
-                    earlier = visible_outputs(_log(state), scope)
-                    output = await env.trait(step, earlier, stream)
-                    return {"log": [entry(output, trait=True, streamed=stream)]}
+        async def run_trait(state: RunState) -> dict[str, Any]:
+            earlier = visible_outputs(_log(state), scope)
+            output = await env.trait(step, earlier, stream)
+            return {"log": [entry(output, trait=True, streamed=stream)]}
 
-                node = self.node(f"trait.{step.id}", run_trait)
-                return node, self.edge_from(node)
+        node = self.node(f"trait.{step.id}", run_trait)
+        return node, self.edge_from(node)
 
-            case "approval":
+    def _approval(self, step: Step) -> tuple[str, Callable[[str], None]]:
+        env = self.env
 
-                async def approve(state: RunState) -> dict[str, Any]:
-                    if env.first_visit(step):
-                        env.started(step)
-                    interrupt({"step_id": step.id})
-                    return {}
+        async def approve(state: RunState) -> dict[str, Any]:
+            if env.first_visit(step):
+                env.started(step)
+            interrupt({"step_id": step.id})
+            return {}
 
-                node = self.node(f"approval.{step.id}", approve)
-                return node, self.edge_from(node)
+        node = self.node(f"approval.{step.id}", approve)
+        return node, self.edge_from(node)
 
-            case "condition":
-                labels = [b.label for b in step.branches]
+    def _condition(
+        self, step: Step, parent: str, scope: dict[str, str]
+    ) -> tuple[str, Callable[[str], None]]:
+        env = self.env
+        entry = self._entry(step, parent, scope)
+        labels = [b.label for b in step.branches]
 
-                async def choose(state: RunState) -> dict[str, Any]:
-                    earlier = visible_outputs(_log(state), scope)
-                    choice = await env.decide(step, labels, earlier)
-                    return {"decisions": {step.id: choice}, "log": [marker()]}
+        async def choose(state: RunState) -> dict[str, Any]:
+            earlier = visible_outputs(_log(state), scope)
+            choice = await env.decide(step, labels, earlier)
+            return {"decisions": {step.id: choice}, "log": [entry(None, marker=True)]}
 
-                async def close(state: RunState) -> dict[str, Any]:
-                    choice = (state.get("decisions") or {})[step.id]
-                    out = list_output(_log(state), f"{step.id}/{choice}", step.id)
-                    if out is None:
-                        return {"log": [entry(None)]}
-                    return {"log": [entry(out.output, streamed=out.streamed)]}
+        async def close(state: RunState) -> dict[str, Any]:
+            choice = (state.get("decisions") or {})[step.id]
+            out = list_output(_log(state), f"{step.id}/{choice}", step.id)
+            if out is None:
+                return {"log": [entry(None)]}
+            return {"log": [entry(out.output, streamed=out.streamed)]}
 
-                decision = self.node(f"condition.{step.id}", choose)
-                end = self.node(f"condition-end.{step.id}", close)
-                targets: dict[str, str] = {}
-                for branch in step.branches:
-                    first, link = self.chain(branch.steps, f"{step.id}/{branch.label}", scope)
-                    targets[branch.label] = first
-                    link(end)
-                self.graph.add_conditional_edges(
-                    decision, lambda s, i=step.id: (s.get("decisions") or {})[i], targets
-                )
-                return decision, self.edge_from(end)
+        decision = self.node(f"condition.{step.id}", choose)
+        end = self.node(f"condition-end.{step.id}", close)
+        targets: dict[str, str] = {}
+        for branch in step.branches:
+            first, link = self.chain(branch.steps, f"{step.id}/{branch.label}", scope)
+            targets[branch.label] = first
+            link(end)
+        self.graph.add_conditional_edges(decision, _decision(step.id), targets)
+        return decision, self.edge_from(end)
 
-            case "loop":
+    def _loop(
+        self, step: Step, parent: str, scope: dict[str, str]
+    ) -> tuple[str, Callable[[str], None]]:
+        env = self.env
+        entry = self._entry(step, parent, scope)
 
-                async def begin(state: RunState) -> dict[str, Any]:
-                    return {"loops": {step.id: 0}, "log": [marker()]}
+        async def begin(state: RunState) -> dict[str, Any]:
+            return {"loops": {step.id: 0}, "log": [entry(None, marker=True)]}
 
-                async def again(state: RunState) -> dict[str, Any]:
-                    log = _log(state)
-                    count = (state.get("loops") or {}).get(step.id, 0) + 1
-                    if count >= step.max_iterations:
-                        env.started(step)
-                        env.completed(step, STOP)
-                        choice = STOP
-                    else:
-                        earlier = visible_outputs(log, scope)
-                        choice = await env.decide(step, [REPEAT, STOP], earlier)
-                    update: dict[str, Any] = {
-                        "loops": {step.id: count},
-                        "decisions": {step.id: choice},
-                    }
-                    if choice == REPEAT:
-                        update["log"] = [marker()]
-                    else:
-                        out = list_output(log, step.id, step.id)
-                        update["log"] = [entry(out.output if out else None)]
-                    return update
+        async def again(state: RunState) -> dict[str, Any]:
+            log = _log(state)
+            count = (state.get("loops") or {}).get(step.id, 0) + 1
+            if count >= step.max_iterations:
+                env.started(step)
+                env.completed(step, STOP)
+                choice = STOP
+            else:
+                earlier = visible_outputs(log, scope)
+                choice = await env.decide(step, [REPEAT, STOP], earlier)
+            update: dict[str, Any] = {
+                "loops": {step.id: count},
+                "decisions": {step.id: choice},
+            }
+            if choice == REPEAT:
+                update["log"] = [entry(None, marker=True)]
+            else:
+                out = list_output(log, step.id, step.id)
+                update["log"] = [entry(out.output if out else None)]
+            return update
 
-                start = self.node(f"loop.{step.id}", begin)
-                decision = self.node(f"loop-decision.{step.id}", again)
-                first, link = self.chain(step.steps, step.id, scope)
-                self.graph.add_edge(start, first)
-                link(decision)
+        start = self.node(f"loop.{step.id}", begin)
+        decision = self.node(f"loop-decision.{step.id}", again)
+        first, link = self.chain(step.steps, step.id, scope)
+        self.graph.add_edge(start, first)
+        link(decision)
 
-                def link_out(target: str) -> None:
-                    self.graph.add_conditional_edges(
-                        decision,
-                        lambda s, i=step.id: (s.get("decisions") or {})[i],
-                        {REPEAT: first, STOP: target},
-                    )
+        def link_out(target: str) -> None:
+            self.graph.add_conditional_edges(
+                decision, _decision(step.id), {REPEAT: first, STOP: target}
+            )
 
-                return start, link_out
+        return start, link_out
 
-            case "parallel":
+    def _parallel(
+        self, step: Step, parent: str, scope: dict[str, str]
+    ) -> tuple[str, Callable[[str], None]]:
+        env = self.env
+        entry = self._entry(step, parent, scope)
 
-                async def split(state: RunState) -> dict[str, Any]:
-                    env.started(step)
-                    return {"log": [marker()]}
+        async def split(state: RunState) -> dict[str, Any]:
+            env.started(step)
+            return {"log": [entry(None, marker=True)]}
 
-                async def join(state: RunState) -> dict[str, Any]:
-                    log = _log(state)
-                    outputs = []
-                    for branch in step.branches:
-                        out = list_output(log, f"{step.id}/{branch.label}", step.id)
-                        outputs.append((branch.label, out.output if out else None))
-                    joined = parallel_output(outputs)
-                    env.completed(step, joined)
-                    return {"log": [entry(joined)]}
+        async def join(state: RunState) -> dict[str, Any]:
+            log = _log(state)
+            outputs = []
+            for branch in step.branches:
+                out = list_output(log, f"{step.id}/{branch.label}", step.id)
+                outputs.append((branch.label, out.output if out else None))
+            joined = parallel_output(outputs)
+            env.completed(step, joined)
+            return {"log": [entry(joined)]}
 
-                async def pass_through(state: RunState) -> dict[str, Any]:
-                    return {}
+        async def pass_through(state: RunState) -> dict[str, Any]:
+            return {}
 
-                start = self.node(f"parallel.{step.id}", split)
-                end = self.node(f"parallel-join.{step.id}", join)
-                ends: list[str] = []
-                for branch in step.branches:
-                    inner = {**scope, step.id: branch.label}
-                    first, link = self.chain(branch.steps, f"{step.id}/{branch.label}", inner)
-                    self.graph.add_edge(start, first)
-                    # Every branch ends in its own node, so the join can wait for all of them
-                    # even when a branch ends with a loop's conditional edge.
-                    branch_end = self.node(f"branch-end.{step.id}/{branch.label}", pass_through)
-                    link(branch_end)
-                    ends.append(branch_end)
-                self.graph.add_edge(ends, end)
-                return start, self.edge_from(end)
-
-        raise ValueError(f"unknown Step type {step.type!r}")
+        start = self.node(f"parallel.{step.id}", split)
+        end = self.node(f"parallel-join.{step.id}", join)
+        ends: list[str] = []
+        for branch in step.branches:
+            inner = {**scope, step.id: branch.label}
+            first, link = self.chain(branch.steps, f"{step.id}/{branch.label}", inner)
+            self.graph.add_edge(start, first)
+            # Every branch ends in its own node, so the join can wait for all of them
+            # even when a branch ends with a loop's conditional edge.
+            branch_end = self.node(f"branch-end.{step.id}/{branch.label}", pass_through)
+            link(branch_end)
+            ends.append(branch_end)
+        self.graph.add_edge(ends, end)
+        return start, self.edge_from(end)
 
 
 def compile_workflow(

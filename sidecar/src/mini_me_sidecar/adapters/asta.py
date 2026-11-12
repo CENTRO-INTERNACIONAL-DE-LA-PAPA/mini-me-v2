@@ -111,58 +111,68 @@ class Theorize(Adapter):
             return
         _log_task(task)
 
-        loop = asyncio.get_running_loop()
-        started = loop.time()
-        deadline = started + THEORIZER_LIMIT_S
-        seen: set[str] = set()
-        while not _finished(task):
-            if loop.time() > deadline:
-                raise TraitError(
-                    "asta_unavailable", "The Theorizer took too long. Try again later."
-                )
-            try:
-                await asyncio.wait_for(ctx.cancelled.wait(), THEORIZER_POLL_S)
-                return
-            except TimeoutError:
-                pass
-            previous = task
-            task_id = task.get("id") or ""
-            polled = await _until_cancelled(ctx, lambda: _call(ctx, client.get_task, task_id))
-            if polled is None:
-                return
-            task = polled
-            if _task_summary(task) != _task_summary(previous):
-                _log_task(task)
-            minutes = int((loop.time() - started) // 60)
-            state = (task.get("status") or {}).get("state")
-            label = _status_text(task) or STATE_LABELS.get(str(state), "Working")
-            for artifact in task.get("artifacts") or []:
-                name = str(artifact.get("name") or "")
-                if name and name not in seen:
-                    seen.add(name)
-                    label = f"Got {name.replace('_', ' ')}"
-            ctx.progress(f"{label[:140]} ({minutes} min)" if minutes else label[:140])
+        finished = await _poll_theorizer(ctx, client, task)
+        if finished is not None:
+            await _finish_theorizer(ctx, finished)
 
-        state = (task.get("status") or {}).get("state")
-        if state != "completed":
-            detail = _status_text(task)
-            raise TraitError(
-                "asta_unavailable",
-                f"The Theorizer stopped ({state}){': ' + detail if detail else ''}.",
-            )
-        artifacts = task.get("artifacts") or []
-        store, texts = theory_store(artifacts)
-        data = theories_data(store)
-        if data is None:
-            ctx.write(_without_theories(texts))
-        else:
-            ctx.write(theories_summary(data, store))
-            await component_or_text(ctx, show_theories, data, theories_markdown(data), "asta")
+
+async def _poll_theorizer(
+    ctx: CallContext, client: Any, task: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Polls `task` until it finishes, reporting progress; None when the call is cancelled."""
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    deadline = started + THEORIZER_LIMIT_S
+    seen: set[str] = set()
+    while not _finished(task):
+        if loop.time() > deadline:
+            raise TraitError("asta_unavailable", "The Theorizer took too long. Try again later.")
         try:
-            content = json.dumps(artifacts, ensure_ascii=False).encode()
-            await save_file(ctx, "theory-store.json", "application/json", content)
-        except ToolError as error:
-            print(f"[asta] could not save the Theory Store: {error}", file=sys.stderr, flush=True)
+            await asyncio.wait_for(ctx.cancelled.wait(), THEORIZER_POLL_S)
+            return None
+        except TimeoutError:
+            pass
+        previous = task
+        task_id = task.get("id") or ""
+        polled = await _until_cancelled(ctx, lambda: _call(ctx, client.get_task, task_id))
+        if polled is None:
+            return None
+        task = polled
+        if _task_summary(task) != _task_summary(previous):
+            _log_task(task)
+        minutes = int((loop.time() - started) // 60)
+        state = (task.get("status") or {}).get("state")
+        label = _status_text(task) or STATE_LABELS.get(str(state), "Working")
+        for artifact in task.get("artifacts") or []:
+            name = str(artifact.get("name") or "")
+            if name and name not in seen:
+                seen.add(name)
+                label = f"Got {name.replace('_', ' ')}"
+        ctx.progress(f"{label[:140]} ({minutes} min)" if minutes else label[:140])
+    return task
+
+
+async def _finish_theorizer(ctx: CallContext, task: dict[str, Any]) -> None:
+    state = (task.get("status") or {}).get("state")
+    if state != "completed":
+        detail = _status_text(task)
+        raise TraitError(
+            "asta_unavailable",
+            f"The Theorizer stopped ({state}){': ' + detail if detail else ''}.",
+        )
+    artifacts = task.get("artifacts") or []
+    store, texts = theory_store(artifacts)
+    data = theories_data(store)
+    if data is None:
+        ctx.write(_without_theories(texts))
+    else:
+        ctx.write(theories_summary(data, store))
+        await component_or_text(ctx, show_theories, data, theories_markdown(data), "asta")
+    try:
+        content = json.dumps(artifacts, ensure_ascii=False).encode()
+        await save_file(ctx, "theory-store.json", "application/json", content)
+    except ToolError as error:
+        print(f"[asta] could not save the Theory Store: {error}", file=sys.stderr, flush=True)
 
 
 async def _token(ctx: CallContext) -> str:
