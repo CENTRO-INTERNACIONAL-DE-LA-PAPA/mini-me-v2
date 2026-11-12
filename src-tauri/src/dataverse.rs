@@ -134,7 +134,6 @@ fn parse_files(body: &Value) -> AppResult<Vec<DataverseFile>> {
     Ok(files)
 }
 
-/// Searches CIP Dataverse's datasets.
 pub fn search(search: &Search) -> AppResult<SearchPage> {
     let params = search_params(search);
     let body = off_runtime(move || get_json("/api/search", &params))?;

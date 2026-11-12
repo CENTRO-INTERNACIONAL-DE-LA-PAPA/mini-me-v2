@@ -131,15 +131,13 @@ export function WorkflowCanvas({
   );
   const { drag, pointer, start } = useStepDrag({ onDrop, onPress });
 
-  // Nodes and connectors read this, so it changes only when what they draw does, not on
-  // every pointer move.
+  // Nodes and connectors read this, so it changes only when what they draw does.
   const state = useMemo(
     () => ({ steps, traits, miniMe, selectedId, editable, drag, start }),
     [steps, traits, miniMe, selectedId, editable, drag, start],
   );
   return (
     <CanvasContext.Provider value={state}>
-      {/* The board: a grey card with a dot grid, inside the editor's sheet. */}
       <div
         style={surfaceStyle(miniMe.colors)}
         className="relative h-full w-full overflow-hidden rounded-card bg-muted"

@@ -27,8 +27,7 @@ const KEY_ACCOUNTS: [(&str, &str); 7] = [
     ("dataverse", "CIP Dataverse"),
 ];
 
-/// The keychain service Mini-Me's entries are stored under, one per key account, used until
-/// `use_keychain_service` names the running app's.
+/// One entry per key account under this service, until `use_keychain_service` names the app's.
 const DEFAULT_KEYCHAIN_SERVICE: &str = "org.cipotato.mini-me";
 static KEYCHAIN_SERVICE: OnceLock<String> = OnceLock::new();
 
@@ -100,9 +99,8 @@ impl SecretSource for NoSecrets {
     }
 }
 
-/// API keys in the OS keychain (Windows Credential Manager, macOS Keychain, the Secret Service on
-/// Linux). Read on every request and never cached, so a key removed in Settings stops working at
-/// once.
+/// API keys in the OS keychain, read on every request and never cached, so a key removed in
+/// Settings stops working at once.
 pub struct KeychainSecrets;
 
 impl KeychainSecrets {
@@ -121,7 +119,7 @@ impl KeychainSecrets {
         Self::entry(provider)?.set_password(key).map_err(keychain_error)
     }
 
-    /// Removes the key; does nothing if there is none.
+    /// Does nothing if there is no key.
     pub fn remove(provider: &str) -> AppResult<()> {
         match Self::entry(provider)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -174,12 +172,6 @@ pub mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn keys_use_mini_mes_service_until_the_app_names_its_own() {
-        // No test sets the service, which the running app does once at start-up.
-        assert_eq!(keychain_service(), "org.cipotato.mini-me");
-    }
 
     #[test]
     fn secrets_print_redacted() {

@@ -5,7 +5,7 @@ import { threadPlacements } from "./anchors";
 
 /** Which threads the source shows (the open ones), which one is selected, each one's number in
  * the document, and the suggestions waiting in them. */
-export interface Highlighted {
+interface Highlighted {
   visible: ReadonlySet<Uuid>;
   selected: Uuid | null;
   numbers: ReadonlyMap<Uuid, number>;
@@ -111,8 +111,7 @@ function decorations(state: EditorState): DecorationSet {
   return Decoration.set(marks, true);
 }
 
-/** The threads' passages and number badges in the source, following their placements as the
- * user edits. */
+/** The threads' passages and number badges in the source, following their placements. */
 export const threadHighlights = [
   highlighted,
   StateField.define<DecorationSet>({

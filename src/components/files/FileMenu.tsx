@@ -2,14 +2,13 @@ import { api } from "../../api";
 import { ItemMenu } from "../shell/ItemMenu";
 
 /** A file's name split at its last dot, so a rename can keep the extension. */
-export function splitName(name: string): { stem: string; suffix: string } {
+function splitName(name: string): { stem: string; suffix: string } {
   const dot = name.lastIndexOf(".");
   return dot > 0 ? { stem: name.slice(0, dot), suffix: name.slice(dot) } : { stem: name, suffix: "" };
 }
 
-/** The "…" menu of a file wherever a file row appears: Open, Show in folder, Duplicate, Rename
- * (which keeps the extension) and Delete. `onChanged` runs after a rename, copy or delete, so the
- * list around it can reload. */
+/** A file's "…" menu; Rename keeps the extension, and `onChanged` runs after a rename, copy or
+ * delete. */
 export function FileMenu({
   projectId,
   file,

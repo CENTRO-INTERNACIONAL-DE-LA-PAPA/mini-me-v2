@@ -27,6 +27,7 @@ import { InteractiveComponent } from "../interactive/InteractiveComponent";
 import { FileMark } from "../files/FileMark";
 import { FileMenu } from "../files/FileMenu";
 import { DOTS_HOVER } from "../shell/ItemMenu";
+import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import { MiniMePill } from "../minime/MiniMePill";
 import { ItemMenu } from "../shell/ItemMenu";
@@ -78,6 +79,7 @@ export function OverviewView({
   // The Project's files, which the summary's links may name.
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [writing, setWriting] = useState(false);
+  const open = useOpenFile(project.id, { openDocument: onOpenDocument });
   const [all, setAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,8 +125,7 @@ export function OverviewView({
   const featured = overview.featured;
   const featuredBy = featured ? miniMeOf(featured.author.id) : undefined;
   const shown = shownOutputs(overview.outputs, all);
-  const openFile = (id: string, name: string) =>
-    isDocument(name) ? onOpenDocument(id) : void api.openAsset(project.id, id).catch(() => {});
+  const openFile = (id: string, name: string) => open(id, isDocument(name));
 
   return (
     <SheetPage
@@ -246,11 +247,7 @@ export function OverviewView({
                         "absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/output:opacity-100 group-hover/output:opacity-100 aria-expanded:opacity-100",
                         DOTS_HOVER,
                       )}
-                      onOpen={() =>
-                        isDocument(output.title)
-                          ? onOpenDocument(output.id)
-                          : api.openAsset(project.id, output.id)
-                      }
+                      onOpen={() => openFile(output.id, output.title)}
                       onChanged={() => {
                         void refresh();
                         onChanged();
@@ -272,8 +269,7 @@ export function OverviewView({
   );
 }
 
-/** An output as a row: an icon tile in the tint of the Mini-Me that made it, then its title
- * and where it came from. */
+/** An output's row: its icon in its maker's ink, its title, and the Conversation it came from. */
 function OutputRow({
   output,
   miniMe,

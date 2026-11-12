@@ -1,8 +1,8 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { memo, useCallback, useState } from "react";
-import { api, errorMessage } from "../../api";
-import type { MessageView } from "../../protocol/eventStore";
+import { errorMessage } from "../../api";
+import type { MessageView, Reaction } from "../../protocol/eventStore";
 import { segments } from "../../protocol/references";
 import type { AssetRef, MiniMe } from "../../protocol/types";
 import { formatClock, formatSize } from "../../lib/format";
@@ -21,7 +21,7 @@ import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useJevDebug } from "../../hooks/useJevDebug";
 import { useReplyDebug } from "../../hooks/useReplyDebug";
 import { useMiniMes } from "../../hooks/useMiniMes";
-import { useOpenDocument } from "../documents/openDocument";
+import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
 import { MetaParts } from "@/components/ui/meta-parts";
@@ -74,33 +74,20 @@ export const MessageItem = memo(function MessageItem({
   const replyDebug = useReplyDebug();
   const { name, miniMe: authorMiniMe } = author(message, miniMes);
 
-  const counts = new Map<string, number>();
-  for (const reaction of message.reactions) {
-    counts.set(reaction.emoji, (counts.get(reaction.emoji) ?? 0) + 1);
-  }
   const miniMe = (id: string) => miniMes.find((m) => m.id === id);
-  const reactors = (emoji: string) => message.reactions.filter((r) => r.emoji === emoji);
   const { own } = componentPlaces(message.steps, message.components, message.status);
   // An approval shows only while it asks; once answered, the progress card shows its answer.
   const shown = own.filter(
     (c) => c.kind !== "approval" || approvalState(c.answer, message.status) === "asking",
   );
 
-  const openDocument = useOpenDocument();
+  const openFile = useOpenFile(projectId, { onError: (e) => setError(errorMessage(e)) });
   const open = useCallback(
-    async (assetId: string) => {
+    (assetId: string) => {
       const name = message.attachments.find((a) => a.id === assetId)?.name;
-      if (openDocument && name && isDocument(name)) {
-        openDocument(assetId);
-        return;
-      }
-      try {
-        await api.openAsset(projectId, assetId);
-      } catch (e) {
-        setError(errorMessage(e));
-      }
+      openFile(assetId, !!name && isDocument(name));
     },
-    [projectId, message.attachments, openDocument],
+    [message.attachments, openFile],
   );
 
   const status = STATUS_LABEL[message.status];
@@ -132,48 +119,6 @@ export const MessageItem = memo(function MessageItem({
         <AttachmentChip key={asset.id} asset={asset} onOpen={() => open(asset.id)} />
       ))}
     </div>
-  );
-
-  // A white pill per emoji over the bubble's bottom-left corner, with the avatars of the
-  // Mini-Mes that reacted with it; the tooltip names every reactor.
-  const reactionPills = counts.size > 0 && (
-    <ul aria-label="Reactions" className="pointer-events-none absolute -bottom-3 left-3 flex gap-1">
-      {[...counts].map(([emoji, count]) => {
-        const byMiniMes = reactors(emoji).filter((r) => r.by.kind === "mini_me");
-        return (
-          <li key={emoji} className="pointer-events-auto">
-            <Tooltip>
-              <TooltipTrigger
-                render={<span />}
-                className="flex h-6 items-center gap-1 rounded-full border border-border bg-card px-1.5 text-meta"
-              >
-                {byMiniMes.slice(0, 3).map((reaction, index) => (
-                  <MiniMeAvatar
-                    key={index}
-                    miniMe={miniMe(reaction.by.id)}
-                    size={16}
-                    className={index > 0 ? "-ml-2" : undefined}
-                  />
-                ))}
-                {emoji}
-                {count > 1 && ` ${count}`}
-              </TooltipTrigger>
-              <TooltipContent>
-                {reactors(emoji).map((reaction, index) =>
-                  reaction.by.kind === "mini_me" ? (
-                    <MiniMePill key={index} miniMe={miniMe(reaction.by.id)}>
-                      {miniMe(reaction.by.id)?.name ?? "Mini-Me"}
-                    </MiniMePill>
-                  ) : (
-                    <span key={index}>You</span>
-                  ),
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </li>
-        );
-      })}
-    </ul>
   );
 
   const notes = (
@@ -211,9 +156,9 @@ export const MessageItem = memo(function MessageItem({
         <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] bg-bubble [--card-edge:transparent] px-[15px] py-[11px] text-foreground">
           {text}
           {attachments}
-          {reactionPills}
+          <ReactionPills reactions={message.reactions} miniMe={miniMe} />
         </div>
-        <p className={cn("text-meta text-muted-foreground", counts.size > 0 && "mt-2")}>{time}</p>
+        <p className={cn("text-meta text-muted-foreground", message.reactions.length > 0 && "mt-2")}>{time}</p>
         {notes}
       </article>
     );
@@ -288,7 +233,7 @@ export const MessageItem = memo(function MessageItem({
           </p>
         )}
         {attachments}
-        {reactionPills}
+        <ReactionPills reactions={message.reactions} miniMe={miniMe} />
         {notes}
       </MiniMeSurface>
       {/* Outside the reply's colours, where it reads as a developer note, not part of the reply. */}
@@ -296,6 +241,60 @@ export const MessageItem = memo(function MessageItem({
     </div>
   );
 });
+
+function ReactionPills({
+  reactions,
+  miniMe,
+}: {
+  reactions: Reaction[];
+  miniMe: (id: string) => MiniMe | undefined;
+}) {
+  const counts = new Map<string, number>();
+  for (const reaction of reactions) {
+    counts.set(reaction.emoji, (counts.get(reaction.emoji) ?? 0) + 1);
+  }
+  const reactors = (emoji: string) => reactions.filter((r) => r.emoji === emoji);
+  if (counts.size === 0) return null;
+  return (
+    <ul aria-label="Reactions" className="pointer-events-none absolute -bottom-3 left-3 flex gap-1">
+      {[...counts].map(([emoji, count]) => {
+        const byMiniMes = reactors(emoji).filter((r) => r.by.kind === "mini_me");
+        return (
+          <li key={emoji} className="pointer-events-auto">
+            <Tooltip>
+              <TooltipTrigger
+                render={<span />}
+                className="flex h-6 items-center gap-1 rounded-full border border-border bg-card px-1.5 text-meta"
+              >
+                {byMiniMes.slice(0, 3).map((reaction, index) => (
+                  <MiniMeAvatar
+                    key={index}
+                    miniMe={miniMe(reaction.by.id)}
+                    size={16}
+                    className={index > 0 ? "-ml-2" : undefined}
+                  />
+                ))}
+                {emoji}
+                {count > 1 && ` ${count}`}
+              </TooltipTrigger>
+              <TooltipContent>
+                {reactors(emoji).map((reaction, index) =>
+                  reaction.by.kind === "mini_me" ? (
+                    <MiniMePill key={index} miniMe={miniMe(reaction.by.id)}>
+                      {miniMe(reaction.by.id)?.name ?? "Mini-Me"}
+                    </MiniMePill>
+                  ) : (
+                    <span key={index}>You</span>
+                  ),
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 /** A file attached to a message: it opens the file, or says that the file was removed. */
 function AttachmentChip({ asset, onOpen }: { asset: AssetRef; onOpen: () => void }) {

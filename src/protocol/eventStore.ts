@@ -30,8 +30,7 @@ export interface ConversationState {
 
 export const emptyConversation: ConversationState = { lastSeq: 0, messages: [] };
 
-/** A Conversation as the core opens it: the state folding its events up to `last_seq`
- * gives, and the subscription that delivers the events after it. */
+/** A Conversation as opened: its state up to `last_seq`, and a subscription for later events. */
 export interface OpenedConversation {
   subscription_id: Uuid;
   last_seq: number;
@@ -50,11 +49,8 @@ function sameAuthor(a: Author, b: Author): boolean {
   return a.kind === b.kind && a.id === b.id;
 }
 
-/**
- * Folds one event into the Conversation state. Only the event right after `lastSeq` is
- * applied: replays and duplicate deliveries are ignored, and unknown event types only
- * advance `lastSeq`.
- */
+/** Folds one event in. Only the event right after `lastSeq` applies: replays and duplicates
+ * are ignored, and unknown event types only advance `lastSeq`. */
 export function applyEvent(state: ConversationState, event: ProtocolEvent): ConversationState {
   if (event.seq !== state.lastSeq + 1) {
     return state;
@@ -70,9 +66,6 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
           ...state.messages,
           {
             ...known.payload.message,
-            // Events stored before Interactive Components existed have no `components`.
-            components: known.payload.message.components ?? [],
-            steps: known.payload.message.steps ?? [],
             created_at: known.ts,
             reactions: [],
             progress: null,

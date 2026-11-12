@@ -4,12 +4,11 @@ from mini_me_sidecar.adapters.data import CleanData, JoinData, PlotData, Profile
 from mini_me_sidecar.adapters.dataverse import SearchDataverse
 from mini_me_sidecar.adapters.echo import Echo
 from mini_me_sidecar.adapters.prompt import Prompt
-from mini_me_sidecar.adapters.testing import TEST_ADAPTERS
 
 __all__ = ["Adapter", "AdapterInfo", "load_adapters"]
 
 
-def load_adapters(test_adapters: bool) -> dict[str, Adapter]:
+def load_adapters() -> dict[str, Adapter]:
     adapters: list[Adapter] = [
         Echo(),
         Prompt(),
@@ -22,8 +21,6 @@ def load_adapters(test_adapters: bool) -> dict[str, Adapter]:
         PlotData(),
         SearchDataverse(),
     ]
-    if test_adapters:
-        adapters.extend(TEST_ADAPTERS)
     by_id: dict[str, Adapter] = {}
     for adapter in adapters:
         if adapter.info.id in by_id:

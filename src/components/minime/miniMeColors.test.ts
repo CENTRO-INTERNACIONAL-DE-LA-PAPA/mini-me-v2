@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { colorForHue } from "../avatar/palette";
 import { hexToOklch, oklchToHex, surfaceColors } from "./miniMeColors";
 
 describe("surfaceColors", () => {
@@ -14,5 +15,13 @@ describe("surfaceColors", () => {
     expect(washL).toBeCloseTo(0.985, 2);
     expect(edgeL).toBeCloseTo(0.86, 2);
     expect(Math.abs(washH - solidH)).toBeLessThan(5);
+  });
+
+  it("derives wash and edge from an oklch solid's hue", () => {
+    const { solid, ink } = colorForHue(205);
+    const { wash, edge } = surfaceColors({ tint: "#DDF3F7", solid, ink });
+    expect(wash).toMatch(/^#[0-9a-f]{6}$/);
+    expect(edge).toMatch(/^#[0-9a-f]{6}$/);
+    expect(Math.abs(hexToOklch(edge)[2] - 205)).toBeLessThan(5);
   });
 });

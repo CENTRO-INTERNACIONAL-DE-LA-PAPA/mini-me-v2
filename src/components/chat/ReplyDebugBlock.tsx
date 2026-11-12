@@ -1,14 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { api, errorMessage } from "../../api";
+import { count } from "../../lib/format";
 import type { DebugMessage, ModelCallRecord, ReplyRecord } from "../../protocol/types";
 import { modelCalls } from "./replyDebug";
 
 const json = (value: unknown) =>
   typeof value === "string" ? value : JSON.stringify(value, null, 2);
 
-/** The "[DEBUG] AI" block under a reply: its model calls and tool calls, read each time the
- * block is opened, so records written or cleared since show as they are. */
+/** The "[DEBUG] AI" block under a reply: its model and tool calls, read again on each open. */
 export function ReplyDebugBlock({
   projectId,
   messageId,
@@ -56,7 +56,7 @@ export function ReplyDebugBlock({
               {input && (
                 <details>
                   <summary className="cursor-pointer select-none">
-                    What the AI read ({input.length} {input.length === 1 ? "message" : "messages"})
+                    What the AI read ({count(input.length, "message")})
                   </summary>
                   <div className="mt-1 ms-3 flex flex-col gap-2">
                     {input.map((message, i) => (

@@ -1,8 +1,7 @@
 //! An open Project: its database, the event log, and delivery to subscribers.
 //!
-//! One lock per Project covers sequence assignment, the database transaction and queuing
-//! events for subscribers, so events are queued only after they are committed, and always in
-//! `seq` order. Each subscription's own thread sends its queue to the UI, outside the lock.
+//! One lock per Project covers seq assignment, the transaction and queuing, so events are queued
+//! only once committed, in `seq` order; each subscription's thread delivers outside the lock.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,24 +16,22 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::paths::ProjectPaths;
+use crate::sync::locked;
 use crate::protocol::{
     AssetRef, Author, AuthorKind, Component, ENVELOPE_VERSION, Event, EventKind,
     Message, MessageStatus, MessageStep, MessageView, OpenedConversation, Origin, Progress,
     Reaction, TextComponent, new_id, now_ms,
 };
 
-/// How long a subscription gathers events before delivering them as one batch: about one
-/// screen refresh, so a fast reply updates the UI at most once per frame.
+/// About one screen refresh, so a fast reply updates the UI at most once per frame.
 pub const BATCH_WINDOW: Duration = Duration::from_millis(16);
 
-/// Receives delivered events, in batches of consecutive events. Returns `false` when the
-/// subscriber is gone and should be dropped.
+/// Receives batches of consecutive events; returns `false` when the subscriber is gone.
 pub trait EventSink: Send {
     fn send(&self, events: &[Event]) -> bool;
 }
 
-/// A subscriber's queue, which its delivery thread sends to the subscriber's sink. Dropping
-/// it ends the subscription: the thread delivers nothing more, then ends.
+/// Dropping it ends the subscription and its delivery thread.
 struct Subscription {
     id: Uuid,
     queue: Sender<Event>,
@@ -47,8 +44,7 @@ impl Drop for Subscription {
     }
 }
 
-/// A subscription's delivery thread: waits for an event, gathers what follows it within
-/// `BATCH_WINDOW`, and sends them together, until the subscription ends or a send fails.
+/// Sends each event with those within `BATCH_WINDOW` after it, until unsubscribed or a send fails.
 fn deliver(queue: Receiver<Event>, active: Arc<AtomicBool>, sink: Box<dyn EventSink>) {
     while let Ok(first) = queue.recv() {
         let mut batch = vec![first];
@@ -68,7 +64,6 @@ fn deliver(queue: Receiver<Event>, active: Arc<AtomicBool>, sink: Box<dyn EventS
 
 pub struct Project {
     pub id: Uuid,
-    name: Mutex<String>,
     pub paths: ProjectPaths,
     inner: Mutex<ProjectState>,
 }
@@ -81,10 +76,9 @@ pub struct ProjectState {
 }
 
 impl Project {
-    pub fn new(id: Uuid, name: String, paths: ProjectPaths, conn: Connection, origin: Origin) -> Self {
+    pub fn new(id: Uuid, paths: ProjectPaths, conn: Connection, origin: Origin) -> Self {
         Self {
             id,
-            name: Mutex::new(name),
             paths,
             inner: Mutex::new(ProjectState {
                 conn,
@@ -95,27 +89,18 @@ impl Project {
         }
     }
 
-    /// The Project's name as it is now.
-    pub fn name(&self) -> String {
-        self.name.lock().unwrap_or_else(|p| p.into_inner()).clone()
-    }
-
-    /// Gives the Project a new name, stored in its database through this open Project; no folder
-    /// is renamed or moved. Returns the name as trimmed.
+    /// Stored in the database only; no folder is renamed. Returns the trimmed name.
     pub fn rename(&self, name: &str) -> AppResult<String> {
         let name = crate::projects::validate_name(name)?;
         self.lock().conn.execute("UPDATE project SET name = ?1", rusqlite::params![name])?;
-        *self.name.lock().unwrap_or_else(|p| p.into_inner()) = name.clone();
         Ok(name)
     }
 
     pub fn lock(&self) -> MutexGuard<'_, ProjectState> {
-        self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        locked(&self.inner)
     }
 
-    /// Delivers every stored event after `after_seq`, then every new event, and returns the
-    /// subscription's ID. Both are queued under the Project lock, so no event is missed or
-    /// duplicated. The app opens Conversations with `open`; tests subscribe from a sequence.
+    /// Stored events after `after_seq`, then new ones; queued under the lock, so none is missed.
     #[cfg(test)]
     pub fn subscribe(
         &self,
@@ -129,8 +114,7 @@ impl Project {
         state.add_subscription(conversation_id, stored, sink)
     }
 
-    /// The Conversation as stored, and a subscription that delivers every event persisted
-    /// after it. Both are read under the Project lock, so no event is missed or duplicated.
+    /// The stored Conversation and a subscription from there, read under the lock: none is missed.
     pub fn open(
         &self,
         conversation_id: Uuid,
@@ -148,7 +132,7 @@ impl Project {
         })
     }
 
-    /// Ends a subscription, whatever its Conversation; an unknown ID is ignored.
+    /// An unknown ID is ignored.
     pub fn unsubscribe(&self, subscription_id: Uuid) {
         for subscriptions in self.lock().subscribers.values_mut() {
             subscriptions.retain(|s| s.id != subscription_id);
@@ -176,8 +160,7 @@ impl ProjectState {
             .ok_or_else(|| AppError::not_found("Conversation not found"))
     }
 
-    /// Queues `stored` for `sink`, then starts the thread that delivers the subscription's
-    /// queue, and returns its ID.
+    /// Queues `stored`, then starts the delivery thread; returns the subscription's ID.
     fn add_subscription(
         &mut self,
         conversation_id: Uuid,
@@ -231,15 +214,13 @@ impl ProjectState {
         Ok(events)
     }
 
-    /// Assigns the next sequence number, stores the event and its projection in one
-    /// transaction, and only then queues it for delivery.
+    /// Stores the event and its projection in one transaction, and only then queues it.
     pub fn persist(&mut self, conversation_id: Uuid, kind: EventKind) -> AppResult<Event> {
         let mut events = self.persist_all(conversation_id, vec![kind], |_| Ok(()))?;
         Ok(events.remove(0))
     }
 
-    /// Stores `kinds` as consecutive events, their projections and whatever `also` writes,
-    /// all in one transaction, then queues the events for delivery in order.
+    /// Stores `kinds`, their projections and `also`'s writes in one transaction, then queues them.
     pub fn persist_all(
         &mut self,
         conversation_id: Uuid,
@@ -298,8 +279,7 @@ impl ProjectState {
         }
         tx.commit()?;
 
-        // Queuing never waits on a subscriber. A queue whose thread has ended refuses the
-        // event, and its subscription is dropped.
+        // Never waits on a subscriber; a queue whose thread has ended is dropped.
         if let Some(subscriptions) = self.subscribers.get_mut(&conversation_id) {
             subscriptions.retain(|s| events.iter().all(|e| s.queue.send(e.clone()).is_ok()));
         }
@@ -319,20 +299,18 @@ impl ProjectState {
         let Some((conversation, status)) = row else {
             return Ok(None);
         };
-        let corrupt = || AppError::storage("stored message is not readable");
-        let conversation = Uuid::parse_str(&conversation).map_err(|_| corrupt())?;
-        Ok(Some((conversation, MessageStatus::parse(&status).ok_or_else(corrupt)?)))
+        let conversation = parse_id(&conversation, "message")?;
+        let status = MessageStatus::parse(&status).ok_or_else(|| unreadable("message"))?;
+        Ok(Some((conversation, status)))
     }
 
-    /// A message with all of its components' data; the app itself reads messages through
-    /// `message_place` and `load_message_with`.
+    /// A message with all of its components' data.
     #[cfg(test)]
     pub fn load_message(&self, message_id: Uuid) -> AppResult<Option<(Uuid, Message)>> {
         self.load_message_with(message_id, true)
     }
 
-    /// A message, with its components' `data` when `component_data` is set and `null` instead
-    /// otherwise (their `text` is always read).
+    /// Components' `data` is `null` unless `component_data` is set; `text` is always read.
     pub fn load_message_with(
         &self,
         message_id: Uuid,
@@ -341,9 +319,7 @@ impl ProjectState {
         Ok(self.messages_in(Scope::Message(message_id), component_data)?.into_iter().next())
     }
 
-    /// The messages of `scope` with their Conversation, in the order they were created, with
-    /// their components and Steps; components carry `data` only when `component_data` is set
-    /// (`null` instead). Three queries, whatever the number of messages.
+    /// `scope`'s messages in creation order, with components (`data` if asked) and Steps.
     fn messages_in(&self, scope: Scope, component_data: bool) -> AppResult<Vec<(Uuid, Message)>> {
         let mut components = self.components_in(scope, component_data)?;
         let mut steps = self.steps_in(scope)?;
@@ -354,48 +330,42 @@ impl ProjectState {
             scope.condition()
         ))?;
         let rows = stmt.query_map(params![scope.id()], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, String>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, String>(8)?,
-            ))
+            Ok(MessageRow {
+                id: row.get(0)?,
+                conversation: row.get(1)?,
+                author_kind: row.get(2)?,
+                author_id: row.get(3)?,
+                content: row.get(4)?,
+                status: row.get(5)?,
+                reply_to: row.get(6)?,
+                attachments: row.get(7)?,
+                text_components: row.get(8)?,
+            })
         })?;
-        let corrupt = || AppError::storage("stored message is not readable");
         let mut messages = Vec::new();
         for row in rows {
-            let (id, conversation, kind, author_id, content, status, reply_to, attachments, refs) =
-                row?;
-            let id = Uuid::parse_str(&id).map_err(|_| corrupt())?;
+            let row = row?;
+            let id = parse_id(&row.id, "message")?;
             let message = Message {
                 id,
                 author: Author {
-                    kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?,
-                    id: author_id,
+                    kind: AuthorKind::parse(&row.author_kind).ok_or_else(|| unreadable("message"))?,
+                    id: row.author_id,
                 },
-                content,
-                status: MessageStatus::parse(&status).ok_or_else(corrupt)?,
-                reply_to: reply_to
-                    .map(|id| Uuid::parse_str(&id))
-                    .transpose()
-                    .map_err(|_| corrupt())?,
-                attachments: serde_json::from_str::<Vec<AssetRef>>(&attachments)?,
-                text_components: serde_json::from_str::<Vec<TextComponent>>(&refs)?,
+                content: row.content,
+                status: MessageStatus::parse(&row.status).ok_or_else(|| unreadable("message"))?,
+                reply_to: row.reply_to.map(|id| parse_id(&id, "message")).transpose()?,
+                attachments: serde_json::from_str::<Vec<AssetRef>>(&row.attachments)?,
+                text_components: serde_json::from_str::<Vec<TextComponent>>(&row.text_components)?,
                 components: components.remove(&id).unwrap_or_default(),
                 steps: steps.remove(&id).unwrap_or_default(),
             };
-            messages.push((Uuid::parse_str(&conversation).map_err(|_| corrupt())?, message));
+            messages.push((parse_id(&row.conversation, "message")?, message));
         }
         Ok(messages)
     }
 
-    /// The Interactive Components of `scope`'s messages by message, each message's in the
-    /// order they were added; with `data` `null` unless `with_data` is set.
+    /// By message, in the order added; `data` is `null` unless `with_data` is set.
     fn components_in(
         &self,
         scope: Scope,
@@ -408,19 +378,18 @@ impl ProjectState {
             scope.condition(),
         ))?;
         let rows = stmt.query_map(params![scope.id()], |row| {
-            Ok((row.get::<_, String>(0)?, component_row(row, 1)?))
+            Ok((row.get::<_, String>(0)?, ComponentRow::read(row, 1)?))
         })?;
         let mut components: HashMap<Uuid, Vec<Component>> = HashMap::new();
         for row in rows {
             let (message_id, raw) = row?;
-            let message_id = Uuid::parse_str(&message_id)
-                .map_err(|_| AppError::storage("stored component is not readable"))?;
-            components.entry(message_id).or_default().push(component(raw)?);
+            let message_id = parse_id(&message_id, "component")?;
+            components.entry(message_id).or_default().push(raw.into_component()?);
         }
         Ok(components)
     }
 
-    /// The Steps each of `scope`'s replies has started, by message, in order.
+    /// Started Steps by message, in order.
     fn steps_in(&self, scope: Scope) -> AppResult<HashMap<Uuid, Vec<MessageStep>>> {
         let mut stmt = self.conn.prepare(&format!(
             "SELECT s.message_id, s.step_id, s.type, s.name, s.output, s.done \
@@ -443,15 +412,13 @@ impl ProjectState {
         let mut steps: HashMap<Uuid, Vec<MessageStep>> = HashMap::new();
         for row in rows {
             let (message_id, step) = row?;
-            let message_id = Uuid::parse_str(&message_id)
-                .map_err(|_| AppError::storage("stored Step is not readable"))?;
+            let message_id = parse_id(&message_id, "Step")?;
             steps.entry(message_id).or_default().push(step);
         }
         Ok(steps)
     }
 
-    /// The position, from 0, of the latest run of `step_id` among `message_id`'s started
-    /// Steps; `None` when that Step has not started.
+    /// 0-based index of `step_id`'s latest run among started Steps; `None` if it has not started.
     pub fn latest_step_index(&self, message_id: Uuid, step_id: &str) -> AppResult<Option<u32>> {
         let position: Option<u32> = self.conn.query_row(
             "SELECT MAX(position) FROM message_steps WHERE message_id = ?1 AND step_id = ?2",
@@ -461,8 +428,7 @@ impl ProjectState {
         Ok(position.map(|p| p - 1))
     }
 
-    /// The Interactive Component `component_id` with its data, when a message of the
-    /// Conversation holds it.
+    /// `None` unless a message of the Conversation holds it.
     pub fn conversation_component(
         &self,
         conversation_id: Uuid,
@@ -477,15 +443,13 @@ impl ProjectState {
                     component_columns(true),
                 ),
                 params![conversation_id.to_string(), component_id.to_string()],
-                |row| component_row(row, 0),
+                |row| ComponentRow::read(row, 0),
             )
             .optional()?;
-        raw.map(component).transpose()
+        raw.map(ComponentRow::into_component).transpose()
     }
 
-    /// The `table` and `chart` components of the Conversation shown from a file, by that
-    /// file's Asset ID (their `source_id`), each file's newest first, as `(kind, title)`.
-    /// Only `source_id` and `title` are read from each component's data.
+    /// `(kind, title)` of tables and charts by source Asset ID, newest first; reads no other data.
     pub fn file_components(
         &self,
         conversation_id: Uuid,
@@ -514,8 +478,7 @@ impl ProjectState {
         Ok(shown)
     }
 
-    /// Stores `content` as `message_id`'s only debug record of `kind`, at position 0, replacing
-    /// the one it had.
+    /// Replaces the message's only debug record of `kind`.
     pub fn put_debug_record(
         &self,
         conversation_id: Uuid,
@@ -538,7 +501,6 @@ impl ProjectState {
         Ok(())
     }
 
-    /// Stores `content` as `message_id`'s next debug record of `kind`, after the ones it has.
     pub fn append_debug_record(
         &self,
         conversation_id: Uuid,
@@ -562,7 +524,7 @@ impl ProjectState {
         Ok(())
     }
 
-    /// `message_id`'s debug records of `kind`, in the order they were written.
+    /// In the order they were written.
     pub fn debug_records(&self, message_id: Uuid, kind: &str) -> AppResult<Vec<Value>> {
         let mut statement = self.conn.prepare(
             "SELECT content FROM debug_records WHERE message_id = ?1 AND kind = ?2 \
@@ -578,24 +540,20 @@ impl ProjectState {
         Ok(records)
     }
 
-    /// Deletes every debug record of the Project.
     pub fn clear_debug_records(&self) -> AppResult<()> {
         self.conn.execute("DELETE FROM debug_records", [])?;
         Ok(())
     }
 
-    /// IDs of messages still streaming, optionally limited to one Conversation.
-    pub fn streaming_messages(&self, conversation_id: Option<Uuid>) -> AppResult<Vec<(Uuid, Uuid)>> {
+    pub fn streaming_messages(&self, conversation_id: Option<Uuid>) -> AppResult<Vec<MessageAt>> {
         self.messages_with_status(&[MessageStatus::Streaming], conversation_id)
     }
 
-    /// `(conversation, message)` IDs of the messages whose status is one of `statuses`,
-    /// optionally limited to one Conversation.
     pub fn messages_with_status(
         &self,
         statuses: &[MessageStatus],
         conversation_id: Option<Uuid>,
-    ) -> AppResult<Vec<(Uuid, Uuid)>> {
+    ) -> AppResult<Vec<MessageAt>> {
         // The statuses are fixed identifiers, so listing them in the SQL text is safe.
         let listed: Vec<String> = statuses.iter().map(|s| format!("'{}'", s.as_str())).collect();
         let mut stmt = self.conn.prepare(&format!(
@@ -609,25 +567,22 @@ impl ProjectState {
         let mut result = Vec::new();
         for row in rows {
             let (conversation, message) = row?;
-            let parse = |s: &str| {
-                Uuid::parse_str(s).map_err(|_| AppError::storage("stored ID is not readable"))
-            };
-            result.push((parse(&conversation)?, parse(&message)?));
+            result.push(MessageAt {
+                conversation: parse_id(&conversation, "ID")?,
+                message: parse_id(&message, "ID")?,
+            });
         }
         Ok(result)
     }
 
-    /// Every message of the Conversation, in the order they were created. Their components
-    /// carry only `text` (`data` is `null`), which is all a history needs.
+    /// In creation order; components carry only `text`, which is all a history needs.
     pub fn conversation_messages(&self, conversation_id: Uuid) -> AppResult<Vec<Message>> {
         let messages = self.messages_in(Scope::Conversation(conversation_id), false)?;
         Ok(messages.into_iter().map(|(_, message)| message).collect())
     }
 
-    /// Every message of the Conversation as the UI shows it, in the order they were created:
-    /// the stored messages with their components' data and reactions, plus the failures,
-    /// Jev's answers and progress that only events record. Matches what folding the
-    /// Conversation's events gives (`src/protocol/eventStore.ts`).
+    /// Messages as the UI shows them, including what only events record; must match the fold in
+    /// `src/protocol/eventStore.ts`.
     fn message_views(&self, conversation_id: Uuid) -> AppResult<Vec<MessageView>> {
         let messages = self.messages_in(Scope::Conversation(conversation_id), true)?;
         let created: HashMap<String, i64> = self
@@ -650,8 +605,7 @@ impl ProjectState {
         let index: HashMap<Uuid, usize> =
             views.iter().enumerate().map(|(i, v)| (v.message.id, i)).collect();
 
-        // A reaction removed and added again is a new row, so `rowid` order is the order in
-        // which the UI adds them.
+        // A re-added reaction is a new row, so `rowid` order is the UI's order.
         let mut stmt = self.conn.prepare(
             "SELECT r.message_id, r.emoji, r.by_kind, r.by_id FROM reactions r \
              JOIN messages m ON m.id = r.message_id WHERE m.conversation_id = ?1 \
@@ -667,10 +621,9 @@ impl ProjectState {
         })?;
         for row in rows {
             let (message_id, emoji, kind, by_id) = row?;
-            let corrupt = || AppError::storage("stored reaction is not readable");
-            let message_id = Uuid::parse_str(&message_id).map_err(|_| corrupt())?;
+            let message_id = parse_id(&message_id, "reaction")?;
             let by = Author {
-                kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?,
+                kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("reaction"))?,
                 id: by_id,
             };
             if let Some(&i) = index.get(&message_id) {
@@ -696,8 +649,7 @@ impl ProjectState {
                         views[i].failure = Some(error);
                     }
                 }
-                // Pausing clears a reply's progress; it stays empty after resuming until the
-                // next progress event.
+                // Progress stays empty after resuming until the next progress event.
                 EventKind::MessagePaused { message_id } => {
                     paused.insert(message_id);
                     if let Some(i) = view(&message_id) {
@@ -761,41 +713,73 @@ impl Scope {
     }
 }
 
-/// The columns of a `components` row `c` that `component_row` reads; `data` reads as `null`
-/// unless `with_data` is set.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MessageAt {
+    pub conversation: Uuid,
+    pub message: Uuid,
+}
+
+struct MessageRow {
+    id: String,
+    conversation: String,
+    author_kind: String,
+    author_id: String,
+    content: String,
+    status: String,
+    reply_to: Option<String>,
+    attachments: String,
+    text_components: String,
+}
+
+/// `data` reads as `null` unless `with_data` is set.
 fn component_columns(with_data: bool) -> String {
     let data = if with_data { "c.data" } else { "'null'" };
     format!("c.id, c.kind, c.version, {data}, c.text, c.answer, c.step_index")
 }
 
-/// The raw `component_columns`, starting at column `first`.
-type ComponentRow = (String, String, u32, String, String, Option<String>, Option<u32>);
-
-fn component_row(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<ComponentRow> {
-    Ok((
-        row.get(first)?,
-        row.get(first + 1)?,
-        row.get(first + 2)?,
-        row.get(first + 3)?,
-        row.get(first + 4)?,
-        row.get(first + 5)?,
-        row.get(first + 6)?,
-    ))
+struct ComponentRow {
+    id: String,
+    kind: String,
+    version: u32,
+    data: String,
+    text: String,
+    answer: Option<String>,
+    step_index: Option<u32>,
 }
 
-fn component(
-    (id, kind, version, data, text, answer, step_index): ComponentRow,
-) -> AppResult<Component> {
-    Ok(Component {
-        id: Uuid::parse_str(&id)
-            .map_err(|_| AppError::storage("stored component is not readable"))?,
-        kind,
-        version,
-        data: serde_json::from_str(&data)?,
-        text,
-        answer: answer.map(|a| serde_json::from_str(&a)).transpose()?.unwrap_or_default(),
-        step_index,
-    })
+impl ComponentRow {
+    /// Reads `component_columns` starting at column `first`.
+    fn read(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(first)?,
+            kind: row.get(first + 1)?,
+            version: row.get(first + 2)?,
+            data: row.get(first + 3)?,
+            text: row.get(first + 4)?,
+            answer: row.get(first + 5)?,
+            step_index: row.get(first + 6)?,
+        })
+    }
+
+    fn into_component(self) -> AppResult<Component> {
+        Ok(Component {
+            id: parse_id(&self.id, "component")?,
+            kind: self.kind,
+            version: self.version,
+            data: serde_json::from_str(&self.data)?,
+            text: self.text,
+            answer: self.answer.map(|a| serde_json::from_str(&a)).transpose()?.unwrap_or_default(),
+            step_index: self.step_index,
+        })
+    }
+}
+
+pub(crate) fn unreadable(what: &str) -> AppError {
+    AppError::storage(format!("stored {what} is not readable"))
+}
+
+pub(crate) fn parse_id(value: &str, what: &str) -> AppResult<Uuid> {
+    Uuid::parse_str(value).map_err(|_| unreadable(what))
 }
 
 fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
@@ -825,8 +809,7 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
                 params![message_id.to_string(), text],
             )?;
         }
-        // Progress has no projection: opening a Conversation reads it from its events
-        // (`message_views`), as it does a failure's details.
+        // No projection: `message_views` reads progress from the events.
         EventKind::MessageProgress { .. } => {}
         EventKind::MessagePaused { message_id } => {
             tx.execute(
@@ -954,8 +937,7 @@ pub mod test_support {
             self.0.lock().unwrap().clone()
         }
 
-        /// The delivered events, once at least `count` arrived and no more followed within a
-        /// few batch windows; panics after two seconds without `count`.
+        /// Waits for `count` events and a few quiet batch windows; panics after two seconds.
         pub fn settled(&self, count: usize) -> Vec<Event> {
             let start = std::time::Instant::now();
             while self.events().len() < count {
@@ -984,6 +966,16 @@ mod tests {
 
     fn cancel(id: Uuid) -> EventKind {
         EventKind::MessageCancelled { message_id: id }
+    }
+
+    /// Sends the user message `text` to `conversation`.
+    fn send(project: &Project, conversation: Uuid, text: &str) -> Message {
+        let input = conversations::SendMessageInput {
+            content: text.into(),
+            attachments: Vec::new(),
+            text_components: Vec::new(),
+        };
+        conversations::send_message(project, conversation, input, new_id()).unwrap()
     }
 
     #[test]
@@ -1076,8 +1068,7 @@ mod tests {
         assert_eq!(project.lock().subscription_count(), 0);
     }
 
-    /// Takes the Project lock on every delivery, which would deadlock if delivery ran under
-    /// that lock.
+    /// Takes the Project lock on delivery, so it deadlocks if delivery runs under that lock.
     struct Locking(Arc<Project>, Collector);
 
     impl EventSink for Locking {
@@ -1145,8 +1136,7 @@ mod tests {
         let opened = project.open(conversation, Box::new(Collector::default())).unwrap();
         let mut opened = serde_json::to_value(&opened).unwrap();
         assert_eq!(opened["last_seq"], fixture["opened"]["lastSeq"]);
-        // Persisting stamps events with the current time rather than the fixture's `ts`, so
-        // `created_at` is checked for presence and left out of the comparison.
+        // Persisting stamps the current time, so `created_at` is only checked for presence.
         let mut expected = fixture["opened"]["messages"].clone();
         for list in [&mut opened["messages"], &mut expected] {
             for message in list.as_array_mut().unwrap() {
@@ -1161,13 +1151,7 @@ mod tests {
     fn components_are_rebuilt_in_the_order_they_were_added() {
         let (_dir, project) = temp_project();
         let conversation = conversations::create(&project).unwrap().id;
-        let input = conversations::SendMessageInput {
-            content: "papers on late blight".into(),
-            attachments: Vec::new(),
-            text_components: Vec::new(),
-        };
-        let question =
-            conversations::send_message(&project, conversation, input, new_id()).unwrap();
+        let question = send(&project, conversation, "papers on late blight");
         let author = Author {
             kind: AuthorKind::MiniMe,
             id: "researcher".into(),
@@ -1213,20 +1197,13 @@ mod tests {
     }
 
     #[test]
-    fn debug_records_are_replaced_cleared_and_deleted_with_their_conversation() {
+    fn debug_records_are_replaced_or_appended_and_go_with_their_conversation() {
         let (_dir, project) = temp_project();
-        let send = |conversation: Uuid| {
-            let input = conversations::SendMessageInput {
-                content: "check the data".into(),
-                attachments: Vec::new(),
-                text_components: Vec::new(),
-            };
-            conversations::send_message(&project, conversation, input, new_id()).unwrap().id
-        };
         let kept = conversations::create(&project).unwrap().id;
         let deleted = conversations::create(&project).unwrap().id;
-        let (first, second) = (send(kept), send(deleted));
-        let record = |n: u32| serde_json::json!({ "answers": n });
+        let first = send(&project, kept, "check the data").id;
+        let second = send(&project, deleted, "check the data").id;
+        let record = |n: u32| serde_json::json!({ "n": n });
         {
             let state = project.lock();
             state.put_debug_record(kept, first, "jev", &record(1)).unwrap();
@@ -1234,6 +1211,12 @@ mod tests {
             state.put_debug_record(deleted, second, "jev", &record(3)).unwrap();
             assert_eq!(state.debug_records(first, "jev").unwrap(), vec![record(2)]);
             assert_eq!(state.debug_records(first, "reply").unwrap(), Vec::<Value>::new());
+            for n in 4..=6 {
+                state.append_debug_record(kept, first, "reply", &record(n)).unwrap();
+            }
+            let replies = state.debug_records(first, "reply").unwrap();
+            assert_eq!(replies, vec![record(4), record(5), record(6)]);
+            assert_eq!(state.debug_records(first, "jev").unwrap(), vec![record(2)]);
         }
 
         conversations::delete(&project, deleted).unwrap();
@@ -1245,38 +1228,10 @@ mod tests {
     }
 
     #[test]
-    fn appended_debug_records_come_back_in_order_next_to_jevs() {
-        let (_dir, project) = temp_project();
-        let conversation = conversations::create(&project).unwrap().id;
-        let input = conversations::SendMessageInput {
-            content: "check the data".into(),
-            attachments: Vec::new(),
-            text_components: Vec::new(),
-        };
-        let message =
-            conversations::send_message(&project, conversation, input, new_id()).unwrap().id;
-        let record = |n: u32| serde_json::json!({ "n": n });
-        let state = project.lock();
-        state.put_debug_record(conversation, message, "jev", &record(0)).unwrap();
-        for n in 1..=3 {
-            state.append_debug_record(conversation, message, "reply", &record(n)).unwrap();
-        }
-        let replies = state.debug_records(message, "reply").unwrap();
-        assert_eq!(replies, vec![record(1), record(2), record(3)]);
-        assert_eq!(state.debug_records(message, "jev").unwrap(), vec![record(0)]);
-    }
-
-    #[test]
     fn steps_pauses_and_answers_are_rebuilt_from_events() {
         let (_dir, project) = temp_project();
         let conversation = conversations::create(&project).unwrap().id;
-        let input = conversations::SendMessageInput {
-            content: "does early planting reduce late blight?".into(),
-            attachments: Vec::new(),
-            text_components: Vec::new(),
-        };
-        let question =
-            conversations::send_message(&project, conversation, input, new_id()).unwrap();
+        let question = send(&project, conversation, "does early planting reduce late blight?");
         let author = Author {
             kind: AuthorKind::MiniMe,
             id: "investigator".into(),

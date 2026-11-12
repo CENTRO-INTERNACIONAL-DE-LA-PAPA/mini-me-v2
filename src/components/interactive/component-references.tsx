@@ -14,8 +14,7 @@ interface ComponentReferences {
 // Provided around a Conversation; outside one (such as on the Overview) there is no button.
 const ComponentReferencesContext = createContext<ComponentReferences | null>(null);
 
-/** Lets the tables and charts of a Conversation's replies add `$` references to its
- * composer. */
+/** Lets a Conversation's tables and charts add `$` references to its composer. */
 export function ComponentReferencesProvider({
   names,
   append,

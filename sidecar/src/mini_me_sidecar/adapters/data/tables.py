@@ -1,5 +1,5 @@
-"""Reads the tables a data Trait works on: the CSV, TSV and Excel Assets a message references
-with `#` or attaches, parsed into pandas DataFrames, and the tables it references with `$`."""
+"""A data Trait's tables: CSV, TSV and Excel Assets a message tags with `#` or attaches, parsed
+with pandas, and the tables it references with `$`."""
 
 import csv
 import io
@@ -51,8 +51,7 @@ class Table:
 
 @dataclass(frozen=True)
 class TableSource:
-    """Where one table of a message comes from: a table file (`asset_id` and `name`), or a
-    `$` reference (`reference`, its Text Component)."""
+    """A table file (`asset_id`, `name`) or a `$` reference (`reference`, its Text Component)."""
 
     asset_id: str | None = None
     name: str = ""
@@ -60,8 +59,7 @@ class TableSource:
 
 
 def table_sources(message: dict[str, Any]) -> list[TableSource]:
-    """The table files the message references with `#` and the tables it references with `$`,
-    in the order they appear, then the table files it attaches; each file once."""
+    """`#` table files and `$` tables in message order, then attached tables; each file once."""
     sources: list[TableSource] = []
     seen: set[str] = set()
 
@@ -84,9 +82,8 @@ def table_sources(message: dict[str, Any]) -> list[TableSource]:
 def fallback_source(
     picked: dict[str, Any] | None, assets: list[dict[str, Any]]
 ) -> tuple[TableSource, str] | None:
-    """The table to read when the message points to none, with a note saying which and why:
-    `picked`, routing's `{ asset_id, name }`, when it is a table file, else the first table
-    file of `assets`, the Conversation's Assets newest first. None when neither has one."""
+    """For a message naming no table: routing's `picked` file if a table, else the newest table
+    in `assets`, with a note saying which; None when neither has one."""
     if picked and str(picked.get("name", "")).lower().endswith(TABLE_EXTENSIONS):
         name = str(picked["name"])
         source = TableSource(asset_id=str(picked.get("asset_id")), name=name)
@@ -100,8 +97,7 @@ def fallback_source(
 
 
 def parse_table(name: str, data: bytes, text: str = "") -> Table:
-    """Parses one file by its extension. For Excel, reads the sheet whose name appears in
-    `text`, else the first."""
+    """Parses by extension; for Excel, the sheet named in `text`, else the first."""
     try:
         if name.lower().endswith(".xlsx"):
             book = pd.ExcelFile(io.BytesIO(data), engine="openpyxl")
@@ -147,8 +143,7 @@ def as_text(series: pd.Series) -> pd.Series:
 def table_file(
     table: Table, frame: pd.DataFrame, suffix: str, csv_only: bool = False
 ) -> tuple[str, str, bytes]:
-    """`frame` as a file named after `table` plus `suffix`, in `table`'s format (or CSV):
-    the name, media type and bytes."""
+    """`frame` as `(name, media type, bytes)`, named after `table` plus `suffix`, in its format."""
     extension = ".csv" if csv_only else table.extension
     name = f"{table.stem}-{suffix}{extension}"
     if extension == ".xlsx":
@@ -165,8 +160,7 @@ def table_file(
 
 
 def plain_value(value: Any) -> Any:
-    """A numpy or pandas scalar as a plain Python value; dates as ISO text, without a time of
-    day when they have none."""
+    """A numpy or pandas scalar as plain Python; dates as ISO text, dropping a midnight time."""
     if isinstance(value, pd.Timestamp):
         return value.date().isoformat() if value == value.normalize() else value.isoformat()
     return value.item() if hasattr(value, "item") else value

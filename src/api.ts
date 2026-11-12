@@ -21,6 +21,7 @@ import type {
   FeatureFlag,
   HomeSettings,
   Message,
+  MessageStatus,
   MiniMe,
   MiniMeDefinition,
   OpenedDocument,
@@ -32,6 +33,7 @@ import type {
   ProjectSummary,
   ProtocolEvent,
   ProviderId,
+  ProjectActivity,
   RecentConversation,
   RunningReply,
   SavedDefinition,
@@ -83,8 +85,12 @@ export const api = {
     invoke<void>("answer_approval", { project_id, message_id, component_id, approved }),
   /** Every reply paused at an approval, across all Projects, newest first. */
   listPausedApprovals: () => invoke<PausedApproval[]>("list_paused_approvals"),
+  /** The status of a message; null once it no longer exists. */
+  getMessageStatus: (project_id: Uuid, message_id: Uuid) =>
+    invoke<MessageStatus | null>("get_message_status", { project_id, message_id }),
   /** The most recently active Conversations across all Projects, newest first. */
   listRecentConversations: () => invoke<RecentConversation[]>("list_recent_conversations"),
+  listProjectActivity: () => invoke<ProjectActivity[]>("list_project_activity"),
 
 
   /** Opens the native file picker; resolves with the imported Assets (empty if cancelled). */
@@ -157,8 +163,7 @@ export const api = {
     decision: Exclude<SuggestionDecision, "accepted">,
   ) => invoke<void>("answer_suggestion", { project_id, message_id, component_id, decision }),
   /** Drafts the new document `asset_id` from a Conversation, calling `onEvent` as text arrives.
-   * Resolves once the draft has ended and what was written is saved; rejects with why it
-   * stopped early. */
+   * Resolves once the draft has ended and is saved; rejects with why it stopped early. */
   draftDocument: (
     project_id: Uuid,
     asset_id: Uuid,
@@ -177,8 +182,7 @@ export const api = {
     });
   },
   stopDraft: (draft_id: Uuid) => invoke<void>("stop_draft", { draft_id }),
-  /** The document text `source` as Quarto renders it, one SVG image per page. The Project's
-   * files that the text names are available to the render. */
+  /** Renders `source` with Quarto, one SVG per page; it can use the Project files it names. */
   previewDocument: (project_id: Uuid, source: string) =>
     invoke<string[]>("preview_document", { project_id, source }),
   /** Names a new Conversation after its first message and returns the title, or null when it was
@@ -205,11 +209,13 @@ export const api = {
   /** A message's debug records of `kind`, in the order they were written. */
   getDebugRecords: <T>(project_id: Uuid, message_id: Uuid, kind: string) =>
     invoke<T[]>("get_debug_records", { project_id, message_id, kind }),
+  /** Saves `csv` as a Project file named after `title`. */
+  saveTableCsv: (project_id: Uuid, title: string, csv: string) =>
+    invoke<AssetRef>("save_table_csv", { project_id, title, csv }),
   /** Shows the file in the system's file manager. */
   revealAsset: (project_id: Uuid, asset_id: Uuid) =>
     invoke<void>("reveal_asset", { project_id, asset_id }),
-  /** Whether Quarto is usable, its version and where it is, as last looked up: when the app
-   * started, when asked again, or when its location changed. */
+  /** Whether Quarto is usable, its version and path, as last looked up; see `recheckQuarto`. */
   quartoStatus: () => invoke<QuartoStatus>("quarto_status"),
   /** Looks for Quarto again, as when it was installed after the app started. */
   recheckQuarto: () => invoke<QuartoStatus>("recheck_quarto"),
@@ -237,7 +243,6 @@ export const api = {
     on_warning.onmessage = onWarning;
     return invoke<void>("subscribe_routing_warning", { on_warning });
   },
-  /** Starts the sidecar again after it stopped. */
   restartSidecar: () => invoke<void>("restart_sidecar"),
 
   listMiniMes: () => invoke<MiniMe[]>("list_mini_mes"),
@@ -257,8 +262,7 @@ export const api = {
   getAiSettings: () => invoke<AiSettings>("get_ai_settings"),
   setAiModel: (provider: ProviderId, model: string) =>
     invoke<void>("set_ai_model", { provider, model }),
-  /** Tests the model with one small request that needs a tool call; fails with why it did not
-   * pass. */
+  /** Tries one small request that needs a tool call; fails with why the model did not pass. */
   testModel: (provider: ProviderId, model: string) =>
     invoke<void>("test_model", { provider, model }),
   /** Stores the key in the OS keychain; it is never sent back to the UI. */
@@ -275,9 +279,9 @@ export const api = {
   openSidecarLog: () => invoke<void>("open_sidecar_log"),
   /** The third-party software this build ships; null in a build without it, such as dev. */
   getThirdParty: () => invoke<ThirdParty | null>("get_third_party"),
-  /** Whether developer options are shown: on in Mini-Me Dev and off in Mini-Me until set. */
   /** Whether to open What's new now; true once after the app updated, never in Mini-Me Dev. */
   takeWhatsNew: () => invoke<boolean>("take_whats_new"),
+  /** Whether developer options are shown: on in Mini-Me Dev and off in Mini-Me until set. */
   getDeveloperMode: () => invoke<boolean>("get_developer_mode"),
   setDeveloperMode: (on: boolean) => invoke<void>("set_developer_mode", { on }),
   /** The feature flags that are on. */

@@ -39,8 +39,7 @@ class Group {
 
 const unsigned = (label: string) => label.replace(/^[@#$]/, "");
 
-/** The Mini-Mes, files and tables and charts `messages` use. `names` are the Conversation's
- * table and chart names, from `componentNames`. */
+/** The Mini-Mes, files, tables and charts `messages` use; `names` comes from `componentNames`. */
 export function outline(messages: MessageView[], names: Map<string, ComponentName>): Outline {
   const miniMes = new Group();
   const files = new Group();

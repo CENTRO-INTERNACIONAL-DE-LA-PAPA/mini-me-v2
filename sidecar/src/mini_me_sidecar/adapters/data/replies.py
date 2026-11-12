@@ -1,6 +1,5 @@
-"""How each data Trait answers: read the tables, let the model choose from a catalogue when
-the Trait needs it, compute with the tools, and reply with text, `table` or `chart`
-components and saved files."""
+"""How each data Trait answers: reads the tables, has the model pick from the catalogue when
+needed, computes, and replies with text, `table` or `chart` components and saved files."""
 
 from typing import Any
 
@@ -165,9 +164,8 @@ async def plot(ctx: CallContext, text: str) -> None:
 
 
 async def read_tables(ctx: CallContext, text: str, fallback: bool = True) -> list[Table]:
-    """Every table the call's message points to, in order. When it points to none and
-    `fallback` is set, the picked file or the Conversation's newest table, named in the reply.
-    Fails when there is none."""
+    """The tables the message points to, in order, or with `fallback` the picked or newest
+    table, named in the reply. Raises `no_table` when there is none."""
     sources = table_sources(ctx.message)
     if not sources and fallback:
         found = fallback_source(ctx.file, (await ctx.results()).get("assets") or [])
@@ -189,8 +187,7 @@ async def read_tables(ctx: CallContext, text: str, fallback: bool = True) -> lis
 async def _save(
     ctx: CallContext, table: Table, frame: pd.DataFrame, suffix: str, csv_only: bool = False
 ) -> dict[str, Any] | None:
-    """Saves `frame` as a new Asset and returns its `{ asset_id, name }`, or None when it is
-    too large."""
+    """Saves `frame` as a new Asset: its `{ asset_id, name }`, or None when over 32 MiB."""
     name, media, data = await WORKERS.run(ctx, table_file, table, frame, suffix, csv_only)
     if len(data) > MAX_FILE_BYTES:
         ctx.write(f"\nThe result is larger than 32 MiB, so `{name}` could not be saved.\n")

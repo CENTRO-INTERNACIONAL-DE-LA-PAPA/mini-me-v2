@@ -1,7 +1,5 @@
-//! Comment threads on the passages of a document. A thread is a Conversation that belongs to a
-//! document: its comments and replies are ordinary messages, while its anchor and whether it is
-//! resolved are stored beside it in `comment_threads`. Threads are listed only here, never as
-//! Conversations.
+//! Comment threads on a document's passages. A thread is a Conversation whose anchor and resolved
+//! state live in `comment_threads`; threads are listed only here, never as Conversations.
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -9,7 +7,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::assets;
-use crate::conversations;
+use crate::conversations::{self, NewComponent};
 use crate::documents;
 use crate::error::{AppError, AppResult};
 use crate::link::RunDocument;
@@ -17,10 +15,10 @@ use crate::protocol::{
     AssetRef, Author, AuthorKind, Component, EventKind, Message, MessageStatus, TextComponentKind,
     new_id,
 };
-use crate::store::{Project, ProjectState};
+use crate::store::{Project, ProjectState, parse_id, unreadable};
 
-/// A thread as the document view shows it. `start` and `end` are UTF-16 offsets in the
-/// document's source; `quote` is the passage's text when the thread was last anchored.
+/// `start` and `end` are UTF-16 offsets in the document's source; `quote` is the passage's text
+/// when the thread was last anchored.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CommentThread {
     pub conversation_id: Uuid,
@@ -30,9 +28,9 @@ pub struct CommentThread {
     pub quote: String,
     pub resolved: bool,
     pub created_at: i64,
-    /// How many comments and replies the thread holds.
+    /// Comments and replies together.
     pub comments: u32,
-    /// Its newest suggestion still waiting for an answer.
+    /// The newest suggestion still waiting for an answer.
     pub pending: Option<PendingSuggestion>,
     /// Where a Mini-Me opened it; none for a thread the user started.
     pub opened_from: Option<OpenedFrom>,
@@ -42,13 +40,13 @@ pub struct CommentThread {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct OpenedFrom {
     pub conversation_id: Uuid,
-    /// The Conversation's title; none once it no longer exists.
+    /// None once the Conversation is deleted.
     pub title: Option<String>,
-    /// The Mini-Me that opened it, the author of its first message.
+    /// The author of the thread's first message.
     pub by: Author,
 }
 
-/// A suggestion waiting for the user's answer, as the thread view and the source show it.
+/// A suggestion waiting for the user's answer.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PendingSuggestion {
     pub message_id: Uuid,
@@ -57,7 +55,7 @@ pub struct PendingSuggestion {
     pub text: String,
 }
 
-/// Where a thread's passage is now, as the document view tracks it while the user edits.
+/// A thread's passage as the document view tracks it while the user edits.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct Anchor {
     pub thread_id: Uuid,
@@ -65,8 +63,7 @@ pub struct Anchor {
     pub end: u32,
 }
 
-/// The text between the UTF-16 offsets `start` and `end` of `text`; none when they do not mark
-/// a passage of it.
+/// The text between UTF-16 offsets `start` and `end`; none when they do not mark a passage.
 pub fn passage(text: &str, start: u32, end: u32) -> Option<String> {
     let units: Vec<u16> = text.encode_utf16().collect();
     let (start, end) = (start as usize, end as usize);
@@ -76,9 +73,8 @@ pub fn passage(text: &str, start: u32, end: u32) -> Option<String> {
     String::from_utf16(&units[start..end]).ok()
 }
 
-/// Moves the threads of the document `asset_id` to `anchors` in its saved `text`, each quoting
-/// the passage it now marks. An anchor outside the text, or of another document's thread,
-/// changes nothing.
+/// Moves `asset_id`'s threads to `anchors` in its saved `text`, each quoting its new passage.
+/// An anchor outside the text, or of another document's thread, changes nothing.
 pub fn move_anchors(
     conn: &Connection,
     asset_id: Uuid,
@@ -105,23 +101,10 @@ pub fn move_anchors(
 }
 
 /// A SQL condition that holds when the Conversation ID in `column` is not a comment thread's.
-/// Home reads Projects without upgrading their databases, and one from before comment threads
-/// has no `comment_threads` table and no threads.
-pub fn not_a_thread(conn: &Connection, column: &str) -> AppResult<String> {
-    let has_threads: bool = conn.query_row(
-        "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' \
-         AND name = 'comment_threads')",
-        [],
-        |row| row.get(0),
-    )?;
-    Ok(if has_threads {
-        format!("{column} NOT IN (SELECT conversation_id FROM comment_threads)")
-    } else {
-        "1".to_string()
-    })
+pub fn not_a_thread(column: &str) -> String {
+    format!("{column} NOT IN (SELECT conversation_id FROM comment_threads)")
 }
 
-/// Whether the Conversation `conversation_id` is a comment thread.
 pub fn is_thread(state: &ProjectState, conversation_id: Uuid) -> AppResult<bool> {
     Ok(state.conn.query_row(
         "SELECT EXISTS (SELECT 1 FROM comment_threads WHERE conversation_id = ?1)",
@@ -130,19 +113,18 @@ pub fn is_thread(state: &ProjectState, conversation_id: Uuid) -> AppResult<bool>
     )?)
 }
 
-/// The thread whose Conversation is `conversation_id`; none for an ordinary Conversation.
+/// None for an ordinary Conversation.
 pub fn thread_of(state: &ProjectState, conversation_id: Uuid) -> AppResult<Option<CommentThread>> {
     Ok(threads_where(state, "conversation_id = ?1", conversation_id)?.pop())
 }
 
-/// The document the thread `conversation_id` is about; none for an ordinary Conversation.
+/// None for an ordinary Conversation.
 pub fn document_of(state: &ProjectState, conversation_id: Uuid) -> AppResult<Option<AssetRef>> {
     thread_of(state, conversation_id)?.map(|t| assets::find(state, t.asset_id)).transpose()
 }
 
-/// What a run answering a comment in the thread `conversation_id` is told about its document,
-/// with the passage as the saved document reads now, or as last quoted when the thread's
-/// anchor no longer marks a passage; none for an ordinary Conversation.
+/// The thread's document for a run, with the passage as saved now, or as last quoted when the
+/// anchor no longer marks one; none for an ordinary Conversation.
 pub fn run_document(project: &Project, conversation_id: Uuid) -> AppResult<Option<RunDocument>> {
     let found = {
         let state = project.lock();
@@ -159,9 +141,8 @@ pub fn run_document(project: &Project, conversation_id: Uuid) -> AppResult<Optio
     Ok(Some(RunDocument { asset_id: document.id, name: document.name, passage }))
 }
 
-/// A `suggestion` component's data as it is stored: the thread's document, the passage as the
-/// saved document reads now (the base a later Accept merges from), and the suggested `text`.
-/// Fails with `not_in_thread` outside a comment thread.
+/// A `suggestion` component's stored data: the document, the passage as saved now (the base Accept
+/// merges from) and the suggested `text`. Fails with `not_in_thread` outside a thread.
 pub fn suggestion(project: &Project, conversation_id: Uuid, data: &Value) -> AppResult<Value> {
     let text = data["text"]
         .as_str()
@@ -172,7 +153,7 @@ pub fn suggestion(project: &Project, conversation_id: Uuid, data: &Value) -> App
     Ok(json!({ "document_id": document.asset_id, "base": document.passage, "text": text }))
 }
 
-/// What the user decided about a suggestion, as its component's answer records it.
+/// What the user decided about a suggestion.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Decision {
@@ -181,15 +162,14 @@ pub enum Decision {
     Dismissed,
 }
 
-/// The document after a suggestion was accepted: its text and its threads, anchored anew.
+/// The document after an accepted suggestion: its text and its re-anchored threads.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Accepted {
     pub text: String,
     pub threads: Vec<CommentThread>,
 }
 
-/// Records `decision` on the pending suggestion `component_id` of `message_id`, leaving the
-/// document as it is. Accepting goes through `accept_suggestion`, which also changes it.
+/// Leaves the document unchanged; accepting goes through `accept_suggestion`.
 pub fn answer_suggestion(
     project: &Project,
     message_id: Uuid,
@@ -201,11 +181,9 @@ pub fn answer_suggestion(
     record(&mut state, conversation, (message_id, component_id), decision)
 }
 
-/// Accepts the pending suggestion `component_id` of `message_id`: merges its change into the
-/// passage as the user may have edited it since, saves the document with every thread moved to
-/// fit, and records the suggestion as accepted. Fails with `suggestion_conflict`, changing
-/// nothing, when the user's edits and the suggestion change the same words, and with
-/// `suggestion_detached` when the thread's passage can no longer be found.
+/// Merges the suggestion into the passage as the user has edited it since, saves the document with
+/// its threads moved, and records it accepted. Changes nothing on `suggestion_conflict` (both
+/// change the same words) or `suggestion_detached` (the passage is gone).
 pub fn accept_suggestion(
     project: &Project,
     message_id: Uuid,
@@ -239,8 +217,7 @@ pub fn accept_suggestion(
     let merged_units: Vec<u16> = merged.encode_utf16().collect();
     let new_units = [&units[..start], &merged_units, &units[end..]].concat();
     let new_text = String::from_utf16_lossy(&new_units);
-    // Positions after the passage move by the change in its length; positions inside it keep
-    // their place up to the passage's new end.
+    // Positions after the passage shift by its change in length; those inside stop at its new end.
     let new_end = start + merged_units.len();
     let moved = |at: u32| -> u32 {
         let at = at as usize;
@@ -262,8 +239,7 @@ pub fn accept_suggestion(
     Ok(Accepted { text: new_text, threads: list(project, thread.asset_id)? })
 }
 
-/// The thread's Conversation and the data of the suggestion `component_id`, which must still
-/// wait for an answer.
+/// The thread's Conversation and the suggestion's data; fails unless it still awaits an answer.
 fn pending_suggestion(
     state: &ProjectState,
     message_id: Uuid,
@@ -293,12 +269,11 @@ fn record(
     Ok(())
 }
 
-/// Stands in for a newline while text is split one word per line for `diffy`, which merges
-/// line by line.
+/// Stands in for a newline while text is split one word per line for `diffy`'s line-based merge.
 const NEWLINE: char = '\u{E000}';
 
-/// `ours` with the change from `base` to `theirs` applied word by word; none when the two
-/// change the same words.
+/// `ours` with the change from `base` to `theirs` applied word by word; none when both change the
+/// same words.
 fn merge(base: &str, ours: &str, theirs: &str) -> Option<String> {
     if ours == base {
         return Some(theirs.to_string());
@@ -318,8 +293,7 @@ fn word_lines(text: &str) -> String {
     lines
 }
 
-/// Starts a thread on the passage `start..end` of the document `asset_id`, which reads
-/// `quote`.
+/// Starts a thread on `start..end` of `asset_id`, which reads `quote`.
 pub fn create(
     project: &Project,
     asset_id: Uuid,
@@ -349,8 +323,7 @@ pub fn create(
     })
 }
 
-/// Stores a thread on `start..end` of `asset_id`, opened from the Conversation `opened_from`
-/// when a Mini-Me opened it there; returns the thread's Conversation and when it was made.
+/// Returns the thread's Conversation and when it was made.
 fn insert_thread(
     state: &ProjectState,
     asset_id: Uuid,
@@ -358,8 +331,7 @@ fn insert_thread(
     quote: &str,
     opened_from: Option<Uuid>,
 ) -> AppResult<(Uuid, i64)> {
-    // One transaction, so a thread's Conversation never exists without its row and so never
-    // shows up as an ordinary Conversation.
+    // One transaction, so a thread's Conversation never shows up as an ordinary Conversation.
     let tx = state.conn.unchecked_transaction()?;
     let conversation = conversations::insert(&tx)?;
     tx.execute(
@@ -379,11 +351,10 @@ fn insert_thread(
     Ok((conversation.id, conversation.created_at))
 }
 
-/// The most bytes an edit's new text may take, as for a suggestion in a thread.
+/// In bytes; the same limit as a suggestion in a thread.
 const MAX_EDIT_BYTES: usize = 64 * 1024;
 
-/// One edit a Mini-Me suggests from a Conversation: the exact text it replaces in the saved
-/// document, the new text, and why.
+/// `find` is the exact text replaced in the saved document; `reason` is why.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DocumentEdit {
     pub find: String,
@@ -391,8 +362,8 @@ pub struct DocumentEdit {
     pub reason: String,
 }
 
-/// The Trait call that edits a document: its Conversation, the message it answers, and its
-/// reply, written by `author` in the Step `step_id`.
+/// The Trait call that edits a document: its reply to the `answers` message, by `author` in
+/// `step_id`.
 pub struct EditingCall<'a> {
     pub conversation_id: Uuid,
     pub answers: Uuid,
@@ -408,11 +379,8 @@ pub struct EditedDocument {
     pub threads: Vec<Uuid>,
 }
 
-/// Opens a thread on each edit's passage of the document `asset_id`, holding the call's
-/// Mini-Me's reason and its suggestion, and adds a `document-edits` card for them to the
-/// reply. The document's file is only read. Nothing is made unless every edit can be: it fails
-/// with `in_thread` inside a comment thread, `document_not_referenced` for a document the
-/// answered message neither references nor attaches, and as `passages` does for the edits.
+/// Opens a suggestion thread per edit and adds a `document-edits` card to the reply, all or none.
+/// The answered message must reference or attach the document, whose file is only read.
 pub fn edit_document(
     project: &Project,
     call: &EditingCall,
@@ -457,20 +425,23 @@ pub fn edit_document(
         n => format!("{n} edits"),
     };
     let data = json!({ "asset_id": asset_id, "title": title, "threads": threads });
-    let card = ("document-edits", 1, data, format!("Suggested {count} to {title}"));
+    let card = NewComponent {
+        kind: "document-edits".into(),
+        version: 1,
+        data,
+        text: format!("Suggested {count} to {title}"),
+    };
     let component_id = conversations::add_core_component(project, call.reply, call.step_id, card)?;
     Ok(EditedDocument { component_id, threads })
 }
 
-/// Where each edit's `find` is in `text`, the document `name`, as UTF-16 ranges in the order of
-/// `edits`. Fails, naming the edit, with `passage_not_found` or `passage_not_unique` unless its
-/// `find` occurs exactly once, with `edits_overlap` when two passages overlap, and with
-/// `invalid_input` for no edits or a new text over 64 KiB.
+/// Each edit's `find` in `text` as a UTF-16 range, in order. Each must occur exactly once without
+/// overlapping another, and the errors name the edit.
 fn passages(text: &str, name: &str, edits: &[DocumentEdit]) -> AppResult<Vec<(u32, u32)>> {
     if edits.is_empty() {
         return Err(AppError::invalid_input("Give at least one edit."));
     }
-    // Byte ranges, each with its edit's number as the error messages count them.
+    // Byte ranges, each with its edit's number for error messages.
     let mut found = Vec::with_capacity(edits.len());
     for (number, edit) in (1..).zip(edits) {
         if edit.replace.len() > MAX_EDIT_BYTES {
@@ -526,8 +497,8 @@ fn beginning(text: &str) -> String {
     if chars.next().is_some() { format!("{start}…") } else { start }
 }
 
-/// Opens a thread on `range` of `asset_id`, starting with the call's Mini-Me's message: the
-/// edit's reason, with the edit as a pending suggestion. Returns the thread's Conversation.
+/// Opens a thread on `range` whose first message is the edit's reason, with the edit as a pending
+/// suggestion. Returns the thread's Conversation.
 fn open_suggestion(
     project: &Project,
     call: &EditingCall,
@@ -562,7 +533,7 @@ fn open_suggestion(
     Ok(thread)
 }
 
-/// Resolves the thread `conversation_id`, which hides it until "Show resolved", or reopens it.
+/// Resolving hides the thread until "Show resolved".
 pub fn set_resolved(project: &Project, conversation_id: Uuid, resolved: bool) -> AppResult<()> {
     let changed = project.lock().conn.execute(
         "UPDATE comment_threads SET resolved = ?1 WHERE conversation_id = ?2",
@@ -574,9 +545,8 @@ pub fn set_resolved(project: &Project, conversation_id: Uuid, resolved: bool) ->
     Ok(())
 }
 
-/// Deletes the thread `conversation_id` with its comments, replies and their suggestions, in
-/// one transaction. Files its replies saved stay in the Project. A running reply must be
-/// stopped first, as `conversations::stop_reply` does.
+/// Deletes the thread with its messages and suggestions in one transaction; files its replies saved
+/// stay. A running reply must be stopped first, as `conversations::stop_reply` does.
 pub fn delete(project: &Project, conversation_id: Uuid) -> AppResult<()> {
     let state = project.lock();
     if thread_of(&state, conversation_id)?.is_none() {
@@ -605,12 +575,12 @@ pub fn delete(project: &Project, conversation_id: Uuid) -> AppResult<()> {
     Ok(())
 }
 
-/// The threads of the document `asset_id`, in the order of their passages.
+/// In the order of their passages.
 pub fn list(project: &Project, asset_id: Uuid) -> AppResult<Vec<CommentThread>> {
     threads_where(&project.lock(), "asset_id = ?1", asset_id)
 }
 
-/// The threads matching `condition` on the ID `id`, in the order of their passages.
+/// In the order of their passages.
 fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<Vec<CommentThread>> {
     let count = "(SELECT COUNT(*) FROM messages m WHERE m.conversation_id = t.conversation_id)";
     let first = |column: &str| {
@@ -628,47 +598,41 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
         first("author_id"),
     ))?;
     let rows = stmt.query_map(params![id.to_string()], |row| {
-        Ok((
-            (
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, u32>(2)?,
-                row.get::<_, u32>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, bool>(5)?,
-                row.get::<_, i64>(6)?,
-                row.get::<_, u32>(7)?,
-            ),
-            (
-                row.get::<_, Option<String>>(8)?,
-                row.get::<_, Option<String>>(9)?,
-                row.get::<_, Option<String>>(10)?,
-                row.get::<_, Option<String>>(11)?,
-            ),
-        ))
+        Ok(ThreadRow {
+            conversation_id: row.get(0)?,
+            asset_id: row.get(1)?,
+            start: row.get(2)?,
+            end: row.get(3)?,
+            quote: row.get(4)?,
+            resolved: row.get(5)?,
+            created_at: row.get(6)?,
+            comments: row.get(7)?,
+            opened_from: row.get(8)?,
+            opened_from_title: row.get(9)?,
+            first_author_kind: row.get(10)?,
+            first_author_id: row.get(11)?,
+        })
     })?;
-    let corrupt = || AppError::storage("stored ID is not readable");
     let mut threads = Vec::new();
     for row in rows {
-        let ((conversation_id, asset_id, start, end, quote, resolved, created_at, comments), from) =
-            row?;
-        let opened_from = match from {
-            (Some(conversation), title, Some(kind), Some(id)) => Some(OpenedFrom {
-                conversation_id: Uuid::parse_str(&conversation).map_err(|_| corrupt())?,
-                title,
-                by: Author { kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?, id },
+        let row = row?;
+        let opened_from = match (row.opened_from, row.first_author_kind, row.first_author_id) {
+            (Some(conversation), Some(kind), Some(id)) => Some(OpenedFrom {
+                conversation_id: parse_id(&conversation, "ID")?,
+                title: row.opened_from_title,
+                by: Author { kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("ID"))?, id },
             }),
             _ => None,
         };
         threads.push(CommentThread {
-            conversation_id: Uuid::parse_str(&conversation_id).map_err(|_| corrupt())?,
-            asset_id: Uuid::parse_str(&asset_id).map_err(|_| corrupt())?,
-            start,
-            end,
-            quote,
-            resolved,
-            created_at,
-            comments,
+            conversation_id: parse_id(&row.conversation_id, "ID")?,
+            asset_id: parse_id(&row.asset_id, "ID")?,
+            start: row.start,
+            end: row.end,
+            quote: row.quote,
+            resolved: row.resolved,
+            created_at: row.created_at,
+            comments: row.comments,
             pending: None,
             opened_from,
         });
@@ -679,7 +643,23 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
     Ok(threads)
 }
 
-/// The newest suggestion in the thread `conversation_id` still waiting for an answer.
+/// `first_author_*` is the author of the thread's first message.
+struct ThreadRow {
+    conversation_id: String,
+    asset_id: String,
+    start: u32,
+    end: u32,
+    quote: String,
+    resolved: bool,
+    created_at: i64,
+    comments: u32,
+    opened_from: Option<String>,
+    opened_from_title: Option<String>,
+    first_author_kind: Option<String>,
+    first_author_id: Option<String>,
+}
+
+/// The newest suggestion in the thread still waiting for an answer.
 fn pending(state: &ProjectState, conversation_id: Uuid) -> AppResult<Option<PendingSuggestion>> {
     let row = state
         .conn
@@ -702,12 +682,14 @@ fn pending(state: &ProjectState, conversation_id: Uuid) -> AppResult<Option<Pend
     let Some((component_id, message_id, data, kind, author_id)) = row else {
         return Ok(None);
     };
-    let corrupt = || AppError::storage("stored suggestion is not readable");
     let data: Value = serde_json::from_str(&data)?;
     Ok(Some(PendingSuggestion {
-        message_id: Uuid::parse_str(&message_id).map_err(|_| corrupt())?,
-        component_id: Uuid::parse_str(&component_id).map_err(|_| corrupt())?,
-        author: Author { kind: AuthorKind::parse(&kind).ok_or_else(corrupt)?, id: author_id },
+        message_id: parse_id(&message_id, "suggestion")?,
+        component_id: parse_id(&component_id, "suggestion")?,
+        author: Author {
+            kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("suggestion"))?,
+            id: author_id,
+        },
         text: data["text"].as_str().unwrap_or_default().to_string(),
     }))
 }
@@ -717,8 +699,7 @@ pub mod test_support {
     use super::*;
     use crate::projects::test_support::user;
 
-    /// Makes the existing Conversation `conversation_id` a comment thread on a new document,
-    /// so a test can check that a listing skips it.
+    /// Makes `conversation_id` a thread on a new document, so a test can check a listing skips it.
     pub fn into_thread(project: &Project, conversation_id: Uuid) {
         let document = documents::create(project, "Thread document", None, &user()).unwrap();
         project
@@ -806,9 +787,8 @@ mod tests {
 
     const SENTENCE: &str = "Yield fell above 3,800 m in both 2024 and 2025, mainly at Huancayo.";
 
-    /// A document reading `text`, a thread on `quote` in it, and a reply in the thread
-    /// suggesting `suggested` for it; returns the document, the thread and the suggestion's
-    /// `(message, component)`.
+    /// A document reading `text`, a thread on `quote` and a reply suggesting `suggested`; returns
+    /// the document, the thread and the suggestion's `(message, component)`.
     fn suggested(
         project: &Project,
         text: &str,
@@ -831,7 +811,12 @@ mod tests {
         let conversation = thread.conversation_id;
         let reply = conversations::start_reply(project, conversation, comment.id, scribe).unwrap();
         let data = suggestion(project, thread.conversation_id, &json!({ "text": suggested }));
-        let component = ("suggestion", 1, data.unwrap(), suggested.to_string());
+        let component = NewComponent {
+            kind: "suggestion".into(),
+            version: 1,
+            data: data.unwrap(),
+            text: suggested.to_string(),
+        };
         let component = conversations::add_component(project, reply, None, component).unwrap();
         (document, thread, (reply, component))
     }
@@ -951,8 +936,8 @@ mod tests {
         assert!(create(&project, report.id, (5, 5), "").is_err());
     }
 
-    /// A Conversation whose message references `document` with `#`, and Scribe's reply to it;
-    /// returns the editing call's `(conversation, message, reply)`.
+    /// A Conversation whose message references `document` with `#`, and Scribe's reply; returns the
+    /// editing call's `(conversation, message, reply)`.
     fn asked(project: &Project, document: Uuid) -> (Uuid, Uuid, Uuid) {
         let conversation = conversations::create(project).unwrap().id;
         let reference = TextComponent {

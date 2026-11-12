@@ -1,5 +1,4 @@
-"""Clean Data: applies the chosen actions to a table with pandas, holding back any action that
-would remove most of the remaining rows."""
+"""Clean Data: applies chosen actions with pandas, holding back any that would drop most rows."""
 
 import re
 from dataclasses import dataclass

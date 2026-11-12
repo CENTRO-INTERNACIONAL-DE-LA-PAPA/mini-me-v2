@@ -1,8 +1,5 @@
-"""Plot: the values each chart type needs, computed with pandas, as the views of a `chart`
-Interactive Component, and its plain-text alternative. Only what a chart draws is sent: bins,
-aggregates, box statistics, correlations, or the points of a line or scatter chart. Every
-series, category and outlier is kept; only points are sampled, and only when a chart would
-not fit the core's size limit."""
+"""Plot: the values each `chart` view draws, computed with pandas, and the chart's text. Every
+series, category and outlier is kept; only points are sampled, and only to fit the size limit."""
 
 import json
 import math
@@ -15,8 +12,7 @@ import pandas as pd
 from mini_me_sidecar.adapters.data.catalogue import Chart, chart_axes, chart_problem
 from mini_me_sidecar.adapters.data.preview import json_value
 
-# The core refuses component data larger than 2 MiB; this leaves room for the title and the
-# JSON the core wraps around it.
+# Under the core's 2 MiB limit, leaving room for the title and the JSON the core wraps around it.
 MAX_BYTES = 2_000_000
 
 # The most bins a histogram has, for each series.
@@ -37,8 +33,7 @@ KIND_NAMES = {
 
 @dataclass
 class ChartResult:
-    """A chart's component data, and what the reply says about how it was drawn. When the
-    chart does not `fit` the core's size limit, its data serves only for its text."""
+    """Component data and the reply's notes; data that does not `fit` serves only for the text."""
 
     data: dict[str, Any]
     notes: list[str] = field(default_factory=list)
@@ -46,9 +41,8 @@ class ChartResult:
 
 
 def as_type(chart: Chart, kind: str) -> Chart:
-    """`chart` drawn as another type with the same columns. A histogram's values and series
-    become a box or bar chart's `y` and groups, and the other way round; other types keep
-    their fields."""
+    """`chart` as type `kind`: a histogram's values and series become a box or bar chart's `y`
+    and groups, and the other way round."""
     update: dict[str, Any] = {"type": kind}
     if chart.type == "histogram" and kind in ("box", "bar"):
         update |= {"x": chart.series, "y": chart.x, "series": None}
@@ -60,8 +54,7 @@ def as_type(chart: Chart, kind: str) -> Chart:
 
 
 def chart_views(chart: Chart, types: dict[str, str]) -> list[Chart]:
-    """The chart itself and its valid alternatives, each type once. `chart` must already be
-    valid."""
+    """`chart`, which must be valid, and its valid alternatives, each type once."""
     views = [chart]
     for kind in chart.alternatives:
         if any(v.type == kind for v in views):
@@ -87,10 +80,8 @@ def build_chart(frame: pd.DataFrame, chart: Chart, types: dict[str, str]) -> Cha
 
 
 def _fit(result: ChartResult, sampled: list[tuple[dict[str, Any], pd.DataFrame]]) -> None:
-    """Fits the chart in `MAX_BYTES`: leaves out the alternative views that would not fit
-    even without points, then samples the points of line and scatter views until the chart
-    fits, and notes each view that was left out or sampled. The same table
-    always gives the same sample. A chart whose own view does not fit is marked so."""
+    """Drops alternative views, then samples points, until the chart fits `MAX_BYTES`, noting
+    each. The same table gives the same sample; a too-large first view marks the chart unfit."""
     views = result.data["views"]
     budget = MAX_BYTES - len(json.dumps({**result.data, "views": []}))
     sizes = [len(json.dumps({k: v for k, v in view.items() if k != "points"})) for view in views]
@@ -112,8 +103,7 @@ def _fit(result: ChartResult, sampled: list[tuple[dict[str, Any], pd.DataFrame]]
             used += size
     result.data["views"] = kept
     sampled = [(view, points) for view, points in sampled if any(view is k for k in kept)]
-    # Each pass cuts every sample by the share of the points' bytes that is over the limit, so
-    # the chart is serialised once per pass instead of once per halving.
+    # Each pass scales every sample by the share over the limit, serialising once per pass.
     while sampled and any(len(view["points"]) > 1 for view, _ in sampled):
         total = len(json.dumps(result.data))
         if total <= MAX_BYTES:
@@ -130,8 +120,7 @@ def _fit(result: ChartResult, sampled: list[tuple[dict[str, Any], pd.DataFrame]]
 
 
 def _set_points(view: dict[str, Any], points: pd.DataFrame, size: int) -> None:
-    """Sets the view's points to a sample of `size` of `points`, or all of them, and records
-    the sample in the view, so that its bytes count when the chart's size is measured."""
+    """Sets a sample of `size` of `points`, recording it in the view so its bytes are counted."""
     shown = points.sample(size, random_state=0) if size < len(points) else points
     if view["type"] == "line":
         shown = shown.sort_values("x", kind="stable")
@@ -152,8 +141,7 @@ def _view(
     points, which `_fit` may sample."""
     if chart.type == "heatmap":
         return _heatmap(frame, chart), [], None
-    # Only the columns `chart_problem` checked are read, so that a column the chart type
-    # ignores neither fails nor leaves rows out.
+    # Only the columns `chart_problem` checked, so an ignored column neither fails nor drops rows.
     axes = chart_axes(chart)
     used = [getattr(chart, axis) for axis in axes]
     if chart.series and chart.type != "box":
@@ -203,8 +191,7 @@ def _histogram(values: pd.Series, series: pd.Series | None) -> list[dict[str, An
         # Dates with a time zone are binned by their local time.
         if values.dt.tz is not None:
             values = values.dt.tz_localize(None)
-        # Dates are binned as microseconds, whatever resolution pandas read them in.
-        # Nanoseconds would only reach the years 1677 to 2262.
+        # Binned as microseconds: nanoseconds only reach the years 1677 to 2262.
         numbers = values.astype("datetime64[us]").astype("int64").to_numpy()
     else:
         numbers = values.to_numpy(dtype=float)
@@ -230,9 +217,8 @@ def _histogram(values: pd.Series, series: pd.Series | None) -> list[dict[str, An
 
 
 def _bin_count(numbers: np.ndarray) -> int:
-    """numpy's "auto" number of bins, the larger of the Freedman–Diaconis and Sturges
-    estimates, at most `MAX_BINS`. "auto" itself has no limit: with most values close
-    together and one far away, it makes millions of bins."""
+    """numpy's "auto" bin count (Freedman–Diaconis or Sturges), capped at `MAX_BINS`: "auto"
+    alone makes millions of bins when one value lies far from the rest."""
     if len(numbers) == 0:
         return 1
     sturges = math.ceil(math.log2(len(numbers))) + 1

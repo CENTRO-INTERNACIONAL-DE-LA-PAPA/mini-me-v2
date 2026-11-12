@@ -1,6 +1,5 @@
-"""Document requests from the core outside any reply: drafting a report from a Conversation,
-streamed as it is written. Like the Overview summary, each request gets exactly one ending frame,
-and nothing is read from or written to disk."""
+"""Drafts a report from a Conversation, streamed, outside any reply. Each request gets exactly one
+ending frame; nothing touches disk."""
 
 import asyncio
 import sys
@@ -9,10 +8,15 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from mini_me_sidecar.adapters.prompt import REFUSED, RESEARCH_CONTEXT
-from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, chat_model, provider_error
+from mini_me_sidecar.adapters.prompt import RESEARCH_CONTEXT
+from mini_me_sidecar.adapters.providers import (
+    PROVIDER_NAMES,
+    chat_model,
+    filtered,
+    provider_error,
+)
 from mini_me_sidecar.context import Model, Requests, TraitError
-from mini_me_sidecar.link import Link, log
+from mini_me_sidecar.link import Link, RequestTasks
 
 DRAFT_RULE = (
     "You are Scribe, and you draft a report for the user from one Conversation of their "
@@ -28,7 +32,6 @@ DRAFT_RULE = (
 
 
 def draft_prompt() -> str:
-    """Who the model works for, then how to write the draft."""
     return f"{RESEARCH_CONTEXT} {DRAFT_RULE}"
 
 
@@ -36,36 +39,23 @@ class Documents:
     def __init__(self, link: Link, requests: Requests) -> None:
         self._link = link
         self._requests = requests
-        self._tasks: set[asyncio.Task[None]] = set()
-        self._drafts: dict[str, asyncio.Task[None]] = {}
-
-    def _spawn(self, work: Any) -> asyncio.Task[None]:
-        task = asyncio.create_task(work)
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-        return task
+        self._drafts = RequestTasks(link, "draft")
 
     def start_draft(self, frame: dict[str, Any]) -> None:
-        draft_id = frame.get("draft_id")
-        if not isinstance(draft_id, str):
-            log(f"ignoring draft.start without a draft_id: {frame!r}")
+        task = self._drafts.start(frame, self._draft)
+        if task is None:
             return
-        task = self._spawn(self._draft(draft_id, frame))
-        self._drafts[draft_id] = task
+        draft_id = frame["draft_id"]
 
         def ended(task: asyncio.Task[None]) -> None:
-            self._drafts.pop(draft_id, None)
-            # A draft cancelled before it started never ran `_draft`, which sends the ending
-            # once it has; one cancelled while running ends there normally.
+            # Only a draft cancelled before `_draft` began ends here; `_draft` ends the others.
             if task.cancelled():
                 self._link.send({"type": "draft.done", "draft_id": draft_id})
 
         task.add_done_callback(ended)
 
     def cancel_draft(self, draft_id: Any) -> None:
-        task = self._drafts.get(draft_id) if isinstance(draft_id, str) else None
-        if task is not None:
-            task.cancel()
+        self._drafts.cancel(draft_id)
 
     async def _draft(self, draft_id: str, frame: dict[str, Any]) -> None:
         raw = frame.get("model") or {}
@@ -78,14 +68,14 @@ class Documents:
             # A stopped draft ends normally: the core keeps what was written.
             self._link.send({"type": "draft.done", "draft_id": draft_id})
         except TraitError as error:
-            self._draft_error(draft_id, error.code, str(error))
+            self._drafts.error(draft_id, error.code, str(error))
         except Exception as error:
             traceback.print_exc(file=sys.stderr)
             mapped = provider_error(error, model) if model.provider in PROVIDER_NAMES else None
             if mapped:
-                self._draft_error(draft_id, mapped.code, str(mapped))
+                self._drafts.error(draft_id, mapped.code, str(mapped))
             else:
-                self._draft_error(draft_id, "draft_failed", "The draft could not be written.")
+                self._drafts.error(draft_id, "draft_failed", "The draft could not be written.")
         else:
             self._link.send({"type": "draft.done", "draft_id": draft_id})
 
@@ -96,7 +86,7 @@ class Documents:
         wrote = False
         async for chunk in chat.astream(messages):
             metadata = getattr(chunk, "response_metadata", None) or {}
-            if metadata.get("finish_reason") in REFUSED or metadata.get("stop_reason") in REFUSED:
+            if filtered(metadata):
                 raise TraitError(
                     "provider_refused",
                     f"{model.model} stopped the draft: {PROVIDER_NAMES[model.provider]}'s content "
@@ -112,10 +102,5 @@ class Documents:
                 "another model in Settings.",
             )
 
-    def _draft_error(self, draft_id: str, code: str, message: str) -> None:
-        error = {"code": code, "message": message}
-        self._link.send({"type": "draft.error", "draft_id": draft_id, "error": error})
-
     async def close(self) -> None:
-        for task in list(self._tasks):
-            task.cancel()
+        await self._drafts.close()

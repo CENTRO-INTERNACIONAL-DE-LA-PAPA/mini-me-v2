@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { cn } from "@/lib/utils";
-import { SportShoeIcon, NotebookPenIcon, SummaryIcon, PaperclipIcon } from "lucide-react";
+import { NotebookPenIcon, SummaryIcon, PaperclipIcon } from "lucide-react";
 import { api } from "../../api";
 import type { Uuid } from "../../protocol/types";
 import { chatColumn, Composer, type ComposerHandle } from "./Composer";
@@ -17,12 +17,11 @@ import { ReportPanel } from "../documents/ReportPanel";
 import { componentNames } from "../interactive/component-names";
 import { ComponentReferencesProvider } from "../interactive/component-references";
 import type { ReferenceTarget } from "../../protocol/references";
-import { JobsPanel, OutlinePanel, StepsPanel, type Panel } from "./SidePanels";
+import { OutlinePanel, StepsPanel, type Panel } from "./SidePanels";
 import { outline } from "./outline";
 import { useConversation } from "./useConversation";
 import { useFilesChanged } from "../../hooks/useFilesChanged";
 import { useMiniMes } from "../../hooks/useMiniMes";
-import { useRunningReplies } from "../../hooks/useRunningReplies";
 
 interface Props {
   projectId: string;
@@ -33,10 +32,9 @@ interface Props {
   onActivity: () => void;
   onRename: (title: string) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
-  onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
-  /** Opens a document: to be drafted from this Conversation, with its Comments sheet showing,
-   * or as it is. */
-  onOpenDocument: (assetId: Uuid, how?: "draft" | "comments") => void;
+  /** Opens a document: to be drafted from this Conversation, with the Comments sheet showing a
+   * reply's suggested edits (the threads they opened), or as it is. */
+  onOpenDocument: (assetId: Uuid, how?: "draft" | { edits: Uuid[] }) => void;
 }
 
 export function ChatView({
@@ -47,7 +45,6 @@ export function ChatView({
   onActivity,
   onRename,
   onDelete,
-  onOpenReply,
   onOpenDocument,
 }: Props) {
   const { state, error } = useConversation(projectId, conversationId);
@@ -66,24 +63,11 @@ export function ChatView({
   );
   const stepsOf =
     panel?.kind === "steps" ? state.messages.find((m) => m.id === panel.messageId) : undefined;
-  const running = useRunningReplies();
-  // The open Conversation's reply first, then the others in the order their runs started.
-  const jobs = [
-    ...running.filter((reply) => reply.conversation_id === conversationId),
-    ...running.filter((reply) => reply.conversation_id !== conversationId),
-  ];
-  const tools: ToolOption<"outline" | "jobs" | "report">[] = [
+  const tools: ToolOption<"outline" | "report">[] = [
     { id: "outline", label: "Outline", icon: SummaryIcon },
-    {
-      id: "jobs",
-      label: "Jobs",
-      icon: SportShoeIcon,
-      count: jobs.length > 0 ? jobs.length : undefined,
-    },
     { id: "report", label: "Report", icon: NotebookPenIcon },
   ];
-  // The scrolling list and the column inside it, and whether the user is at the bottom, which is
-  // when new text is followed.
+  // `pinned`: the user is at the bottom, so new text is followed.
   const scroller = useRef<HTMLDivElement>(null);
   const column = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -108,12 +92,11 @@ export function ChatView({
   const openDocumentRef = useRef(onOpenDocument);
   openDocumentRef.current = onOpenDocument;
   const openDocument = useCallback(
-    (assetId: Uuid, comments?: boolean) =>
-      openDocumentRef.current(assetId, comments ? "comments" : undefined),
+    (assetId: Uuid, edits?: Uuid[]) =>
+      openDocumentRef.current(assetId, edits ? { edits } : undefined),
     [],
   );
-  /** Files are being dragged over the window. */
-  const [dragging, setDragging] = useState(false);
+  const [draggingFiles, setDraggingFiles] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -121,11 +104,11 @@ export function ChatView({
     getCurrentWebview()
       .onDragDropEvent(({ payload }) => {
         if (payload.type === "enter") {
-          setDragging(payload.paths.length > 0);
+          setDraggingFiles(payload.paths.length > 0);
         } else if (payload.type === "leave") {
-          setDragging(false);
+          setDraggingFiles(false);
         } else if (payload.type === "drop") {
-          setDragging(false);
+          setDraggingFiles(false);
           if (payload.paths.length > 0) composer.current?.attachDropped(payload.paths);
         }
       })
@@ -172,9 +155,8 @@ export function ChatView({
     if (pinned.current) scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [state.messages.length, last, choosing]);
 
-  // A reply keeps growing after its text arrives: Markdown re-renders, Interactive Components
-  // appear when a Step finishes and the progress card grows. Following the column's height keeps
-  // the view at the bottom through all of it.
+  // A reply keeps growing after its text arrives (Markdown, components, the progress card);
+  // following the column's height keeps the view at the bottom through it all.
   useEffect(() => {
     const box = scroller.current;
     const content = column.current;
@@ -193,7 +175,7 @@ export function ChatView({
         <ComponentReferencesProvider names={names} append={appendReference}>
           <div className="flex min-h-0 min-w-0 flex-1 gap-3">
             <MainSheet>
-              {dragging && (
+              {draggingFiles && (
                 <div
                   role="status"
                   className={cn(
@@ -240,7 +222,6 @@ export function ChatView({
                 }}
                 className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]"
               >
-                {/* The list's top edge fades into the sheet. */}
                 <div
                   aria-hidden
                   className="pointer-events-none sticky top-0 z-10 -mb-14 h-14 bg-linear-to-b from-background to-transparent"
@@ -284,9 +265,8 @@ export function ChatView({
                 onSent={(message) => {
                   setRouting(message.id);
                   onActivity();
-                  // A new Conversation is named from its first message while the reply is still
-                  // being written; the core ignores any other message, and a failure leaves the
-                  // default title.
+                  // Named from the first message while the reply runs; the core ignores any
+                  // other message, and a failure keeps the default title.
                   void api
                     .nameConversation(projectId, conversationId)
                     .then((named) => named && onActivity())
@@ -296,22 +276,6 @@ export function ChatView({
             </MainSheet>
             {panel?.kind === "outline" && (
               <OutlinePanel outline={used} onClose={() => setPanel(null)} />
-            )}
-            {panel?.kind === "jobs" && (
-              <JobsPanel
-                replies={jobs}
-                conversationId={conversationId}
-                onOpen={(reply) => {
-                  if (reply.conversation_id === conversationId) {
-                    document
-                      .querySelector(`[data-message-id="${reply.message_id}"]`)
-                      ?.scrollIntoView({ block: "center", behavior: "smooth" });
-                  } else {
-                    onOpenReply(reply.project_id, reply.conversation_id, reply.message_id);
-                  }
-                }}
-                onClose={() => setPanel(null)}
-              />
             )}
             {panel?.kind === "report" && (
               <ReportPanel

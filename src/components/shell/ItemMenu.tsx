@@ -31,9 +31,8 @@ export const DOTS_HOVER =
 
 type View = "menu" | "rename" | "delete";
 
-/** A "…" button that opens a small popover over one list item: its actions, then Rename, which
- * asks for the new name, and Delete, which asks first. Used for Conversations, Projects and
- * files, so each asks the same way. */
+/** A "…" button with one list item's actions, then Rename, which asks for the new name, and
+ * Delete, which asks first. */
 export function ItemMenu({ name, actions = [], rename, remove, className }: Props) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>("menu");

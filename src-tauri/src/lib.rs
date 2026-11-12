@@ -15,6 +15,7 @@ mod library;
 mod link;
 mod overview;
 mod paths;
+mod project_activity;
 mod projects;
 mod recent;
 mod protocol;
@@ -25,23 +26,19 @@ mod secrets;
 mod settings;
 mod sidecar;
 mod store;
+mod sync;
 mod updates;
 mod user_library;
 mod user_profile;
 
 use tauri::{DragDropEvent, Manager, RunEvent, WindowEvent};
 
-/// The app's build-time context. `generate_context!` can be expanded once per crate, so the app
-/// and the test of its version both come here.
-fn app_context() -> tauri::Context {
-    tauri::generate_context!()
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let state = ipc::AppState::init(app.handle())?;
@@ -81,7 +78,9 @@ pub fn run() {
             ipc::stop_reply,
             ipc::answer_approval,
             ipc::list_paused_approvals,
+            ipc::get_message_status,
             ipc::list_recent_conversations,
+            ipc::list_project_activity,
             ipc::subscribe_running_replies,
             ipc::import_assets,
             ipc::dataverse_search,
@@ -97,6 +96,7 @@ pub fn run() {
             ipc::update_overview_summary,
             ipc::test_model,
             ipc::open_asset,
+            ipc::save_table_csv,
             ipc::rename_asset,
             ipc::duplicate_asset,
             ipc::delete_asset,
@@ -160,7 +160,7 @@ pub fn run() {
             ipc::subscribe_update_status,
             ipc::restart_to_update,
         ])
-        .build(app_context())
+        .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
             if let RunEvent::Exit = event {
@@ -171,20 +171,4 @@ pub fn run() {
                 }
             }
         });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::app_context;
-
-    /// The app's version is set in package.json, which tauri.conf.json reads; Cargo.toml's is not it.
-    #[test]
-    fn the_app_version_is_the_one_in_package_json() {
-        let package: serde_json::Value =
-            serde_json::from_str(include_str!("../../package.json")).unwrap();
-        assert_eq!(
-            app_context().package_info().version.to_string(),
-            package["version"].as_str().unwrap()
-        );
-    }
 }

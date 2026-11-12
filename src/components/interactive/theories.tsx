@@ -9,7 +9,6 @@ import { useId, useState } from "react";
 import type { Renderers } from "./catalogue";
 import { openLink, webUrl } from "./links";
 
-/** `theories` version 1 data, `{ theories, references }`, as *Theorize* builds it. */
 interface Wording {
   plain: string;
   technical?: string | null;
@@ -25,6 +24,12 @@ interface Reference {
   title: string;
   year?: number | null;
   url?: string | null;
+}
+
+/** `theories` version 1 data, as *Theorize* builds it. */
+interface TheoriesData {
+  theories: Theory[];
+  references: Reference[];
 }
 
 type Version = "plain" | "technical";
@@ -110,7 +115,7 @@ function TheorySection({ theory, number, prefix }: SectionProps) {
 }
 
 function Theories({ data }: { data: unknown }) {
-  const { theories, references } = data as { theories: Theory[]; references: Reference[] };
+  const { theories, references } = data as TheoriesData;
   const prefix = `ref-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
   return (
     <div className="overflow-hidden rounded-xl border border-card-edge bg-card">

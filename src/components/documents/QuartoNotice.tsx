@@ -3,8 +3,7 @@ import type { QuartoStatus } from "../../protocol/types";
 import { openLink } from "../interactive/links";
 import { quartoNotice } from "./quarto";
 
-/** Says why documents cannot be edited without a usable Quarto, with a link to install it and a
- * button to look for it again. */
+/** Why documents need a usable Quarto, with a link to install it and a button to look again. */
 export function QuartoNotice({ status, onCheck }: { status: QuartoStatus; onCheck: () => void }) {
   return (
     <div role="status" className="m-6 grid max-w-md gap-3 rounded-card bg-card p-5">

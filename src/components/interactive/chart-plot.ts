@@ -1,5 +1,4 @@
-/** Observable Plot options for one view of a `chart`, and what each hoverable shape shows.
- * Plot draws the figure and its axes; the card, the controls and the tooltip are React's. */
+/** Observable Plot options for one view of a `chart`, and each hoverable shape's tooltip. */
 
 import * as Plot from "@observablehq/plot";
 import type { Bin, BoxGroup, ChartData, Column, Point, Value, View } from "./chart-model";
@@ -23,7 +22,7 @@ export interface ChartColours {
 export type TipLines = [string, string][];
 
 /** A mark whose shapes show a tooltip. Plot gives each shape the index of its row in `data`. */
-export interface TipSource {
+interface TipSource {
   data: unknown[];
   lines: (row: never) => TipLines;
 }
@@ -36,7 +35,7 @@ export interface ChartSpec {
 
 export const TIP_CLASS = "chart-tip-";
 
-export function tipClass(index: number): string {
+function tipClass(index: number): string {
   return `${TIP_CLASS}${index}`;
 }
 
@@ -55,9 +54,8 @@ const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4
 // An ISO time of day without a time zone: "T" followed by no "Z", "+" or "-".
 const NO_ZONE = /T[^Z+-]*$/;
 
-/** Dates arrive as ISO text; Plot draws them on a time scale only as `Date`s. Text without
- * a time zone is read as UTC, the zone Plot's time axis shows; JavaScript already reads a
- * date without a time of day that way, but reads a time of day without a zone as local. */
+/** Dates as the `Date`s Plot's time scale needs. Text without a zone is read as UTC, the zone
+ * the axis shows; JavaScript alone would read a time of day without a zone as local. */
 function value(column: Column | undefined, v: Value): Value | Date {
   if (column?.type !== "date" || typeof v !== "string") return v;
   return new Date(NO_ZONE.test(v) ? `${v}Z` : v);
@@ -74,8 +72,7 @@ function visible<T extends { series?: string }>(rows: T[], hidden: string[]): T[
   return hidden.length ? rows.filter((r) => !r.series || !hidden.includes(r.series)) : rows;
 }
 
-/** Series keep their colour while others are hidden: each takes it from its place in the
- * view's full list of series. */
+/** Colours by place in the view's full series list, so a series keeps its colour as others hide. */
 function colourScale(view: View, colours: ChartColours): Plot.ScaleOptions | undefined {
   const series = seriesOf(view);
   if (!series.length) return undefined;

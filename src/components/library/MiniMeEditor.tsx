@@ -4,15 +4,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { useEffect, useState } from "react";
-import { api, errorMessage } from "../../api";
+import { useState } from "react";
+import { api } from "../../api";
 import { MINI_ME_GROUPS } from "../../protocol/references";
-import type { LibraryView, MiniMeDefinition, MiniMeGroup, WorkflowStep } from "../../protocol/types";
+import type { MiniMeDefinition, MiniMeGroup, WorkflowStep } from "../../protocol/types";
 import { Avatar } from "../avatar/Avatar";
 import { ColorPicker } from "../avatar/ColorPicker";
 import { COLOR_FAMILIES, hueOf, miniMeColors } from "../avatar/palette";
 import { PartTabs } from "../avatar/PartGrid";
-import { copyName, NIL_ID } from "./library";
+import { NIL_ID } from "./library";
 import {
   DeleteButton,
   EditorHeader,
@@ -29,6 +29,7 @@ import { refreshMiniMes } from "../../hooks/useMiniMes";
 import { StepInspector } from "../workflow/StepInspector";
 import { WorkflowCanvas } from "../workflow/WorkflowCanvas";
 import { traitIds } from "../workflow/workflowEdit";
+import { useDefinitionDraft } from "./useDefinitionDraft";
 
 const yellow = COLOR_FAMILIES.find((f) => f.name === "Yellow")!;
 
@@ -56,31 +57,26 @@ export function MiniMeEditor({
   onOpen: (view: View) => void;
   onBack: () => void;
 }) {
-  const [library, setLibrary] = useState<LibraryView | null>(null);
-  const [draft, setDraft] = useState<MiniMeDefinition | null>(null);
-  const [problems, setProblems] = useState<string | null>(null);
+  const { library, draft, setDraft, problems, save, remove } = useDefinitionDraft({
+    id,
+    from,
+    open: (id) => api.getMiniMe(id),
+    source: async (from) => ({ ...(await api.getMiniMe(from)), built_in: false }),
+    names: (library) => library.mini_mes.map((m) => m.name),
+    empty: EMPTY,
+    save: api.saveMiniMe,
+    remove: api.deleteMiniMe,
+    onSaved: (id) => {
+      refreshMiniMes();
+      onOpen({ kind: "mini-me", id });
+    },
+    onRemoved: () => {
+      refreshMiniMes();
+      onBack();
+    },
+  });
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState("workflow");
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const loaded = await api.listLibrary();
-        setLibrary(loaded);
-        if (id) {
-          setDraft(await api.getMiniMe(id));
-        } else if (from) {
-          const source = await api.getMiniMe(from);
-          const taken = loaded.mini_mes.map((m) => m.name);
-          setDraft({ ...source, id: NIL_ID, name: copyName(source.name, taken), built_in: false });
-        } else {
-          setDraft(EMPTY);
-        }
-      } catch (e) {
-        setProblems(errorMessage(e));
-      }
-    })();
-  }, [id, from]);
 
   if (!library || !draft) {
     return problems ? (
@@ -105,28 +101,6 @@ export function MiniMeEditor({
     const found = library.traits.find((x) => x.id === t);
     return found ? [found] : [];
   });
-
-  async function save() {
-    try {
-      const result = await api.saveMiniMe(draft!);
-      setProblems(null);
-      setLibrary(result.library);
-      refreshMiniMes();
-      onOpen({ kind: "mini-me", id: result.id });
-    } catch (e) {
-      setProblems(errorMessage(e));
-    }
-  }
-
-  async function remove() {
-    try {
-      await api.deleteMiniMe(draft!.id);
-      refreshMiniMes();
-      onBack();
-    } catch (e) {
-      setProblems(errorMessage(e));
-    }
-  }
 
   return (
     <Tabs
@@ -210,7 +184,6 @@ export function MiniMeEditor({
           </div>
         </TabsContent>
       </MainSheet>
-      {/* The selected Step's inspector opens as a tool sheet beside the board. */}
       {tab === "workflow" && (
         <StepInspector
           miniMe={draft}

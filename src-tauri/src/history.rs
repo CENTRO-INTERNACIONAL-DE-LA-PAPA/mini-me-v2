@@ -65,9 +65,8 @@ pub struct HistoryEntry {
     pub complete: bool,
 }
 
-/// The messages before `before` in `messages` (a whole Conversation in creation order),
-/// filled from the newest backwards until the next one would exceed `budget` characters.
-/// Notes written by the app itself (`system` authors) are left out.
+/// The messages before `before` in `messages` (a Conversation in creation order), filled from the
+/// newest back until the next would exceed `budget` characters. `system` notes are left out.
 pub fn history(messages: &[Message], before: Uuid, library: &Library, budget: usize) -> History {
     let earlier = messages
         .iter()
@@ -94,12 +93,10 @@ pub fn history(messages: &[Message], before: Uuid, library: &Library, budget: us
     }
 }
 
-/// The Assets and components a call can see: those of `messages` (a whole Conversation in
-/// creation order) up to and including its reply `reply`, newest first, at most `MAX_RESULTS`
-/// of each, each Asset once. The Assets of the call's user message `answers` and of `reply`
-/// are `current`, and so are the components `answers` references with `$`. `find_asset`
-/// looks up an Asset that a message references by `#`, since a reference carries only its ID
-/// and label.
+/// Assets and components of `messages` (a Conversation in creation order) up to `reply`, newest
+/// first, at most `MAX_RESULTS` of each, each Asset once. Those of `answers` and `reply`, and the
+/// components `answers` references with `$`, are `current`. `find_asset` resolves `#` references,
+/// which carry only an ID and label.
 pub fn results(
     messages: &[Message],
     answers: Uuid,
@@ -275,6 +272,9 @@ mod tests {
         assert!(history.messages[1].complete);
         assert!(!history.messages[3].complete);
         assert_eq!(history.messages[3].content, "The main cause");
+
+        let first = super::history(&all, all[0].id, &Library::builtin(), HISTORY_BUDGET_CHARS);
+        assert!(first.messages.is_empty() && !first.truncated);
     }
 
     #[test]
@@ -418,13 +418,5 @@ mod tests {
         let results = results(&[question], answers, new_id(), &Library::builtin(), find);
         assert_eq!(results.assets.len(), 1);
         assert_eq!(lookups.get(), 0);
-    }
-
-    #[test]
-    fn the_first_message_has_no_history() {
-        let all = [user("hello")];
-        let history = history(&all, all[0].id, &Library::builtin(), HISTORY_BUDGET_CHARS);
-        assert_eq!(history.messages, Vec::new());
-        assert!(!history.truncated);
     }
 }

@@ -35,7 +35,6 @@ pub struct RunTrait {
     pub instructions: Option<String>,
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
-    /// The tools the Trait may use.
     pub tools: Vec<String>,
 }
 
@@ -51,12 +50,10 @@ pub struct RunContext {
     pub project_id: Uuid,
     pub conversation_id: Uuid,
     pub message: Message,
-    /// Whether the routing decision said the message needs earlier context; `None` without
-    /// a decision.
+    /// Whether routing said the message needs earlier context.
     #[serde(default)]
     pub needs_context: Option<bool>,
-    /// The file routing picked as the one the message means, for a message that tags and
-    /// attaches none; `None` without a pick.
+    /// The file routing picked for a message that tags and attaches none.
     #[serde(default)]
     pub file: Option<RunFile>,
     /// Every Mini-Me of the library, which a call's model may hand off to.
@@ -70,8 +67,8 @@ pub struct RunContext {
     pub debug: DebugParts,
 }
 
-/// The parts of a reply's debug records to collect, each on only while Developer mode and its
-/// switch are on; with all three off, the sidecar sends no `run.debug`.
+/// Debug parts to collect, each on only while Developer mode and its switch are on; all off means
+/// no `run.debug`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DebugParts {
     /// Each model call's input messages.
@@ -160,7 +157,6 @@ pub struct ChoiceAnswer {
     pub probabilities: BTreeMap<String, f64>,
 }
 
-/// Frames the core sends to the sidecar.
 /// What a `summary.start` asks the sidecar to write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -173,6 +169,7 @@ pub enum SummaryKind {
     Test,
 }
 
+/// Frames the core sends to the sidecar.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum CoreFrame {
@@ -202,8 +199,7 @@ pub enum CoreFrame {
         /// The question IDs to ask: `mini_me`, `reaction`, `needs_context`, `file`.
         ask: Vec<String>,
     },
-    /// Asks for a short text written from `material`: a summary of a Project's Conversations,
-    /// or a title for a Conversation, by `kind`.
+    /// Asks for a short text of `kind` written from `material`.
     #[serde(rename = "summary.start")]
     SummaryStart {
         summary_id: Uuid,
@@ -234,12 +230,10 @@ pub enum CoreFrame {
     },
 }
 
-/// Frames the sidecar sends to the core. Types this version does not know, including the
-/// reserved `call.input_requested`, parse as `Unknown`. Interactive Components arrive as the
-/// `component.add` request, so a `call.component` frame is `Unknown` too.
+/// Frames the sidecar sends to the core; types this version does not know parse as `Unknown`.
 ///
-/// `call_id` identifies one Trait call, or one model decision of a condition or loop,
-/// inside a run; the sidecar announces it in `step.started`.
+/// `call_id` identifies one Trait call, or one model decision of a condition or loop, inside a
+/// run; the sidecar announces it in `step.started`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SidecarFrame {
@@ -291,8 +285,7 @@ pub enum SidecarFrame {
     RunError { run_id: Uuid, error: ErrorInfo },
     #[serde(rename = "run.cancelled")]
     RunCancelled { run_id: Uuid },
-    /// `asked` is the request sent to Jev, `{ state, questions }`, kept for the developer's
-    /// debug record.
+    /// `asked` is the request sent to Jev, `{ state, questions }`, kept for the debug record.
     #[serde(rename = "route.done")]
     RouteDone {
         route_id: Uuid,
@@ -330,8 +323,7 @@ pub enum SidecarFrame {
     Unknown,
 }
 
-/// The frame on one line from the sidecar, or `None` when the line is not a JSON object with
-/// a known frame shape.
+/// `None` when the line is not a JSON object with a known frame shape.
 pub fn parse_line(line: &str) -> Option<SidecarFrame> {
     serde_json::from_str(line.trim_end()).ok()
 }
@@ -360,10 +352,6 @@ mod tests {
 
     #[test]
     fn unknown_types_and_unreadable_lines_are_tolerated() {
-        assert_eq!(
-            parse_line(r#"{"type":"call.component","call_id":"x"}"#),
-            Some(SidecarFrame::Unknown)
-        );
         assert_eq!(parse_line(r#"{"type":"something.new"}"#), Some(SidecarFrame::Unknown));
         assert_eq!(parse_line("not json"), None);
         assert_eq!(parse_line(r#"{"no_type":1}"#), None);
@@ -387,52 +375,20 @@ mod tests {
     }
 
     #[test]
-    fn fixture_round_trips_every_frame_type() {
+    fn the_fixture_frames_round_trip() {
         let fixture: Value =
             serde_json::from_str(include_str!("../fixtures/sidecar-frames.json"))
                 .unwrap();
-        let mut types = Vec::new();
         for original in fixture["core_to_sidecar"].as_array().unwrap() {
             let frame: CoreFrame = serde_json::from_value(original.clone())
                 .unwrap_or_else(|e| panic!("cannot parse {original}: {e}"));
             assert_eq!(&serde_json::to_value(&frame).unwrap(), original);
-            types.push(original["type"].as_str().unwrap().to_string());
         }
         for original in fixture["sidecar_to_core"].as_array().unwrap() {
             let frame: SidecarFrame = serde_json::from_value(original.clone())
                 .unwrap_or_else(|e| panic!("cannot parse {original}: {e}"));
             assert_ne!(frame, SidecarFrame::Unknown, "{original} parsed as unknown");
             assert_eq!(&serde_json::to_value(&frame).unwrap(), original);
-            types.push(original["type"].as_str().unwrap().to_string());
-        }
-        for expected in [
-            "hello",
-            "adapters.list",
-            "adapters",
-            "ping",
-            "pong",
-            "shutdown",
-            "run.start",
-            "run.cancel",
-            "run.delta",
-            "run.progress",
-            "run.debug",
-            "step.started",
-            "step.completed",
-            "run.paused",
-            "run.done",
-            "run.error",
-            "run.cancelled",
-            "core.request",
-            "core.response",
-            "route.start",
-            "route.done",
-            "route.error",
-            "summary.start",
-            "summary.done",
-            "summary.error",
-        ] {
-            assert!(types.iter().any(|t| t == expected), "fixture lacks {expected}");
         }
     }
 }

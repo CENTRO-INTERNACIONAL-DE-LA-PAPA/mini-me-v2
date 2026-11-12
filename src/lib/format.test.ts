@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRelative } from "./format";
+import { count, formatRelative } from "./format";
 
 describe("formatRelative", () => {
   const now = new Date(2026, 9, 21, 15, 0).getTime();
@@ -15,5 +15,13 @@ describe("formatRelative", () => {
     expect(formatRelative(at(2026, 9, 20, 23, 0), now)).toBe("Yesterday");
     expect(formatRelative(at(2026, 2, 12, 9, 0), now)).toBe("Mar 12");
     expect(formatRelative(at(2024, 2, 12, 9, 0), now)).toBe("Mar 12, 2024");
+  });
+});
+
+describe("count", () => {
+  it("names one thing in the singular and others in the plural", () => {
+    expect(count(1, "file")).toBe("1 file");
+    expect(count(0, "file")).toBe("0 files");
+    expect(count(2, "person", "people")).toBe("2 people");
   });
 });

@@ -7,8 +7,7 @@ function token(element: Element, name: string): string {
   return getComputedStyle(element).getPropertyValue(name).trim();
 }
 
-/** The theme's chart colours, read when the figure is drawn; Plot writes colours as SVG
- * attributes, where CSS variables don't apply. */
+/** The theme's chart colours as values; CSS variables don't apply in Plot's SVG attributes. */
 function readColours(element: Element, color: string | undefined): ChartColours {
   return {
     first: color ?? token(element, "--primary"),
@@ -27,8 +26,8 @@ interface Tip {
   lines: TipLines;
 }
 
-/** The tooltip of the shape under the pointer, or null. Only the shape itself counts: Plot
- * draws each shape of a mark with that mark's class and binds it to the index of its row. */
+/** The tooltip of the shape (not the mark) under the pointer, or null; Plot gives each shape
+ * its mark's class and its row's index. */
 function tipAt(target: EventTarget, spec: ChartSpec): TipLines | null {
   const shape = target as Element & { __data__?: unknown };
   const mark = shape.closest?.(`[class*="${TIP_CLASS}"]`);
@@ -39,8 +38,7 @@ function tipAt(target: EventTarget, spec: ChartSpec): TipLines | null {
   return source && row !== undefined ? source.lines(row as never) : null;
 }
 
-/** The figure of one chart, drawn by Observable Plot into a container React leaves empty.
- * Loaded on demand, so Plot is only fetched when a Conversation shows a chart. */
+/** One chart, drawn by Observable Plot into a container React leaves empty; loaded on demand. */
 export default function ChartFigure({
   chart,
   state,
@@ -56,8 +54,7 @@ export default function ChartFigure({
   const [width, setWidth] = useState(0);
   const [tip, setTip] = useState<Tip | null>(null);
   const [failure, setFailure] = useState<Error | null>(null);
-  // Error boundaries don't see errors in effects, so a failed draw is rethrown here and the
-  // component shows its text instead.
+  // Error boundaries miss errors in effects, so a failed draw is rethrown during render.
   if (failure) throw failure;
 
   useEffect(() => {

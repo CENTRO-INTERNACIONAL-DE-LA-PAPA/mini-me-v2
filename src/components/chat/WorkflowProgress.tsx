@@ -7,7 +7,7 @@ import { approvalState } from "../interactive/approval";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
 import { Markdown } from "./Markdown";
 
-export type StepState = "done" | "running" | "waiting" | "pending";
+type StepState = "done" | "running" | "waiting" | "pending";
 
 /** How a Step is drawn: done once completed; otherwise running while its reply streams,
  * waiting while the reply waits for an approval, and pending after the reply ended. */
@@ -26,11 +26,9 @@ export function showsProgress(steps: MessageStep[]): boolean {
 /** How an approval's answer reads after its Step's name. */
 export const ANSWER_LABELS = { approved: "Approved", rejected: "Rejected" } as const;
 
-/**
- * The answer to each approval Step run in `steps`, by index: the *n*-th run of an approval
- * Step asked the *n*-th `approval` component with its `step_id`, both in the order they were
- * added. Missing for other Steps, and for an approval without a component or an answer yet.
- */
+/** Each approval Step run's answer, by index in `steps`: the n-th run of an approval Step asked
+ * the n-th `approval` component with its `step_id`, both in the order added. Missing for other
+ * Steps, and for an approval without a component or an answer yet. */
 export function approvalAnswers(
   steps: MessageStep[],
   components: Component[],
@@ -49,13 +47,10 @@ export function approvalAnswers(
   });
 }
 
-/**
- * Where a reply's components are drawn, whatever the reply's status, so that none is pushed
- * down by text still arriving: each shows once the Step run that added it is done, with that
- * run, under `byStep` at its index in `steps`. Once the reply has ended, the last Trait Step's,
- * and those no Step added, are the reply's own instead, below its text. An approval is the
- * reply's own while the reply waits on it.
- */
+/** Where a reply's components go, so text still arriving never pushes one down: each shows
+ * with its done Step run, under `byStep` at its index in `steps`. Once the reply ended, the last
+ * Trait Step's and those no Step added are the reply's own, below its text, as is an approval
+ * while the reply waits on it. */
 export function componentPlaces(
   steps: MessageStep[],
   components: Component[],

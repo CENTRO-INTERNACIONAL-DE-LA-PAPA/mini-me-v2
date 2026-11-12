@@ -1,7 +1,6 @@
-//! What Mini-Me knows about its user, stored app-wide in `user-profile.json` in the app's config
-//! folder, next to `settings.json`. The file never lives in a Project folder or in Mini-Me Data,
-//! which may be synced to the cloud; no Trait tool can address it, and nothing in it is sent to
-//! the sidecar.
+//! What Mini-Me knows about its user, in `user-profile.json` next to `settings.json`. Never in a
+//! Project folder or Mini-Me Data, which may be synced to the cloud; no Trait tool can address it,
+//! and nothing in it is sent to the sidecar.
 
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
@@ -10,6 +9,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::error::{AppError, AppResult};
+use crate::paths::write_atomic;
 
 pub const FILE_NAME: &str = "user-profile.json";
 
@@ -50,7 +50,7 @@ impl ProfileStore {
         }
     }
 
-    /// Saves `name` trimmed, or clears it when it is empty, returning the saved profile.
+    /// Saves `name` trimmed, or clears it when empty; returns the saved profile.
     pub fn save_name(&self, name: &str) -> AppResult<UserProfile> {
         let name = name.trim();
         if name.chars().count() > MAX_NAME_CHARS {
@@ -103,9 +103,7 @@ fn load(path: &Path) -> State {
 
 /// Writes through a temporary file so a failed write leaves the previous file whole.
 fn write(path: &Path, raw: &Map<String, Value>) -> AppResult<()> {
-    let tmp = path.with_file_name(format!("{FILE_NAME}.tmp"));
-    std::fs::write(&tmp, serde_json::to_string_pretty(raw)?)?;
-    std::fs::rename(&tmp, path)?;
+    write_atomic(path, serde_json::to_string_pretty(raw)?.as_bytes())?;
     Ok(())
 }
 

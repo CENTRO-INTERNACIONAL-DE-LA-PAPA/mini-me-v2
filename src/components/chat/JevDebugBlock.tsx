@@ -6,9 +6,8 @@ import { answerRows, questionWords } from "./jevDebug";
 
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 
-/** The "[DEBUG] Jev" block under a user message: Jev's debug record, read each time the block
- * is opened, so a record written or cleared since shows as it is. Options that are IDs are
- * shown by their Mini-Me's or file's name. */
+/** The "[DEBUG] Jev" block under a user message: Jev's record, read again on each open.
+ * Options that are IDs show their Mini-Me's or file's name. */
 export function JevDebugBlock({
   projectId,
   messageId,

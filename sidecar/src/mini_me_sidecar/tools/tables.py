@@ -1,5 +1,4 @@
-"""Tables: reading a table file into a DataFrame, and showing a table as a `table`
-Interactive Component, built the same way whether an adapter or a model shows it."""
+"""Reading tables, and `table` components built the same whether an adapter or a model shows one."""
 
 import math
 import sys
@@ -24,8 +23,7 @@ COLUMN_TYPES = ("number", "text", "date", "boolean")
 
 
 async def read_table(ctx: CallContext, asset_id: str, name: str, text: str = "") -> Table:
-    """The table in the Asset `asset_id`, named `name`. For Excel, reads the sheet whose name
-    appears in `text`, else the first."""
+    """For Excel, reads the sheet named in `text`, else the first."""
     ctx.progress(f"Reading {name}")
     data = await ctx.read_asset(asset_id)
     if len(data) > MAX_TABLE_BYTES:
@@ -41,9 +39,8 @@ async def read_table(ctx: CallContext, asset_id: str, name: str, text: str = "")
 
 
 async def read_reference(ctx: CallContext, reference: dict[str, Any]) -> Table:
-    """The table a `$` reference (a `component` Text Component) points to: the file it was
-    shown from when the core names one, named after that file, else the component's own rows,
-    named after the table with a `.csv` extension."""
+    """The table a `$` reference points to: its source file when the core names one, else the
+    component's own rows, named after the label plus `.csv`."""
     label = str(reference.get("label", ""))
     ctx.progress(f"Reading {label}")
     try:
@@ -66,9 +63,8 @@ async def read_reference(ctx: CallContext, reference: dict[str, Any]) -> Table:
 async def show_frame(
     ctx: CallContext, frame: pd.DataFrame, title: str, source: dict[str, Any] | None = None
 ) -> str:
-    """Shows `frame` as a table, a preview of its first rows when it is long, and returns
-    the component's ID. `source` is the saved file holding the table, `{ asset_id, name }`
-    as `save_file` returns it."""
+    """Shows `frame`, previewed when long, and returns the component's ID; `source` is the
+    saved file holding it, as `save_file` returns it."""
     file = source or {}
     data = table_data(frame, title=title, source=file.get("name"), source_id=file.get("asset_id"))
     ctx.progress("Showing a table")
@@ -82,8 +78,7 @@ async def show_table(
     rows: list[list[Any]] | None = None,
     asset_id: str | None = None,
 ) -> dict[str, Any]:
-    """The form of showing a table offered to models: from the columns and rows the model
-    writes, or from one of the Conversation's CSV, TSV or Excel files."""
+    """The form offered to models: the model's own columns and rows, or a CSV, TSV or Excel file."""
     if asset_id:
         if columns or rows:
             raise ToolError("Give either columns and rows, or an asset_id, not both.")
@@ -177,8 +172,7 @@ def given_table(
 
 
 def table_result(frame: pd.DataFrame, start: int) -> dict[str, Any]:
-    """Up to `MAX_ROWS` rows of `frame` from row `start` as CSV text, with its columns and
-    total row count, for a model to read."""
+    """Up to `MAX_ROWS` rows from `start` as CSV, with the columns and total, for a model."""
     part = frame.iloc[start : start + MAX_ROWS]
     return {
         "columns": [{"name": str(n), "type": column_type(frame[n])} for n in frame.columns],

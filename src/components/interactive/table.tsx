@@ -1,9 +1,12 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { api, errorMessage } from "../../api";
+import { announceFilesChanged } from "../../hooks/useFilesChanged";
+import { ItemMenu, type MenuAction } from "../shell/ItemMenu";
 import type { Renderers } from "./catalogue";
-import { ReferenceButton, useComponentName } from "./component-references";
-import { FeatureButton, useCanFeature } from "./featuring";
+import { ReferenceButton } from "./component-references";
+import { FeatureButton } from "./featuring";
 
 type Cell = string | number | boolean | null;
 
@@ -15,6 +18,7 @@ interface TableData {
   /** Set when `rows` is a preview of a larger table, held whole in the Asset `source`. */
   total_rows?: number;
   source?: string;
+  source_id?: string;
 }
 
 const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 });
@@ -25,8 +29,28 @@ function display(value: Cell): string {
   return String(value);
 }
 
+/** The table as TSV for the clipboard or CSV for a file. Values are written as stored, so
+ * numbers keep full precision and no thousands separators. */
+export function tableText(
+  columns: TableData["columns"],
+  rows: Cell[][],
+  format: "tsv" | "csv",
+): string {
+  const field = (value: string) =>
+    format === "tsv"
+      ? value.replace(/[\t\r\n]+/g, " ")
+      : /[",\r\n]/.test(value)
+        ? `"${value.replace(/"/g, '""')}"`
+        : value;
+  const line = (values: string[]) => values.map(field).join(format === "tsv" ? "\t" : ",");
+  return [
+    line(columns.map((column) => column.name)),
+    ...rows.map((row) => line(columns.map((_, index) => String(row[index] ?? "")))),
+  ].join(format === "tsv" ? "\n" : "\r\n");
+}
+
 /** Which column the rows are sorted by, and in which direction. */
-export interface Sorting {
+interface Sorting {
   column: number;
   desc: boolean;
 }
@@ -55,37 +79,76 @@ function nextSorting(current: Sorting | null, column: number, numeric: boolean):
   return null;
 }
 
-/** The table with an optional starting sort; the catalogue's renderer starts unsorted. */
 export function TableView({
   data,
-  initialSorting = null,
   componentId,
+  projectId,
 }: {
   data: unknown;
-  initialSorting?: Sorting | null;
   componentId?: string;
+  projectId?: string;
 }) {
-  const { columns, rows, title, total_rows, source } = data as TableData;
-  const [sorting, setSorting] = useState<Sorting | null>(initialSorting);
-  const canFeature = useCanFeature(componentId);
-  const canReference = useComponentName(componentId) !== undefined;
+  const { columns, rows, title, total_rows, source, source_id } = data as TableData;
+  /** What the last action did, or why it failed, shown in the header for a moment. */
+  const [notice, setNotice] = useState<string | null>(null);
+  const [sorting, setSorting] = useState<Sorting | null>(null);
   const sorted = useMemo(
     () => sortRows(rows, columns[sorting?.column ?? 0]?.type === "number", sorting),
     [rows, columns, sorting],
   );
+
+  function tell(text: string) {
+    setNotice(text);
+    setTimeout(() => setNotice((current) => (current === text ? null : current)), 3000);
+  }
+
+  // Both act on the rows shown, in their current order.
+  const actions: MenuAction[] = [
+    {
+      label: "Copy table",
+      onSelect: async () => {
+        await navigator.clipboard.writeText(tableText(columns, sorted, "tsv"));
+        tell("Copied");
+      },
+    },
+  ];
+  if (projectId) {
+    actions.push({
+      label: "Save to Files",
+      onSelect: async () => {
+        const csv = tableText(columns, sorted, "csv");
+        const saved = await api.saveTableCsv(projectId, title ?? "", csv);
+        announceFilesChanged(projectId);
+        tell(`Saved as ${saved.name}`);
+      },
+    });
+  }
+
+  async function openSource() {
+    if (!projectId || !source_id) return;
+    try {
+      await api.openAsset(projectId, source_id);
+    } catch (e) {
+      tell(errorMessage(e));
+    }
+  }
 
   return (
     <section
       aria-label={title ?? "Table"}
       className="w-full min-w-0 overflow-hidden rounded-xl border border-card-edge bg-card"
     >
-      {(title || canFeature || canReference) && (
-        <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
-          <h3 className="mr-auto text-ui font-semibold">{title}</h3>
-          <ReferenceButton componentId={componentId} />
-          <FeatureButton componentId={componentId} />
-        </header>
-      )}
+      <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
+        <h3 className="mr-auto text-ui font-semibold">{title}</h3>
+        {notice && (
+          <span role="status" className="truncate text-meta text-muted-foreground">
+            {notice}
+          </span>
+        )}
+        <ReferenceButton componentId={componentId} />
+        <FeatureButton componentId={componentId} />
+        <ItemMenu name={title ?? "this table"} actions={actions} />
+      </header>
       {/* Wide tables scroll sideways inside the card instead of widening the reply. */}
       <div className="max-h-[420px] w-full overflow-auto overscroll-contain">
         <table className="w-max min-w-full border-collapse text-ui tabular-nums">
@@ -144,7 +207,18 @@ export function TableView({
           Showing {numberFormat.format(rows.length)} of {numberFormat.format(total_rows)} rows
           {source && (
             <>
-              ; the full table is in <span className="font-medium text-ink-2">{source}</span>
+              ; the full table is in{" "}
+              {projectId && source_id ? (
+                <button
+                  type="button"
+                  onClick={openSource}
+                  className="cursor-pointer font-medium text-ink-2 underline-offset-2 hover:underline"
+                >
+                  {source}
+                </button>
+              ) : (
+                <span className="font-medium text-ink-2">{source}</span>
+              )}
             </>
           )}
           .
@@ -155,5 +229,7 @@ export function TableView({
 }
 
 export const renderers: Renderers = {
-  1: ({ data, componentId }) => <TableView data={data} componentId={componentId} />,
+  1: ({ data, componentId, projectId }) => (
+    <TableView data={data} componentId={componentId} projectId={projectId} />
+  ),
 };

@@ -2,7 +2,7 @@ import raw from "../../CHANGELOG.md?raw";
 
 /** The release notes of one version: the version in the first line, `# Mini-Me 0.6.0`, and the
  * Markdown after it. */
-export interface Changelog {
+interface Changelog {
   /** Null when the first line names no version. */
   version: string | null;
   body: string;

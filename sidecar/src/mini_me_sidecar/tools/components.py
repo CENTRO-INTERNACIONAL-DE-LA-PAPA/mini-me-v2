@@ -1,5 +1,4 @@
-"""Showing Interactive Components other than tables, one tool per kind, and reading any of
-the Conversation's components back. Tables are in `tools.tables`."""
+"""Show tools for non-table components (tables are in `tools.tables`), and reading any back."""
 
 import csv
 import io
@@ -14,22 +13,18 @@ READ_CHARS = 100_000
 
 
 async def show_chart(ctx: CallContext, data: dict[str, Any], text: str) -> str:
-    """Shows a `chart` component and returns its ID."""
     return await add_component(ctx, "chart", data, text)
 
 
 async def show_papers(ctx: CallContext, data: dict[str, Any], text: str) -> str:
-    """Shows a `paper-sources` component and returns its ID."""
     return await add_component(ctx, "paper-sources", data, text)
 
 
 async def show_datasets(ctx: CallContext, data: dict[str, Any], text: str) -> str:
-    """Shows a `dataset-results` component and returns its ID."""
     return await add_component(ctx, "dataset-results", data, text)
 
 
 async def show_theories(ctx: CallContext, data: dict[str, Any], text: str) -> str:
-    """Shows a `theories` component and returns its ID."""
     return await add_component(ctx, "theories", data, text)
 
 
@@ -49,9 +44,8 @@ async def read_component(ctx: CallContext, component_id: str, start: int = 0) ->
 
 
 def component_result(component: dict[str, Any], start: int = 0) -> dict[str, Any]:
-    """A `table` component as its columns and whole rows from row `start` in CSV text; any
-    other kind as its data in JSON from character `start`. Either holds at most `READ_CHARS`
-    characters (a table at least one row), and `more` says whether more follow."""
+    """A table as CSV rows from row `start`, other kinds as JSON from character `start`: at most
+    `READ_CHARS` characters (a table at least one row), with `more` when more follow."""
     kind = str(component.get("kind", ""))
     data = component.get("data") or {}
     if kind == "table" and isinstance(data, dict):

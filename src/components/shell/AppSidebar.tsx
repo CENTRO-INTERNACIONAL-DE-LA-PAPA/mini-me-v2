@@ -59,6 +59,8 @@ interface Props {
   project: ProjectSummary | null;
   projects: ProjectSummary[];
   conversations: ConversationSummary[];
+  /** Conversations whose reply finished, failed or paused while they were not open. */
+  unseen: ReadonlySet<Uuid>;
   /** How many files the open Project holds. */
   fileCount: number;
   onOpenProject: (project: ProjectSummary) => void;
@@ -74,6 +76,7 @@ export function AppSidebar({
   project,
   projects,
   conversations,
+  unseen,
   fileCount,
   onOpenProject,
   onNavigate,
@@ -91,8 +94,7 @@ export function AppSidebar({
 
   const loadRecent = useCallback(() => api.listRecentConversations().then(setRecent), []);
 
-  // Fetched each time Home is shown and each time a reply starts or stops running, so it follows
-  // activity, and the statuses of Conversations, in any Project.
+  // Refetched when Home shows and when a reply starts or stops, so activity and statuses follow.
   const runningKey = useRunningKey();
   useEffect(() => {
     if (onHome) loadRecent().catch(() => {});
@@ -170,7 +172,10 @@ export function AppSidebar({
                       onOpenConversation(conversation.project_id, conversation.conversation_id)
                     }
                   >
-                    <span className="w-full truncate text-foreground">{conversation.title}</span>
+                    <ConversationTitle
+                      title={conversation.title}
+                      unseen={unseen.has(conversation.conversation_id)}
+                    />
                     {conversation.status ? (
                       <ConversationStatusLine status={conversation.status} />
                     ) : (
@@ -242,7 +247,10 @@ export function AppSidebar({
                       )}
                       onClick={() => onNavigate({ kind: "conversation", id: conversation.id })}
                     >
-                      <span className="w-full truncate text-foreground">{conversation.title}</span>
+                      <ConversationTitle
+                        title={conversation.title}
+                        unseen={unseen.has(conversation.id)}
+                      />
                       {conversation.status ? (
                         <ConversationStatusLine status={conversation.status} />
                       ) : (
@@ -402,5 +410,17 @@ function ProjectSwitcher({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** A Conversation's title in the sidebar, with a dot when its reply ended while not open. */
+function ConversationTitle({ title, unseen }: { title: string; unseen: boolean }) {
+  return (
+    <span className="flex w-full items-center gap-1.5 text-foreground">
+      <span className="truncate">{title}</span>
+      {unseen && (
+        <span role="img" aria-label="New" className="size-1.5 shrink-0 rounded-full bg-primary" />
+      )}
+    </span>
   );
 }

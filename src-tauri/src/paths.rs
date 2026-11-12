@@ -1,5 +1,6 @@
 //! Project-folder confinement: every Project file path goes through `ProjectPaths::resolve`.
 
+use std::io;
 use std::path::{Component, Path, PathBuf};
 
 use crate::error::{AppError, AppResult};
@@ -29,9 +30,8 @@ impl ProjectPaths {
         self.root.join("project.sqlite")
     }
 
-    /// Resolves a path relative to the Project folder, rejecting absolute paths, `..`
-    /// segments, and anything (including symbolic links) that ends up outside the folder.
-    /// The path does not need to exist yet; its nearest existing ancestor is checked.
+    /// Rejects absolute paths, `..` segments, and anything, symbolic links included, that ends up
+    /// outside the folder. The path need not exist; its nearest existing ancestor is checked.
     pub fn resolve(&self, relative: &str) -> AppResult<PathBuf> {
         let relative_path = Path::new(relative);
         for component in relative_path.components() {
@@ -61,6 +61,14 @@ impl ProjectPaths {
         }
         Ok(joined)
     }
+}
+
+/// Writes through `<path>.tmp`, so a failed write leaves the previous file whole.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)
 }
 
 #[cfg(test)]

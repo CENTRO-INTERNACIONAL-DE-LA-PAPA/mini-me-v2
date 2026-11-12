@@ -2,7 +2,7 @@
 //! folders stay self-contained.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::features::{self, FEATURES, Feature};
 use crate::link::{CallModel, DebugParts};
+use crate::paths::write_atomic;
 use crate::protocol::{Origin, new_id};
 use crate::secrets::is_provider;
 
@@ -30,15 +31,14 @@ pub struct Settings {
     pub debug: DebugSettings,
     #[serde(default)]
     pub home: HomeSettings,
-    /// Shows developer options when set; until the user sets it, it follows the app (on in
-    /// Mini-Me Dev, off in Mini-Me).
+    /// Shows developer options; while unset it follows the app (on in Mini-Me Dev, off in Mini-Me).
     #[serde(default)]
     pub developer_mode: Option<bool>,
     /// The Quarto program the user chose in Settings; when unset, the app looks for one.
     #[serde(default)]
     pub quarto_path: Option<String>,
-    /// The app version whose What's new was last shown, or that was running when the settings
-    /// were created. Settings from before this field existed hold none.
+    /// The version whose What's new was last shown, or that ran when settings were created; none
+    /// shows What's new on the next launch.
     #[serde(default)]
     pub last_seen_version: Option<String>,
     /// The feature flags whose key was entered, which are on in Mini-Me.
@@ -93,7 +93,7 @@ impl Default for RoutingSettings {
 }
 
 impl RoutingSettings {
-    /// Sets the threshold, clamped to 0..=1.
+    /// Clamped to 0..=1; a value that is not finite is refused.
     pub fn set_threshold(&mut self, threshold: f64) -> AppResult<()> {
         if !threshold.is_finite() {
             return Err(AppError::invalid_input("The threshold must be a number from 0 to 1."));
@@ -142,8 +142,8 @@ impl AiSettings {
 }
 
 impl Settings {
-    /// Loads the settings from `config_dir`, creating them with fresh IDs on first launch, when
-    /// the running `version` counts as already shown, since a new install has nothing to announce.
+    /// Creates settings with fresh IDs on first launch, recording `version` as shown: a new install
+    /// has nothing to announce.
     pub fn load_or_create(config_dir: &Path, version: &str) -> AppResult<Self> {
         let path = config_dir.join(FILE_NAME);
         if path.exists() {
@@ -171,32 +171,26 @@ impl Settings {
     /// Writes to a temporary file and renames it, so a crash never leaves a half-written file.
     pub fn save(&self, config_dir: &Path) -> AppResult<()> {
         std::fs::create_dir_all(config_dir)?;
-        let tmp: PathBuf = config_dir.join(format!("{FILE_NAME}.tmp"));
-        std::fs::write(&tmp, serde_json::to_string_pretty(self)?)?;
-        std::fs::rename(&tmp, config_dir.join(FILE_NAME))?;
+        write_atomic(&config_dir.join(FILE_NAME), serde_json::to_string_pretty(self)?.as_bytes())?;
         Ok(())
     }
 
     /// Whether to open What's new for the running `version`: it is not the version last shown,
-    /// and this is not Mini-Me Dev (`dev_app`). Records `version` as shown, so the caller saves.
-    pub fn take_whats_new(&mut self, version: &str, dev_app: bool) -> bool {
-        if dev_app || self.last_seen_version.as_deref() == Some(version) {
+    /// and this is not Mini-Me Dev. Records `version` as shown, so the caller saves.
+    pub fn take_whats_new(&mut self, version: &str, is_dev_app: bool) -> bool {
+        if is_dev_app || self.last_seen_version.as_deref() == Some(version) {
             return false;
         }
         self.last_seen_version = Some(version.to_string());
         true
     }
 
-    /// Whether developer options are shown, for an app that is (`dev_app`) or is not
-    /// Mini-Me Dev.
-    pub fn developer_mode(&self, dev_app: bool) -> bool {
-        self.developer_mode.unwrap_or(dev_app)
+    pub fn developer_mode(&self, is_dev_app: bool) -> bool {
+        self.developer_mode.unwrap_or(is_dev_app)
     }
 
-    /// The parts of reply debug records runs collect, for an app that is (`dev_app`) or is not
-    /// Mini-Me Dev.
-    pub fn reply_debug(&self, dev_app: bool) -> DebugParts {
-        let on = self.developer_mode(dev_app);
+    pub fn reply_debug(&self, is_dev_app: bool) -> DebugParts {
+        let on = self.developer_mode(is_dev_app);
         DebugParts {
             input: on && self.debug.reply_input,
             details: on && self.debug.reply_details,
@@ -204,9 +198,8 @@ impl Settings {
         }
     }
 
-    /// The feature flags that are on, for an app that is (`dev_app`) or is not Mini-Me Dev.
-    pub fn active_features(&self, dev_app: bool) -> Vec<&'static Feature> {
-        features::active(FEATURES, &self.unlocked_features, &self.locked_features, dev_app)
+    pub fn active_features(&self, is_dev_app: bool) -> Vec<&'static Feature> {
+        features::active(FEATURES, &self.unlocked_features, &self.locked_features, is_dev_app)
     }
 
     /// Records the flag `id` as on, as entering its key does.
@@ -238,23 +231,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ids_are_stable_across_loads() {
+    fn ids_and_recent_projects_are_kept_across_loads() {
         let dir = tempfile::tempdir().unwrap();
-        let first = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
+        let mut first = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
+        let project = new_id();
+        first.recent_projects.insert(project, 42);
+        first.save(dir.path()).unwrap();
         let second = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
         assert_eq!(first.installation_id, second.installation_id);
         assert_eq!(first.user_id, second.user_id);
-    }
-
-    #[test]
-    fn recent_projects_persist() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut settings = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
-        let project = new_id();
-        settings.recent_projects.insert(project, 42);
-        settings.save(dir.path()).unwrap();
-        let loaded = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
-        assert_eq!(loaded.recent_projects.get(&project), Some(&42));
+        assert_eq!(second.recent_projects.get(&project), Some(&42));
     }
 
     #[test]

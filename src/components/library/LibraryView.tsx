@@ -10,6 +10,7 @@ import { MINI_ME_GROUPS } from "../../protocol/references";
 import type { LibraryView as Library, MiniMe, TraitSummary } from "../../protocol/types";
 import { List, MiniMeCard, Row, TraitIcon } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
+import { count } from "../../lib/format";
 import { SheetPage } from "../shell/Sheet";
 import type { LibraryTab, View } from "../shell/view";
 import { MetaParts } from "@/components/ui/meta-parts";
@@ -17,8 +18,7 @@ import { MetaParts } from "@/components/ui/meta-parts";
 /** A group's heading as the `@` list shows it, or the group itself for one it doesn't know. */
 const groupLabel = (group: string) => MINI_ME_GROUPS.find((g) => g.group === group)?.label ?? group;
 
-/** Every Mini-Me or Trait, user-made ones first, then built-in ones; each entry opens its editor.
- * Both lists can be searched by name and description, and Mini-Mes narrowed to one group. */
+/** Every Mini-Me or Trait, yours first, searchable; Mini-Mes can be narrowed to one group. */
 export function LibraryView({ tab, onOpen }: { tab: LibraryTab; onOpen: (view: View) => void }) {
   const [library, setLibrary] = useState<Library | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -131,11 +131,11 @@ function GroupFilter({
       variant="switch"
       size="switch"
       spacing={1}
-      value={[group ?? ALL]}
-      onValueChange={(value) => value.length > 0 && onSelect(value[0] === ALL ? null : value[0])}
+      value={[group ?? ALL_GROUPS]}
+      onValueChange={(value) => value.length > 0 && onSelect(value[0] === ALL_GROUPS ? null : value[0])}
     >
       {[null, ...groups].map((g) => (
-        <ToggleGroupItem key={g ?? ALL} value={g ?? ALL}>
+        <ToggleGroupItem key={g ?? ALL_GROUPS} value={g ?? ALL_GROUPS}>
           {g === null ? "All" : groupLabel(g)}
           <span className="tabular-nums">{count(g)}</span>
         </ToggleGroupItem>
@@ -144,8 +144,7 @@ function GroupFilter({
   );
 }
 
-/** The filter's value for every group. */
-const ALL = "all";
+const ALL_GROUPS = "all";
 
 function MiniMeLists({
   library,
@@ -213,9 +212,7 @@ function TraitLists({
             )}
             {users.length === 0
               ? "Not used yet"
-              : users.length === 1
-                ? "1 Mini-Me"
-                : `${users.length} Mini-Mes`}
+              : count(users.length, "Mini-Me")}
           </span>
         }
         onOpen={() => onOpen({ kind: "trait", id: t.id })}
@@ -231,8 +228,7 @@ function TraitLists({
   );
 }
 
-/** `entries` split into the user's own and the built-in ones, each list under its heading and
- * count. A list with no entries is left out. */
+/** `entries` under "Yours" and "Built-in" headings with counts; an empty list is left out. */
 function Origins<T extends { id: string; built_in: boolean }>({
   entries,
   builtInNote,

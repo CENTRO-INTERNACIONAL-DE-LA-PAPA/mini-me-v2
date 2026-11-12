@@ -11,11 +11,11 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::library::{Library, MiniMe, PROMPT_ADAPTER, TraitDef};
+use crate::paths::write_atomic;
 
 pub const FILE_NAME: &str = "library.json";
 
-/// The fill every user-made Trait gets. Trait colours are not shown, but the format keeps the
-/// field.
+/// The fill of every user-made Trait; colours are not shown, but the format keeps the field.
 const TRAIT_COLOR: &str = "oklch(0.86 0 0)";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -59,8 +59,7 @@ struct RawFile {
 struct State {
     library: Arc<Library>,
     skipped: Vec<Skipped>,
-    /// Why the file could not be read. While set, edits are refused so the file is not
-    /// overwritten.
+    /// Why the file could not be read; while set, edits are refused so the file is not overwritten.
     unreadable: Option<String>,
 }
 
@@ -104,7 +103,7 @@ impl LibraryStore {
         self.read().unreadable.clone()
     }
 
-    /// Creates or replaces a user-made Trait, returning it as saved.
+    /// Returns the Trait as saved.
     pub fn save_trait(&self, draft: TraitDraft) -> AppResult<TraitDef> {
         let id = if draft.id.is_nil() { Uuid::now_v7() } else { draft.id };
         let saved = TraitDef {
@@ -128,7 +127,7 @@ impl LibraryStore {
         Ok(saved)
     }
 
-    /// Creates or replaces a user-made Mini-Me, returning it as saved.
+    /// Returns the Mini-Me as saved.
     pub fn save_mini_me(&self, mut mini_me: MiniMe) -> AppResult<MiniMe> {
         if mini_me.id.is_nil() {
             mini_me.id = Uuid::now_v7();
@@ -147,7 +146,7 @@ impl LibraryStore {
         Ok(mini_me)
     }
 
-    /// Deletes a user-made Trait, refusing while a Mini-Me runs it.
+    /// Refused while a Mini-Me runs the Trait.
     pub fn delete_trait(&self, id: Uuid) -> AppResult<()> {
         self.edit(|library| {
             refuse_built_in(library, id)?;
@@ -288,9 +287,7 @@ fn write(path: &Path, library: &Library, skipped: &[Skipped]) -> AppResult<()> {
     }
     mini_mes.extend(raw_of(EntryKind::MiniMe));
     let json = serde_json::json!({ "traits": traits, "mini_mes": mini_mes });
-    let tmp = path.with_file_name(format!("{FILE_NAME}.tmp"));
-    std::fs::write(&tmp, serde_json::to_string_pretty(&json)?)?;
-    std::fs::rename(&tmp, path)?;
+    write_atomic(path, serde_json::to_string_pretty(&json)?.as_bytes())?;
     Ok(())
 }
 
@@ -354,7 +351,7 @@ mod tests {
     fn a_missing_file_gives_the_built_ins() {
         let dir = tempfile::tempdir().unwrap();
         let store = LibraryStore::open(dir.path());
-        assert_eq!(names(&store.current()).len(), 16);
+        assert_eq!(names(&store.current()).len(), Library::builtin().mini_mes.len());
         assert_eq!((store.skipped(), store.unreadable()), (vec![], None));
     }
 
@@ -404,7 +401,7 @@ mod tests {
             ]
         );
         assert!(store.skipped()[0].problems[0].contains("cannot list \"show_chart\""));
-        assert_eq!(names(&store.current()).len(), 16);
+        assert_eq!(names(&store.current()).len(), Library::builtin().mini_mes.len());
 
         store.save_trait(draft("Translate")).unwrap();
         let written: Value =
@@ -420,7 +417,7 @@ mod tests {
         std::fs::write(dir.path().join(FILE_NAME), "{ not json").unwrap();
         let store = LibraryStore::open(dir.path());
         assert!(store.unreadable().is_some());
-        assert_eq!(names(&store.current()).len(), 16);
+        assert_eq!(names(&store.current()).len(), Library::builtin().mini_mes.len());
         let error = store.save_trait(draft("Translate")).unwrap_err();
         assert_eq!(error.code, "storage");
         assert_eq!(std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap(), "{ not json");

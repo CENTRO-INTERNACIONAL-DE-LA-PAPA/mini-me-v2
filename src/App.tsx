@@ -3,6 +3,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
 import { useDeveloperMode } from "./hooks/useDeveloperMode";
 import { useFilesChanged } from "./hooks/useFilesChanged";
+import { useReplyNotifications } from "./hooks/useReplyNotifications";
 import { useRunningKey } from "./hooks/useRunningReplies";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
 import { ChatView } from "./components/chat/ChatView";
@@ -14,6 +15,7 @@ import { LibraryView } from "./components/library/LibraryView";
 import { MiniMeEditor } from "./components/library/MiniMeEditor";
 import { OverviewView } from "./components/overview/OverviewView";
 import { SettingsView } from "./components/settings/SettingsView";
+import { LicenseView } from "./components/shell/LicenseView";
 import { ThirdPartyView } from "./components/shell/ThirdPartyView";
 import { WhatsNewView } from "./components/shell/WhatsNewView";
 import { AppSidebar } from "./components/shell/AppSidebar";
@@ -33,8 +35,7 @@ export default function App() {
   const fail = (e: unknown) => setError(errorMessage(e));
   const developer = useDeveloperMode();
 
-  // Outside Developer mode the webview's own right-click menu (Reload, Back, …) is kept only
-  // in text fields, for cut, copy and paste.
+  // Outside Developer mode only text fields keep the webview's context menu, for cut and paste.
   useEffect(() => {
     if (developer) return;
     const block = (event: MouseEvent) => {
@@ -71,9 +72,9 @@ export default function App() {
     refreshConversations();
   }, [refreshConversations]);
 
-  // A Conversation's status, shown in the sidebar, follows its reply as it runs, pauses and ends;
-  // the file count also follows files added without a reply, such as a download.
+  // Reload as replies run, pause and end, and as files change without a reply (a download).
   const runningKey = useRunningKey();
+  const unseen = useReplyNotifications(view.kind === "conversation" ? view.id : null);
   const filesChanged = useFilesChanged(projectId);
   useEffect(() => {
     refreshConversations();
@@ -102,7 +103,6 @@ export default function App() {
   async function deleteConversation(id: string) {
     if (!project) return;
     await api.deleteConversation(project.id, id);
-    // Leaving the deleted Conversation's view for the Project's Overview.
     if (view.kind === "conversation" && view.id === id) setView({ kind: "overview" });
     await refreshConversations();
   }
@@ -140,8 +140,7 @@ export default function App() {
     }
   }
 
-  /** Shows a Conversation, at `messageId` when given, opening its Project first when another
-   * is open. */
+  /** Shows a Conversation, at `messageId` if given, opening its Project first if needed. */
   async function openConversation(projectId: Uuid, conversationId: Uuid, messageId?: Uuid) {
     const next: View = { kind: "conversation", id: conversationId, messageId };
     if (project?.id === projectId) {
@@ -171,6 +170,7 @@ export default function App() {
         project={project}
         projects={projects}
         conversations={conversations}
+        unseen={unseen}
         fileCount={fileCount}
         onOpenProject={openProject}
         onNavigate={navigate}
@@ -238,8 +238,7 @@ function Main({
   onNavigate: (view: View) => void;
   onOpenReply: (projectId: Uuid, conversationId: Uuid, messageId: Uuid) => void;
 }) {
-  // A Conversation and the Mini-Me editor lay out their own sheets; other views fill the main
-  // sheet and scroll as a whole.
+  // Views other than a Conversation and the Mini-Me editor fill one sheet and scroll as a whole.
   const scrolling = (content: ReactNode) => (
     <MainSheet>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{content}</div>
@@ -255,11 +254,16 @@ function Main({
           onOpenWhatsNew={() =>
             onNavigate({ kind: "whats-new", from: { kind: "settings", page: "about" } })
           }
+          onOpenLicense={() => onNavigate({ kind: "license" })}
           onOpenThirdParty={() => onNavigate({ kind: "third-party" })}
         />,
       );
     case "whats-new":
       return scrolling(<WhatsNewView onClose={() => onNavigate(view.from ?? { kind: "home" })} />);
+    case "license":
+      return scrolling(
+        <LicenseView onClose={() => onNavigate({ kind: "settings", page: "about" })} />,
+      );
     case "third-party":
       return scrolling(
         <ThirdPartyView onClose={() => onNavigate({ kind: "settings", page: "about" })} />,
@@ -328,14 +332,13 @@ function Main({
           onActivity={onConversationActivity}
           onRename={(newTitle) => onRenameConversation(view.id, newTitle)}
           onDelete={() => onDeleteConversation(view.id)}
-          onOpenReply={onOpenReply}
           onOpenDocument={(assetId, how) =>
             onNavigate({
               kind: "document",
               assetId,
               from: view,
               draftFrom: how === "draft" ? view.id : undefined,
-              comments: how === "comments",
+              edits: typeof how === "object" ? how.edits : undefined,
             })
           }
         />
@@ -354,10 +357,9 @@ function Main({
           projectId={project.id}
           assetId={view.assetId}
           draftFrom={view.draftFrom}
-          comments={view.comments}
+          edits={view.edits}
           back={back}
           onClose={() => onNavigate(from)}
-          onOpenConversation={(id) => onNavigate({ kind: "conversation", id })}
         />
       ) : null;
     }

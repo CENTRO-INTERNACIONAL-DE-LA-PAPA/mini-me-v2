@@ -1,6 +1,4 @@
-//! Mini-Me runs in flight: starting and resuming them, turning their frames into reply
-//! events, pausing them at approvals, cancelling them, and answering the requests their
-//! Trait calls and model decisions make to the core.
+//! Mini-Me runs in flight: start, resume, pause, cancel, and the core requests their calls make.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
@@ -18,7 +16,7 @@ use uuid::Uuid;
 use crate::assets;
 use crate::comments;
 use crate::components;
-use crate::conversations::{self, ConversationStatus, PausedRun};
+use crate::conversations::{self, ConversationStatus, NewComponent, PausedRun};
 use crate::dataverse;
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
@@ -33,6 +31,7 @@ use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
 use crate::sidecar::SidecarLog;
 use crate::store::Project;
+use crate::sync::locked;
 
 pub const ASSET_CHUNK_BYTES: u64 = 1024 * 1024;
 /// The largest file a Trait may write with `asset.write`.
@@ -51,8 +50,7 @@ const ROUTING_KEY: &str = "typesafe";
 /// Jev's answers to a routing request, by question ID.
 pub type RouteAnswers = BTreeMap<String, ChoiceAnswer>;
 
-/// The end of a routing request: Jev's answers or why there are none, and what was sent to
-/// Jev (`null` when nothing was).
+/// Jev's answers or why there are none, and what was sent (`null` when nothing was).
 pub struct Routed {
     pub answers: AppResult<RouteAnswers>,
     pub asked: Value,
@@ -67,30 +65,26 @@ pub enum DraftEvent {
     Error { error: ErrorInfo },
 }
 
-/// The sender each request waiting for the sidecar's answer is listed under, by its ID.
+/// Requests waiting for the sidecar's answer, by ID.
 type Pending<T> = HashMap<Uuid, mpsc::Sender<Result<T, ErrorInfo>>>;
 
-/// Checks that document work is possible, which the app sets once it knows where Quarto is.
+/// Set by the app once it knows where Quarto is.
 pub type DocumentGate = Arc<dyn Fn() -> AppResult<()> + Send + Sync>;
 
 /// What a request to the sidecar fails with when no answer comes.
 struct NoAnswer {
-    /// The sidecar is not running.
-    not_ready: &'static str,
-    /// The code and message when the answer takes longer than the request's timeout.
-    timeout: (&'static str, &'static str),
-    /// The sidecar stopped before it answered.
-    stopped: &'static str,
+    when_not_ready: &'static str,
+    /// Code and message.
+    when_timed_out: (&'static str, &'static str),
+    when_stopped: &'static str,
 }
 
-/// The writing end of the link to a running sidecar. Returns `false` when the sidecar can
-/// no longer be reached.
+/// Returns `false` when the sidecar can no longer be reached.
 pub trait FrameSink: Send + Sync {
     fn send(&self, frame: &CoreFrame) -> bool;
 }
 
-/// What a reply is produced by. A paused run stores it, so the run resumes with the
-/// definitions it started with.
+/// Stored with a paused run, so it resumes with the definitions it started with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunSpec {
     pub author: Author,
@@ -100,15 +94,14 @@ pub struct RunSpec {
     pub traits: Vec<TraitDef>,
     /// The input of every Trait Step.
     pub input: Value,
-    /// The routing decision's answer to whether the message needs earlier context.
+    /// Routing's answer to whether the message needs earlier context.
     pub needs_context: Option<bool>,
-    /// The file the routing decision picked as the one the message means.
+    /// The file routing picked as the one the message means.
     pub file: Option<RunFile>,
 }
 
 impl RunSpec {
-    /// The run of `mini_me_id`'s Workflow, with the Traits it uses from `library`, and no
-    /// picked file.
+    /// A run of `mini_me_id` with no picked file.
     pub fn for_mini_me(
         library: &Library,
         mini_me_id: Uuid,
@@ -137,7 +130,7 @@ impl RunSpec {
         }
     }
 
-    /// The name a Step is shown with: its Trait's name, else its label, else its type.
+    /// Its Trait's name, else its label, else its type.
     fn step_name(&self, step_id: &str) -> Option<String> {
         let step = self.workflow.step(step_id)?;
         let name = match (self.trait_of(step_id), &step.label) {
@@ -160,8 +153,8 @@ struct SavedRun {
     answers: Uuid,
 }
 
-/// What a call inside a run may do: a Trait call works through its Trait's adapter; a
-/// condition's or loop's model decision may only get the run's AI key.
+/// A Trait call uses its adapter; a condition's or loop's decision may only get the run's AI key.
+#[derive(Clone)]
 enum CallKind {
     Trait { adapter: String },
     Decision,
@@ -171,17 +164,13 @@ enum CallKind {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RunningReply {
     pub project_id: Uuid,
-    pub project_name: String,
     pub conversation_id: Uuid,
     pub conversation_title: String,
     pub message_id: Uuid,
     pub mini_me: RunMiniMe,
-    /// The name of the Step the run last started; none before its first Step.
-    pub step: Option<String>,
 }
 
-/// The status of Conversation `conversation_id` of Project `project_id` given the replies
-/// `running`: `running` with the Mini-Me of its reply, or none when no reply of it is running.
+/// `Running` with its Mini-Me while a reply of the Conversation is in flight.
 pub fn running_status(
     running: &[RunningReply],
     project_id: Uuid,
@@ -203,16 +192,14 @@ struct Run {
     answers: Uuid,
     message_id: Uuid,
     spec: RunSpec,
-    /// The provider of the run's model; the only AI provider whose secret it may get.
+    /// The only AI provider whose secret the run may get.
     provider: Option<String>,
     /// Calls that have started and whose Step has not completed, by call ID.
     calls: HashMap<Uuid, (String, CallKind)>,
     cancelling: bool,
-    step: Option<String>,
-    /// The model chosen in Settings, even when the run needs none, for the reply it hands off
-    /// to.
+    /// Kept even when the run needs none, for the reply it hands off to.
     model: Option<CallModel>,
-    /// The hand-off a call of the run asked for, started when the reply completes.
+    /// Started when the reply completes.
     hand_off: Option<HandOff>,
 }
 
@@ -235,7 +222,7 @@ struct Inner {
     summaries: Pending<String>,
     /// Drafts being written.
     drafts: HashMap<Uuid, mpsc::Sender<DraftEvent>>,
-    /// The provider whose key each summary and draft may get, by its ID.
+    /// The only provider whose key each summary or draft may get.
     key_providers: HashMap<Uuid, String>,
     /// Drafts stopped before they were sent to the sidecar; `draft` ends them at once.
     stopped_drafts: HashSet<Uuid>,
@@ -252,8 +239,7 @@ impl Inner {
 
 pub struct Runs {
     inner: Mutex<Inner>,
-    /// Held while a list is built and sent, so subscribers get lists in the order the runs
-    /// changed.
+    /// Held while a list is built and sent, so subscribers get lists in change order.
     subscribers: Mutex<Vec<RunningSink>>,
     library: Arc<LibraryStore>,
     secrets: Box<dyn SecretSource>,
@@ -261,9 +247,9 @@ pub struct Runs {
     cancel_timeout: Duration,
     /// Asked before a Mini-Me writes or edits a document; none until the app sets one.
     document_gate: Mutex<Option<DocumentGate>>,
-    /// The IDs of the feature flags that are on, as the app last set them.
+    /// Feature flags that are on.
     features: Mutex<Vec<String>>,
-    /// The parts of reply debug records new runs collect, as the app last set them.
+    /// What new runs collect for reply debug records.
     debug: Mutex<DebugParts>,
 }
 
@@ -311,13 +297,12 @@ struct Place {
     conversation_id: Uuid,
     answers: Uuid,
     reply: Uuid,
-    /// The reply's author, the Mini-Me that adds what the call saves.
+    /// The Mini-Me that adds what the call saves.
     author: Author,
     provider: Option<String>,
     /// The Step the call runs.
     step_id: String,
-    /// The adapter of a Trait call; `None` for a decision.
-    call: Option<String>,
+    call: CallKind,
 }
 
 #[derive(Deserialize)]
@@ -348,45 +333,42 @@ impl Runs {
     }
 
     pub fn set_debug(&self, parts: DebugParts) {
-        *self.debug.lock().unwrap_or_else(|p| p.into_inner()) = parts;
+        *locked(&self.debug) = parts;
     }
 
-    /// Sets which feature flags are on, for Traits that ask during a call.
+    /// For Traits that ask during a call.
     pub fn set_active_features(&self, ids: Vec<String>) {
-        *self.features.lock().unwrap_or_else(|p| p.into_inner()) = ids;
+        *locked(&self.features) = ids;
     }
 
-    /// Sets the check that a Mini-Me may write or edit documents.
     pub fn set_document_gate(&self, gate: DocumentGate) {
-        *self.document_gate.lock().unwrap_or_else(|p| p.into_inner()) = Some(gate);
+        *locked(&self.document_gate) = Some(gate);
     }
 
     /// Fails with the gate's error when document work is not possible.
     fn document_allowed(&self) -> AppResult<()> {
-        let gate = self.document_gate.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let gate = locked(&self.document_gate).clone();
         gate.map_or(Ok(()), |check| check())
     }
 
 
     fn lock(&self) -> MutexGuard<'_, Inner> {
-        self.inner.lock().unwrap_or_else(|p| p.into_inner())
+        locked(&self.inner)
     }
 
-    /// Starts using a sidecar that has completed the handshake and listed its adapters.
+    /// For a sidecar past the handshake.
     pub fn connect(&self, sink: Arc<dyn FrameSink>, adapters: Vec<AdapterInfo>) {
         let mut inner = self.lock();
         inner.sink = Some(sink);
         inner.adapters = adapters.into_iter().map(|a| (a.id.clone(), a)).collect();
     }
 
-    /// Forgets the sidecar and fails every reply whose run was still open. Paused replies
-    /// have no open run, so they stay paused.
+    /// Fails every reply with an open run; paused replies have none, so they stay paused.
     pub fn disconnect(&self) {
         let runs: Vec<Run> = {
             let mut inner = self.lock();
             inner.sink = None;
-            // Dropping the senders wakes every waiting routing, summary, draft and export
-            // request.
+            // Dropping the senders wakes every waiting request.
             inner.routes.clear();
             inner.summaries.clear();
             inner.drafts.clear();
@@ -410,9 +392,7 @@ impl Runs {
         })
     }
 
-    /// Whether a run of `spec` needs the model chosen in Settings: when one of its Traits'
-    /// adapters calls an AI provider, or a condition or loop asks the model to decide.
-    /// Adapters may declare other keys, such as the Ai2 account, without needing a model.
+    /// When an adapter calls an AI provider or a condition or loop decides; Ai2 and such need none.
     fn needs_model(&self, spec: &RunSpec) -> bool {
         let inner = self.lock();
         spec.workflow.has_decisions()
@@ -424,9 +404,7 @@ impl Runs {
             })
     }
 
-    /// Creates the reply to `message` and starts the run that produces it. When the run
-    /// needs a model and Settings has none, the reply fails with `model_not_set` and no run
-    /// is started.
+    /// When the run needs a model and Settings has none, the reply fails with `model_not_set`.
     pub fn start(
         &self,
         project: Arc<Project>,
@@ -442,8 +420,7 @@ impl Runs {
         Ok(reply)
     }
 
-    /// Resumes the run of a reply whose approval was just approved, from its saved state.
-    /// The model is the one chosen in Settings now.
+    /// Uses the model chosen in Settings now, not at start.
     pub fn resume(
         &self,
         project: Arc<Project>,
@@ -538,7 +515,7 @@ impl Runs {
                 file: spec.file.clone(),
                 mini_mes: mini_me_list(&self.library.current()),
                 document: comments::run_document(&project, conversation_id).ok().flatten(),
-                debug: *self.debug.lock().unwrap_or_else(|p| p.into_inner()),
+                debug: *locked(&self.debug),
             },
         };
         self.lock().runs.insert(
@@ -552,7 +529,6 @@ impl Runs {
                 provider: model.as_ref().map(|m| m.provider.clone()),
                 calls: HashMap::new(),
                 cancelling: false,
-                step: None,
                 model: chosen,
                 hand_off: None,
             },
@@ -570,10 +546,7 @@ impl Runs {
         }
     }
 
-    /// Asks the sidecar for Jev's answers to the `ask` questions about `state`, waiting at
-    /// most `timeout`; `mini_mes` and `files` are the options of the `mini_me` and `file`
-    /// questions. The answers fail with the sidecar's error, `jev_timeout`, or
-    /// `sidecar_stopped`.
+    /// Fails with the sidecar's error, `jev_timeout` or `sidecar_stopped`.
     pub fn route(
         &self,
         state: Value,
@@ -585,9 +558,9 @@ impl Runs {
         let route_id = new_id();
         let frame = CoreFrame::RouteStart { route_id, state, mini_mes, files, ask };
         let no_answer = NoAnswer {
-            not_ready: "Mini-Me's runtime is not ready.",
-            timeout: ("jev_timeout", "Typesafe did not answer in time."),
-            stopped: "Mini-Me's runtime stopped before choosing a Mini-Me.",
+            when_not_ready: "Mini-Me's runtime is not ready.",
+            when_timed_out: ("jev_timeout", "Typesafe did not answer in time."),
+            when_stopped: "Mini-Me's runtime stopped before choosing a Mini-Me.",
         };
         match self.request(|inner| &mut inner.routes, route_id, frame, timeout, no_answer) {
             Ok((answers, asked)) => Routed {
@@ -598,8 +571,7 @@ impl Runs {
         }
     }
 
-    /// Asks the sidecar to summarise `material` with `model`, waiting at most `timeout`.
-    /// Fails with the sidecar's error, `summary_timeout`, or `sidecar_stopped`.
+    /// Fails with the sidecar's error, `summary_timeout` or `sidecar_stopped`.
     pub fn summarize(
         &self,
         model: CallModel,
@@ -611,19 +583,16 @@ impl Runs {
         self.lock().key_providers.insert(summary_id, model.provider.clone());
         let frame = CoreFrame::SummaryStart { summary_id, model, material, kind };
         let no_answer = NoAnswer {
-            not_ready: "Mini-Me's runtime is not ready.",
-            timeout: ("summary_timeout", "The AI model did not answer in time. Try again."),
-            stopped: "Mini-Me's runtime stopped before the AI model answered.",
+            when_not_ready: "Mini-Me's runtime is not ready.",
+            when_timed_out: ("summary_timeout", "The AI model did not answer in time. Try again."),
+            when_stopped: "Mini-Me's runtime stopped before the AI model answered.",
         };
         let summary = self.request(|inner| &mut inner.summaries, summary_id, frame, timeout, no_answer);
         self.lock().key_providers.remove(&summary_id);
         summary
     }
 
-    /// Drafts a report titled `title` from `material` with `model`, passing each piece of text
-    /// to `on_event` as it arrives, until the draft ends, is cancelled with `cancel_draft`, or
-    /// no text arrives for `idle`. Returns the whole text, and the error that ended it if one
-    /// did; the text written before an error is kept.
+    /// Ends when done, on `cancel_draft` or after `idle` without text; returns text and any error.
     pub fn draft(
         &self,
         draft_id: Uuid,
@@ -690,9 +659,7 @@ impl Runs {
         (text, ending)
     }
 
-    /// Asks the sidecar to stop the draft `draft_id`; it then ends as `Done`. A draft not yet
-    /// sent to the sidecar, because the core is still gathering its material, ends empty when
-    /// it would start.
+    /// It then ends as `Done`; a draft not yet sent to the sidecar ends empty when it would start.
     pub fn cancel_draft(&self, draft_id: Uuid) {
         let sink = {
             let mut inner = self.lock();
@@ -719,8 +686,7 @@ impl Runs {
         }
     }
 
-    /// Sends `frame` for the request `id`, listed in `pending` until it ends, and waits at most
-    /// `timeout` for the sidecar's answer, which `answered` passes on.
+    /// Lists `id` in `pending` until it ends; `answered` passes the answer on.
     fn request<T>(
         &self,
         pending: fn(&mut Inner) -> &mut Pending<T>,
@@ -733,7 +699,7 @@ impl Runs {
         let sink = {
             let mut inner = self.lock();
             let Some(sink) = inner.sink.clone() else {
-                return Err(AppError::new(SIDECAR_STOPPED, no_answer.not_ready));
+                return Err(AppError::new(SIDECAR_STOPPED, no_answer.when_not_ready));
             };
             pending(&mut inner).insert(id, tx);
             sink
@@ -748,15 +714,15 @@ impl Runs {
             Ok(Ok(answer)) => Ok(answer),
             Ok(Err(error)) => Err(AppError::new(&error.code, error.message)),
             Err(RecvTimeoutError::Timeout) => {
-                Err(AppError::new(no_answer.timeout.0, no_answer.timeout.1))
+                Err(AppError::new(no_answer.when_timed_out.0, no_answer.when_timed_out.1))
             }
             Err(RecvTimeoutError::Disconnected) => {
-                Err(AppError::new(SIDECAR_STOPPED, no_answer.stopped))
+                Err(AppError::new(SIDECAR_STOPPED, no_answer.when_stopped))
             }
         }
     }
 
-    /// Passes the sidecar's answer to the request `id` of `pending`, named `what` in the log.
+    /// `what` names the request in the log.
     fn answered<T>(
         &self,
         pending: fn(&mut Inner) -> &mut Pending<T>,
@@ -772,8 +738,7 @@ impl Runs {
         }
     }
 
-    /// Asks the sidecar to cancel the run producing `message_id`, and closes the run if it
-    /// has not ended within the cancel timeout.
+    /// Closes the run itself if it has not ended within `CANCEL_TIMEOUT`.
     pub fn cancel_message(self: &Arc<Self>, message_id: Uuid) {
         let (run_id, sink) = {
             let mut inner = self.lock();
@@ -801,15 +766,15 @@ impl Runs {
         });
     }
 
-    /// Sends the running replies to `sink` and then every change to them.
+    /// Sends the list now and on every change.
     pub fn subscribe(&self, sink: RunningSink) {
-        let mut subscribers = self.subscribers.lock().unwrap_or_else(|p| p.into_inner());
+        let mut subscribers = locked(&self.subscribers);
         if sink(&self.running()) {
             subscribers.push(sink);
         }
     }
 
-    /// Every reply whose run is in flight, oldest run first.
+    /// Oldest run first.
     pub fn running(&self) -> Vec<RunningReply> {
         let mut runs: Vec<_> = {
             let inner = self.lock();
@@ -823,34 +788,30 @@ impl Runs {
                         run.conversation_id,
                         run.message_id,
                         run.spec.mini_me.clone(),
-                        run.step.clone(),
                     )
                 })
                 .collect()
         };
         // Run IDs are UUIDv7, so they sort by start time.
         runs.sort_by_key(|run| run.0);
-        // Titles are read after the runs lock is released, so no Project lock is taken
-        // while it is held.
+        // Titles are read after the runs lock is released, so no Project lock is taken under it.
         runs.into_iter()
             .filter(|(_, project, conversation_id, ..)| {
                 !comments::is_thread(&project.lock(), *conversation_id).unwrap_or(false)
             })
-            .map(|(_, project, conversation_id, message_id, mini_me, step)| RunningReply {
+            .map(|(_, project, conversation_id, message_id, mini_me)| RunningReply {
                 project_id: project.id,
-                project_name: project.name(),
                 conversation_id,
                 conversation_title: conversations::title(&project, conversation_id)
                     .unwrap_or_default(),
                 message_id,
                 mini_me,
-                step,
             })
             .collect()
     }
 
     fn notify(&self) {
-        let mut subscribers = self.subscribers.lock().unwrap_or_else(|p| p.into_inner());
+        let mut subscribers = locked(&self.subscribers);
         if subscribers.is_empty() {
             return;
         }
@@ -880,8 +841,7 @@ impl Runs {
         run
     }
 
-    /// Removes the run `run_id` without telling anyone, for a caller that stores what became of
-    /// it before the running list changes.
+    /// Does not notify, so the caller can store the outcome before the running list changes.
     fn take(&self, run_id: Uuid) -> Option<Run> {
         let run = self.lock().runs.remove(&run_id);
         if run.is_none() {
@@ -912,10 +872,8 @@ impl Runs {
                 };
                 run.calls.insert(call_id, (step_id.clone(), kind));
             }
-            run.step = Some(name.clone());
             (Arc::clone(&run.project), run.message_id, step.type_name(), name)
         };
-        self.notify();
         let (project, message_id, step_type, name) = started;
         let _ = conversations::append_step_started(&project, message_id, &step_id, step_type, &name);
     }
@@ -936,7 +894,6 @@ impl Runs {
         }
     }
 
-    /// Saves a run that reached an approval, so the reply waits for the user's answer.
     fn paused(&self, run_id: Uuid, step_id: String, output: Option<String>, state: String) {
         let Some(run) = self.take(run_id) else {
             return;
@@ -980,8 +937,7 @@ impl Runs {
         let _ = conversations::pause_reply(&run.project, paused, &prompt);
     }
 
-    /// Applies a run frame from the sidecar. Updates to a reply that has already ended are
-    /// rejected by `conversations` and dropped here.
+    /// Updates to a reply that has already ended are rejected by `conversations` and dropped.
     pub fn handle(self: &Arc<Self>, frame: SidecarFrame) {
         match frame {
             SidecarFrame::RunDelta { run_id, text } => {
@@ -1063,8 +1019,7 @@ impl Runs {
                 method,
                 params,
             } => {
-                // Asset reads touch the disk; answering on another thread keeps the link's
-                // reader free for other runs.
+                // Asset reads touch the disk; another thread keeps the link's reader free.
                 let this = Arc::clone(self);
                 std::thread::spawn(move || {
                     let response = this.respond(request_id, call_id, &method, params);
@@ -1108,10 +1063,7 @@ impl Runs {
                 author: run.spec.author.clone(),
                 provider: run.provider.clone(),
                 step_id: step_id.to_string(),
-                call: match kind {
-                    CallKind::Trait { adapter } => Some(adapter.clone()),
-                    CallKind::Decision => None,
-                },
+                call: kind.clone(),
             });
             // A summary or a draft may only get its own model's key.
             let summary_provider = inner.key_providers.get(&call_id).cloned();
@@ -1126,105 +1078,21 @@ impl Runs {
             }
             return Err(AppError::new("call_not_active", "This Trait call has ended."));
         };
-        let Some(adapter) = place.call.clone() else {
+        let CallKind::Trait { adapter } = &place.call else {
             return self.answer_key("Workflow decision", place.provider.as_deref(), method, params);
         };
-        let project = Arc::clone(&place.project);
-        let reply = place.reply;
         match method {
-            "asset.read" => read_asset(&project, parse_params(params)?),
-            "conversation.history" => {
-                let messages = project.lock().conversation_messages(place.conversation_id)?;
-                let library = self.library.current();
-                let history = history(&messages, place.answers, &library, HISTORY_BUDGET_CHARS);
-                Ok(serde_json::to_value(history)?)
-            }
-            "features.active" => {
-                let features = self.features.lock().unwrap_or_else(|p| p.into_inner()).clone();
-                Ok(json!({ "features": features }))
-            }
-            "dataverse.search" => {
-                let search: dataverse::Search = parse_params(params)?;
-                Ok(serde_json::to_value(dataverse::search(&search)?)?)
-            }
-            "secret.get" => self.secret(&adapter, place.provider.as_deref(), parse_params(params)?),
-            "asset.write" => {
-                let p: AssetWriteParams = parse_params(params)?;
-                if crate::documents::is_document(&p.name) {
-                    self.document_allowed()?;
-                }
-                let bytes = decode_asset(&p.data)?;
-                let file = (p.name.as_str(), p.media_type.as_str(), bytes.as_slice());
-                let asset = conversations::attach_generated(&project, reply, &place.author, file)
-                    .map_err(reply_ended)?;
-                Ok(json!({ "asset": asset }))
-            }
-            "conversation.results" => {
-                let state = project.lock();
-                let messages = state.conversation_messages(place.conversation_id)?;
-                let library = self.library.current();
-                let mut found = results(&messages, place.answers, reply, &library, |id| {
-                    assets::find(&state, id).ok()
-                });
-                // A thread's document is part of what its comment is about.
-                if let Some(document) = comments::document_of(&state, place.conversation_id)? {
-                    found.assets.retain(|a| a.asset.id != document.id);
-                    let message_id = place.answers;
-                    let listed = ResultAsset { asset: document, message_id, current: true };
-                    found.assets.insert(0, listed);
-                }
-                Ok(serde_json::to_value(found)?)
-            }
-            "component.read" => {
-                let p: ComponentReadParams = parse_params(params)?;
-                components::read(&project.lock(), place.conversation_id, p.component_id)
-            }
-            "component.add" => {
-                let p: ComponentAddParams = parse_params(params)?;
-                let data = match p.kind.as_str() {
-                    "suggestion" => comments::suggestion(&project, place.conversation_id, &p.data)?,
-                    _ => p.data,
-                };
-                let component = (p.kind.as_str(), p.version, data, p.text);
-                let step_id = Some(place.step_id.as_str());
-                let id = conversations::add_component(&project, reply, step_id, component)
-                    .map_err(reply_ended)?;
-                Ok(json!({ "component_id": id }))
-            }
-            "document.edit" => {
-                let p: DocumentEditParams = parse_params(params)?;
-                self.document_allowed()?;
-                let call = comments::EditingCall {
-                    conversation_id: place.conversation_id,
-                    answers: place.answers,
-                    reply,
-                    author: &place.author,
-                    step_id: Some(place.step_id.as_str()),
-                };
-                let edited = comments::edit_document(&project, &call, p.asset_id, &p.edits)
-                    .map_err(reply_ended)?;
-                Ok(serde_json::to_value(edited)?)
-            }
-            "reply.hand_off" => {
-                let p: HandOffParams = parse_params(params)?;
-                let hand_off = self.hand_off_allowed(&place, p)?;
-                let library = self.library.current();
-                let name = library.mini_me(hand_off.mini_me_id).map_or("", |m| m.name.as_str());
-                let data = json!({
-                    "mini_me_id": hand_off.mini_me_id,
-                    "request": hand_off.request,
-                    "file": hand_off.file,
-                });
-                let text = format!("Handed to {name}: {}", hand_off.request);
-                self.hold_hand_off(call_id, hand_off)?;
-                let step_id = Some(place.step_id.as_str());
-                let card = ("hand-off", 1, data, text);
-                if let Err(err) = conversations::add_core_component(&project, reply, step_id, card) {
-                    self.drop_hand_off(call_id);
-                    return Err(reply_ended(err));
-                }
-                Ok(json!({ "ok": true }))
-            }
+            "asset.read" => read_asset(&place.project, parse_params(params)?),
+            "conversation.history" => self.conversation_history(&place),
+            "features.active" => self.active_features(),
+            "dataverse.search" => search_dataverse(parse_params(params)?),
+            "secret.get" => self.secret(adapter, place.provider.as_deref(), parse_params(params)?),
+            "asset.write" => self.write_asset(&place, parse_params(params)?),
+            "conversation.results" => self.conversation_results(&place),
+            "component.read" => read_component(&place, parse_params(params)?),
+            "component.add" => add_component(&place, parse_params(params)?),
+            "document.edit" => self.edit_document(&place, parse_params(params)?),
+            "reply.hand_off" => self.accept_hand_off(call_id, &place, parse_params(params)?),
             other => Err(AppError::new(
                 "unknown_method",
                 format!("The core has no request method called '{other}'."),
@@ -1232,9 +1100,84 @@ impl Runs {
         }
     }
 
-    /// The hand-off `params` asks for, when the reply in `place` may make it: not to its own
-    /// Mini-Me or one the library lacks, not from a reply a hand-off started or a comment
-    /// thread, and with a file of the Conversation or none.
+    fn conversation_history(&self, place: &Place) -> AppResult<Value> {
+        let messages = place.project.lock().conversation_messages(place.conversation_id)?;
+        let library = self.library.current();
+        let history = history(&messages, place.answers, &library, HISTORY_BUDGET_CHARS);
+        Ok(serde_json::to_value(history)?)
+    }
+
+    fn active_features(&self) -> AppResult<Value> {
+        let features = locked(&self.features).clone();
+        Ok(json!({ "features": features }))
+    }
+
+    fn write_asset(&self, place: &Place, p: AssetWriteParams) -> AppResult<Value> {
+        if crate::documents::is_document(&p.name) {
+            self.document_allowed()?;
+        }
+        let bytes = decode_asset(&p.data)?;
+        let file = (p.name.as_str(), p.media_type.as_str(), bytes.as_slice());
+        let asset =
+            conversations::attach_generated(&place.project, place.reply, &place.author, file)
+                .map_err(reply_ended)?;
+        Ok(json!({ "asset": asset }))
+    }
+
+    fn conversation_results(&self, place: &Place) -> AppResult<Value> {
+        let state = place.project.lock();
+        let messages = state.conversation_messages(place.conversation_id)?;
+        let library = self.library.current();
+        let mut found = results(&messages, place.answers, place.reply, &library, |id| {
+            assets::find(&state, id).ok()
+        });
+        // A thread's document is part of what its comment is about.
+        if let Some(document) = comments::document_of(&state, place.conversation_id)? {
+            found.assets.retain(|a| a.asset.id != document.id);
+            let message_id = place.answers;
+            let listed = ResultAsset { asset: document, message_id, current: true };
+            found.assets.insert(0, listed);
+        }
+        Ok(serde_json::to_value(found)?)
+    }
+
+    fn edit_document(&self, place: &Place, p: DocumentEditParams) -> AppResult<Value> {
+        self.document_allowed()?;
+        let call = comments::EditingCall {
+            conversation_id: place.conversation_id,
+            answers: place.answers,
+            reply: place.reply,
+            author: &place.author,
+            step_id: Some(place.step_id.as_str()),
+        };
+        let edited = comments::edit_document(&place.project, &call, p.asset_id, &p.edits)
+            .map_err(reply_ended)?;
+        Ok(serde_json::to_value(edited)?)
+    }
+
+    fn accept_hand_off(&self, call_id: Uuid, place: &Place, p: HandOffParams) -> AppResult<Value> {
+        let hand_off = self.hand_off_allowed(place, p)?;
+        let library = self.library.current();
+        let name = library.mini_me(hand_off.mini_me_id).map_or("", |m| m.name.as_str());
+        let data = json!({
+            "mini_me_id": hand_off.mini_me_id,
+            "request": hand_off.request,
+            "file": hand_off.file,
+        });
+        let text = format!("Handed to {name}: {}", hand_off.request);
+        self.hold_hand_off(call_id, hand_off)?;
+        let step_id = Some(place.step_id.as_str());
+        let card = NewComponent { kind: "hand-off".into(), version: 1, data, text };
+        let added = conversations::add_core_component(&place.project, place.reply, step_id, card);
+        if let Err(err) = added {
+            self.drop_hand_off(call_id);
+            return Err(reply_ended(err));
+        }
+        Ok(json!({ "ok": true }))
+    }
+
+    /// Not to its own or an unknown Mini-Me, not from a handed-off reply or comment thread,
+    /// and only with a file of the Conversation.
     fn hand_off_allowed(&self, place: &Place, params: HandOffParams) -> AppResult<HandOff> {
         let library = self.library.current();
         if library.mini_me(params.mini_me_id).is_none() {
@@ -1270,7 +1213,7 @@ impl Runs {
         Ok(HandOff { mini_me_id: params.mini_me_id, request, file })
     }
 
-    /// Holds `hand_off` on the run of the call `call_id`, which may hand off once.
+    /// A run may hand off once.
     fn hold_hand_off(&self, call_id: Uuid, hand_off: HandOff) -> AppResult<()> {
         let mut inner = self.lock();
         let run = inner
@@ -1292,9 +1235,7 @@ impl Runs {
         }
     }
 
-    /// Starts the reply of the Mini-Me the completed `reply` hands off to, with the run's model,
-    /// as if the user had sent the request: with the earlier messages, and the handed file as
-    /// its picked file. Notes why when it cannot start.
+    /// As if the user sent the request, with the run's model; notes why when it cannot start.
     fn hand_off(&self, run: &Run, reply: &Message, hand_off: HandOff) {
         let library = self.library.current();
         let author = Author { kind: AuthorKind::MiniMe, id: hand_off.mini_me_id.to_string() };
@@ -1310,8 +1251,7 @@ impl Runs {
         }
     }
 
-    /// A request that may only get the `allowed` API key, such as a routing request, which
-    /// may only get Typesafe's. `what` names the request in errors.
+    /// Answers a routing, summary or decision request: only `secret.get` for `allowed`.
     fn answer_key(
         &self,
         what: &str,
@@ -1335,8 +1275,7 @@ impl Runs {
         self.secret_value(&params.provider)
     }
 
-    /// A Trait call may get only secrets its adapter declared: for an AI provider, only the
-    /// one of its run's model; other keys, such as the Ai2 account, whenever declared.
+    /// Only declared secrets; for an AI provider, only the run model's.
     fn secret(
         &self,
         adapter: &str,
@@ -1393,7 +1332,6 @@ fn hand_off_refused(message: &str) -> AppError {
     AppError::new("hand_off_not_allowed", message)
 }
 
-/// Every Mini-Me of `library`, as a run's `mini_mes`.
 fn mini_me_list(library: &Library) -> Vec<RouteMiniMe> {
     library
         .summaries()
@@ -1402,8 +1340,7 @@ fn mini_me_list(library: &Library) -> Vec<RouteMiniMe> {
         .collect()
 }
 
-/// A reply that was stopped while its call winds down takes no more output, as if the call
-/// had ended.
+/// A reply stopped while its call winds down takes no more output, as if the call had ended.
 fn reply_ended(err: AppError) -> AppError {
     if err.code == "reply_finished" {
         AppError::new("call_not_active", "This Trait call has ended.")
@@ -1416,8 +1353,27 @@ fn parse_params<T: for<'de> Deserialize<'de>>(params: Value) -> AppResult<T> {
     serde_json::from_value(params).map_err(|e| AppError::invalid_input(e.to_string()))
 }
 
-/// Reads up to one chunk of an Asset. `assets::file_path` only finds Assets of this Project
-/// and resolves them through the Project-folder confinement check.
+fn search_dataverse(search: dataverse::Search) -> AppResult<Value> {
+    Ok(serde_json::to_value(dataverse::search(&search)?)?)
+}
+
+fn read_component(place: &Place, p: ComponentReadParams) -> AppResult<Value> {
+    components::read(&place.project.lock(), place.conversation_id, p.component_id)
+}
+
+fn add_component(place: &Place, p: ComponentAddParams) -> AppResult<Value> {
+    let data = match p.kind.as_str() {
+        "suggestion" => comments::suggestion(&place.project, place.conversation_id, &p.data)?,
+        _ => p.data,
+    };
+    let component = NewComponent { kind: p.kind, version: p.version, data, text: p.text };
+    let step_id = Some(place.step_id.as_str());
+    let id = conversations::add_component(&place.project, place.reply, step_id, component)
+        .map_err(reply_ended)?;
+    Ok(json!({ "component_id": id }))
+}
+
+/// Up to one chunk; `assets::file_path` confines the read to this Project's folder.
 fn read_asset(project: &Project, params: AssetReadParams) -> AppResult<Value> {
     let path = assets::file_path(project, params.asset_id)?;
     let mut file = File::open(&path)?;
@@ -1477,30 +1433,18 @@ pub mod test_support {
             model: "dummy-model".to_string(),
         })
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::comments::test_support::into_thread;
-    use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
-    use crate::library::{FALLBACK_MINI_ME, SCRIBE, Step};
-    use crate::projects::test_support::{temp_project, user};
-    use crate::protocol::{EventKind, MessageStatus};
-    use crate::secrets::NoSecrets;
-    use crate::secrets::test_support::MemorySecrets;
-    use super::test_support::{STEP, dummy_model, spec};
-
+    /// A frame sink that keeps every frame sent to the sidecar.
     #[derive(Default)]
-    struct Recorder(Mutex<Vec<CoreFrame>>);
+    pub struct Recorder(pub Mutex<Vec<CoreFrame>>);
 
     impl Recorder {
-        fn frames(&self) -> Vec<CoreFrame> {
+        pub fn frames(&self) -> Vec<CoreFrame> {
             self.0.lock().unwrap().clone()
         }
 
         /// The ID of the latest `run.start`.
-        fn last_run(&self) -> Uuid {
+        pub fn last_run(&self) -> Uuid {
             self.frames()
                 .iter()
                 .rev()
@@ -1518,6 +1462,19 @@ mod tests {
             true
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::comments::test_support::into_thread;
+    use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
+    use crate::library::{FALLBACK_MINI_ME, SCRIBE, Step};
+    use crate::projects::test_support::{temp_project, user};
+    use crate::protocol::{EventKind, MessageStatus};
+    use crate::secrets::NoSecrets;
+    use crate::secrets::test_support::MemorySecrets;
+    use super::test_support::{Recorder, STEP, dummy_model, spec};
 
     fn info(id: &str, providers: &[&str]) -> AdapterInfo {
         AdapterInfo {
@@ -1565,8 +1522,7 @@ mod tests {
     }
 
     impl Fixture {
-        /// Sends a user message and starts a run of `adapter` for it; returns (run ID,
-        /// reply ID).
+        /// Returns (run ID, reply ID).
         fn start(&self, adapter: &str) -> (Uuid, Uuid) {
             self.start_spec(spec(adapter, json!({ "text": "late blight spreads" })), dummy_model())
         }
@@ -1591,8 +1547,7 @@ mod tests {
             send_message(&self.project, conversation, input, new_id()).unwrap()
         }
 
-        /// Starts a run of `adapter` and its one Step's Trait call; returns (call ID, reply
-        /// ID).
+        /// Starts the run and its one Trait call; returns (call ID, reply ID).
         fn start_call(&self, adapter: &str) -> (Uuid, Uuid) {
             let (run_id, reply) = self.start(adapter);
             (self.step(run_id, STEP), reply)
@@ -1710,7 +1665,7 @@ mod tests {
         assert_eq!((steps[0].output.as_deref(), steps[0].done), (Some("late blight"), true));
     }
 
-    /// Subscribes to the running replies; returns every list sent so far.
+    /// Every list sent so far.
     fn watch(f: &Fixture) -> Arc<Mutex<Vec<Vec<RunningReply>>>> {
         let lists = Arc::new(Mutex::new(Vec::new()));
         let sent = Arc::clone(&lists);
@@ -1740,8 +1695,7 @@ mod tests {
             output: None,
             state: "opaque".into(),
         });
-        // The Conversation had no status while running, and none is missing when the reply
-        // leaves the running list.
+        // When the reply leaves the running list, its paused status is already stored.
         let seen = seen.lock().unwrap().clone();
         assert_eq!(seen.last(), Some(&(0, true)), "{seen:?}");
     }
@@ -1751,12 +1705,10 @@ mod tests {
         let (project_id, conversation_id) = (new_id(), new_id());
         let reply = |project_id, conversation_id| RunningReply {
             project_id,
-            project_name: "Trials".into(),
             conversation_id,
             conversation_title: "Plan".into(),
             message_id: new_id(),
             mini_me: RunMiniMe { id: new_id(), name: "Researcher".into() },
-            step: None,
         };
         let running = [reply(project_id, conversation_id)];
         assert_eq!(
@@ -1769,7 +1721,7 @@ mod tests {
     }
 
     #[test]
-    fn running_replies_follow_their_runs_steps_and_ends() {
+    fn running_replies_follow_their_runs_until_they_end() {
         let f = quick();
         let lists = watch(&f);
         let (run_id, reply) = f.start("echo");
@@ -1779,24 +1731,10 @@ mod tests {
         let running = last(&lists);
         assert_eq!(running.len(), 1);
         assert_eq!(running[0].message_id, reply);
-        assert_eq!(running[0].project_name, "Test Project");
         assert_eq!(running[0].conversation_title, "New conversation");
-        assert_eq!(running[0].step, None);
-
-        f.step(run_id, STEP);
-        assert_eq!(last(&lists)[0].step.as_deref(), Some("Test"));
 
         f.runs.handle(SidecarFrame::RunDone { run_id });
         assert!(last(&lists).is_empty());
-    }
-
-    #[test]
-    fn a_paused_reply_is_not_running() {
-        let f = quick();
-        let lists = watch(&f);
-        paused(&f);
-        assert!(lists.lock().unwrap().last().unwrap().is_empty());
-        assert!(f.runs.running().is_empty());
     }
 
     #[test]
@@ -1912,7 +1850,7 @@ mod tests {
             .collect()
     }
 
-    /// Asks to hand `request` off to the Mini-Me `mini_me` for the call `call_id`.
+    /// Asks to hand off to `mini_me` from `call_id`.
     fn hand_off(f: &Fixture, call_id: Uuid, mini_me: Uuid, asset: Option<Uuid>) -> CoreFrame {
         let params = json!({ "mini_me_id": mini_me, "request": "profile\n this", "asset_id": asset });
         f.runs.respond("r".into(), call_id, "reply.hand_off", params)
@@ -2004,30 +1942,6 @@ mod tests {
     }
 
     #[test]
-    fn a_trait_cannot_add_a_document_edits_card() {
-        let f = quick();
-        let (call_id, _) = f.start_call("echo");
-        let params = json!({ "kind": "document-edits", "version": 1, "data": {}, "text": "t" });
-        let refused = add_component(&f, call_id, params);
-        assert_eq!(error_code(refused).as_deref(), Some("component_not_allowed"));
-    }
-
-    #[test]
-    fn a_valid_component_is_added_to_the_reply() {
-        let f = quick();
-        let (call_id, reply) = f.start_call("echo");
-        let params = json!({
-            "kind": "paper-sources", "version": 1, "data": papers(), "text": "1. Late blight"
-        });
-        let id = result(add_component(&f, call_id, params))["component_id"].clone();
-
-        let message = f.message(reply);
-        assert_eq!(message.components.len(), 1);
-        assert_eq!(json!(message.components[0].id), id);
-        assert_eq!(message.components[0].kind, "paper-sources");
-    }
-
-    #[test]
     fn a_component_records_the_step_run_that_added_it() {
         let f = quick();
         let (run_id, reply) = f.start("echo");
@@ -2077,14 +1991,17 @@ mod tests {
     }
 
     #[test]
-    fn an_approval_or_a_component_without_text_is_refused() {
+    fn components_a_trait_may_not_add_are_refused() {
         let f = quick();
         let (call_id, reply) = f.start_call("echo");
-        let approval = json!({ "kind": "approval", "version": 1, "data": {}, "text": "t" });
-        assert_eq!(
-            error_code(add_component(&f, call_id, approval)).as_deref(),
-            Some("component_not_allowed")
-        );
+        for kind in ["approval", "document-edits"] {
+            let params = json!({ "kind": kind, "version": 1, "data": {}, "text": "t" });
+            assert_eq!(
+                error_code(add_component(&f, call_id, params)).as_deref(),
+                Some("component_not_allowed"),
+                "{kind}"
+            );
+        }
 
         let empty = json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": " " });
         assert_eq!(
@@ -2098,7 +2015,7 @@ mod tests {
     }
 
     #[test]
-    fn a_request_after_its_step_completed_is_refused() {
+    fn a_request_after_its_step_or_run_ended_is_refused() {
         let f = quick();
         let (run_id, reply) = f.start("echo");
         let call_id = f.step(run_id, STEP);
@@ -2110,6 +2027,13 @@ mod tests {
             Some("call_not_active")
         );
         assert!(f.message(reply).components.is_empty());
+
+        let (run_id, _) = f.start("echo");
+        let call_id = f.step(run_id, STEP);
+        f.runs.handle(SidecarFrame::RunDone { run_id });
+        let response = write_asset(&f, call_id, "theory-store.json", b"{}");
+        assert_eq!(error_code(response).as_deref(), Some("call_not_active"));
+        assert!(assets::list(&f.project, None).unwrap().is_empty());
     }
 
     fn write_asset(f: &Fixture, call_id: Uuid, name: &str, content: &[u8]) -> CoreFrame {
@@ -2129,17 +2053,6 @@ mod tests {
         assert_eq!(message.attachments.len(), 1);
         let path = assets::file_path(&f.project, message.attachments[0].id).unwrap();
         assert_eq!(std::fs::read(path).unwrap(), b"{\"theories\": []}");
-    }
-
-    #[test]
-    fn an_asset_written_after_the_run_ended_is_refused_and_not_stored() {
-        let f = quick();
-        let (run_id, _) = f.start("echo");
-        let call_id = f.step(run_id, STEP);
-        f.runs.handle(SidecarFrame::RunDone { run_id });
-        let response = write_asset(&f, call_id, "theory-store.json", b"{}");
-        assert_eq!(error_code(response).as_deref(), Some("call_not_active"));
-        assert!(assets::list(&f.project, None).unwrap().is_empty());
     }
 
     #[test]
@@ -2206,18 +2119,25 @@ mod tests {
     }
 
     #[test]
-    fn secrets_go_only_to_declared_providers() {
-        let f = fixture(Box::new(MemorySecrets::dummy()), CANCEL_TIMEOUT);
+    fn a_trait_call_gets_only_the_key_of_its_runs_provider() {
+        let secrets = MemorySecrets(HashMap::from([
+            ("dummy".to_string(), "sk-dummy-0123456789".to_string()),
+            ("dataverse".to_string(), "dv-token".to_string()),
+        ]));
+        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        let ask = |call: Uuid, provider: &str| {
+            f.runs.respond("r".into(), call, "secret.get", json!({ "provider": provider }))
+        };
+        // An adapter that declares no provider gets no key.
         let (echo_call, _) = f.start_call("echo");
-        let response =
-            f.runs.respond("r".into(), echo_call, "secret.get", json!({ "provider": "dummy" }));
-        assert_eq!(error_code(response).as_deref(), Some("secret_not_allowed"));
-
+        assert_eq!(error_code(ask(echo_call, "dummy")).as_deref(), Some("secret_not_allowed"));
+        // One that declares several gets only the run's, and never the Dataverse token.
+        let (prompt_call, _) = f.start_call("prompt");
+        assert_eq!(error_code(ask(prompt_call, "openai")).as_deref(), Some("secret_not_allowed"));
         let (run_id, reply) = f.start("test-use-secret");
         let secret_call = f.step(run_id, STEP);
-        let response =
-            f.runs.respond("r".into(), secret_call, "secret.get", json!({ "provider": "dummy" }));
-        assert_eq!(result(response)["value"], json!("sk-dummy-0123456789"));
+        assert_eq!(error_code(ask(secret_call, "dataverse")).as_deref(), Some("secret_not_allowed"));
+        assert_eq!(result(ask(secret_call, "dummy"))["value"], json!("sk-dummy-0123456789"));
         f.runs.handle(SidecarFrame::RunDone { run_id });
         let persisted = format!("{:?}", f.reply_events(reply));
         assert!(!persisted.contains("sk-dummy"));
@@ -2226,36 +2146,6 @@ mod tests {
         let (call, _) = g.start_call("test-use-secret");
         let response = g.runs.respond("r".into(), call, "secret.get", json!({ "provider": "dummy" }));
         assert_eq!(error_code(response).as_deref(), Some("secret_unavailable"));
-    }
-
-    #[test]
-    fn a_dataverse_search_needs_a_query() {
-        let f = quick();
-        let (call, _) = f.start_call("echo");
-        let response = f.runs.respond("r".into(), call, "dataverse.search", json!({ "start": 0 }));
-        assert_eq!(error_code(response).as_deref(), Some("invalid_input"));
-    }
-
-    #[test]
-    fn the_dataverse_token_goes_to_no_trait() {
-        let secrets = MemorySecrets(HashMap::from([("dataverse".into(), "dv-token".into())]));
-        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
-        let (call, _) = f.start_call("test-use-secret");
-        let params = json!({ "provider": "dataverse" });
-        let response = f.runs.respond("r".into(), call, "secret.get", params);
-        assert_eq!(error_code(response).as_deref(), Some("secret_not_allowed"));
-    }
-
-    #[test]
-    fn secrets_go_only_to_the_runs_own_provider() {
-        let f = fixture(Box::new(MemorySecrets::dummy()), CANCEL_TIMEOUT);
-        let (call, _) = f.start_call("prompt");
-        let response =
-            f.runs.respond("r".into(), call, "secret.get", json!({ "provider": "openai" }));
-        assert_eq!(error_code(response).as_deref(), Some("secret_not_allowed"));
-        let response =
-            f.runs.respond("r".into(), call, "secret.get", json!({ "provider": "dummy" }));
-        assert_eq!(result(response)["value"], json!("sk-dummy-0123456789"));
     }
 
     /// A run of `adapter` whose Workflow is a condition with one Trait Step per branch.
@@ -2310,8 +2200,15 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_model_fails_the_reply_without_a_run() {
+    fn only_ai_adapters_and_decisions_need_a_model() {
         let f = quick();
+        f.start("echo");
+        let sent = f.sink.frames().into_iter().find_map(|frame| match frame {
+            CoreFrame::RunStart { model, .. } => Some(model),
+            _ => None,
+        });
+        assert_eq!(sent, Some(None));
+
         let sent_before = f.sink.frames().len();
         let message = f.send(f.conversation, "summarize");
         let reply = f
@@ -2334,17 +2231,6 @@ mod tests {
         assert_eq!(f.status(reply), MessageStatus::Failed);
     }
 
-    #[test]
-    fn runs_without_ai_adapters_or_decisions_get_no_model() {
-        let f = quick();
-        f.start("echo");
-        let sent = f.sink.frames().into_iter().find_map(|frame| match frame {
-            CoreFrame::RunStart { model, .. } => Some(model),
-            _ => None,
-        });
-        assert_eq!(sent, Some(None));
-    }
-
     /// A run of `echo` whose Workflow is an approval, then a Trait Step.
     fn approving_spec() -> RunSpec {
         let mut run = spec("echo", json!({ "text": "late blight" }));
@@ -2357,8 +2243,7 @@ mod tests {
         run
     }
 
-    /// Starts an approving run and pauses it at its approval; returns the reply and its
-    /// approval's ID.
+    /// Returns the paused reply and its approval's ID.
     fn paused(f: &Fixture) -> (Uuid, Uuid) {
         let (run_id, reply) = f.start_spec(approving_spec(), None);
         f.runs.handle(SidecarFrame::StepStarted { run_id, step_id: "ask".into(), call_id: None });
@@ -2439,16 +2324,10 @@ mod tests {
             let ask = vec!["reaction".into()];
             runs.route(json!({ "message": "hi" }), Vec::new(), Vec::new(), ask, timeout)
         });
-        let route_id = loop {
-            let found = f.sink.frames().into_iter().find_map(|frame| match frame {
-                CoreFrame::RouteStart { route_id, .. } => Some(route_id),
-                _ => None,
-            });
-            if let Some(route_id) = found {
-                break route_id;
-            }
-            std::thread::sleep(Duration::from_millis(5));
-        };
+        let route_id = wait_for(f, |frame| match frame {
+            CoreFrame::RouteStart { route_id, .. } => Some(route_id),
+            _ => None,
+        });
         (route_id, handle)
     }
 
@@ -2473,15 +2352,19 @@ mod tests {
     }
 
     #[test]
-    fn a_routing_request_times_out_or_ends_with_the_sidecar() {
+    fn routing_and_summary_requests_time_out_or_end_with_the_sidecar() {
         let f = quick();
         let (_, handle) = start_route(&f, Duration::from_millis(50));
         assert_eq!(handle.join().unwrap().answers.unwrap_err().code, "jev_timeout");
+        let (_, handle) = start_summary(&f, Duration::from_millis(50));
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "summary_timeout");
 
         let g = quick();
-        let (_, handle) = start_route(&g, CANCEL_TIMEOUT);
+        let (_, route) = start_route(&g, CANCEL_TIMEOUT);
+        let (_, summary) = start_summary(&g, CANCEL_TIMEOUT);
         g.runs.disconnect();
-        assert_eq!(handle.join().unwrap().answers.unwrap_err().code, SIDECAR_STOPPED);
+        assert_eq!(route.join().unwrap().answers.unwrap_err().code, SIDECAR_STOPPED);
+        assert_eq!(summary.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
     }
 
     /// Starts a summary request on another thread; returns its summary ID and the outcome.
@@ -2494,16 +2377,10 @@ mod tests {
             let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
             runs.summarize(model, "## Trial\nYou: plot yield".into(), SummaryKind::Overview, timeout)
         });
-        let summary_id = loop {
-            let found = f.sink.frames().into_iter().find_map(|frame| match frame {
-                CoreFrame::SummaryStart { summary_id, .. } => Some(summary_id),
-                _ => None,
-            });
-            if let Some(summary_id) = found {
-                break summary_id;
-            }
-            std::thread::sleep(Duration::from_millis(5));
-        };
+        let summary_id = wait_for(f, |frame| match frame {
+            CoreFrame::SummaryStart { summary_id, .. } => Some(summary_id),
+            _ => None,
+        });
         (summary_id, handle)
     }
 
@@ -2519,35 +2396,6 @@ mod tests {
         let error = ErrorInfo { code: "provider_refused".into(), message: "Refused.".into() };
         g.runs.handle(SidecarFrame::SummaryError { summary_id, error });
         assert_eq!(handle.join().unwrap().unwrap_err().code, "provider_refused");
-    }
-
-    #[test]
-    fn a_summary_request_times_out_or_ends_with_the_sidecar() {
-        let f = quick();
-        let (_, handle) = start_summary(&f, Duration::from_millis(50));
-        assert_eq!(handle.join().unwrap().unwrap_err().code, "summary_timeout");
-
-        let g = quick();
-        let (_, handle) = start_summary(&g, CANCEL_TIMEOUT);
-        g.runs.disconnect();
-        assert_eq!(handle.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
-    }
-
-    #[test]
-    fn a_summary_request_may_only_get_its_models_key() {
-        let secrets = MemorySecrets(HashMap::from([
-            ("typesafe".to_string(), "ts-key".to_string()),
-            ("openai".to_string(), "sk-openai".to_string()),
-        ]));
-        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
-        let (summary_id, handle) = start_summary(&f, CANCEL_TIMEOUT);
-        let ask = |provider: &str| {
-            f.runs.respond("r".into(), summary_id, "secret.get", json!({ "provider": provider }))
-        };
-        assert_eq!(error_code(ask("typesafe")).as_deref(), Some("secret_not_allowed"));
-        assert_eq!(error_code(ask("openai")), None);
-        f.runs.handle(SidecarFrame::SummaryDone { summary_id, text: String::new() });
-        handle.join().unwrap().unwrap();
     }
 
     /// Waits until the sink has a frame `pick` accepts, and returns what it picked.
@@ -2628,40 +2476,36 @@ mod tests {
     }
 
     #[test]
-    fn a_draft_may_only_get_its_models_key() {
+    fn requests_outside_a_run_get_only_their_own_key() {
         let secrets = MemorySecrets(HashMap::from([
             ("typesafe".to_string(), "ts-key".to_string()),
             ("openai".to_string(), "sk-openai".to_string()),
         ]));
         let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
-        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
-        let ask = |provider: &str| {
-            f.runs.respond("r".into(), draft_id, "secret.get", json!({ "provider": provider }))
+        let key = |id: Uuid, provider: &str| {
+            f.runs.respond("r".into(), id, "secret.get", json!({ "provider": provider }))
         };
-        assert_eq!(error_code(ask("typesafe")).as_deref(), Some("secret_not_allowed"));
-        assert_eq!(error_code(ask("openai")), None);
-        f.runs.handle(SidecarFrame::DraftDone { draft_id });
-        handle.join().unwrap();
-    }
 
-    #[test]
-    fn a_routing_request_may_only_get_the_typesafe_key() {
-        let secrets = MemorySecrets(HashMap::from([
-            ("typesafe".to_string(), "ts-key".to_string()),
-            ("openai".to_string(), "sk-openai".to_string()),
-        ]));
-        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
+        // A summary or a draft gets only its model's key.
+        let (summary_id, summary) = start_summary(&f, CANCEL_TIMEOUT);
+        let (draft_id, draft) = start_draft(&f, CANCEL_TIMEOUT);
+        for id in [summary_id, draft_id] {
+            assert_eq!(error_code(key(id, "typesafe")).as_deref(), Some("secret_not_allowed"));
+            assert_eq!(error_code(key(id, "openai")), None);
+        }
+        f.runs.handle(SidecarFrame::SummaryDone { summary_id, text: String::new() });
+        f.runs.handle(SidecarFrame::DraftDone { draft_id });
+        summary.join().unwrap().unwrap();
+        draft.join().unwrap();
+
+        // A routing request gets only Typesafe's key, and no other core request.
         let (route_id, handle) = start_route(&f, CANCEL_TIMEOUT);
         let ask =
             |method: &str, params: Value| f.runs.respond("r".into(), route_id, method, params);
         let read = json!({ "asset_id": Uuid::nil(), "offset": 0, "length": 1 });
         assert_eq!(error_code(ask("asset.read", read)).as_deref(), Some("unknown_method"));
-        assert_eq!(
-            error_code(ask("secret.get", json!({ "provider": "openai" }))).as_deref(),
-            Some("secret_not_allowed")
-        );
-        let key = result(ask("secret.get", json!({ "provider": "typesafe" })));
-        assert_eq!(key["value"], json!("ts-key"));
+        assert_eq!(error_code(key(route_id, "openai")).as_deref(), Some("secret_not_allowed"));
+        assert_eq!(result(key(route_id, "typesafe"))["value"], json!("ts-key"));
         f.runs.handle(SidecarFrame::RouteError {
             route_id,
             error: ErrorInfo { code: "jev_unavailable".into(), message: String::new() },

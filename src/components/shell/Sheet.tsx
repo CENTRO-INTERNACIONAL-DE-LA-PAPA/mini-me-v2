@@ -19,8 +19,8 @@ export function MainSheet({ className, children }: { className?: string; childre
   );
 }
 
-/** A tool sheet beside the main sheet (To-do, Jobs, a Workflow, an inspector): a serif title,
- * an optional line under it, and a close button. Only one is open at a time. */
+/** A tool sheet beside the main sheet (Comments, an inspector): a serif title, an optional
+ * line under it, and a close button. Only one is open at a time. */
 export function ToolSheet({
   title,
   meta,
@@ -55,7 +55,7 @@ export function ToolSheet({
 }
 
 /** The well-filled square close button at the top right of a sheet. */
-export function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
+function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <Button variant="secondary" size="icon" aria-label={label} title={label} onClick={onClick}>
       <XIcon />
@@ -105,8 +105,6 @@ export interface ToolOption<Id extends string> {
   id: Id;
   label: string;
   icon: LucideIcon;
-  /** Shown after the label, such as the number of open to-dos. */
-  count?: number;
 }
 
 /** A tab switch whose options open and close tool sheets: at most one is pressed, and
@@ -130,11 +128,10 @@ export function ToolSwitch<Id extends string>({
       spacing={1}
       value={value === null ? [] : [value]}
     >
-      {options.map(({ id, label, icon: Icon, count }) => (
+      {options.map(({ id, label, icon: Icon }) => (
         <ToggleGroupItem key={id} value={id} onClick={() => onToggle(id)}>
           <Icon />
           {label}
-          {count !== undefined && <span className="tabular-nums">{count}</span>}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

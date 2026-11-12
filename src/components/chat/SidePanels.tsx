@@ -1,10 +1,8 @@
 import { cn } from "@/lib/utils";
 import { useState, type ReactNode } from "react";
 import type { MessageView } from "../../protocol/eventStore";
-import type { RunningReply } from "../../protocol/types";
 import type { Outline, OutlineEntry } from "./outline";
 import { Markdown } from "./Markdown";
-import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { ToolSheet } from "../shell/Sheet";
 import { useMiniMes } from "../../hooks/useMiniMes";
@@ -21,7 +19,6 @@ import { MetaParts } from "@/components/ui/meta-parts";
 /** A panel docked to the right of a Conversation. */
 export type Panel =
   | { kind: "outline" }
-  | { kind: "jobs" }
   | { kind: "report" }
   | { kind: "steps"; messageId: string };
 
@@ -118,60 +115,6 @@ export function OutlinePanel({ outline, onClose }: { outline: Outline; onClose: 
           </ul>
         </Group>
       ))}
-    </SidePanel>
-  );
-}
-
-/** Every running reply, in any Project; `conversationId`'s are shown as in this one. */
-export function JobsPanel({
-  replies,
-  conversationId,
-  onOpen,
-  onClose,
-}: {
-  replies: RunningReply[];
-  conversationId: string;
-  onOpen: (reply: RunningReply) => void;
-  onClose: () => void;
-}) {
-  const miniMes = useMiniMes();
-  return (
-    <SidePanel title="Jobs" meta={`${replies.length} running`} onClose={onClose}>
-      {replies.length === 0 ? (
-        <p className="text-body text-muted-foreground">Nothing is running.</p>
-      ) : (
-        <ul className="grid gap-2">
-          {replies.map((reply) => {
-            const miniMe = miniMes.find((m) => m.id === reply.mini_me.id);
-            return (
-              <MiniMeSurface
-                key={reply.message_id}
-                miniMe={miniMe}
-                render={<li />}
-              >
-                <button
-                  type="button"
-                  onClick={() => onOpen(reply)}
-                  className="flex w-full items-center gap-3 p-4 text-left focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  <MiniMeAvatar miniMe={miniMe} size={26} />
-                  <span className="grid min-w-0 flex-1 gap-0.5">
-                    <span className="font-medium">{reply.mini_me.name}</span>
-                    <span className="truncate text-meta text-mm-ink">
-                      {reply.step ? `Running ${reply.step}` : "Starting"}
-                    </span>
-                    <span className="truncate text-meta text-muted-foreground">
-                      {reply.conversation_id === conversationId
-                        ? "This conversation"
-                        : `${reply.conversation_title} (${reply.project_name})`}
-                    </span>
-                  </span>
-                </button>
-              </MiniMeSurface>
-            );
-          })}
-        </ul>
-      )}
     </SidePanel>
   );
 }

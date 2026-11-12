@@ -72,7 +72,7 @@ finds it by itself when it starts, and if it is somewhere unusual, set where it 
 **Settings → General → Documents**. If you install Quarto while Mini-Me is running, click
 **Check again** there or in the notice a document shows. Without Quarto, Mini-Me shows how to get
 it and does not create, open, edit or export documents; they stay in Files as files. To start
-one, pick **Report** next to Outline and Jobs in a Conversation:
+one, pick **Report** next to Outline in a Conversation:
 
 - **Draft from this conversation** creates a document titled after the Conversation and opens
   it while Scribe writes a report from the Conversation's messages, which appears in the

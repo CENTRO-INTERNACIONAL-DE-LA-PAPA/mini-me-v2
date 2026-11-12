@@ -24,8 +24,7 @@ TEXT_MEDIA_TYPES = {
 # The most characters of a text file one read returns.
 READ_CHARS = 100_000
 
-# The extensions `adapters.data.tables` reads as tables, repeated here so that reading a text
-# file does not load pandas.
+# As in `adapters.data.tables`, repeated so that reading a text file does not load pandas.
 TABLE_EXTENSIONS = (".csv", ".tsv", ".xlsx")
 
 

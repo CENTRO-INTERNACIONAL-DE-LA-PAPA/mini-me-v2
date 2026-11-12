@@ -1,32 +1,20 @@
-"""Search CIP Dataverse: the AI model turns the message into a search, the core searches CIP's
-Dataverse, and the datasets show as a `dataset-results` component, whose card downloads their
-files through the core."""
+"""Searches CIP Dataverse: the model writes the search, the core runs it, and the datasets show
+as a `dataset-results` component."""
 
-import sys
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
-from mini_me_sidecar.adapters.providers import (
-    PROVIDER_NAMES,
-    chat_model,
-    log_error,
-    provider_error,
-    structured_answer,
+from mini_me_sidecar.adapters.base import (
+    TEXT_INPUT,
+    Adapter,
+    AdapterInfo,
+    component_or_text,
+    require_model,
 )
-from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
-from mini_me_sidecar.tools.base import ToolError
+from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, ask_structured
+from mini_me_sidecar.context import CallContext, TraitError
 from mini_me_sidecar.tools.components import show_datasets
-
-TEXT_INPUT: dict[str, Any] = {
-    "type": "object",
-    "properties": {"text": {"type": "string"}},
-    "required": ["text"],
-}
-
-# The codes with which the core refuses a component, when the reply lists the datasets instead.
-COMPONENT_REFUSED = {"component_not_allowed", "invalid_component"}
 
 
 class DataverseSearch(BaseModel):
@@ -71,18 +59,9 @@ def datasets_text(datasets: list[dict[str, Any]]) -> str:
 
 
 async def _write_search(ctx: CallContext, text: str) -> DataverseSearch:
-    model = ctx.model
-    if model is None or not model.model:
-        raise TraitError("model_not_set", "Choose an AI model in Settings first.")
-    key = await ctx.secret(model.provider)
+    model = require_model(ctx)
     turns = [("system", ctx.trait.instructions or ""), ("human", text)]
-    try:
-        answer = await structured_answer(chat_model(model, key.reveal()), DataverseSearch, turns)
-    except TraitError:
-        raise
-    except Exception as error:
-        log_error(error, model, key.reveal())
-        raise provider_error(error, model) from None
+    answer = await ask_structured(ctx, DataverseSearch, turns)
     if not isinstance(answer, DataverseSearch):
         raise TraitError(
             "provider_empty",
@@ -105,10 +84,7 @@ class SearchDataverse(Adapter):
         ctx.progress("Writing the search")
         search = search_params(await _write_search(ctx, str(input.get("text", ""))))
         ctx.progress("Searching CIP Dataverse")
-        try:
-            page = await ctx.search_dataverse(search)
-        except CoreRequestError as error:
-            raise TraitError(error.code, str(error)) from None
+        page = await ctx.search_dataverse(search)
         datasets = page.get("datasets") or []
         total = int(page.get("total") or 0)
         if not datasets:
@@ -116,11 +92,4 @@ class SearchDataverse(Adapter):
             return
         ctx.write(f"Found {total:,} {'dataset' if total == 1 else 'datasets'}.")
         data = {**search, "total": total, "datasets": datasets}
-        text = datasets_text(datasets)
-        try:
-            await show_datasets(ctx, data, text)
-        except ToolError as error:
-            if error.code not in COMPONENT_REFUSED:
-                raise
-            print(f"[dataverse] component refused: {error}", file=sys.stderr, flush=True)
-            ctx.write("\n\n" + text)
+        await component_or_text(ctx, show_datasets, data, datasets_text(datasets), "dataverse")

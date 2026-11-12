@@ -1,28 +1,21 @@
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronUpIcon,
-  RotateCcwIcon,
-} from "lucide-react";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronUpIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "../../api";
-import { useMiniMes } from "../../hooks/useMiniMes";
-import { formatClock } from "../../lib/format";
+import { count, formatClock } from "../../lib/format";
 import type { CommentThread, Component, Message, Uuid } from "../../protocol/types";
 import { Composer } from "../chat/Composer";
 import { MessageItem } from "../chat/MessageItem";
 import { useConversation } from "../chat/useConversation";
 import { componentNames } from "../interactive/component-names";
+import { editsLabel } from "../interactive/document-edits";
 import { ThreadSuggestionsProvider } from "../interactive/suggestion";
-import { DeleteButton } from "../library/LibraryParts";
+import { ItemMenu } from "../shell/ItemMenu";
 import { ToolSheet } from "../shell/Sheet";
 import type { Placement } from "./anchors";
 import { passageLocation } from "./location";
-import { MetaParts } from "@/components/ui/meta-parts";
 
 type Tab = "open" | "resolved";
 
@@ -43,7 +36,12 @@ interface Props {
   /** Accepts a thread's suggestion into the document and resolves the thread; rejects with
    * why it could not. */
   onAccept: (id: Uuid, messageId: Uuid, componentId: Uuid) => Promise<void>;
-  onOpenConversation: (id: Uuid) => void;
+  /** A reply's suggested edits, the threads they opened, which the list offers to accept or
+   * discard at once. */
+  edits?: Uuid[];
+  /** Accepts the waiting suggestions of the threads given; resolves to those left waiting. */
+  onAcceptAll: (ids: Uuid[]) => Promise<Uuid[]>;
+  onDiscardAll: (ids: Uuid[]) => Promise<void>;
 }
 
 /** The document's comment threads beside it, as a tool sheet: a list under Open and Resolved
@@ -60,7 +58,9 @@ export function CommentsSheet({
   onResolve,
   onDelete,
   onAccept,
-  onOpenConversation,
+  edits,
+  onAcceptAll,
+  onDiscardAll,
 }: Props) {
   const [tab, setTab] = useState<Tab>("open");
   const lists: Record<Tab, CommentThread[]> = {
@@ -98,7 +98,6 @@ export function CommentsSheet({
           onAccept={(messageId, componentId) =>
             onAccept(thread.conversation_id, messageId, componentId)
           }
-          onOpenConversation={onOpenConversation}
         />
       </ToolSheet>
     );
@@ -108,6 +107,14 @@ export function CommentsSheet({
   const detachedFrom = shown.findIndex((t) => from(t) === undefined);
   return (
     <ToolSheet title="Comments" onClose={onClose}>
+      {edits && (
+        <EditsBar
+          threads={threads.filter((t) => edits.includes(t.conversation_id))}
+          onAcceptAll={() => onAcceptAll(edits)}
+          onDiscardAll={() => onDiscardAll(edits)}
+          onOpen={onOpen}
+        />
+      )}
       <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="mb-4">
         <TabsList aria-label="Comments">
           <TabsTrigger value="open">
@@ -159,6 +166,79 @@ export function CommentsSheet({
   );
 }
 
+/** How many of a reply's suggested edits, the `threads` they opened, still wait, with Accept all
+ * and Discard all while any do, and the edits Accept all left waiting. */
+function EditsBar({
+  threads,
+  onAcceptAll,
+  onDiscardAll,
+  onOpen,
+}: {
+  threads: CommentThread[];
+  onAcceptAll: () => Promise<Uuid[]>;
+  onDiscardAll: () => Promise<void>;
+  onOpen: (id: Uuid) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [left, setLeft] = useState<Uuid[]>([]);
+  const [failure, setFailure] = useState<string | null>(null);
+  if (threads.length === 0) return null;
+  const waiting = threads.filter((t) => t.pending);
+  const notApplied = waiting.filter((t) => left.includes(t.conversation_id));
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setFailure(null);
+    try {
+      await action();
+    } catch (e) {
+      setFailure(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mb-4 grid gap-2 rounded-xl border border-card-edge bg-card px-4 py-3">
+      <span className="text-meta text-muted-foreground">
+        {editsLabel(waiting.length, threads.length)}
+      </span>
+      {notApplied.length > 0 && (
+        <div className="grid grid-cols-1 gap-1">
+          <p className="text-meta text-destructive">
+            Not applied (you changed the same words, or the passage is gone):
+          </p>
+          {notApplied.map((t) => (
+            <button
+              key={t.conversation_id}
+              type="button"
+              onClick={() => onOpen(t.conversation_id)}
+              className="truncate text-left text-ui hover:underline"
+            >
+              “{t.quote}”
+            </button>
+          ))}
+        </div>
+      )}
+      {failure && <p className="text-meta text-destructive">{failure}</p>}
+      {waiting.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => void run(async () => setLeft(await onAcceptAll()))}
+          >
+            Accept all
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run(onDiscardAll)}>
+            Discard all
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** The threads that are `resolved` or not, in the order of their passages in the source, with
  * the detached ones last. Their positions are the numbers the source shows by each passage. */
 export function threadsInOrder(
@@ -186,8 +266,7 @@ function NumberBadge({ number }: { number: number }) {
   );
 }
 
-/** One thread in full: where it is, its messages with any suggestions, and a field to reply,
- * with ways to move to the previous or next thread and back to the list. */
+/** One thread in full: where it is, its messages and suggestions, a reply field and navigation. */
 function ThreadView({
   projectId,
   thread,
@@ -202,7 +281,6 @@ function ThreadView({
   onResolve,
   onDelete,
   onAccept,
-  onOpenConversation,
 }: {
   projectId: Uuid;
   thread: CommentThread;
@@ -217,16 +295,12 @@ function ThreadView({
   onResolve: (resolved: boolean) => void;
   onDelete: () => void;
   onAccept: (messageId: Uuid, componentId: Uuid) => Promise<void>;
-  onOpenConversation: (id: Uuid) => void;
 }) {
   const { state, error } = useConversation(projectId, thread.conversation_id);
   const names = useMemo(() => componentNames(state.messages), [state.messages]);
   const newestFirst = useMemo(() => [...names.values()].reverse(), [names]);
   const replying = state.messages.some((m) => m.status === "streaming" || m.status === "paused");
   const [failure, setFailure] = useState<string | null>(null);
-  const miniMes = useMiniMes();
-  const from = thread.opened_from;
-  const opener = from ? (miniMes.find((m) => m.id === from.by.id)?.name ?? "a Mini-Me") : "you";
   const pending = newestPending(state.messages);
 
   // The list's counts and the source's suggestion marks follow new messages, finished replies,
@@ -282,57 +356,34 @@ function ThreadView({
           <ChevronDownIcon />
         </Button>
       </nav>
-      <div className="grid grid-cols-1 gap-1.5">
-        <h3 className="flex items-center gap-2 font-serif text-subheading text-foreground">
-          <NumberBadge number={number} />
-          <span className="min-w-0 truncate">{location ?? `“${thread.quote}”`}</span>
-        </h3>
-        <div className="flex items-center gap-2 text-meta text-muted-foreground">
-          <span className="flex-1">
-            <MetaParts
-              parts={[
-                <>
-                  Opened by {opener}
-                  {from?.title && (
-                    <>
-                      {" from "}
-                      <Button
-                        variant="link"
-                        className="text-meta"
-                        onClick={() => onOpenConversation(from.conversation_id)}
-                      >
-                        {from.title}
-                      </Button>
-                    </>
-                  )}
-                  {` (${formatClock(thread.created_at)})`}
-                </>,
-                detached && "Passage not found",
-              ]}
-            />
-          </span>
-          {thread.resolved ? (
-            <Button variant="mini-me" onClick={() => onResolve(false)}>
-              <RotateCcwIcon />
-              Reopen
-            </Button>
-          ) : (
-            !detached &&
-            state.messages.length > 0 && (
-              <Button variant="mini-me" onClick={() => void resolve()}>
-                <CheckIcon />
-                Resolve
-              </Button>
-            )
-          )}
-          <DeleteButton
-            question={`Delete this thread and its ${thread.comments} comment${
-              thread.comments === 1 ? "" : "s"
-            }?`}
-            onDelete={onDelete}
-            variant="mini-me"
+      <div className="grid grid-cols-1 gap-1.5 border-b border-border pb-3">
+        <div className="flex items-center gap-2">
+          <h3 className="flex min-w-0 flex-1 items-center gap-2 font-serif text-subheading text-foreground">
+            <NumberBadge number={number} />
+            <span className="min-w-0 truncate">{location ?? `“${thread.quote}”`}</span>
+          </h3>
+          <ItemMenu
+            name="this thread"
+            actions={
+              thread.resolved
+                ? [{ label: "Reopen", onSelect: () => onResolve(false) }]
+                : !detached && state.messages.length > 0
+                  ? [{ label: "Resolve", onSelect: resolve }]
+                  : []
+            }
+            remove={{
+              question: `Delete this thread and its ${count(thread.comments, "comment")}?`,
+              onDelete: async () => onDelete(),
+            }}
           />
         </div>
+        {/* Without a location, the title is already the passage. */}
+        {location && (
+          <p className="line-clamp-2 text-ui text-muted-foreground wrap-anywhere">
+            “{thread.quote}”
+          </p>
+        )}
+        {detached && <p className="text-meta text-muted-foreground">Passage not found</p>}
       </div>
       {state.messages.length > 0 && (
         <ThreadSuggestionsProvider value={{ accept: onAccept, detached }}>

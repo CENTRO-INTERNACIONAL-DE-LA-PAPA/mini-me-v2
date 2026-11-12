@@ -1,6 +1,5 @@
-"""Runs Mini-Me runs concurrently: each `run.start` compiles its Workflow and runs it as one
-task, inside an error boundary, until it ends with `run.done`, `run.paused`, `run.error` or
-`run.cancelled`."""
+"""Runs each `run.start`'s Workflow as its own task, ending it with exactly one of `run.done`,
+`run.paused`, `run.error` or `run.cancelled`."""
 
 import asyncio
 import sys
@@ -19,8 +18,7 @@ from mini_me_sidecar.workflow.decide import decide
 from mini_me_sidecar.workflow.graph import compile_workflow, workflow_output
 from mini_me_sidecar.workflow.model import Step, parse_steps
 
-# After `run.cancel`, a run's Trait calls get this long to return on their own before its
-# task is cancelled. The core stops waiting for the run after five seconds.
+# How long Trait calls get to return after `run.cancel`; the core gives up after five seconds.
 CANCEL_GRACE_S = 2.0
 
 # Each run has a graph of its own, so one checkpoint thread per graph is enough.
@@ -137,8 +135,7 @@ class Run:
             ctx.cancelled.set()
 
     async def execute(self) -> None:
-        """Runs the Workflow from its start or from `resume`; returns normally once it
-        has ended or paused, and raises like a Trait otherwise."""
+        """Runs from the start or from `resume`; returns once ended or paused, else raises."""
         if self.resume is not None:
             saver = await saved_state.restore(str(self.resume.get("state", "")), THREAD)
             start: Any = Command(resume=True)

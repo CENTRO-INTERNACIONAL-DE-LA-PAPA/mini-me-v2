@@ -15,7 +15,7 @@ use crate::protocol::{
     AssetRef, Author, AuthorKind, Component, ErrorInfo, EventKind, Message, MessageStatus,
     TextComponent, TextComponentKind, new_id, now_ms,
 };
-use crate::store::{Project, ProjectState};
+use crate::store::{MessageAt, Project, ProjectState, parse_id};
 
 pub const DEFAULT_TITLE: &str = "New conversation";
 const MAX_EMOJI_CHARS: usize = 16;
@@ -26,12 +26,10 @@ pub struct ConversationSummary {
     pub title: String,
     pub created_at: i64,
     pub last_activity_at: i64,
-    /// What the latest reply is doing, when it is running or waits for an approval.
     pub status: Option<ConversationStatus>,
 }
 
-/// What a Conversation's latest reply is doing, and which Mini-Me is doing it. Only a running
-/// reply and one paused at an approval have a status.
+/// What the latest reply is doing, and which Mini-Me; only running or paused replies have one.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ConversationStatus {
@@ -52,7 +50,7 @@ pub fn create(project: &Project) -> AppResult<ConversationSummary> {
     insert(&project.lock().conn)
 }
 
-/// Stores a new, empty Conversation through `conn`, which may be inside a transaction.
+/// `conn` may be inside a transaction.
 pub fn insert(conn: &Connection) -> AppResult<ConversationSummary> {
     let now = now_ms();
     let summary = ConversationSummary {
@@ -70,7 +68,6 @@ pub fn insert(conn: &Connection) -> AppResult<ConversationSummary> {
     Ok(summary)
 }
 
-/// The title of Conversation `conversation_id`.
 pub fn title(project: &Project, conversation_id: Uuid) -> AppResult<String> {
     let state = project.lock();
     Ok(state.conn.query_row(
@@ -80,7 +77,7 @@ pub fn title(project: &Project, conversation_id: Uuid) -> AppResult<String> {
     )?)
 }
 
-/// Gives Conversation `conversation_id` the title `title`, trimmed and not empty.
+/// Trims `title`; fails when it is empty.
 pub fn rename(project: &Project, conversation_id: Uuid, title: &str) -> AppResult<()> {
     let title = title.trim();
     if title.is_empty() {
@@ -95,9 +92,7 @@ pub fn rename(project: &Project, conversation_id: Uuid, title: &str) -> AppResul
     Ok(())
 }
 
-/// Removes Conversation `conversation_id` with its messages, events, reactions, components and
-/// steps in one transaction. Files its replies saved stay in the Project. Its running reply must
-/// be stopped first.
+/// Deletes all its rows in one transaction; saved files stay. Stop its running reply first.
 pub fn delete(project: &Project, conversation_id: Uuid) -> AppResult<()> {
     let state = project.lock();
     state.require_conversation(conversation_id)?;
@@ -127,9 +122,7 @@ pub fn delete(project: &Project, conversation_id: Uuid) -> AppResult<()> {
     Ok(())
 }
 
-/// The text to name Conversation `conversation_id` from: its first message, cut to a sensible
-/// length. Only while the title is still the default and the user has sent exactly one message, so
-/// a Conversation is named once.
+/// The sole user message (first 2000 chars) while the title is the default, so it is named once.
 pub fn first_message_to_name(project: &Project, conversation_id: Uuid) -> AppResult<Option<String>> {
     let state = project.lock();
     state.require_conversation(conversation_id)?;
@@ -150,8 +143,7 @@ pub fn first_message_to_name(project: &Project, conversation_id: Uuid) -> AppRes
     })
 }
 
-/// Gives the Conversation `title` only while it still has the default title, so a title the user
-/// set in the meantime is kept. Returns whether it was set.
+/// Only replaces the default title, keeping one the user set meanwhile; returns whether it did.
 pub fn set_title_if_default(project: &Project, conversation_id: Uuid, title: &str) -> AppResult<bool> {
     let title = title.trim();
     if title.is_empty() {
@@ -170,7 +162,7 @@ pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
     let mut stmt = state.conn.prepare(&format!(
         "SELECT id, title, created_at, last_activity_at FROM conversations WHERE {} \
          ORDER BY last_activity_at DESC, created_at DESC",
-        comments::not_a_thread(&state.conn, "id")?
+        comments::not_a_thread("id")
     ))?;
     let rows = stmt.query_map([], |row| {
         Ok((
@@ -184,7 +176,7 @@ pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
     let mut conversations = Vec::new();
     for row in rows {
         let (id, title, created_at, last_activity_at) = row?;
-        let id = Uuid::parse_str(&id).map_err(|_| AppError::storage("stored ID is not readable"))?;
+        let id = parse_id(&id, "ID")?;
         conversations.push(ConversationSummary {
             id,
             title,
@@ -242,8 +234,7 @@ fn check_reference(
     Ok(())
 }
 
-/// Validates and persists a user message. Fails with `reply_in_progress` while a reply in
-/// the same Conversation is still streaming or paused.
+/// Fails with `reply_in_progress` while a reply in the Conversation is streaming or paused.
 pub fn send_message(
     project: &Project,
     conversation_id: Uuid,
@@ -292,7 +283,7 @@ fn reply_event(project: &Project, message_id: Uuid, kind: EventKind) -> AppResul
     Ok(())
 }
 
-/// Loads a message and checks it is a reply that is still streaming.
+/// The reply's Conversation; `reply_finished` unless the reply is still streaming.
 fn streaming_reply(state: &ProjectState, message_id: Uuid) -> AppResult<Uuid> {
     match state.message_place(message_id)? {
         Some((conversation, MessageStatus::Streaming)) => Ok(conversation),
@@ -347,26 +338,31 @@ pub fn append_step_completed(
     reply_event(project, message_id, kind)
 }
 
-/// Adds an Interactive Component `(kind, version, data, text)` from a Trait to a streaming
-/// reply; returns its new ID. `step_id` is the Step whose Trait call added it, if any; the
-/// component records that Step's latest run.
+/// A component a reply adds; its ID, answer and Step are set when it is added.
+pub struct NewComponent {
+    pub kind: String,
+    pub version: u32,
+    pub data: serde_json::Value,
+    pub text: String,
+}
+
+/// Returns the new ID; the component records the latest run of `step_id`, the Step that added it.
 pub fn add_component(
     project: &Project,
     message_id: Uuid,
     step_id: Option<&str>,
-    component: (&str, u32, serde_json::Value, String),
+    component: NewComponent,
 ) -> AppResult<Uuid> {
-    components::check(component.0, &component.2, &component.3)?;
+    components::check(&component.kind, &component.data, &component.text)?;
     add_core_component(project, message_id, step_id, component)
 }
 
-/// Adds a component the core itself makes, of a kind `add_component` refuses from a Trait, to
-/// a streaming reply; returns its new ID.
+/// For kinds `add_component` refuses from a Trait; returns the new ID.
 pub fn add_core_component(
     project: &Project,
     message_id: Uuid,
     step_id: Option<&str>,
-    (kind, version, data, text): (&str, u32, serde_json::Value, String),
+    NewComponent { kind, version, data, text }: NewComponent,
 ) -> AppResult<Uuid> {
     let mut state = project.lock();
     let conversation = streaming_reply(&state, message_id)?;
@@ -376,7 +372,7 @@ pub fn add_core_component(
     };
     let component = Component {
         id: new_id(),
-        kind: kind.to_string(),
+        kind,
         version,
         data,
         text,
@@ -388,9 +384,7 @@ pub fn add_core_component(
     Ok(id)
 }
 
-/// Stores a file a Trait produced as a generated Asset added by `author`, the reply's Mini-Me,
-/// and attaches it to its streaming reply. If the reply ends before the attachment is
-/// persisted, the Asset is removed again.
+/// Stores a Trait's file as a generated Asset and attaches it; removed if the reply ends first.
 pub fn attach_generated(
     project: &Project,
     message_id: Uuid,
@@ -413,7 +407,6 @@ pub fn attach_generated(
     Ok(asset)
 }
 
-/// Completes the streaming reply `message_id` and returns it as completed.
 pub fn complete_reply(project: &Project, message_id: Uuid) -> AppResult<Message> {
     let mut state = project.lock();
     let conversation = streaming_reply(&state, message_id)?;
@@ -461,20 +454,19 @@ pub fn append_progress(
     reply_event(project, message_id, kind)
 }
 
-/// Ends a streaming reply as cancelled; a reply that has already ended is left as it is.
+/// A reply that has already ended is left as it is.
 pub fn cancel_reply(project: &Project, message_id: Uuid) -> AppResult<()> {
     reply_event(project, message_id, EventKind::MessageCancelled { message_id })
 }
 
-/// Stops the reply streaming or paused in a Conversation, if any, and returns the stopped
-/// replies' IDs. The producer's later updates are rejected because the reply is no longer
-/// streaming, and a paused reply's saved run is deleted.
+/// Returns the stopped IDs; later producer updates are rejected, and a paused run is deleted.
 pub fn stop_reply(project: &Project, conversation_id: Uuid) -> AppResult<Vec<Uuid>> {
     let mut state = project.lock();
     state.require_conversation(conversation_id)?;
     let in_progress = [MessageStatus::Streaming, MessageStatus::Paused];
     let mut stopped = Vec::new();
-    for (_, message_id) in state.messages_with_status(&in_progress, Some(conversation_id))? {
+    let replies = state.messages_with_status(&in_progress, Some(conversation_id))?;
+    for MessageAt { message: message_id, .. } in replies {
         let kinds = vec![EventKind::MessageCancelled { message_id }];
         state.persist_all(conversation_id, kinds, |tx| {
             tx.execute("DELETE FROM paused_runs WHERE message_id = ?1", params![message_id.to_string()])?;
@@ -485,8 +477,7 @@ pub fn stop_reply(project: &Project, conversation_id: Uuid) -> AppResult<Vec<Uui
     Ok(stopped)
 }
 
-/// What a reply paused at an approval needs to resume. `run` holds the run's Mini-Me,
-/// Workflow, Traits, input and context; `state` is the sidecar's opaque resume state.
+/// What a paused reply needs to resume; `state` is the sidecar's opaque resume state.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PausedRun {
     pub message_id: Uuid,
@@ -497,8 +488,7 @@ pub struct PausedRun {
     pub state: String,
 }
 
-/// Pauses a streaming reply at the approval Step `step_id`: adds the `approval` component,
-/// saves `paused`, and persists `message.paused`, all in one transaction.
+/// Adds the `approval` component, saves `paused` and persists `message.paused` in one transaction.
 pub fn pause_reply(
     project: &Project,
     paused: PausedRun,
@@ -539,8 +529,7 @@ pub fn pause_reply(
     Ok(())
 }
 
-/// The saved run of a reply paused at the approval `component_id`; `not_paused` when the
-/// reply is not waiting for that approval.
+/// `not_paused` unless the reply waits for the approval `component_id`.
 pub fn paused_run(project: &Project, message_id: Uuid, component_id: Uuid) -> AppResult<PausedRun> {
     let state = project.lock();
     paused_locked(&state, message_id, component_id).map(|(_, paused)| paused)
@@ -590,9 +579,7 @@ fn paused_locked(
     Ok((conversation, paused))
 }
 
-/// Records the answer to a paused reply's approval and deletes its saved run. Approving
-/// resumes the reply as streaming; rejecting completes it with the Workflow's output so far.
-/// Returns the saved run, which an approved reply resumes from.
+/// Approving resumes the reply; rejecting completes it as is. Deletes and returns the saved run.
 pub fn answer_approval(
     project: &Project,
     message_id: Uuid,
@@ -628,7 +615,7 @@ pub fn answer_approval(
     Ok(paused)
 }
 
-/// The names of a message's attached and referenced files, without duplicates.
+/// Attached and referenced file names, without duplicates.
 pub fn file_names(message: &Message) -> Vec<String> {
     let mut names: Vec<String> = message.attachments.iter().map(|a| a.name.clone()).collect();
     for component in &message.text_components {
@@ -642,8 +629,7 @@ pub fn file_names(message: &Message) -> Vec<String> {
     names
 }
 
-/// Persists a reply that is complete from the start, written by the app itself rather than
-/// produced by a Trait.
+/// A reply the app writes itself, complete from the start.
 pub fn system_reply(
     project: &Project,
     conversation_id: Uuid,
@@ -665,7 +651,7 @@ pub fn system_reply(
 /// Marks replies left streaming by a previous session as failed with code `interrupted`.
 pub fn recover_interrupted(project: &Project) -> AppResult<()> {
     let mut state = project.lock();
-    for (_, message_id) in state.streaming_messages(None)? {
+    for MessageAt { message: message_id, .. } in state.streaming_messages(None)? {
         fail_locked(
             &mut state,
             message_id,
@@ -684,7 +670,7 @@ fn validate_emoji(emoji: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Adds a reaction; does nothing if the same author already reacted with that emoji.
+/// Does nothing if the same author already reacted with that emoji.
 pub fn add_reaction(project: &Project, message_id: Uuid, emoji: &str, by: Author) -> AppResult<()> {
     validate_emoji(emoji)?;
     let mut state = project.lock();
@@ -761,17 +747,8 @@ mod tests {
         // Titled now, so it is not named again.
         assert_eq!(first_message_to_name(&project, id).unwrap(), None);
         assert!(!set_title_if_default(&project, id, "Another").unwrap());
-    }
 
-    #[test]
-    fn a_title_the_user_set_is_never_replaced_and_later_messages_do_not_name() {
-        let (_dir, project) = temp_project();
-        let renamed = create(&project).unwrap().id;
-        send_message(&project, renamed, text("hello"), new_id()).unwrap();
-        rename(&project, renamed, "My title").unwrap();
-        assert!(!set_title_if_default(&project, renamed, "Generated").unwrap());
-        assert_eq!(title(&project, renamed).unwrap(), "My title");
-
+        // A Conversation past its first exchange is not named either.
         let second = create(&project).unwrap().id;
         let first = send_message(&project, second, text("one"), new_id()).unwrap();
         let reply = start_reply(&project, second, first.id, echo()).unwrap();
@@ -782,13 +759,16 @@ mod tests {
     }
 
     #[test]
-    fn a_conversation_can_be_renamed() {
+    fn a_title_the_user_sets_is_trimmed_and_never_replaced() {
         let (_dir, project) = temp_project();
-        let conversation = create(&project).unwrap().id;
-        rename(&project, conversation, "  Yield by altitude ").unwrap();
-        assert_eq!(title(&project, conversation).unwrap(), "Yield by altitude");
-        assert!(rename(&project, conversation, "   ").is_err());
+        let renamed = create(&project).unwrap().id;
+        send_message(&project, renamed, text("hello"), new_id()).unwrap();
+        rename(&project, renamed, "  Yield by altitude ").unwrap();
+        assert_eq!(title(&project, renamed).unwrap(), "Yield by altitude");
+        assert!(rename(&project, renamed, "   ").is_err());
         assert!(rename(&project, new_id(), "Other").is_err());
+        assert!(!set_title_if_default(&project, renamed, "Generated").unwrap());
+        assert_eq!(title(&project, renamed).unwrap(), "Yield by altitude");
     }
 
     #[test]
@@ -876,17 +856,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_empty_messages() {
-        let (_dir, project) = temp_project();
+    fn rejects_empty_messages_and_unknown_or_misplaced_references() {
+        let (dir, project) = temp_project();
         let conversation = create(&project).unwrap().id;
-        let err = send_message(&project, conversation, text("   "), new_id()).unwrap_err();
-        assert_eq!(err.code, "invalid_input");
-    }
-
-    #[test]
-    fn rejects_unknown_attachments_and_references() {
-        let (_dir, project) = temp_project();
-        let conversation = create(&project).unwrap().id;
+        let empty = send_message(&project, conversation, text("   "), new_id()).unwrap_err();
+        assert_eq!(empty.code, "invalid_input");
 
         let mut with_attachment = text("see file");
         with_attachment.attachments.push(new_id());
@@ -912,12 +886,7 @@ mod tests {
             "not_found"
         );
         assert!(project.lock().events_after(conversation, 0).unwrap().is_empty());
-    }
 
-    #[test]
-    fn rejects_references_outside_the_content() {
-        let (dir, project) = temp_project();
-        let conversation = create(&project).unwrap().id;
         let source = dir.path().join("trial.csv");
         std::fs::write(&source, "a,b").unwrap();
         let asset = assets::import(&project, &source, &project_support::user()).unwrap();
@@ -939,14 +908,15 @@ mod tests {
         );
     }
 
-    /// A Conversation with one reply holding a `table`, a `chart` and `theories`; returns
-    /// the Conversation and the three components.
+    /// One reply holding a `table`, a `chart` and `theories`; returns their IDs.
     fn conversation_with_components(project: &Project) -> (Uuid, [Uuid; 3]) {
         let conversation = create(project).unwrap().id;
         let question = send_message(project, conversation, text("profile"), new_id()).unwrap();
         let reply = start_reply(project, conversation, question.id, echo()).unwrap();
         let ids = ["table", "chart", "theories"].map(|kind| {
-            add_component(project, reply, None, (kind, 1, serde_json::json!({}), "t".into())).unwrap()
+            let data = serde_json::json!({});
+            let component = NewComponent { kind: kind.into(), version: 1, data, text: "t".into() };
+            add_component(project, reply, None, component).unwrap()
         });
         complete_reply(project, reply).unwrap();
         (conversation, ids)

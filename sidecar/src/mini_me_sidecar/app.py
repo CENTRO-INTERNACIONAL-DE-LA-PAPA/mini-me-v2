@@ -18,10 +18,10 @@ from mini_me_sidecar.summary import Summarizer
 from mini_me_sidecar.adapters import load_adapters
 
 
-def run(link_out: BinaryIO, test_adapters: bool) -> None:
+def run(link_out: BinaryIO) -> None:
     link = Link(link_out)
     try:
-        asyncio.run(_main(link, test_adapters))
+        asyncio.run(_main(link))
     finally:
         # `os._exit` skips `multiprocessing`'s own clean-up of child processes.
         WORKERS.close()
@@ -38,8 +38,8 @@ def _read_stdin(loop: asyncio.AbstractEventLoop, inbox: asyncio.Queue[bytes | No
     loop.call_soon_threadsafe(inbox.put_nowait, None)
 
 
-async def _main(link: Link, test_adapters: bool) -> None:
-    adapters = load_adapters(test_adapters)
+async def _main(link: Link) -> None:
+    adapters = load_adapters()
     requests = Requests(link)
     runs = Runs(link, adapters, requests)
     router = Router(link, requests)

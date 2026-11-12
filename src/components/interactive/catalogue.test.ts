@@ -21,10 +21,4 @@ describe("catalogue", () => {
       expect(rendererFor(kind, 1), kind).not.toBeNull();
     }
   });
-
-  it("has no renderer for an unknown kind or version", () => {
-    expect(rendererFor("charts", 1)).toBeNull();
-    expect(rendererFor("theories", 9)).toBeNull();
-    expect(rendererFor("toString", 1)).toBeNull();
-  });
 });

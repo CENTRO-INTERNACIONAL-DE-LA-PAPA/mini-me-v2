@@ -31,6 +31,7 @@ import {
 } from "react";
 import { getName, getVersion } from "@tauri-apps/api/app";
 import { api, errorMessage } from "../../api";
+import { useLoad } from "../../hooks/useLoad";
 import ai2Logo from "../../assets/logos/ai2-logo.png";
 import cipLogo from "../../assets/logos/cip-logo.png";
 import type {
@@ -78,19 +79,18 @@ const PAGES: Section<Page>[] = [
   { id: "about", name: "About", icon: InfoIcon },
 ];
 
-/** `onOpenAvatars` opens the avatar parts page, a developer option, `onOpenWhatsNew` the page
- * of the version's changes, and `onOpenThirdParty` the third-party software page. Settings opens
- * at `initialPage`, General unless given. `projectId` is the open Project, whose debug records
- * the Developer page can clear. */
+/** Settings, opening at `initialPage`; the Developer page can clear `projectId`'s debug records. */
 export function SettingsView({
   onOpenAvatars,
   onOpenWhatsNew,
+  onOpenLicense,
   onOpenThirdParty,
   initialPage = "general",
   projectId,
 }: {
   onOpenAvatars: () => void;
   onOpenWhatsNew: () => void;
+  onOpenLicense: () => void;
   onOpenThirdParty: () => void;
   initialPage?: Page;
   projectId?: string;
@@ -138,7 +138,11 @@ export function SettingsView({
           />
         )}
         {shown === "about" && (
-          <AboutPage onOpenWhatsNew={onOpenWhatsNew} onOpenThirdParty={onOpenThirdParty} />
+          <AboutPage
+            onOpenWhatsNew={onOpenWhatsNew}
+            onOpenLicense={onOpenLicense}
+            onOpenThirdParty={onOpenThirdParty}
+          />
         )}
       </div>
     </SectionPage>
@@ -177,11 +181,13 @@ function SettingRow({
   label,
   htmlFor,
   description,
+  error,
   children,
 }: {
   label: string;
   htmlFor?: string;
   description?: ReactNode;
+  error?: string | null;
   children: ReactNode;
 }) {
   return (
@@ -190,15 +196,60 @@ function SettingRow({
         <Label htmlFor={htmlFor} className="font-medium">
           {label}
         </Label>
-        {description && <p className="text-meta text-muted-foreground">{description}</p>}
+        {(description || error) && (
+          <p className="text-meta text-muted-foreground">
+            {description}
+            {error && <span className="mt-1 block text-destructive">{error}</span>}
+          </p>
+        )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{children}</div>
     </div>
   );
 }
 
-/** An account or key in Settings: a white outlined card, so the well-filled buttons and
- * inputs inside it stand out. */
+/** Shows why its last change failed, or else `error`. */
+function SwitchRow({
+  id,
+  label,
+  description,
+  checked,
+  disabled,
+  error,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  description: ReactNode;
+  checked: boolean;
+  disabled?: boolean;
+  error?: string | null;
+  onChange: (checked: boolean) => Promise<void>;
+}) {
+  const [failed, setFailed] = useState<string | null>(null);
+
+  async function change(checked: boolean) {
+    try {
+      setFailed(null);
+      await onChange(checked);
+    } catch (e) {
+      setFailed(errorMessage(e));
+    }
+  }
+
+  return (
+    <SettingRow label={label} htmlFor={id} description={description} error={failed ?? error}>
+      <Switch
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(next) => void change(next)}
+      />
+    </SettingRow>
+  );
+}
+
+/** An account or key's card, outlined on white so the well-filled controls inside stand out. */
 function AccountCard({ render, children }: { render?: ReactElement; children: ReactNode }) {
   return (
     <Card render={render} className="gap-0 rounded-2xl border border-border bg-card px-4 py-3.5">
@@ -276,8 +327,7 @@ function DeveloperPage({
   );
 }
 
-/** Turns feature flags on with their keys and lists the ones that are on, each of which can be
- * turned off again. */
+/** Turns feature flags on by key, and lists the ones that are on, each with Turn off. */
 function FeatureFlagsSection() {
   const flags = useFeatureFlags();
   const [key, setKey] = useState("");
@@ -312,12 +362,8 @@ function FeatureFlagsSection() {
         <SettingRow
           label="Key"
           htmlFor="feature-key"
-          description={
-            <>
-              Enter a feature's key to turn it on.
-              {error && <span className="mt-1 block text-destructive">{error}</span>}
-            </>
-          }
+          description="Enter a feature's key to turn it on."
+          error={error}
         >
           <Input
             id="feature-key"
@@ -409,12 +455,8 @@ function QuartoForm({ status }: { status: QuartoStatus }) {
       <SettingRow
         label="Quarto"
         htmlFor="quarto-path"
-        description={
-          <>
-            {quartoSummary(status)}
-            {error && <span className="mt-1 block text-destructive">{error}</span>}
-          </>
-        }
+        description={quartoSummary(status)}
+        error={error}
       >
         <Input
           id="quarto-path"
@@ -489,9 +531,9 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
                 left unchanged. Fix or remove it, then restart Mini-Me.
               </span>
             )}
-            {status && <span className="mt-1 block text-destructive">{status}</span>}
           </>
         }
+        error={status}
       >
         <Input
           id="user-name"
@@ -514,9 +556,11 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
 
 function AboutPage({
   onOpenWhatsNew,
+  onOpenLicense,
   onOpenThirdParty,
 }: {
   onOpenWhatsNew: () => void;
+  onOpenLicense: () => void;
   onOpenThirdParty: () => void;
 }) {
   return (
@@ -547,6 +591,14 @@ function AboutPage({
           </span>
         </SettingRow>
         <SettingRow
+          label="License"
+          description="The GNU General Public License, version 3 or later."
+        >
+          <Button variant="secondary" onClick={onOpenLicense}>
+            Show
+          </Button>
+        </SettingRow>
+        <SettingRow
           label="Third-party Software"
           description="The software Mini-Me is built with, and its licenses."
         >
@@ -563,37 +615,26 @@ function AboutPage({
 
 function DeveloperModeRow() {
   const developer = useDeveloperMode();
-  const [error, setError] = useState<string | null>(null);
   return (
-    <SettingRow
+    <SwitchRow
+      id="developer-mode"
       label="Developer mode"
-      htmlFor="developer-mode"
       description={
         <>
           Shows the Developer page, and the right-click menu with Inspect.
           Inspect follows this switch from the next time Mini-Me starts.
-          {error && <span className="mt-1 block text-destructive">{error}</span>}
         </>
       }
-    >
-      <Switch
-        id="developer-mode"
-        checked={developer}
-        onCheckedChange={async (checked) => {
-          try {
-            setError(null);
-            await api.setDeveloperMode(checked);
-            refreshDeveloperMode(checked);
-          } catch (e) {
-            setError(errorMessage(e));
-          }
-        }}
-      />
-    </SettingRow>
+      checked={developer}
+      onChange={async (checked) => {
+        await api.setDeveloperMode(checked);
+        refreshDeveloperMode(checked);
+      }}
+    />
   );
 }
 
-/** The two institutions that make Mini-Me, as a lockup: both logos, one height, an × between. */
+/** The logos of the two institutions that make Mini-Me. */
 function Collaboration() {
   return (
     <figure className="flex flex-col items-center gap-4 py-8">
@@ -613,17 +654,10 @@ function Collaboration() {
 
 /** Which app and version is running, such as "Mini-Me Dev 0.4.0". */
 function AboutRow({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
-  const [about, setAbout] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    Promise.all([getName(), getVersion()])
-      .then(([name, version]) => active && setAbout(`${name} ${version}`))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { value: about } = useLoad(
+    () => Promise.all([getName(), getVersion()]).then(([name, version]) => `${name} ${version}`),
+    [],
+  );
 
   return (
     <SettingRow label="Version">
@@ -636,46 +670,25 @@ function AboutRow({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
 }
 
 function HomeMiniMesRow() {
-  const [show, setShow] = useState<boolean | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    api
-      .getHomeSettings()
-      .then((home) => active && setShow(home.show_mini_mes))
-      .catch((e) => active && setError(errorMessage(e)));
-    return () => {
-      active = false;
-    };
-  }, []);
+  const {
+    value: show,
+    setValue: setShow,
+    error,
+  } = useLoad(() => api.getHomeSettings().then((home) => home.show_mini_mes), []);
 
   return (
-    <SettingRow
+    <SwitchRow
+      id="home-mini-mes"
       label="Show Mini-Mes on Home"
-      htmlFor="home-mini-mes"
-      description={
-        <>
-          Every Mini-Me drops onto Home when it opens, and you can grab and throw them.
-          {error && <span className="mt-1 block text-destructive">{error}</span>}
-        </>
-      }
-    >
-      <Switch
-        id="home-mini-mes"
-        checked={show ?? false}
-        disabled={show === null}
-        onCheckedChange={async (checked) => {
-          try {
-            setError(null);
-            await api.setShowHomeMiniMes(checked);
-            setShow(checked);
-          } catch (e) {
-            setError(errorMessage(e));
-          }
-        }}
-      />
-    </SettingRow>
+      description="Every Mini-Me drops onto Home when it opens, and you can grab and throw them."
+      checked={show ?? false}
+      disabled={show === undefined}
+      error={error}
+      onChange={async (checked) => {
+        await api.setShowHomeMiniMes(checked);
+        setShow(checked);
+      }}
+    />
   );
 }
 
@@ -829,7 +842,6 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
           <Button type="submit" disabled={!changed}>
             Save
           </Button>
-          {/* Says how the test went; clicking outside closes it. */}
           <Popover open={tested !== null} onOpenChange={(open) => !open && setTested(null)}>
             <PopoverTrigger
               render={
@@ -977,99 +989,52 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
   );
 }
 
-/** The two switches for Jev's debug record under each message: its answers, and what was
- * sent to it. Each part is stored only while its switch is on. */
+/** Switches for Jev's debug record under each message; each part is stored only while on. */
 function JevDebugRows({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
-  const [error, setError] = useState<{ part: keyof JevDebug; text: string } | null>(null);
-
   async function set(part: keyof JevDebug, checked: boolean) {
-    try {
-      setError(null);
-      await (part === "answers" ? api.setShowJevAnswers(checked) : api.setShowJevAsked(checked));
-      const shown = { answers: settings.show_answers, asked: settings.show_asked };
-      refreshJevDebug({ ...shown, [part]: checked });
-      onChanged();
-    } catch (e) {
-      setError({ part, text: errorMessage(e) });
-    }
+    await (part === "answers" ? api.setShowJevAnswers(checked) : api.setShowJevAsked(checked));
+    const shown = { answers: settings.show_answers, asked: settings.show_asked };
+    refreshJevDebug({ ...shown, [part]: checked });
+    onChanged();
   }
-
-  const row = (part: keyof JevDebug, label: string, description: string, checked: boolean) => (
-    <SettingRow
-      label={label}
-      htmlFor={`show-jev-${part}`}
-      description={
-        <>
-          {description}
-          {error?.part === part && (
-            <span className="mt-1 block text-destructive">{error.text}</span>
-          )}
-        </>
-      }
-    >
-      <Switch
-        id={`show-jev-${part}`}
-        checked={checked}
-        onCheckedChange={(next) => void set(part, next)}
-      />
-    </SettingRow>
-  );
 
   return (
     <>
-      {row(
-        "answers",
-        "Show Jev's answers",
-        "Stores Jev's answers and shows them under each message.",
-        settings.show_answers,
-      )}
-      {row(
-        "asked",
-        "Show what Jev was asked",
-        "Stores the questions and options sent to Jev and shows them under each message.",
-        settings.show_asked,
-      )}
+      <SwitchRow
+        id="show-jev-answers"
+        label="Show Jev's answers"
+        description="Stores Jev's answers and shows them under each message."
+        checked={settings.show_answers}
+        onChange={(checked) => set("answers", checked)}
+      />
+      <SwitchRow
+        id="show-jev-asked"
+        label="Show what Jev was asked"
+        description="Stores the questions and options sent to Jev and shows them under each message."
+        checked={settings.show_asked}
+        onChange={(checked) => set("asked", checked)}
+      />
     </>
   );
 }
 
 /** The switches for the parts of each reply's debug records. */
 function ReplyDebugRows({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
-  const [error, setError] = useState<{ part: keyof ReplyDebugSettings; text: string } | null>(
-    null,
-  );
-
   async function set(part: keyof ReplyDebugSettings, checked: boolean) {
-    try {
-      setError(null);
-      const debug = { ...settings.debug, [part]: checked };
-      await api.setReplyDebug(debug);
-      refreshReplyDebug(debug);
-      onChanged();
-    } catch (e) {
-      setError({ part, text: errorMessage(e) });
-    }
+    const debug = { ...settings.debug, [part]: checked };
+    await api.setReplyDebug(debug);
+    refreshReplyDebug(debug);
+    onChanged();
   }
 
   const row = (part: keyof ReplyDebugSettings, label: string, description: string) => (
-    <SettingRow
+    <SwitchRow
+      id={`debug-${part}`}
       label={label}
-      htmlFor={`debug-${part}`}
-      description={
-        <>
-          {description}
-          {error?.part === part && (
-            <span className="mt-1 block text-destructive">{error.text}</span>
-          )}
-        </>
-      }
-    >
-      <Switch
-        id={`debug-${part}`}
-        checked={settings.debug[part]}
-        onCheckedChange={(next) => void set(part, next)}
-      />
-    </SettingRow>
+      description={description}
+      checked={settings.debug[part]}
+      onChange={(checked) => set(part, checked)}
+    />
   );
 
   return (
@@ -1155,12 +1120,8 @@ function SidecarLogRow() {
   return (
     <SettingRow
       label="Sidecar log"
-      description={
-        <>
-          The sidecar's errors and the core's notes about it.
-          {error && <span className="mt-1 block text-destructive">{error}</span>}
-        </>
-      }
+      description="The sidecar's errors and the core's notes about it."
+      error={error}
     >
       <Button
         variant="outline"
@@ -1175,10 +1136,7 @@ function SidecarLogRow() {
   );
 }
 
-/**
- * A provider or service in a list: a letter tile, its name, whether its key is saved, and a
- * button that opens a field to add, replace or remove the key.
- */
+/** A provider or service: whether its key is saved, and a field to add, replace or remove it. */
 function KeyRow({
   account,
   saved,

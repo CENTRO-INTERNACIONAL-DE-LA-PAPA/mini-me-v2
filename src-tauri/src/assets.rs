@@ -13,30 +13,53 @@ use crate::error::{AppError, AppResult};
 use crate::protocol::{
     AssetRef, Author, AuthorKind, TextComponent, TextComponentKind, new_id, now_ms,
 };
-use crate::store::{Project, ProjectState};
+use crate::store::{Project, ProjectState, parse_id, unreadable};
 
 /// Where an Asset downloaded from outside the Project came from.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AssetOrigin {
-    /// A file of a dataset in CIP's Dataverse: its file ID there, the dataset's persistent ID,
-    /// title and web address.
+    /// A Dataverse file: its file ID there, and its dataset's persistent ID, title and web address.
     Dataverse { file_id: u64, dataset_id: String, title: String, url: String },
 }
 
-/// Copies a file the user picked into the Project and registers it as added by `user`. The
-/// original file is only read.
+/// Stored in the `source` column as its serialized name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AssetSource {
+    Upload,
+    /// Made by the app, such as a Mini-Me's output or an exported PDF.
+    Generated,
+    Dataverse,
+}
+
+impl AssetSource {
+    fn as_str(self) -> &'static str {
+        match self {
+            AssetSource::Upload => "upload",
+            AssetSource::Generated => "generated",
+            AssetSource::Dataverse => "dataverse",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        [AssetSource::Upload, AssetSource::Generated, AssetSource::Dataverse]
+            .into_iter()
+            .find(|source| source.as_str() == value)
+    }
+}
+
+/// Copies a file the user picked into the Project; the original is only read.
 pub fn import(project: &Project, source: &Path, user: &Author) -> AppResult<AssetRef> {
     let name = source
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .filter(|n| !n.is_empty())
         .ok_or_else(|| AppError::invalid_input("The selected item is not a file."))?;
-    copy_in(project, source, &name, ("upload", user), None)
+    copy_in(project, source, &name, (AssetSource::Upload, user), None)
 }
 
-/// Copies the downloaded file at `source` into the Project as `name`, added by `user`, and
-/// records where it came from.
+/// Copies a downloaded file into the Project as `name` and records where it came from.
 pub fn import_downloaded(
     project: &Project,
     source: &Path,
@@ -46,12 +69,12 @@ pub fn import_downloaded(
 ) -> AppResult<AssetRef> {
     check_name(name)?;
     let kind = match origin {
-        AssetOrigin::Dataverse { .. } => "dataverse",
+        AssetOrigin::Dataverse { .. } => AssetSource::Dataverse,
     };
     copy_in(project, source, name, (kind, user), Some(origin))
 }
 
-/// The Assets downloaded from CIP's Dataverse, by their file ID there.
+/// Assets downloaded from CIP's Dataverse, keyed by their file ID there.
 pub fn dataverse_files(state: &ProjectState) -> AppResult<HashMap<u64, AssetRef>> {
     let mut stmt = state.conn.prepare(
         "SELECT id, name, media_type, size_bytes, origin FROM assets \
@@ -79,7 +102,7 @@ fn copy_in(
     project: &Project,
     source: &Path,
     name: &str,
-    (kind, author): (&str, &Author),
+    (kind, author): (AssetSource, &Author),
     origin: Option<&AssetOrigin>,
 ) -> AppResult<AssetRef> {
     if !source.is_file() {
@@ -100,9 +123,8 @@ fn copy_in(
     })
 }
 
-/// Imports the files of `paths` that the user dropped on the window. Every path must be one of
-/// `dropped`, the paths the operating system reported for the latest drop, so the UI cannot
-/// name a file of its own; folders are skipped.
+/// Skips folders. Every path must be one of `dropped`, the paths the OS reported for the latest
+/// drop, so the UI cannot name a file of its own.
 pub fn import_dropped(
     project: &Project,
     paths: &[PathBuf],
@@ -121,8 +143,7 @@ pub fn import_dropped(
 /// Media types every webview the app runs in can draw as an image.
 pub const THUMBNAIL_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
-/// The media type and bytes of an image Asset, for its thumbnail. Other media types are
-/// refused.
+/// An image Asset's media type and bytes, for its thumbnail; other media types are refused.
 pub fn read_image(project: &Project, id: Uuid) -> AppResult<(String, Vec<u8>)> {
     let asset = find(&project.lock(), id)?;
     if !THUMBNAIL_TYPES.contains(&asset.media_type.as_str()) {
@@ -140,9 +161,8 @@ const WINDOWS_DEVICES: &[&str] = &[
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
-/// Refuses a name for a stored Asset that is empty, longer than 255 characters, or could
-/// leave its folder or fail on Windows: `.` or `..`, path separators, control characters, the
-/// characters Windows forbids, a Windows device name, and a trailing dot or space.
+/// Refuses an Asset name that is empty, over 255 characters, or could leave its folder or fail on
+/// Windows.
 pub fn check_name(name: &str) -> AppResult<()> {
     let stem = name.split('.').next().unwrap_or_default().trim_end();
     let invalid = name.is_empty()
@@ -162,8 +182,8 @@ pub fn check_name(name: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Stores a file the app made, such as a Trait's output, as a `generated` Asset added by
-/// `author`. `media_type` falls back to one guessed from the name when empty.
+/// Stores a file the app made, such as a Trait's output, as a `generated` Asset. An empty
+/// `media_type` is guessed from the name.
 pub fn write_generated(
     project: &Project,
     name: &str,
@@ -171,11 +191,10 @@ pub fn write_generated(
     bytes: &[u8],
     author: &Author,
 ) -> AppResult<AssetRef> {
-    store(project, name, media_type, bytes, ("generated", author))
+    store(project, name, media_type, bytes, (AssetSource::Generated, author))
 }
 
-/// Stores bytes the user pasted or started, such as a blank document, as an `upload` Asset
-/// named `name` and added by `user`.
+/// Stores bytes the user pasted or started, such as a blank document, as an `upload` Asset.
 pub fn import_bytes(
     project: &Project,
     name: &str,
@@ -183,11 +202,27 @@ pub fn import_bytes(
     bytes: &[u8],
     user: &Author,
 ) -> AppResult<AssetRef> {
-    store(project, name, media_type, bytes, ("upload", user))
+    store(project, name, media_type, bytes, (AssetSource::Upload, user))
 }
 
-/// The name of a pasted image: the clipboard's file name when it gives a usable one, else
-/// `Pasted image` with the usual extension of `media_type`.
+/// The title made safe plus `.csv`, or `Table.csv` without one. A title that is a table file's name
+/// loses its extension, so `trial.csv` is not saved as `trial.csv.csv`.
+pub fn table_file_name(title: &str) -> String {
+    let title = title.trim();
+    let lower = title.to_lowercase();
+    let title = [".csv", ".tsv", ".xlsx", ".xls"]
+        .iter()
+        .find(|extension| lower.ends_with(*extension) && lower.len() > extension.len())
+        .map_or(title, |extension| &title[..title.len() - extension.len()]);
+    let stem = if title.is_empty() {
+        "Table".to_string()
+    } else {
+        crate::projects::folder_name(title)
+    };
+    format!("{stem}.csv")
+}
+
+/// The clipboard's file name when usable, else `Pasted image` with `media_type`'s usual extension.
 pub fn pasted_name(clipboard_name: &str, media_type: &str) -> String {
     let clipboard_name = clipboard_name.trim();
     if !clipboard_name.is_empty() && check_name(clipboard_name).is_ok() {
@@ -203,14 +238,14 @@ pub fn pasted_name(clipboard_name: &str, media_type: &str) -> String {
     }
 }
 
-/// Writes `bytes` to a new folder under `assets` and registers them with their `source` and
-/// author. `media_type` falls back to one guessed from the name when empty.
+/// Writes `bytes` to a new folder under `assets` and registers them. An empty `media_type` is
+/// guessed from the name.
 fn store(
     project: &Project,
     name: &str,
     media_type: &str,
     bytes: &[u8],
-    (source, author): (&str, &Author),
+    (source, author): (AssetSource, &Author),
 ) -> AppResult<AssetRef> {
     check_name(name)?;
     let id = new_id();
@@ -231,8 +266,7 @@ fn store(
     })
 }
 
-/// The name that `typed` gives a file now called `current`: the extension stays, whether or not
-/// `typed` repeats it.
+/// The new name for `current`: its extension stays, whether or not `typed` repeats it.
 fn renamed(current: &str, typed: &str) -> String {
     let typed = typed.trim();
     let Some(extension) = Path::new(current).extension().and_then(|e| e.to_str()) else {
@@ -248,8 +282,7 @@ fn renamed(current: &str, typed: &str) -> String {
     format!("{stem}{dotted}")
 }
 
-/// Renames the file `id`, keeping its extension, and returns it. The file keeps its ID, so
-/// references to it keep working.
+/// Keeps the extension and the ID, so references to the file keep working.
 pub fn rename(project: &Project, id: Uuid, typed: &str) -> AppResult<AssetRef> {
     let current = find(&project.lock(), id)?;
     let name = renamed(&current.name, typed);
@@ -276,8 +309,8 @@ pub fn rename(project: &Project, id: Uuid, typed: &str) -> AppResult<AssetRef> {
     Ok(AssetRef { name, ..current })
 }
 
-/// The first of "<stem> copy", "<stem> copy 2", ... that no name in `taken` has, with
-/// `extension` after it. A stem that already ends in " copy" or " copy N" is not extended again.
+/// The first of "<stem> copy", "<stem> copy 2", ... not in `taken`, with `extension`. A stem that
+/// already ends in " copy" or " copy N" is not extended again.
 fn copy_name(stem: &str, extension: Option<&str>, taken: &[String]) -> String {
     let base = match stem.rsplit_once(" copy") {
         Some((base, rest)) if rest.is_empty() || rest.trim().parse::<u32>().is_ok() => base,
@@ -296,9 +329,8 @@ fn copy_name(stem: &str, extension: Option<&str>, taken: &[String]) -> String {
         .expect("an unbounded range always yields a free name")
 }
 
-/// Adds a copy of the file `id` named "<name> copy" before its extension, numbered when that name
-/// is taken, added by `user`. Only the bytes are copied: a document's comment threads stay with
-/// the original.
+/// Adds "<name> copy", numbered when taken. Only the bytes are copied: a document's comment threads
+/// stay with the original.
 pub fn duplicate(project: &Project, id: Uuid, user: &Author) -> AppResult<AssetRef> {
     let asset = find(&project.lock(), id)?;
     let bytes = std::fs::read(file_path(project, id)?)?;
@@ -309,7 +341,7 @@ pub fn duplicate(project: &Project, id: Uuid, user: &Author) -> AppResult<AssetR
     import_bytes(project, &name, &asset.media_type, &bytes, user)
 }
 
-/// Deletes the file `id` with its folder, and the comment threads of a document.
+/// Deletes the file with its folder, and a document's comment threads.
 pub fn delete(project: &Project, id: Uuid) -> AppResult<()> {
     let threads: Vec<String> = {
         let state = project.lock();
@@ -344,11 +376,10 @@ fn media_type_of(name: &str) -> String {
     mime_guess::from_path(name).first_or_octet_stream().essence_str().to_string()
 }
 
-/// Adds a stored file to the registry; `source` is `upload`, `generated` or `dataverse`.
 fn register(
     project: &Project,
     asset: AssetRef,
-    (source, author): (&str, &Author),
+    (source, author): (AssetSource, &Author),
     rel_path: &str,
     origin: Option<&AssetOrigin>,
 ) -> AppResult<AssetRef> {
@@ -361,7 +392,7 @@ fn register(
             asset.name,
             asset.media_type,
             asset.size_bytes,
-            source,
+            source.as_str(),
             rel_path,
             now_ms(),
             author.kind.as_str(),
@@ -372,7 +403,7 @@ fn register(
     Ok(asset)
 }
 
-/// Looks up an Asset by ID, failing with `not_found` if it is not in this Project.
+/// Fails with `not_found` if the Asset is not in this Project.
 pub fn find(state: &ProjectState, id: Uuid) -> AppResult<AssetRef> {
     state
         .conn
@@ -414,7 +445,7 @@ pub fn list(project: &Project, query: Option<&str>) -> AppResult<Vec<AssetRef>> 
             continue;
         }
         assets.push(AssetRef {
-            id: Uuid::parse_str(&id).map_err(|_| AppError::storage("stored ID is not readable"))?,
+            id: parse_id(&id, "ID")?,
             name,
             media_type,
             size_bytes,
@@ -428,20 +459,16 @@ pub fn list(project: &Project, query: Option<&str>) -> AppResult<Vec<AssetRef>> 
 pub struct FileEntry {
     #[serde(flatten)]
     pub asset: AssetRef,
-    /// `upload` for a file the user imported or started, `generated` for one the app made,
-    /// such as a Mini-Me's output or an exported PDF, `dataverse` for one downloaded from CIP's
-    /// Dataverse.
-    pub source: String,
+    pub source: AssetSource,
     /// Where a downloaded file came from.
     pub origin: Option<AssetOrigin>,
-    /// When the Asset was registered, in milliseconds.
+    /// When the Asset was registered, in milliseconds since the epoch.
     pub created_at: i64,
-    /// When its file last changed, in milliseconds; none when the file is missing.
+    /// When its file last changed, in milliseconds since the epoch; none when the file is missing.
     pub modified_at: Option<i64>,
-    /// Who added the Asset; none for a file whose author was never recorded.
+    /// None for a file whose author was never recorded.
     pub added_by: Option<Author>,
-    /// The Conversations whose messages attach or reference the Asset, in the order it first
-    /// appeared in them.
+    /// Conversations whose messages attach or reference the Asset, in order of first appearance.
     pub used_in: Vec<ConversationRef>,
 }
 
@@ -454,61 +481,79 @@ pub struct ConversationRef {
 /// Every Asset of the Project, newest first, with who added it and where it is used.
 pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     let state = project.lock();
-    let corrupt = || AppError::storage("stored ID is not readable");
+    let mut entries = file_entries(project, &state)?;
+    add_used_in(&state, &mut entries)?;
+    Ok(entries)
+}
+
+struct AssetRow {
+    id: String,
+    name: String,
+    media_type: String,
+    size_bytes: i64,
+    source: String,
+    created_at: i64,
+    rel_path: String,
+    added_by_kind: Option<String>,
+    added_by_id: Option<String>,
+    origin: Option<String>,
+}
+
+/// Every Asset, newest first, with `used_in` left empty.
+fn file_entries(project: &Project, state: &ProjectState) -> AppResult<Vec<FileEntry>> {
+    let mut stmt = state.conn.prepare(
+        "SELECT id, name, media_type, size_bytes, source, created_at, rel_path, \
+         added_by_kind, added_by_id, origin FROM assets ORDER BY created_at DESC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(AssetRow {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            media_type: row.get(2)?,
+            size_bytes: row.get(3)?,
+            source: row.get(4)?,
+            created_at: row.get(5)?,
+            rel_path: row.get(6)?,
+            added_by_kind: row.get(7)?,
+            added_by_id: row.get(8)?,
+            origin: row.get(9)?,
+        })
+    })?;
     let mut entries = Vec::new();
-    {
-        let mut stmt = state.conn.prepare(
-            "SELECT id, name, media_type, size_bytes, source, created_at, rel_path, \
-             added_by_kind, added_by_id, origin FROM assets ORDER BY created_at DESC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, i64>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, i64>(5)?,
-                row.get::<_, String>(6)?,
-                row.get::<_, Option<String>>(7)?,
-                row.get::<_, Option<String>>(8)?,
-            ), row.get::<_, Option<String>>(9)?))
-        })?;
-        for row in rows {
-            let (columns, origin) = row?;
-            let (id, name, media_type, size_bytes, source, created_at, rel_path, by_kind, by_id) =
-                columns;
-            let added_by = author(by_kind, by_id);
-            let modified_at = project
-                .paths
-                .resolve(&rel_path)
-                .ok()
-                .and_then(|path| std::fs::metadata(path).ok()?.modified().ok())
-                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|since| since.as_millis() as i64);
-            entries.push(FileEntry {
-                asset: AssetRef {
-                    id: Uuid::parse_str(&id).map_err(|_| corrupt())?,
-                    name,
-                    media_type,
-                    size_bytes,
-                },
-                source,
-                origin: origin.and_then(|o| serde_json::from_str(&o).ok()),
-                created_at,
-                modified_at,
-                added_by,
-                used_in: Vec::new(),
-            });
-        }
+    for row in rows {
+        let row = row?;
+        let modified_at = project
+            .paths
+            .resolve(&row.rel_path)
+            .ok()
+            .and_then(|path| std::fs::metadata(path).ok()?.modified().ok())
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|since| since.as_millis() as i64);
+        entries.push(FileEntry {
+            asset: AssetRef {
+                id: parse_id(&row.id, "ID")?,
+                name: row.name,
+                media_type: row.media_type,
+                size_bytes: row.size_bytes,
+            },
+            source: AssetSource::parse(&row.source).ok_or_else(|| unreadable("Asset"))?,
+            origin: row.origin.and_then(|o| serde_json::from_str(&o).ok()),
+            created_at: row.created_at,
+            modified_at,
+            added_by: author(row.added_by_kind, row.added_by_id),
+            used_in: Vec::new(),
+        });
     }
+    Ok(entries)
+}
+
+fn add_used_in(state: &ProjectState, entries: &mut [FileEntry]) -> AppResult<()> {
     let index: HashMap<Uuid, usize> =
         entries.iter().enumerate().map(|(i, e)| (e.asset.id, i)).collect();
-
     let mut stmt = state.conn.prepare(&format!(
         "SELECT m.conversation_id, c.title, m.attachments, m.text_components FROM messages m \
          JOIN conversations c ON c.id = m.conversation_id WHERE {} ORDER BY m.rowid",
-        comments::not_a_thread(&state.conn, "c.id")?
+        comments::not_a_thread("c.id")
     ))?;
     let rows = stmt.query_map([], |row| {
         Ok((
@@ -520,7 +565,7 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     })?;
     for row in rows {
         let (conversation, title, attachments, text_components) = row?;
-        let conversation = Uuid::parse_str(&conversation).map_err(|_| corrupt())?;
+        let conversation = parse_id(&conversation, "ID")?;
         let attached: Vec<AssetRef> = serde_json::from_str(&attachments)?;
         let referenced: Vec<TextComponent> = serde_json::from_str(&text_components)?;
         let ids = attached.iter().map(|a| a.id).chain(
@@ -535,10 +580,10 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
             }
         }
     }
-    Ok(entries)
+    Ok(())
 }
 
-/// Who added the Asset `id`; none for a file whose author was never recorded.
+/// None for a file whose author was never recorded.
 pub fn added_by(project: &Project, id: Uuid) -> AppResult<Option<Author>> {
     let (kind, author_id) = project.lock().conn.query_row(
         "SELECT added_by_kind, added_by_id FROM assets WHERE id = ?1",
@@ -647,24 +692,41 @@ mod tests {
     }
 
     #[test]
-    fn import_copies_and_registers() {
+    fn imported_generated_and_pasted_files_are_stored_and_registered() {
         let (dir, project) = temp_project();
+        let source_of = |id: Uuid| -> String {
+            let sql = "SELECT source FROM assets WHERE id = ?1";
+            project.lock().conn.query_row(sql, params![id.to_string()], |r| r.get(0)).unwrap()
+        };
+
         let source = dir.path().join("field-trial.csv");
         std::fs::write(&source, "plot,yield\n1,20\n").unwrap();
-
-        let asset = import(&project, &source, &user()).unwrap();
-        assert_eq!(asset.name, "field-trial.csv");
-        assert_eq!(asset.media_type, "text/csv");
-        assert_eq!(asset.size_bytes, 16);
-
-        let stored = file_path(&project, asset.id).unwrap();
-        assert!(stored.starts_with(project.paths.root().join("assets")));
+        let imported = import(&project, &source, &user()).unwrap();
+        let summary = (imported.name.as_str(), imported.media_type.as_str(), imported.size_bytes);
+        assert_eq!(summary, ("field-trial.csv", "text/csv", 16));
+        let assets_folder = project.paths.root().join("assets");
+        assert!(file_path(&project, imported.id).unwrap().starts_with(assets_folder));
         assert_eq!(std::fs::read_to_string(&source).unwrap(), "plot,yield\n1,20\n");
-        assert_eq!(find(&project.lock(), asset.id).unwrap(), asset);
+        assert_eq!(find(&project.lock(), imported.id).unwrap(), imported);
+        assert_eq!(source_of(imported.id), "upload");
+
+        let generated =
+            write_generated(&project, "theory-store.json", "application/json", b"{}", &user()).unwrap();
+        let stored = file_path(&project, generated.id).unwrap();
+        let expected = format!("assets/{}/theory-store.json", generated.id);
+        assert_eq!(stored, project.paths.root().join(expected));
+        assert_eq!(std::fs::read(stored).unwrap(), b"{}");
+        assert_eq!(source_of(generated.id), "generated");
+
+        let name = pasted_name("", "image/png");
+        assert_eq!(name, "Pasted image.png");
+        let pasted = import_bytes(&project, &name, "image/png", b"png", &user()).unwrap();
+        assert_eq!(std::fs::read(file_path(&project, pasted.id).unwrap()).unwrap(), b"png");
+        assert_eq!(source_of(pasted.id), "upload");
     }
 
     #[test]
-    fn same_file_name_does_not_overwrite() {
+    fn files_with_the_same_name_are_both_kept() {
         let (dir, project) = temp_project();
         let first_dir = dir.path().join("a");
         let second_dir = dir.path().join("b");
@@ -672,13 +734,18 @@ mod tests {
         std::fs::create_dir(&second_dir).unwrap();
         std::fs::write(first_dir.join("data.csv"), "first").unwrap();
         std::fs::write(second_dir.join("data.csv"), "second").unwrap();
+        let read = |id| std::fs::read_to_string(file_path(&project, id).unwrap()).unwrap();
 
         let first = import(&project, &first_dir.join("data.csv"), &user()).unwrap();
         let second = import(&project, &second_dir.join("data.csv"), &user()).unwrap();
         assert_ne!(first.id, second.id);
-        let read = |id| std::fs::read_to_string(file_path(&project, id).unwrap()).unwrap();
-        assert_eq!(read(first.id), "first");
-        assert_eq!(read(second.id), "second");
+        assert_eq!((read(first.id), read(second.id)), ("first".into(), "second".into()));
+
+        let first = write_generated(&project, "theory-store.json", "", b"first", &user()).unwrap();
+        let second = write_generated(&project, "theory-store.json", "", b"second", &user()).unwrap();
+        assert_ne!(first.id, second.id);
+        assert_eq!(first.media_type, "application/json");
+        assert_eq!((read(first.id), read(second.id)), ("first".into(), "second".into()));
     }
 
     #[test]
@@ -698,34 +765,9 @@ mod tests {
         assert!(names.iter().all(|n| n.to_lowercase().contains("trial")));
     }
 
-    #[test]
-    fn unknown_asset_is_not_found() {
-        let (_dir, project) = temp_project();
-        assert_eq!(find(&project.lock(), new_id()).unwrap_err().code, "not_found");
-    }
-
     fn assets_folder_entries(project: &Project) -> usize {
         let folder = project.paths.root().join("assets");
         std::fs::read_dir(folder).map(|entries| entries.count()).unwrap_or(0)
-    }
-
-    #[test]
-    fn a_generated_file_is_stored_in_its_own_folder_and_registered() {
-        let (_dir, project) = temp_project();
-        let asset =
-            write_generated(&project, "theory-store.json", "application/json", b"{}", &user()).unwrap();
-        assert_eq!(asset.size_bytes, 2);
-        let stored = file_path(&project, asset.id).unwrap();
-        let expected = format!("assets/{}/theory-store.json", asset.id);
-        assert_eq!(stored, project.paths.root().join(expected));
-        assert_eq!(std::fs::read(stored).unwrap(), b"{}");
-        let id = asset.id.to_string();
-        let source: String = project
-            .lock()
-            .conn
-            .query_row("SELECT source FROM assets WHERE id = ?1", params![id], |r| r.get(0))
-            .unwrap();
-        assert_eq!(source, "generated");
     }
 
     #[test]
@@ -749,27 +791,6 @@ mod tests {
         for name in ["results..final.csv", "a...b.json", "console.txt", "nullable.md", ".env"] {
             assert!(check_name(name).is_ok(), "{name}");
         }
-    }
-
-    #[test]
-    fn generated_files_with_the_same_name_are_both_kept() {
-        let (_dir, project) = temp_project();
-        let first = write_generated(&project, "theory-store.json", "", b"first", &user()).unwrap();
-        let second = write_generated(&project, "theory-store.json", "", b"second", &user()).unwrap();
-        assert_ne!(first.id, second.id);
-        assert_eq!(first.media_type, "application/json");
-        let read = |id| std::fs::read(file_path(&project, id).unwrap()).unwrap();
-        assert_eq!(read(first.id), b"first");
-        assert_eq!(read(second.id), b"second");
-    }
-
-    #[test]
-    fn a_removed_asset_leaves_no_file_or_entry() {
-        let (_dir, project) = temp_project();
-        let asset = write_generated(&project, "notes.txt", "text/plain", b"x", &user()).unwrap();
-        remove(&project, asset.id).unwrap();
-        assert_eq!(find(&project.lock(), asset.id).unwrap_err().code, "not_found");
-        assert_eq!(assets_folder_entries(&project), 0);
     }
 
     #[test]
@@ -803,31 +824,22 @@ mod tests {
 
         let entries = project_files(&project).unwrap();
         let entry = |id| entries.iter().find(|e| e.asset.id == id).unwrap();
-        assert_eq!(entry(trial.id).source, "upload");
+        assert_eq!(entry(trial.id).source, AssetSource::Upload);
         assert_eq!(entry(trial.id).added_by.as_ref().unwrap().kind, AuthorKind::User);
         let used: Vec<Uuid> = entry(trial.id).used_in.iter().map(|c| c.id).collect();
         assert_eq!(used, [first, second]);
-        assert_eq!(entry(unused.id).source, "generated");
+        assert_eq!(entry(unused.id).source, AssetSource::Generated);
         assert_eq!(entry(unused.id).added_by, Some(crate::projects::test_support::user()));
         assert!(entry(unused.id).used_in.is_empty());
     }
 
     #[test]
-    fn a_pasted_image_is_stored_as_an_upload() {
-        let (_dir, project) = temp_project();
-        let name = pasted_name("", "image/png");
-        assert_eq!(name, "Pasted image.png");
-        let asset = import_bytes(&project, &name, "image/png", b"png", &user()).unwrap();
-        assert_eq!((asset.name.as_str(), asset.size_bytes), ("Pasted image.png", 3));
-        assert_eq!(std::fs::read(file_path(&project, asset.id).unwrap()).unwrap(), b"png");
-        let source: String = project
-            .lock()
-            .conn
-            .query_row("SELECT source FROM assets WHERE id = ?1", [asset.id.to_string()], |r| {
-                r.get(0)
-            })
-            .unwrap();
-        assert_eq!(source, "upload");
+    fn a_table_is_saved_under_its_title_made_safe() {
+        assert_eq!(table_file_name("Yield by variety"), "Yield by variety.csv");
+        assert_eq!(table_file_name("Plots 1/2"), "Plots 1-2.csv");
+        assert_eq!(table_file_name("  "), "Table.csv");
+        assert_eq!(table_file_name("field-trial.csv"), "field-trial.csv");
+        assert_eq!(table_file_name("Harvest.XLSX"), "Harvest.csv");
     }
 
     #[test]

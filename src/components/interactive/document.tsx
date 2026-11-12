@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { FileTextIcon } from "lucide-react";
-import { useEffect, useState } from "react";
 import { api } from "../../api";
-import { useOpenDocument } from "../documents/openDocument";
+import { useLoad } from "../../hooks/useLoad";
+import { useOpenFile } from "../documents/openDocument";
 import type { Renderers, RendererProps } from "./catalogue";
 
 /** `document` version 1 data, `{ asset_id, title }`, as the write-a-document tool adds it. */
@@ -11,8 +11,7 @@ interface DocumentData {
   title?: string;
 }
 
-/** A document a reply wrote or edited: its title, `meta` below it, and an Open button, or a
- * note that it was removed. */
+/** A document a reply wrote or edited, with an Open button, or a note that it was removed. */
 export function DocumentCard({
   title,
   meta = "Quarto document",
@@ -44,30 +43,24 @@ export function DocumentCard({
 
 /** Whether the document `assetId` is gone from the Project, once its files have been read. */
 export function useRemoved(projectId: string | undefined, assetId: string | undefined) {
-  const [removed, setRemoved] = useState(false);
-  useEffect(() => {
-    if (!projectId || !assetId) return;
-    let active = true;
-    api
-      .listAssets(projectId, "")
-      .then((assets) => active && setRemoved(!assets.some((a) => a.id === assetId)))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [projectId, assetId]);
-  return removed;
+  const { value: removed } = useLoad(
+    () =>
+      projectId && assetId
+        ? api.listAssets(projectId, "").then((assets) => !assets.some((a) => a.id === assetId))
+        : undefined,
+    [projectId, assetId],
+  );
+  return removed ?? false;
 }
 
 function DocumentV1({ data, projectId }: RendererProps) {
   const { asset_id: assetId, title } = (data ?? {}) as DocumentData;
-  const openDocument = useOpenDocument();
+  const openFile = useOpenFile(projectId);
   const removed = useRemoved(projectId, assetId);
 
   const open = () => {
     if (!assetId) return;
-    if (openDocument) openDocument(assetId);
-    else if (projectId) void api.openAsset(projectId, assetId).catch(() => {});
+    openFile(assetId, true);
   };
   return (
     <DocumentCard

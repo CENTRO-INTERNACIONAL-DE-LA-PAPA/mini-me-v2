@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ComponentReferencesProvider } from "./component-references";
-import { TableView } from "./table";
+import { TableView, sortRows, tableText } from "./table";
 
 const data = {
   columns: [
@@ -15,28 +15,15 @@ const data = {
   ],
 };
 
-function bodyOrder(html: string): string[] {
-  return [...html.matchAll(/<tr class="border-b[^"]*"><td[^>]*>([^<]*)</g)].map((m) => m[1]);
-}
-
 describe("table version 1", () => {
-  it("sorts numbers with missing values last, both ways", () => {
-    const sorted = (desc: boolean) =>
-      renderToStaticMarkup(<TableView data={data} initialSorting={{ column: 1, desc }} />);
-    const [up, down] = [sorted(false), sorted(true)];
-    expect(bodyOrder(up)).toEqual(["a", "c", "b"]);
-    expect(bodyOrder(down)).toEqual(["c", "a", "b"]);
-  });
-
-  it("sorts text in natural order, ignoring case", () => {
-    const plots = {
-      columns: [{ name: "plot", type: "text" }],
-      rows: [["plot 10"], ["plot 2"], ["Plot 1"]],
-    };
-    const html = renderToStaticMarkup(
-      <TableView data={plots} initialSorting={{ column: 0, desc: false }} />,
-    );
-    expect(bodyOrder(html)).toEqual(["Plot 1", "plot 2", "plot 10"]);
+  it("sorts numbers with missing values last both ways, and text naturally ignoring case", () => {
+    const first = (rows: unknown[][]) => rows.map((row) => row[0]);
+    const byYield = (desc: boolean) => first(sortRows(data.rows, true, { column: 1, desc }));
+    expect(byYield(false)).toEqual(["a", "c", "b"]);
+    expect(byYield(true)).toEqual(["c", "a", "b"]);
+    const plots = [["plot 10"], ["plot 2"], ["Plot 1"]];
+    const byName = first(sortRows(plots, false, { column: 0, desc: false }));
+    expect(byName).toEqual(["Plot 1", "plot 2", "plot 10"]);
   });
 
   it("right-aligns numbers and leaves missing cells empty", () => {
@@ -62,6 +49,27 @@ describe("table version 1", () => {
     );
     expect(html).toContain('aria-label="Add $trial to the message"');
     const outside = renderToStaticMarkup(<TableView data={data} componentId="t1" />);
-    expect(outside).not.toContain("<header");
+    expect(outside).not.toContain("Add $trial");
+  });
+});
+
+describe("tableText", () => {
+  const columns = [
+    { name: "plot", type: "text" as const },
+    { name: "yield", type: "number" as const },
+  ];
+  const rows = [
+    ["a, north", 1200.5],
+    ['say "hi"\tnow', null],
+  ];
+
+  it("writes tab-separated text for a spreadsheet, values as stored", () => {
+    expect(tableText(columns, rows, "tsv")).toBe('plot\tyield\na, north\t1200.5\nsay "hi" now\t');
+  });
+
+  it("quotes CSV fields that need it", () => {
+    expect(tableText(columns, rows, "csv")).toBe(
+      'plot,yield\r\n"a, north",1200.5\r\n"say ""hi""\tnow",',
+    );
   });
 });

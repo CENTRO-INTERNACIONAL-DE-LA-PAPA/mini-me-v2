@@ -1,5 +1,4 @@
-"""A paused run's state as an opaque string for the core to keep: the graph's latest
-checkpoint and its pending writes, serialized as JSON with base64 payloads."""
+"""A paused run's state as an opaque string for the core: the latest checkpoint and its writes."""
 
 import base64
 import json

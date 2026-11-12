@@ -2,7 +2,7 @@ import type { AssetRef, Overview, OverviewOutput } from "../../protocol/types";
 import { formatRelative } from "../../lib/format";
 
 /** How many outputs the Overview shows before "Show all". */
-export const LATEST_SHOWN = 6;
+const LATEST_SHOWN = 6;
 
 /** A past moment as `formatRelative` gives it, for use inside a sentence: "Just now" and
  * "Yesterday" lose their capital, dates keep theirs. */
@@ -43,8 +43,17 @@ export function summaryParts(summary: string): SummaryPart[] {
   return parts;
 }
 
-/** A name as `$` references write it: other characters than letters, digits, `.`, `_` and `-`
- * become `-`, a run of `-` one, and case is ignored. */
+/** The summary's first sentence as plain text, names unmarked, for a line on Home's card. */
+export function summaryLine(summary: string): string {
+  const text = summaryParts(summary)
+    .map((part) => part.text)
+    .join("")
+    .trim();
+  return text.match(/^[\s\S]*?[.!?](?=\s|$)/)?.[0] ?? text;
+}
+
+/** A name as `$` references spell it, lower-cased and without its `#` or `$`; characters other than
+ * letters, digits, `.`, `_` and `-` become `-`, and a run of `-` one. */
 const asReference = (name: string) =>
   name
     .replace(/^[#$]/, "")

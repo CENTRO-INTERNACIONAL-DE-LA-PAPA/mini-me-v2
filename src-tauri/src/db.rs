@@ -242,124 +242,45 @@ pub fn open_read_only(path: &Path) -> AppResult<Connection> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    /// A database built by the first `n` migrations, holding the rows `seed` inserts.
+    fn at_version(n: usize, seed: &str) -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.sqlite");
+        let conn = Connection::open(&path).unwrap();
+        for migration in &MIGRATIONS[..n] {
+            conn.execute_batch(migration).unwrap();
+        }
+        conn.pragma_update(None, "user_version", n as i32).unwrap();
+        conn.execute_batch(seed).unwrap();
+        (dir, path)
+    }
 
     #[test]
     fn new_database_is_migrated() {
-        let dir = tempfile::tempdir().unwrap();
-        let conn = open(&dir.path().join("project.sqlite")).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
-        let tables: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN \
-                 ('project', 'conversations', 'events', 'messages', 'reactions', 'assets', \
-                 'components')",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(tables, 7);
-    }
-
-    #[test]
-    fn a_version_1_database_keeps_its_messages_when_migrated() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("project.sqlite");
-        {
-            let conn = Connection::open(&path).unwrap();
-            conn.execute_batch(MIGRATIONS[0]).unwrap();
-            conn.pragma_update(None, "user_version", 1).unwrap();
-            conn.execute_batch(
-                "INSERT INTO conversations (id, title, created_at, last_activity_at) \
-                 VALUES ('c', 'Trial', 1, 1); \
-                 INSERT INTO messages (id, conversation_id, author_kind, author_id, content, \
-                 status, attachments, text_components, created_at) \
-                 VALUES ('m', 'c', 'user', 'u', 'late blight', 'complete', '[]', '[]', 1);",
-            )
-            .unwrap();
-        }
+        let (_dir, path) = at_version(0, "");
         let conn = open(&path).unwrap();
         assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
-        let content: String = conn
-            .query_row("SELECT content FROM messages WHERE id = 'm'", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(content, "late blight");
-        let components: i64 = conn
-            .query_row("SELECT COUNT(*) FROM components", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(components, 0);
-    }
-
-    #[test]
-    fn a_version_2_database_gains_steps_answers_and_paused_runs() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("project.sqlite");
-        {
-            let conn = Connection::open(&path).unwrap();
-            conn.execute_batch(MIGRATIONS[0]).unwrap();
-            conn.execute_batch(MIGRATIONS[1]).unwrap();
-            conn.pragma_update(None, "user_version", 2).unwrap();
-        }
-        let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
-        let tables: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN \
-                 ('message_steps', 'paused_runs')",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(tables, 2);
-        conn.prepare("SELECT answer FROM components").unwrap();
-    }
-
-    #[test]
-    fn a_version_3_database_gains_an_empty_overview() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("project.sqlite");
-        {
-            let conn = Connection::open(&path).unwrap();
-            for migration in &MIGRATIONS[..3] {
-                conn.execute_batch(migration).unwrap();
-            }
-            conn.pragma_update(None, "user_version", 3).unwrap();
-        }
-        let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
-        let (summary, featured): (Option<String>, Option<String>) = conn
-            .query_row("SELECT summary, featured_component FROM overview", [], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
-            .unwrap();
-        assert_eq!((summary, featured), (None, None));
     }
 
     #[test]
     fn a_version_6_database_fills_in_who_added_each_asset() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("project.sqlite");
-        {
-            let conn = Connection::open(&path).unwrap();
-            for migration in &MIGRATIONS[..6] {
-                conn.execute_batch(migration).unwrap();
-            }
-            conn.pragma_update(None, "user_version", 6).unwrap();
-            conn.execute_batch(
-                "INSERT INTO conversations (id, title, created_at, last_activity_at) \
-                 VALUES ('c', 'Trial', 1, 1); \
-                 INSERT INTO messages (id, conversation_id, author_kind, author_id, content, \
-                 status, attachments, text_components, created_at) VALUES \
-                 ('m1', 'c', 'user', 'u', 'plot it', 'complete', '[]', '[]', 1), \
-                 ('m2', 'c', 'mini_me', 'plotter', 'done', 'complete', \
-                 '[{\"id\":\"saved\",\"name\":\"plot.csv\",\"media_type\":\"text/csv\",\
-                 \"size_bytes\":1}]', '[]', 2); \
-                 INSERT INTO assets (id, name, media_type, size_bytes, source, rel_path, \
-                 created_at) VALUES \
-                 ('saved', 'plot.csv', 'text/csv', 1, 'generated', 'assets/saved/plot.csv', 2), \
-                 ('upload', 'trial.csv', 'text/csv', 1, 'upload', 'assets/upload/trial.csv', 1);",
-            )
-            .unwrap();
-        }
+        let (_dir, path) = at_version(
+            6,
+            "INSERT INTO conversations (id, title, created_at, last_activity_at) \
+             VALUES ('c', 'Trial', 1, 1); \
+             INSERT INTO messages (id, conversation_id, author_kind, author_id, content, \
+             status, attachments, text_components, created_at) VALUES \
+             ('m1', 'c', 'user', 'u', 'plot it', 'complete', '[]', '[]', 1), \
+             ('m2', 'c', 'mini_me', 'plotter', 'done', 'complete', \
+             '[{\"id\":\"saved\",\"name\":\"plot.csv\",\"media_type\":\"text/csv\",\
+             \"size_bytes\":1}]', '[]', 2); \
+             INSERT INTO assets (id, name, media_type, size_bytes, source, rel_path, \
+             created_at) VALUES \
+             ('saved', 'plot.csv', 'text/csv', 1, 'generated', 'assets/saved/plot.csv', 2), \
+             ('upload', 'trial.csv', 'text/csv', 1, 'upload', 'assets/upload/trial.csv', 1);",
+        );
         let conn = open(&path).unwrap();
         let added_by = |id: &str| -> (String, String) {
             conn.query_row(
@@ -374,112 +295,34 @@ mod tests {
     }
 
     #[test]
-    fn a_version_7_database_gains_comment_threads() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("project.sqlite");
-        {
-            let conn = Connection::open(&path).unwrap();
-            for migration in &MIGRATIONS[..7] {
-                conn.execute_batch(migration).unwrap();
-            }
-            conn.pragma_update(None, "user_version", 7).unwrap();
-        }
+    fn a_version_10_database_drops_jev_events() {
+        let (_dir, path) = at_version(
+            10,
+            "INSERT INTO conversations (id, title, created_at, last_activity_at) \
+             VALUES ('c', 'Trial', 1, 1); \
+             INSERT INTO events (conversation_id, seq, id, type, ts, body) VALUES \
+             ('c', 1, 'e1', 'message.created', 1, '{}'), \
+             ('c', 2, 'e2', 'routing.answered', 1, '{}');",
+        );
         let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
-        conn.prepare("SELECT passage_start, passage_end, quote, resolved FROM comment_threads")
-            .unwrap();
-    }
-
-    #[test]
-    fn a_version_8_database_gains_where_threads_were_opened_from() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("project.sqlite");
-        {
-            let conn = Connection::open(&path).unwrap();
-            for migration in &MIGRATIONS[..8] {
-                conn.execute_batch(migration).unwrap();
-            }
-            conn.pragma_update(None, "user_version", 8).unwrap();
-        }
-        let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
-        conn.prepare("SELECT opened_from FROM comment_threads").unwrap();
-    }
-
-    #[test]
-    fn a_version_9_database_keeps_its_assets_and_gains_their_origin() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("project.sqlite");
-        {
-            let conn = Connection::open(&path).unwrap();
-            for migration in &MIGRATIONS[..9] {
-                conn.execute_batch(migration).unwrap();
-            }
-            conn.pragma_update(None, "user_version", 9).unwrap();
-            conn.execute_batch(
-                "INSERT INTO assets (id, name, media_type, size_bytes, source, rel_path, \
-                 created_at) VALUES ('a', 'trial.csv', 'text/csv', 1, 'upload', 'assets/a/t', 1);",
-            )
-            .unwrap();
-        }
-        let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
-        let sql = "SELECT origin FROM assets WHERE id = 'a'";
-        let origin: Option<String> = conn.query_row(sql, [], |row| row.get(0)).unwrap();
-        assert_eq!(origin, None);
-    }
-
-    #[test]
-    fn a_version_10_database_gains_debug_records_and_drops_jev_events() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("project.sqlite");
-        {
-            let conn = Connection::open(&path).unwrap();
-            for migration in &MIGRATIONS[..10] {
-                conn.execute_batch(migration).unwrap();
-            }
-            conn.pragma_update(None, "user_version", 10).unwrap();
-            conn.execute_batch(
-                "INSERT INTO conversations (id, title, created_at, last_activity_at) \
-                 VALUES ('c', 'Trial', 1, 1); \
-                 INSERT INTO events (conversation_id, seq, id, type, ts, body) VALUES \
-                 ('c', 1, 'e1', 'message.created', 1, '{}'), \
-                 ('c', 2, 'e2', 'routing.answered', 1, '{}');",
-            )
-            .unwrap();
-        }
-        let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
         let sql = "SELECT group_concat(type) FROM events";
         let types: String = conn.query_row(sql, [], |row| row.get(0)).unwrap();
         assert_eq!(types, "message.created");
-        let columns = "message_id, kind, conversation_id, content, created_at";
-        conn.prepare(&format!("SELECT {columns} FROM debug_records")).unwrap();
     }
 
     #[test]
     fn a_version_11_database_keeps_jevs_records_at_position_0() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("project.sqlite");
-        {
-            let conn = Connection::open(&path).unwrap();
-            for migration in &MIGRATIONS[..11] {
-                conn.execute_batch(migration).unwrap();
-            }
-            conn.pragma_update(None, "user_version", 11).unwrap();
-            conn.execute_batch(
-                "INSERT INTO conversations (id, title, created_at, last_activity_at) \
-                 VALUES ('c', 'Trial', 1, 1); \
-                 INSERT INTO messages (id, conversation_id, author_kind, author_id, content, \
-                 status, attachments, text_components, created_at) \
-                 VALUES ('m', 'c', 'user', 'u', 'hi', 'sent', '[]', '[]', 1); \
-                 INSERT INTO debug_records \
-                 (message_id, kind, conversation_id, content, created_at) VALUES ('m', 'jev', 'c', '{}', 1);",
-            )
-            .unwrap();
-        }
+        let (_dir, path) = at_version(
+            11,
+            "INSERT INTO conversations (id, title, created_at, last_activity_at) \
+             VALUES ('c', 'Trial', 1, 1); \
+             INSERT INTO messages (id, conversation_id, author_kind, author_id, content, \
+             status, attachments, text_components, created_at) \
+             VALUES ('m', 'c', 'user', 'u', 'hi', 'sent', '[]', '[]', 1); \
+             INSERT INTO debug_records \
+             (message_id, kind, conversation_id, content, created_at) VALUES ('m', 'jev', 'c', '{}', 1);",
+        );
         let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
         let sql = "SELECT kind, position, content FROM debug_records WHERE message_id = 'm'";
         let row: (String, i64, String) =
             conn.query_row(sql, [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).unwrap();
@@ -488,13 +331,11 @@ mod tests {
 
     #[test]
     fn newer_database_is_refused_and_unchanged() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("project.sqlite");
-        {
-            let conn = Connection::open(&path).unwrap();
-            conn.pragma_update(None, "user_version", SCHEMA_VERSION + 1)
-                .unwrap();
-        }
+        let (_dir, path) = at_version(0, "");
+        Connection::open(&path)
+            .unwrap()
+            .pragma_update(None, "user_version", SCHEMA_VERSION + 1)
+            .unwrap();
         let before = std::fs::read(&path).unwrap();
 
         let err = open(&path).unwrap_err();

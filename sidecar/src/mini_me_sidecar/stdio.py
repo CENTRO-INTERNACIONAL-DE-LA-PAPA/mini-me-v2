@@ -4,10 +4,9 @@ from typing import BinaryIO
 
 
 def reserve_stdout() -> BinaryIO:
-    """Returns a private handle on the original stdout and points descriptor 1 at stderr.
+    """Points descriptor 1 at stderr and returns the original stdout for the link.
 
-    Native libraries write to descriptor 1 directly, bypassing `sys.stdout`, so redirecting
-    only `sys.stdout` would let their output corrupt the link.
+    Native libraries write to descriptor 1 directly, so redirecting only `sys.stdout` is not enough.
     """
     sys.stdout.flush()
     link_fd = os.dup(1)

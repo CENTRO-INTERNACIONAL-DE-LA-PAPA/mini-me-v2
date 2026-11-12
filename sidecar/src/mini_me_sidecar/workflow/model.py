@@ -56,10 +56,8 @@ def _parse_step(raw: dict[str, Any]) -> Step:
 
 
 def final_steps(steps: tuple[Step, ...]) -> set[str]:
-    """The IDs of the Trait Steps whose text streams into the reply: those no other Step can
-    follow. Such a Step is the last of its list, and that list is the Workflow's own or a
-    branch of a condition that is itself final; Steps in loops and parallel branches can be
-    followed by another run of their list or by the join, so they never are."""
+    """IDs of the Trait Steps no other Step can follow, whose text streams into the reply. Steps
+    in loops and parallel branches never are, as a rerun or the join follows them."""
     if not steps:
         return set()
     last = steps[-1]
@@ -72,10 +70,9 @@ def final_steps(steps: tuple[Step, ...]) -> set[str]:
 
 @dataclass(frozen=True)
 class Entry:
-    """One Step's completion in a run. `parent` is the ID of the list the Step belongs to
-    (a control Step, or `""` for the Workflow's own list), plus `/<label>` for a branch.
-    `scope` maps each parallel Step the Step ran inside to its branch label. `streamed` is
-    set when the output already reached the reply as it was written."""
+    """One Step's completion. `parent` is its list's control Step ID (`""` at top level), plus
+    `/<label>` in a branch; `scope` maps each enclosing parallel Step to its branch label;
+    `streamed` means the output already reached the reply."""
 
     step_id: str
     name: str
@@ -116,16 +113,14 @@ def list_output(log: list[Entry], parent: str, since_marker_of: str) -> Entry | 
 
 
 def parallel_output(branches: list[tuple[str, str | None]]) -> str | None:
-    """A parallel Step's output: each branch's output under a `## <label>` line, in branch
-    order, leaving out branches without one."""
+    """Each branch's output under a `## <label>` line, in order, skipping branches without one."""
     parts = [f"## {label}\n\n{output}" for label, output in branches if output is not None]
     return "\n\n".join(parts) if parts else None
 
 
 def visible_outputs(log: list[Entry], scope: dict[str, str]) -> list[dict[str, Any]]:
-    """The earlier Trait Step outputs a Trait Step with `scope` sees, as `{ step_id, name,
-    output }` in the order they finished: all but those of other branches of a parallel Step
-    it is inside, cut to the budget with the newest kept."""
+    """Earlier Trait outputs a Step in `scope` sees, `{ step_id, name, output }` in finishing
+    order: none from other branches of its parallel Steps, cut to the budget, newest kept."""
     seen = [
         e
         for e in log

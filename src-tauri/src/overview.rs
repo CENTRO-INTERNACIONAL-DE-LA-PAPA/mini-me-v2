@@ -2,9 +2,9 @@
 //! component, and every output the Project's Conversations produced. The summary and the
 //! featured component live in the one-row `overview` table of `project.sqlite`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -12,7 +12,7 @@ use crate::comments;
 use crate::error::{AppError, AppResult};
 use crate::library::Library;
 use crate::protocol::{AssetRef, Author, AuthorKind, Component};
-use crate::store::{Project, ProjectState};
+use crate::store::{Project, ProjectState, parse_id};
 
 /// Component kinds that can be featured on the Overview.
 const FEATURABLE: [&str; 2] = ["chart", "table"];
@@ -20,7 +20,7 @@ const FEATURABLE: [&str; 2] = ["chart", "table"];
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Overview {
     pub conversations: i64,
-    /// The latest activity of any Conversation, in milliseconds; `None` without Conversations.
+    /// In milliseconds; `None` without Conversations.
     pub last_activity_at: Option<i64>,
     pub summary: Option<String>,
     pub summary_at: Option<i64>,
@@ -52,10 +52,6 @@ pub struct Output {
     pub created_at: i64,
 }
 
-fn parse_id(value: &str) -> AppResult<Uuid> {
-    Uuid::parse_str(value).map_err(|_| AppError::storage("stored ID is not readable"))
-}
-
 fn author(kind: &str, id: String) -> AppResult<Author> {
     let kind =
         AuthorKind::parse(kind).ok_or_else(|| AppError::storage("stored author is not readable"))?;
@@ -82,7 +78,7 @@ fn component_title(kind: &str, title: Option<String>, count: Option<i64>, text: 
 pub fn overview(project: &Project) -> AppResult<Overview> {
     let state = project.lock();
     let conn = &state.conn;
-    let conversations_only = comments::not_a_thread(conn, "id")?;
+    let conversations_only = comments::not_a_thread("id");
     let (conversations, last_activity_at): (i64, Option<i64>) = conn.query_row(
         &format!(
             "SELECT COUNT(*), MAX(last_activity_at) FROM conversations WHERE {conversations_only}"
@@ -96,147 +92,12 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
-
     let featured = match featured_id {
         None => None,
-        Some(id) => conn
-            .query_row(
-                "SELECT c.id, c.kind, c.version, c.data, c.text, c.answer, m.author_kind, \
-                 m.author_id, m.conversation_id, m.id FROM components c \
-                 JOIN messages m ON m.id = c.message_id WHERE c.id = ?1",
-                params![id],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, u32>(2)?,
-                        row.get::<_, String>(3)?,
-                        row.get::<_, String>(4)?,
-                        row.get::<_, Option<String>>(5)?,
-                        row.get::<_, String>(6)?,
-                        row.get::<_, String>(7)?,
-                        row.get::<_, String>(8)?,
-                        row.get::<_, String>(9)?,
-                    ))
-                },
-            )
-            .optional()?
-            .map(|(id, kind, version, data, text, answer, a_kind, a_id, conversation, message)| {
-                AppResult::Ok(Featured {
-                    component: Component {
-                        id: parse_id(&id)?,
-                        kind,
-                        version,
-                        data: serde_json::from_str(&data)?,
-                        text,
-                        answer: answer
-                            .map(|a| serde_json::from_str(&a))
-                            .transpose()?
-                            .unwrap_or_default(),
-                        // The Overview draws the component on its own, outside its reply.
-                        step_index: None,
-                    },
-                    author: author(&a_kind, a_id)?,
-                    conversation_id: parse_id(&conversation)?,
-                    message_id: parse_id(&message)?,
-                })
-            })
-            .transpose()?,
+        Some(id) => featured(conn, &id)?,
     };
-
-    let mut outputs = Vec::new();
-    // Only the title and the list lengths are read from `data`, which can be large.
-    let in_conversations = comments::not_a_thread(conn, "v.id")?;
-    let mut stmt = conn.prepare(&format!(
-        "SELECT c.kind, c.id, json_extract(c.data, '$.title'), \
-         COALESCE(json_array_length(c.data, '$.papers'), json_array_length(c.data, '$.theories'), \
-         json_extract(c.data, '$.total')), \
-         c.text, m.author_kind, m.author_id, m.conversation_id, v.title, m.id, c.created_at \
-         FROM components c JOIN messages m ON m.id = c.message_id \
-         JOIN conversations v ON v.id = m.conversation_id \
-         WHERE c.kind != 'approval' AND {in_conversations}",
-    ))?;
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, Option<String>>(2)?,
-            row.get::<_, Option<i64>>(3)?,
-            row.get::<_, String>(4)?,
-            row.get::<_, String>(5)?,
-            row.get::<_, String>(6)?,
-            row.get::<_, String>(7)?,
-            row.get::<_, String>(8)?,
-            row.get::<_, String>(9)?,
-            row.get::<_, i64>(10)?,
-        ))
-    })?;
-    for row in rows {
-        let (kind, id, title, count, text, a_kind, a_id, conversation, c_title, message, at) = row?;
-        outputs.push(Output {
-            title: component_title(&kind, title, count, &text),
-            kind,
-            id: parse_id(&id)?,
-            author: author(&a_kind, a_id)?,
-            conversation_id: parse_id(&conversation)?,
-            conversation_title: c_title,
-            message_id: parse_id(&message)?,
-            created_at: at,
-        });
-    }
-
-    // A file a Mini-Me saved belongs to the first message that attaches it.
-    let generated: HashMap<Uuid, (String, i64)> = {
-        let mut stmt =
-            conn.prepare("SELECT id, name, created_at FROM assets WHERE source = 'generated'")?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
-        })?;
-        let mut generated = HashMap::new();
-        for row in rows {
-            let (id, name, at) = row?;
-            generated.insert(parse_id(&id)?, (name, at));
-        }
-        generated
-    };
-    if !generated.is_empty() {
-        let mut stmt = conn.prepare(&format!(
-            "SELECT m.id, m.author_kind, m.author_id, m.conversation_id, v.title, m.attachments \
-             FROM messages m JOIN conversations v ON v.id = m.conversation_id \
-             WHERE m.attachments != '[]' AND {in_conversations} ORDER BY m.rowid",
-        ))?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, String>(5)?,
-            ))
-        })?;
-        let mut seen = std::collections::HashSet::new();
-        for row in rows {
-            let (message, a_kind, a_id, conversation, c_title, attachments) = row?;
-            let attached: Vec<AssetRef> = serde_json::from_str(&attachments)?;
-            for asset in attached {
-                let Some((name, at)) = generated.get(&asset.id) else { continue };
-                if !seen.insert(asset.id) {
-                    continue;
-                }
-                outputs.push(Output {
-                    kind: "file".into(),
-                    id: asset.id,
-                    title: name.clone(),
-                    author: author(&a_kind, a_id.clone())?,
-                    conversation_id: parse_id(&conversation)?,
-                    conversation_title: c_title.clone(),
-                    message_id: parse_id(&message)?,
-                    created_at: *at,
-                });
-            }
-        }
-    }
+    let mut outputs = component_outputs(conn)?;
+    outputs.extend(file_outputs(conn)?);
     outputs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     Ok(Overview {
@@ -249,8 +110,200 @@ pub fn overview(project: &Project) -> AppResult<Overview> {
     })
 }
 
-/// Features a chart or table on the Overview, replacing any other, or clears the featured
-/// component with `None`.
+struct FeaturedRow {
+    id: String,
+    kind: String,
+    version: u32,
+    data: String,
+    text: String,
+    answer: Option<String>,
+    author_kind: String,
+    author_id: String,
+    conversation: String,
+    message: String,
+}
+
+/// The component `id` with its reply; `None` when it no longer exists.
+fn featured(conn: &Connection, id: &str) -> AppResult<Option<Featured>> {
+    let row = conn
+        .query_row(
+            "SELECT c.id, c.kind, c.version, c.data, c.text, c.answer, m.author_kind, \
+             m.author_id, m.conversation_id, m.id FROM components c \
+             JOIN messages m ON m.id = c.message_id WHERE c.id = ?1",
+            params![id],
+            |row| {
+                Ok(FeaturedRow {
+                    id: row.get(0)?,
+                    kind: row.get(1)?,
+                    version: row.get(2)?,
+                    data: row.get(3)?,
+                    text: row.get(4)?,
+                    answer: row.get(5)?,
+                    author_kind: row.get(6)?,
+                    author_id: row.get(7)?,
+                    conversation: row.get(8)?,
+                    message: row.get(9)?,
+                })
+            },
+        )
+        .optional()?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    Ok(Some(Featured {
+        component: Component {
+            id: parse_id(&row.id, "ID")?,
+            kind: row.kind,
+            version: row.version,
+            data: serde_json::from_str(&row.data)?,
+            text: row.text,
+            answer: row.answer.map(|a| serde_json::from_str(&a)).transpose()?.unwrap_or_default(),
+            // The Overview draws the component on its own, outside its reply.
+            step_index: None,
+        },
+        author: author(&row.author_kind, row.author_id)?,
+        conversation_id: parse_id(&row.conversation, "ID")?,
+        message_id: parse_id(&row.message, "ID")?,
+    }))
+}
+
+struct ComponentOutputRow {
+    kind: String,
+    id: String,
+    title: Option<String>,
+    /// The length of its papers or theories, or its total of matching datasets.
+    count: Option<i64>,
+    text: String,
+    author_kind: String,
+    author_id: String,
+    conversation: String,
+    conversation_title: String,
+    message: String,
+    created_at: i64,
+}
+
+/// Every component of the Project's Conversations other than an approval, in no set order.
+fn component_outputs(conn: &Connection) -> AppResult<Vec<Output>> {
+    // Only the title and the list lengths are read from `data`, which can be large.
+    let in_conversations = comments::not_a_thread("v.id");
+    let mut stmt = conn.prepare(&format!(
+        "SELECT c.kind, c.id, json_extract(c.data, '$.title'), \
+         COALESCE(json_array_length(c.data, '$.papers'), json_array_length(c.data, '$.theories'), \
+         json_extract(c.data, '$.total')), \
+         c.text, m.author_kind, m.author_id, m.conversation_id, v.title, m.id, c.created_at \
+         FROM components c JOIN messages m ON m.id = c.message_id \
+         JOIN conversations v ON v.id = m.conversation_id \
+         WHERE c.kind != 'approval' AND {in_conversations}",
+    ))?;
+    let rows = stmt.query_map([], |row| {
+        Ok(ComponentOutputRow {
+            kind: row.get(0)?,
+            id: row.get(1)?,
+            title: row.get(2)?,
+            count: row.get(3)?,
+            text: row.get(4)?,
+            author_kind: row.get(5)?,
+            author_id: row.get(6)?,
+            conversation: row.get(7)?,
+            conversation_title: row.get(8)?,
+            message: row.get(9)?,
+            created_at: row.get(10)?,
+        })
+    })?;
+    let mut outputs = Vec::new();
+    for row in rows {
+        let row = row?;
+        outputs.push(Output {
+            title: component_title(&row.kind, row.title, row.count, &row.text),
+            kind: row.kind,
+            id: parse_id(&row.id, "ID")?,
+            author: author(&row.author_kind, row.author_id)?,
+            conversation_id: parse_id(&row.conversation, "ID")?,
+            conversation_title: row.conversation_title,
+            message_id: parse_id(&row.message, "ID")?,
+            created_at: row.created_at,
+        });
+    }
+    Ok(outputs)
+}
+
+struct GeneratedFile {
+    name: String,
+    created_at: i64,
+}
+
+struct AttachingMessage {
+    message: String,
+    author_kind: String,
+    author_id: String,
+    conversation: String,
+    conversation_title: String,
+    attachments: String,
+}
+
+/// Files Mini-Mes saved, each with the first message that attaches it, in no set order.
+fn file_outputs(conn: &Connection) -> AppResult<Vec<Output>> {
+    let generated: HashMap<Uuid, GeneratedFile> = {
+        let mut stmt =
+            conn.prepare("SELECT id, name, created_at FROM assets WHERE source = 'generated'")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                GeneratedFile { name: row.get(1)?, created_at: row.get(2)? },
+            ))
+        })?;
+        let mut generated = HashMap::new();
+        for row in rows {
+            let (id, file) = row?;
+            generated.insert(parse_id(&id, "ID")?, file);
+        }
+        generated
+    };
+    let mut outputs = Vec::new();
+    if generated.is_empty() {
+        return Ok(outputs);
+    }
+    let in_conversations = comments::not_a_thread("v.id");
+    let mut stmt = conn.prepare(&format!(
+        "SELECT m.id, m.author_kind, m.author_id, m.conversation_id, v.title, m.attachments \
+         FROM messages m JOIN conversations v ON v.id = m.conversation_id \
+         WHERE m.attachments != '[]' AND {in_conversations} ORDER BY m.rowid",
+    ))?;
+    let rows = stmt.query_map([], |row| {
+        Ok(AttachingMessage {
+            message: row.get(0)?,
+            author_kind: row.get(1)?,
+            author_id: row.get(2)?,
+            conversation: row.get(3)?,
+            conversation_title: row.get(4)?,
+            attachments: row.get(5)?,
+        })
+    })?;
+    let mut seen = HashSet::new();
+    for row in rows {
+        let row = row?;
+        let attached: Vec<AssetRef> = serde_json::from_str(&row.attachments)?;
+        for asset in attached {
+            let Some(file) = generated.get(&asset.id) else { continue };
+            if !seen.insert(asset.id) {
+                continue;
+            }
+            outputs.push(Output {
+                kind: "file".into(),
+                id: asset.id,
+                title: file.name.clone(),
+                author: author(&row.author_kind, row.author_id.clone())?,
+                conversation_id: parse_id(&row.conversation, "ID")?,
+                conversation_title: row.conversation_title.clone(),
+                message_id: parse_id(&row.message, "ID")?,
+                created_at: file.created_at,
+            });
+        }
+    }
+    Ok(outputs)
+}
+
+/// Features a chart or table, replacing any other; `None` clears it.
 pub fn feature(project: &Project, component_id: Option<Uuid>) -> AppResult<()> {
     let state = project.lock();
     if let Some(id) = component_id {
@@ -279,7 +332,7 @@ pub fn feature(project: &Project, component_id: Option<Uuid>) -> AppResult<()> {
     Ok(())
 }
 
-/// Saves a summary the model wrote, with the time it was written in milliseconds.
+/// `at` is when it was written, in milliseconds.
 pub fn save_summary(project: &Project, summary: &str, at: i64) -> AppResult<()> {
     project.lock().conn.execute(
         "UPDATE overview SET summary = ?1, summary_at = ?2 WHERE id = 1",
@@ -288,17 +341,16 @@ pub fn save_summary(project: &Project, summary: &str, at: i64) -> AppResult<()> 
     Ok(())
 }
 
-/// The text a summary is written from: each Conversation's title and its messages as
-/// `You:` or `<Mini-Me name>:` lines, newest Conversation first. Conversations are added whole
-/// while the total stays within `budget` characters; the rest are left out. Messages without
-/// text stand in with their components' text. File contents are never included.
+/// Each Conversation's title and messages as `You:` or `<Mini-Me name>:` lines, newest first, added
+/// whole while within `budget` characters. Messages without text use their components' text; file
+/// contents are never included.
 pub fn summary_material(project: &Project, library: &Library, budget: usize) -> AppResult<String> {
     let state = project.lock();
     let conversations: Vec<(String, String)> = {
         let mut stmt = state.conn.prepare(&format!(
             "SELECT id, title FROM conversations WHERE {} \
              ORDER BY last_activity_at DESC, rowid DESC",
-            comments::not_a_thread(&state.conn, "id")?
+            comments::not_a_thread("id")
         ))?;
         stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<_, _>>()?
@@ -306,7 +358,7 @@ pub fn summary_material(project: &Project, library: &Library, budget: usize) -> 
     let mut material = String::new();
     for (id, title) in conversations {
         let mut block = format!("## {title}\n");
-        for line in message_lines(&state, library, parse_id(&id)?)? {
+        for line in message_lines(&state, library, parse_id(&id, "ID")?)? {
             block.push_str(&line);
             block.push('\n');
         }
@@ -319,9 +371,8 @@ pub fn summary_material(project: &Project, library: &Library, budget: usize) -> 
     Ok(material.trim_end().to_string())
 }
 
-/// The text a document is drafted from: one Conversation's messages, oldest first, each as
-/// "<speaker>: <text>". When they exceed `budget` characters the oldest are left out, and a
-/// newest message longer than `budget` is cut to its first `budget` characters.
+/// One Conversation's messages, oldest first, as "<speaker>: <text>". Over `budget` characters the
+/// oldest are dropped, and a newest message longer than `budget` is cut to it.
 pub fn conversation_material(
     project: &Project,
     library: &Library,
@@ -345,8 +396,8 @@ pub fn conversation_material(
     Ok(kept.join("\n"))
 }
 
-/// A Conversation's messages as "<speaker>: <text>" lines, oldest first: the user is "You", a
-/// Mini-Me is its name, and a message with no text stands for its components' text.
+/// Messages as "<speaker>: <text>", oldest first, the user as "You"; a message without text uses
+/// its components' text.
 fn message_lines(
     state: &ProjectState,
     library: &Library,

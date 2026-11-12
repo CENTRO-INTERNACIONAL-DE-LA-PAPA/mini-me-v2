@@ -36,7 +36,7 @@ pub struct ProjectSummary {
     pub folder: PathBuf,
 }
 
-/// Whether `identifier` is Mini-Me Dev's, the development app kept apart from Mini-Me.
+/// Mini-Me Dev is the development app, kept apart from Mini-Me.
 pub fn is_mini_me_dev(identifier: &str) -> bool {
     identifier.ends_with(".dev")
 }
@@ -72,8 +72,7 @@ pub fn validate_name(name: &str) -> AppResult<String> {
     Ok(trimmed.to_string())
 }
 
-/// Turns a title into a name that is valid for a file or folder on Windows, macOS and Linux, as
-/// documents are named after theirs.
+/// A name valid for a file or folder on Windows, macOS and Linux; documents are named this way too.
 pub fn folder_name(name: &str) -> String {
     let replaced: String = name
         .chars()
@@ -117,9 +116,8 @@ pub fn create(data_root: &Path, name: &str) -> AppResult<ProjectSummary> {
     Ok(summary)
 }
 
-/// Waits until nothing but `project` holds the Project, so that its database is closed once
-/// `project` is dropped: a run that was cancelled still holds it until it ends. Returns whether
-/// that happened within `limit`.
+/// Waits up to `limit` until only `project` holds the Project, so dropping it closes the database;
+/// a cancelled run holds it until it ends. Returns whether that happened.
 pub fn wait_until_alone(project: &Arc<Project>, limit: Duration) -> bool {
     let started = Instant::now();
     while Arc::strong_count(project) > 1 {
@@ -131,8 +129,7 @@ pub fn wait_until_alone(project: &Arc<Project>, limit: Duration) -> bool {
     true
 }
 
-/// Removes the Project in `folder` with everything in it. Its running replies must be stopped
-/// and the Project closed first.
+/// Running replies must be stopped and the Project closed first.
 pub fn delete(folder: &Path) -> AppResult<()> {
     Ok(std::fs::remove_dir_all(folder)?)
 }
@@ -179,9 +176,8 @@ pub fn list(
     Ok(projects)
 }
 
-/// Reads every Project in `data_root` with `read`, merging what it returns. Each database is
-/// opened read-only, so nothing is migrated or written; a Project that cannot be read, or
-/// whose schema is newer than this app's, is left out.
+/// Merges what `read` returns for every Project, each opened read-only so nothing is migrated or
+/// written; a Project that cannot be read, or is from a newer app, is left out.
 pub fn read_each<T>(
     data_root: &Path,
     read: impl Fn(&ProjectSummary, &Connection) -> AppResult<Vec<T>>,
@@ -205,7 +201,7 @@ pub fn read_each<T>(
 pub fn open(summary: &ProjectSummary, origin: Origin) -> AppResult<Project> {
     let paths = ProjectPaths::new(&summary.folder)?;
     let conn = db::open(&paths.database())?;
-    let project = Project::new(summary.id, summary.name.clone(), paths, conn, origin);
+    let project = Project::new(summary.id, paths, conn, origin);
     conversations::recover_interrupted(&project)?;
     quarto::remove_stale_renders(&project);
     Ok(project)
@@ -283,27 +279,39 @@ mod tests {
     }
 
     #[test]
-    fn creates_project_folder_and_lists_it() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
-        let summary = create(&root, "Late Blight Resistance").unwrap();
-        assert!(summary.folder.join("project.sqlite").is_file());
-        assert!(summary.folder.join("assets").is_dir());
-
-        let listed = list(&root, &HashMap::new()).unwrap();
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].name, "Late Blight Resistance");
-    }
-
-    #[test]
-    fn same_name_gets_separate_folders_named_by_id() {
+    fn each_project_gets_its_own_folder_named_by_id_until_deleted() {
         let dir = tempfile::tempdir().unwrap();
         let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
         let first = create(&root, "Trials: 2026/27").unwrap();
         let second = create(&root, "Trials: 2026/27").unwrap();
-        assert_ne!(first.folder, second.folder);
+        assert!(first.folder.join("project.sqlite").is_file());
+        assert!(first.folder.join("assets").is_dir());
         assert_eq!(first.folder.file_name().unwrap().to_string_lossy(), first.id.to_string());
-        assert_eq!(list(&root, &HashMap::new()).unwrap().len(), 2);
+        assert_ne!(first.folder, second.folder);
+        let listed = list(&root, &HashMap::new()).unwrap();
+        assert!(listed.len() == 2 && listed.iter().all(|p| p.name == "Trials: 2026/27"));
+
+        delete(&second.folder).unwrap();
+        assert!(!second.folder.exists());
+        assert_eq!(list(&root, &HashMap::new()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn reading_each_project_skips_and_never_changes_one_from_a_newer_app() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
+        create(&root, "Trials").unwrap();
+        let newer = create(&root, "Newer").unwrap();
+        let database = newer.folder.join("project.sqlite");
+        rusqlite::Connection::open(&database)
+            .unwrap()
+            .pragma_update(None, "user_version", db::SCHEMA_VERSION + 1)
+            .unwrap();
+        let before = std::fs::read(&database).unwrap();
+
+        let names = read_each(&root, |project, _| Ok(vec![project.name.clone()])).unwrap();
+        assert_eq!(names, ["Trials"]);
+        assert_eq!(std::fs::read(&database).unwrap(), before);
     }
 
     #[test]
@@ -313,21 +321,10 @@ mod tests {
         let project = create(&root, "Trial design").unwrap();
         let opened = open(&project, test_support::origin()).unwrap();
         assert_eq!(opened.rename("  Huancayo 2025 ").unwrap(), "Huancayo 2025");
-        assert_eq!(opened.name(), "Huancayo 2025");
         let listed = list(&root, &HashMap::new()).unwrap();
         assert_eq!(listed[0].name, "Huancayo 2025");
         assert_eq!(listed[0].folder, project.folder);
         assert!(opened.rename("   ").is_err());
-    }
-
-    #[test]
-    fn deleting_removes_the_folder_and_the_listing() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = ensure_data_root(dir.path(), DATA_FOLDER_NAME).unwrap();
-        let project = create(&root, "Trial design").unwrap();
-        delete(&project.folder).unwrap();
-        assert!(!project.folder.exists());
-        assert!(list(&root, &HashMap::new()).unwrap().is_empty());
     }
 
     #[test]

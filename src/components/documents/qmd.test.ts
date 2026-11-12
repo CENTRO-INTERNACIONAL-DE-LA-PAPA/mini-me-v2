@@ -19,12 +19,9 @@ Yield fell.
 `;
 
 describe("qmd", () => {
-  it("reads the title and authors from the header", () => {
+  it("reads the title and authors from the header, and nothing from a bad one", () => {
     expect(headerField(DOCUMENT, "title")).toBe("Huancayo 2025");
     expect(headerField(DOCUMENT, "author")).toBe("Ana, Luis");
-  });
-
-  it("gives nothing for a missing or unreadable header", () => {
     expect(headerField("# No header\n", "title")).toBe("");
     expect(headerField("---\ntitle: [unclosed\n---\n", "title")).toBe("");
   });

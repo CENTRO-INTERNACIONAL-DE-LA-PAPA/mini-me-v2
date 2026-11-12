@@ -7,11 +7,12 @@ import pandas as pd
 import pytest
 
 from mini_me_sidecar.adapters.data.tables import Table
+from mini_me_sidecar.adapters.prompt import _run_tool
 from mini_me_sidecar.tools import DEFAULT_TOOLS, MODEL_TOOL_NAMES, TOOL_NAMES, tables
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import component_result, read_component
 from mini_me_sidecar.tools.files import READ_CHARS, check_file, read_file, text_result
-from mini_me_sidecar.tools.model import MODEL_TOOLS
+from mini_me_sidecar.tools.model import MODEL_TOOLS, ModelTool
 from mini_me_sidecar.tools.tables import check_table, given_table, read_reference, table_result
 
 COLUMNS = [{"name": "variety", "type": "text"}, {"name": "yield", "type": "number"}]
@@ -248,3 +249,42 @@ def test_a_chart_is_not_read_as_a_table():
     reference = {"kind": "component", "id": "c1", "label": "$Yield"}
     with pytest.raises(ToolError, match=r"Profile Data reads tables, and \$Yield is a chart"):
         asyncio.run(read_reference(ctx, reference))
+
+
+async def echo(ctx, value: int = 0) -> dict:
+    return {"value": value}
+
+
+async def broken(ctx) -> dict:
+    raise RuntimeError("a fault in the tool")
+
+
+ECHO = ModelTool(
+    name="echo",
+    description="",
+    parameters={"type": "object", "properties": {"value": {"type": "integer"}}},
+    run=echo,
+)
+
+
+def test_a_whole_float_argument_becomes_an_int():
+    assert asyncio.run(ECHO.call(None, {"value": 3.0})) == {"value": 3}
+    with pytest.raises(ToolError, match="whole number"):
+        asyncio.run(ECHO.call(None, {"value": 2.5}))
+
+
+def test_wrong_arguments_and_faults_in_a_tool_are_told_apart():
+    needs = ModelTool(
+        name="needs",
+        description="",
+        parameters={"type": "object", "properties": {"value": {"type": "string"}}},
+        run=lambda ctx, value: echo(ctx, value),
+    )
+    fails = ModelTool(
+        name="fails", description="", parameters={"type": "object", "properties": {}}, run=broken
+    )
+    offered = {"needs": needs, "fails": fails}
+    wrong = asyncio.run(_run_tool(None, offered, {"name": "needs", "args": {}}))
+    assert json.loads(wrong)["error"].startswith("Wrong arguments for needs")
+    fault = asyncio.run(_run_tool(None, offered, {"name": "fails", "args": {}}))
+    assert json.loads(fault) == {"error": "fails failed unexpectedly."}

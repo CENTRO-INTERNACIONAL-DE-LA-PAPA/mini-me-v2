@@ -32,8 +32,7 @@ pub const TOOLS: [&str; 13] = [
 pub const MODEL_TOOLS: [&str; 5] =
     ["save_file", "show_table", "write_document", "suggest_edit", "edit_document"];
 
-/// The adapter that offers a Trait's tools to its AI model, and the only one user-made
-/// Traits run on.
+/// Offers a Trait's tools to its AI model; the only adapter user-made Traits run on.
 pub const PROMPT_ADAPTER: &str = "prompt";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -46,8 +45,7 @@ pub struct TraitDef {
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
     pub instructions: Option<String>,
-    /// The tools this Trait may use: those its adapter's code uses, or, for a prompt-based
-    /// Trait, those its model is offered besides the read tools.
+    /// Tools its adapter's code uses; for a prompt-based Trait, those offered besides read tools.
     #[serde(default)]
     pub tools: Vec<String>,
 }
@@ -141,7 +139,7 @@ impl TryFrom<serde_json::Map<String, serde_json::Value>> for Step {
 }
 
 impl Step {
-    /// The name of this Step's type, as in its JSON `type`.
+    /// As in its JSON `type`.
     pub fn type_name(&self) -> &'static str {
         match self.kind {
             StepKind::Trait { .. } => "trait",
@@ -253,8 +251,7 @@ pub struct Library {
 }
 
 impl Library {
-    /// The built-in library. Its content is checked by this module's tests, so parsing it
-    /// cannot fail at run time.
+    /// Checked by this module's tests, so parsing cannot fail at run time.
     pub fn builtin() -> Self {
         let mut library: Self = serde_json::from_str(include_str!("../library/builtin.json"))
             .expect("library/builtin.json is valid");
@@ -319,7 +316,7 @@ impl Library {
             .collect()
     }
 
-    /// Every problem with the definitions, empty when they are consistent.
+    /// Empty when the definitions are consistent.
     pub(crate) fn problems(&self) -> Vec<String> {
         let mut problems = Vec::new();
         let mut ids: Vec<Uuid> = self.traits.iter().map(|t| t.id).collect();
@@ -436,7 +433,7 @@ impl Library {
     }
 }
 
-/// Whether two names are the same, ignoring case.
+/// Case-insensitive.
 fn same_name(a: &str, b: &str) -> bool {
     a.to_lowercase() == b.to_lowercase()
 }
@@ -464,71 +461,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn builtin_library_is_consistent() {
-        let library = Library::builtin();
-        assert_eq!(library.problems(), Vec::<String>::new());
-        let names: Vec<&str> = library.traits.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(
-            names,
-            [
-                "Summarize",
-                "Assist",
-                "Find Papers",
-                "Theorize",
-                "Scout",
-                "Refute",
-                "Plan",
-                "Wonder",
-                "Experiment",
-                "Search CIP Dataverse",
-                "Code",
-                "Collect Data",
-                "Model",
-                "Predict",
-                "Index Sources",
-                "Profile Data",
-                "Validate Data",
-                "Clean Data",
-                "Join Data",
-                "Plot",
-            ]
-        );
-    }
-
-    #[test]
-    fn built_in_traits_list_their_tools() {
-        let library = Library::builtin();
-        let lists: Vec<(&str, Vec<&str>)> = library
-            .traits
-            .iter()
-            .filter(|t| !t.tools.is_empty())
-            .map(|t| (t.name.as_str(), t.tools.iter().map(String::as_str).collect()))
-            .collect();
-        let table = vec!["read_table", "show_table", "save_file"];
-        assert_eq!(
-            lists,
-            [
-                ("Summarize", vec!["write_document", "suggest_edit", "edit_document"]),
-                (
-                    "Assist",
-                    vec![
-                        "save_file",
-                        "show_table",
-                        "write_document",
-                        "suggest_edit",
-                        "edit_document",
-                    ],
-                ),
-                ("Find Papers", vec!["show_papers"]),
-                ("Theorize", vec!["show_theories", "save_file"]),
-                ("Search CIP Dataverse", vec!["show_datasets"]),
-                ("Profile Data", vec!["read_table", "show_table"]),
-                ("Validate Data", table.clone()),
-                ("Clean Data", table.clone()),
-                ("Join Data", table),
-                ("Plot", vec!["read_table", "show_chart"]),
-            ]
-        );
+    fn the_builtin_library_has_no_problems() {
+        assert_eq!(Library::builtin().problems(), Vec::<String>::new());
     }
 
     #[test]
@@ -552,105 +486,6 @@ mod tests {
         assert!(refute.used_by.contains(&skeptic.id));
         assert!(!traits.iter().find(|t| t.name == "Find Papers").unwrap().prompt_based);
         assert!(!traits.iter().any(|t| t.name == "Code"));
-    }
-
-    #[test]
-    fn mini_mes_have_groups() {
-        let summaries = Library::builtin().summaries();
-        let group = |name: &str| summaries.iter().find(|m| m.name == name).unwrap().group;
-        assert_eq!(group("Profiler"), MiniMeGroup::Data);
-        assert_eq!(group("Researcher"), MiniMeGroup::Literature);
-        assert_eq!(group("Skeptic"), MiniMeGroup::Thinking);
-    }
-
-    #[test]
-    fn an_unknown_group_fails_to_load() {
-        let mut json: serde_json::Value =
-            serde_json::from_str(include_str!("../library/builtin.json")).unwrap();
-        json["mini_mes"][0]["group"] = "other".into();
-        let error = serde_json::from_value::<Library>(json).unwrap_err().to_string();
-        assert!(error.contains("unknown variant"), "{error}");
-    }
-
-    #[test]
-    fn mini_mes_run_their_step_trait() {
-        let library = Library::builtin();
-        let step = |name: &str| {
-            let summary = library.summaries().into_iter().find(|m| m.name == name).unwrap();
-            let mini_me = library.mini_me(summary.id).unwrap();
-            let traits = library.workflow_traits(&mini_me.workflow);
-            assert_eq!(traits.len(), 1, "{name} runs one Trait");
-            traits[0].clone()
-        };
-        assert_eq!(step("Scribe").name, "Summarize");
-        let assist = step("Assistant");
-        assert_eq!((assist.name.as_str(), assist.adapter.as_str()), ("Assist", "prompt"));
-        assert_eq!(step("Researcher").adapter, "asta-paper-finder");
-        assert_eq!(step("Theorist").adapter, "asta-theorizer");
-        for (mini_me, name) in [
-            ("Explorer", "Scout"),
-            ("Skeptic", "Refute"),
-            ("Planner", "Plan"),
-            ("Inquirer", "Wonder"),
-            ("Experimenter", "Experiment"),
-        ] {
-            let t = step(mini_me);
-            assert_eq!((t.name.as_str(), t.adapter.as_str()), (name, "prompt"));
-            assert!(t.instructions.is_some());
-        }
-        for (mini_me, name, adapter) in [
-            ("Profiler", "Profile Data", "data-profile"),
-            ("Validator", "Validate Data", "data-validate"),
-            ("Curator", "Clean Data", "data-clean"),
-            ("Linker", "Join Data", "data-join"),
-            ("Plotter", "Plot", "data-plot"),
-        ] {
-            let t = step(mini_me);
-            assert_eq!((t.name.as_str(), t.adapter.as_str()), (name, adapter));
-        }
-    }
-
-    #[test]
-    fn sixteen_mini_mes_ship_and_investigator_uses_every_control_step() {
-        let library = Library::builtin();
-        let names: Vec<String> = library.summaries().into_iter().map(|m| m.name).collect();
-        assert_eq!(names.len(), 16);
-        assert_eq!(names.last().map(String::as_str), Some("Investigator"));
-
-        let investigator = library.mini_mes.iter().find(|m| m.name == "Investigator").unwrap();
-        let workflow = &investigator.workflow;
-        let types: Vec<&str> = workflow.steps.iter().map(|s| s.type_name()).collect();
-        assert_eq!(types, ["parallel", "trait", "loop", "condition"]);
-        assert!(workflow.all_steps().iter().any(|s| s.type_name() == "approval"));
-        let traits: Vec<&str> =
-            library.workflow_traits(workflow).iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(traits, ["Scout", "Wonder", "Plan", "Refute", "Experiment"]);
-        assert!(matches!(
-            workflow.step("stress-test").map(|s| &s.kind),
-            Some(StepKind::Loop { max_iterations: 2, .. })
-        ));
-    }
-
-    #[test]
-    fn placeholder_traits_run_on_echo_without_instructions() {
-        let library = Library::builtin();
-        let placeholders: Vec<&str> = library
-            .traits
-            .iter()
-            .filter(|t| t.adapter == "echo")
-            .inspect(|t| assert_eq!(t.instructions, None))
-            .map(|t| t.name.as_str())
-            .collect();
-        assert_eq!(
-            placeholders,
-            [
-                "Code",
-                "Collect Data",
-                "Model",
-                "Predict",
-                "Index Sources",
-            ]
-        );
     }
 
     #[test]

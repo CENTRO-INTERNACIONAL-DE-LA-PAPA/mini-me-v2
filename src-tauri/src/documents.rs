@@ -10,21 +10,21 @@ use crate::assets;
 use crate::comments::{self, Anchor};
 use crate::error::{AppError, AppResult};
 use crate::library::SCRIBE;
+use crate::paths::write_atomic;
 use crate::projects;
 use crate::protocol::{AssetRef, Author, AuthorKind};
 use crate::store::Project;
 
 pub const EXTENSION: &str = ".qmd";
 const MEDIA_TYPE: &str = "text/markdown";
-/// The largest document the app saves, as for text files a Mini-Me saves.
+/// In bytes; the same limit as for text files a Mini-Me saves.
 const MAX_BYTES: usize = 2 * 1024 * 1024;
 
 pub fn is_document(name: &str) -> bool {
     name.to_lowercase().ends_with(EXTENSION)
 }
 
-/// The file name for a document titled `title`: the title with characters no file system
-/// allows replaced, and the `.qmd` extension.
+/// `title` with characters no file system allows replaced, plus `.qmd`.
 pub fn file_name(title: &str) -> String {
     format!("{}{EXTENSION}", projects::folder_name(title))
 }
@@ -41,8 +41,7 @@ pub fn header(title: &str, author: Option<&str>) -> String {
     header
 }
 
-/// Creates an empty document titled `title`, added by `user` and with `author` in its header,
-/// and returns its Asset.
+/// Creates an empty document with `author` in its header.
 pub fn create(
     project: &Project,
     title: &str,
@@ -64,7 +63,6 @@ pub struct OpenedDocument {
     pub modified_at: Option<i64>,
 }
 
-/// The document `id` as the document view opens it.
 pub fn open(project: &Project, id: Uuid) -> AppResult<OpenedDocument> {
     let text = read(project, id)?;
     let modified_at = std::fs::metadata(document_path(project, id)?)
@@ -75,21 +73,19 @@ pub fn open(project: &Project, id: Uuid) -> AppResult<OpenedDocument> {
     Ok(OpenedDocument { text, modified_at })
 }
 
-/// The text of the document `id`.
 pub fn read(project: &Project, id: Uuid) -> AppResult<String> {
     let path = document_path(project, id)?;
     String::from_utf8(std::fs::read(path)?)
         .map_err(|_| AppError::invalid_input("This document is not readable text."))
 }
 
-/// Replaces the text of the document `id`, through a temporary file so a failed write leaves
-/// the previous version whole, and moves its comment threads to `anchors`.
+/// Replaces the document's text as `write` does and moves its comment threads to `anchors`.
 pub fn save(project: &Project, id: Uuid, text: &str, anchors: &[Anchor]) -> AppResult<()> {
     write(project, id, text, None, anchors)
 }
 
-/// Replaces the text of the document `id` as `save` does, and records `added_by` with the new
-/// size when given.
+/// Writes through a temporary file, so a failed write leaves the previous version whole; records
+/// `added_by` with the new size when given.
 fn write(
     project: &Project,
     id: Uuid,
@@ -101,12 +97,10 @@ fn write(
         return Err(AppError::invalid_input("A document can be at most 2 MiB."));
     }
     let path = document_path(project, id)?;
-    let tmp = path.with_extension("qmd.tmp");
     // Held until the size is recorded, so saves that overlap (typing, closing, exporting, a
     // draft ending) take turns with the temporary file instead of writing it at once.
     let state = project.lock();
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, &path)?;
+    write_atomic(&path, text.as_bytes())?;
     state.conn.execute(
         "UPDATE assets SET size_bytes = ?1, added_by_kind = COALESCE(?2, added_by_kind), \
          added_by_id = COALESCE(?3, added_by_id) WHERE id = ?4",
@@ -120,9 +114,8 @@ fn write(
     comments::move_anchors(&state.conn, id, text, anchors)
 }
 
-/// Writes a drafted `body` after the document's current text, its header, keeping the header
-/// unchanged. A document that held only its YAML header becomes Scribe's, so Files lists
-/// Scribe as who added it. An empty draft leaves the document as it is.
+/// Writes `body` after `header`, the document's current text. A document that was only a YAML
+/// header becomes Scribe's in Files; an empty draft changes nothing.
 pub fn save_draft(project: &Project, id: Uuid, header: &str, body: &str) -> AppResult<()> {
     let body = body.trim();
     if body.is_empty() {
@@ -148,8 +141,7 @@ pub fn pdf_name(name: &str) -> String {
     format!("{stem}.pdf")
 }
 
-/// Stores the PDF exported from the document `id`, named `name`, as a generated Asset of the
-/// Project, added by whoever added the document, else by `user`, who exported it.
+/// Stores it as a generated Asset added by whoever added the document, else by `user`.
 pub fn store_pdf(
     project: &Project,
     id: Uuid,

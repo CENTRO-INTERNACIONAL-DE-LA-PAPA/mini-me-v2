@@ -1,19 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDownIcon, ChevronRightIcon, DownloadIcon, LockIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, errorMessage } from "../../api";
+import { useLoad } from "../../hooks/useLoad";
 import { announceFilesChanged } from "../../hooks/useFilesChanged";
 import { formatSize } from "../../lib/format";
 import type { AssetRef, Dataset, DatasetFile, DataverseSearch } from "../../protocol/types";
 import { ReferenceChip } from "../chat/ReferenceChip";
-import { useOpenDocument } from "../documents/openDocument";
+import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import type { Renderers, RendererProps } from "./catalogue";
 import { openLink, webUrl } from "./links";
 
-/** `dataset-results` version 1 data, as *Search CIP Dataverse* adds it: the search, how many
- * datasets match, and its first page. */
+/** `dataset-results` version 1 data from *Search CIP Dataverse*; `datasets` is the first page. */
 interface DatasetResultsData {
   query: string;
   from_year: number | null;
@@ -30,31 +30,27 @@ export function datasetByline(dataset: Dataset): string {
   return (names + year).trim();
 }
 
-/** A file of an opened dataset: being downloaded, already in Files, or failed. */
+/** A file of an opened dataset; `error` is why its last download failed. */
 type FileState = { file: DatasetFile; error?: string };
 
 function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Dataset }) {
-  const [files, setFiles] = useState<FileState[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    value: files,
+    setValue: setFiles,
+    error,
+    setError,
+  } = useLoad(
+    () =>
+      api
+        .dataverseFiles(projectId, dataset.id)
+        .then((listed): FileState[] => listed.map((file) => ({ file }))),
+    [projectId, dataset.id],
+  );
   const [ticked, setTicked] = useState<Set<number>>(new Set());
   const [downloading, setDownloading] = useState(false);
-  const openDocument = useOpenDocument();
+  const openFile = useOpenFile(projectId);
 
-  useEffect(() => {
-    let active = true;
-    api
-      .dataverseFiles(projectId, dataset.id)
-      .then((listed) => active && setFiles(listed.map((file) => ({ file }))))
-      .catch((e) => active && setError(errorMessage(e)));
-    return () => {
-      active = false;
-    };
-  }, [projectId, dataset.id]);
-
-  const open = (asset: AssetRef) => {
-    if (openDocument && isDocument(asset.name)) openDocument(asset.id);
-    else void api.openAsset(projectId, asset.id).catch(() => {});
-  };
+  const open = (asset: AssetRef) => openFile(asset.id, isDocument(asset.name));
 
   async function download() {
     if (!files) return;

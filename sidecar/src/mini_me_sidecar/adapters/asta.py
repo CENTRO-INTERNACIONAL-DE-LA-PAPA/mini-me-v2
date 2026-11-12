@@ -1,6 +1,5 @@
-"""Adapters for Ai2's Asta services: Paper Finder (*Find Papers*) and the Theorizer
-(*Theorize*). Both use the Ai2 account's access token, which the core refreshes; Asta's own
-token storage and CLI are never used."""
+"""Ai2's Asta Paper Finder and Theorizer. Both use the Ai2 access token the core refreshes,
+never Asta's own token storage or CLI."""
 
 import asyncio
 import json
@@ -9,7 +8,7 @@ import sys
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
-from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
+from mini_me_sidecar.adapters.base import TEXT_INPUT, Adapter, AdapterInfo, component_or_text
 from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import show_papers, show_theories
@@ -17,30 +16,19 @@ from mini_me_sidecar.tools.files import save_file
 
 AI2 = "ai2"
 
-TEXT_INPUT: dict[str, Any] = {
-    "type": "object",
-    "properties": {"text": {"type": "string"}},
-    "required": ["text"],
-}
-
 MAX_PAPERS = 20
 # The most papers a `paper-sources` component holds, which keeps its data small.
 MAX_SOURCES = 50
-
-# Errors with which the core refuses a component; the reply then falls back to its text.
-COMPONENT_REFUSED = {"component_not_allowed", "invalid_component"}
 PAPER_FINDER_TIMEOUT_S = 300
 
-# The Theorizer's end-to-end skill: it finds papers, extracts evidence and forms theories.
-# Ai2 documents 3–8 minutes for a run, but real runs take 15–25 minutes.
+# The end-to-end skill. Ai2 documents 3–8 minutes a run, but real runs take 15–25 minutes.
 THEORIZER_SKILL = "literature-theory-generation"
 
 # Poll the Theorizer's task this often, and give up after this long.
 THEORIZER_POLL_S = 5.0
 THEORIZER_LIMIT_S = 60 * 60
 
-# A failed Asta request that may succeed later (a dropped connection, or a 5xx or 429 answer)
-# is tried again after each of these delays.
+# Retry delays for a failure that may pass: a dropped connection, a 5xx or a 429.
 RETRY_DELAYS_S = (2.0, 5.0)
 
 T = TypeVar("T")
@@ -59,8 +47,7 @@ class FindPapers(Adapter):
     )
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
-        # Asta's packages load only when a call runs, so the sidecar starts quickly and
-        # sessions that never use Asta never load them.
+        # Imported here so the sidecar starts quickly and sessions without Asta never load it.
         from asta.literature.client import AstaPaperFinder
         from asta.utils.config import get_api_config
 
@@ -83,16 +70,14 @@ class FindPapers(Adapter):
         if result is None:
             return
         widget = result.get("widget") or {}
-        _log_shape("paper finder result", (widget.get("results") or [None])[:1])
         papers = widget.get("results") or []
         narrative = _summary(str(widget.get("response_text") or ""))
         if not papers:
-            ctx.write(papers_reply([], narrative))
+            ctx.write(papers_reply([]))
             return
         count = len(papers)
         ctx.write(narrative or f"Found {count} paper{'' if count == 1 else 's'}.")
-        text = papers_reply(papers, "")
-        await _component_or_text(ctx, show_papers, papers_data(papers), text)
+        await component_or_text(ctx, show_papers, papers_data(papers), papers_reply(papers), "asta")
 
 
 class Theorize(Adapter):
@@ -113,8 +98,7 @@ class Theorize(Adapter):
         client = A2AClient(get_api_config("theorizer")["base_url"], api_key=token)
         ctx.progress("Starting the Theorizer (this can take 20 minutes or more)…")
 
-        # Naming the skill keeps the request from being routed to a narrower skill that takes
-        # the same input.
+        # Naming the skill keeps the request from going to a narrower skill with the same input.
         envelope = {
             "kind": THEORIZER_SKILL,
             "data": {"theory_query": str(input.get("text", ""))},
@@ -127,59 +111,68 @@ class Theorize(Adapter):
             return
         _log_task(task)
 
-        loop = asyncio.get_running_loop()
-        started = loop.time()
-        deadline = started + THEORIZER_LIMIT_S
-        seen: set[str] = set()
-        while not _finished(task):
-            if loop.time() > deadline:
-                raise TraitError(
-                    "asta_unavailable", "The Theorizer took too long. Try again later."
-                )
-            try:
-                await asyncio.wait_for(ctx.cancelled.wait(), THEORIZER_POLL_S)
-                return
-            except TimeoutError:
-                pass
-            previous = task
-            task_id = task.get("id") or ""
-            polled = await _until_cancelled(ctx, lambda: _call(ctx, client.get_task, task_id))
-            if polled is None:
-                return
-            task = polled
-            if _task_summary(task) != _task_summary(previous):
-                _log_task(task)
-            minutes = int((loop.time() - started) // 60)
-            state = (task.get("status") or {}).get("state")
-            label = _status_text(task) or STATE_LABELS.get(str(state), "Working")
-            for artifact in task.get("artifacts") or []:
-                name = str(artifact.get("name") or "")
-                if name and name not in seen:
-                    seen.add(name)
-                    label = f"Got {name.replace('_', ' ')}"
-            ctx.progress(f"{label[:140]} ({minutes} min)" if minutes else label[:140])
+        finished = await _poll_theorizer(ctx, client, task)
+        if finished is not None:
+            await _finish_theorizer(ctx, finished)
 
-        state = (task.get("status") or {}).get("state")
-        if state != "completed":
-            detail = _status_text(task)
-            raise TraitError(
-                "asta_unavailable",
-                f"The Theorizer stopped ({state}){': ' + detail if detail else ''}.",
-            )
-        artifacts = task.get("artifacts") or []
-        _log_shape("theorizer artifacts", artifacts)
-        store, texts = theory_store(artifacts)
-        data = theories_data(store)
-        if data is None:
-            ctx.write(_without_theories(texts))
-        else:
-            ctx.write(theories_summary(data, store))
-            await _component_or_text(ctx, show_theories, data, theories_markdown(data))
+
+async def _poll_theorizer(
+    ctx: CallContext, client: Any, task: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Polls `task` until it finishes, reporting progress; None when the call is cancelled."""
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    deadline = started + THEORIZER_LIMIT_S
+    seen: set[str] = set()
+    while not _finished(task):
+        if loop.time() > deadline:
+            raise TraitError("asta_unavailable", "The Theorizer took too long. Try again later.")
         try:
-            content = json.dumps(artifacts, ensure_ascii=False).encode()
-            await save_file(ctx, "theory-store.json", "application/json", content)
-        except ToolError as error:
-            print(f"[asta] could not save the Theory Store: {error}", file=sys.stderr, flush=True)
+            await asyncio.wait_for(ctx.cancelled.wait(), THEORIZER_POLL_S)
+            return None
+        except TimeoutError:
+            pass
+        previous = task
+        task_id = task.get("id") or ""
+        polled = await _until_cancelled(ctx, lambda: _call(ctx, client.get_task, task_id))
+        if polled is None:
+            return None
+        task = polled
+        if _task_summary(task) != _task_summary(previous):
+            _log_task(task)
+        minutes = int((loop.time() - started) // 60)
+        state = (task.get("status") or {}).get("state")
+        label = _status_text(task) or STATE_LABELS.get(str(state), "Working")
+        for artifact in task.get("artifacts") or []:
+            name = str(artifact.get("name") or "")
+            if name and name not in seen:
+                seen.add(name)
+                label = f"Got {name.replace('_', ' ')}"
+        ctx.progress(f"{label[:140]} ({minutes} min)" if minutes else label[:140])
+    return task
+
+
+async def _finish_theorizer(ctx: CallContext, task: dict[str, Any]) -> None:
+    state = (task.get("status") or {}).get("state")
+    if state != "completed":
+        detail = _status_text(task)
+        raise TraitError(
+            "asta_unavailable",
+            f"The Theorizer stopped ({state}){': ' + detail if detail else ''}.",
+        )
+    artifacts = task.get("artifacts") or []
+    store, texts = theory_store(artifacts)
+    data = theories_data(store)
+    if data is None:
+        ctx.write(_without_theories(texts))
+    else:
+        ctx.write(theories_summary(data, store))
+        await component_or_text(ctx, show_theories, data, theories_markdown(data), "asta")
+    try:
+        content = json.dumps(artifacts, ensure_ascii=False).encode()
+        await save_file(ctx, "theory-store.json", "application/json", content)
+    except ToolError as error:
+        print(f"[asta] could not save the Theory Store: {error}", file=sys.stderr, flush=True)
 
 
 async def _token(ctx: CallContext) -> str:
@@ -197,9 +190,8 @@ async def _token(ctx: CallContext) -> str:
 async def _call(
     ctx: CallContext, function: Callable[..., T], *args: Any, retry: bool = True, **kwargs: Any
 ) -> T:
-    """Runs one of Asta's blocking client calls off the event loop and turns its error into
-    one the user can act on. With `retry`, a failure that may pass is tried again after each
-    of `RETRY_DELAYS_S`; a cancelled call stops waiting and raises the last error."""
+    """Runs a blocking Asta call in a thread, failing with an error the user can act on. With
+    `retry`, a failure that may pass is retried after each `RETRY_DELAYS_S`, unless cancelled."""
     for delay in (*(RETRY_DELAYS_S if retry else ()), None):
         try:
             return await asyncio.to_thread(function, *args, **kwargs)
@@ -217,7 +209,7 @@ async def _call(
 
 
 async def _cancelled_within(ctx: CallContext, seconds: float) -> bool:
-    """Waits up to `seconds`, and whether the call was cancelled meanwhile."""
+    """Waits up to `seconds`; True when the call is cancelled meanwhile."""
     try:
         await asyncio.wait_for(ctx.cancelled.wait(), seconds)
         return True
@@ -226,8 +218,7 @@ async def _cancelled_within(ctx: CallContext, seconds: float) -> bool:
 
 
 def _status(error: BaseException) -> int | None:
-    """The HTTP status of an Asta client error: urllib's HTTPError raised directly, wrapped,
-    or carried as `code`."""
+    """The int `code` of `error` or its cause, as urllib's HTTPError carries the status."""
     for source in (error, error.__cause__):
         code = getattr(source, "code", None)
         if isinstance(code, int):
@@ -302,23 +293,8 @@ def _get(data: dict[str, Any], *keys: str) -> Any:
 
 
 def _summary(narrative: str) -> str:
-    """The verdict at the top of Paper Finder's `response_text`, such as "I found 18 papers
-    that look like perfect matches". The rest, after a `---` line, restates the query."""
+    """Paper Finder's verdict, before the `---` line that precedes a restated query."""
     return re.split(r"(?m)^\s*---+\s*$", narrative, maxsplit=1)[0].strip()
-
-
-async def _component_or_text(
-    ctx: CallContext, show: Callable[[CallContext, Any, str], Awaitable[str]], data: Any, text: str
-) -> None:
-    """Shows a component with the show tool `show`, or writes `text` below the reply's first
-    line when the core refuses the component."""
-    try:
-        await show(ctx, data, text)
-    except ToolError as error:
-        if error.code not in COMPONENT_REFUSED:
-            raise
-        print(f"[asta] component refused: {error}", file=sys.stderr, flush=True)
-        ctx.write("\n\n" + text)
 
 
 def _paper(paper: dict[str, Any]) -> dict[str, Any]:
@@ -346,11 +322,11 @@ def papers_data(papers: list[dict[str, Any]]) -> dict[str, Any]:
     return {"papers": [_paper(paper) for paper in papers[:MAX_SOURCES]]}
 
 
-def papers_reply(papers: list[dict[str, Any]], narrative: str) -> str:
+def papers_reply(papers: list[dict[str, Any]]) -> str:
     """Markdown for Paper Finder's results, most relevant first."""
     if not papers:
         return "No papers were found. Try rephrasing the topic or making it more specific."
-    lines = [narrative.strip(), ""] if narrative.strip() else []
+    lines: list[str] = []
     for number, paper in enumerate(map(_paper, papers[:MAX_PAPERS]), start=1):
         authors = paper["authors"]
         names = ", ".join(authors[:3]) + (" et al." if len(authors) > 3 else "")
@@ -382,12 +358,8 @@ def _relevance(paper: dict[str, Any]) -> str:
 
 
 def theory_store(artifacts: list[dict[str, Any]]) -> tuple[dict[str, list[Any]], list[str]]:
-    """The Theorizer's Theory Store gathered by section (`theories`, `paperstore`,
-    `extractionresults`, …, names reduced by `_norm`), and the text parts of its artifacts.
-
-    The store arrives as parts that each hold some sections, and a section can appear in
-    several parts as it is updated; entries are merged by their ID, a later part replacing an
-    earlier one."""
+    """The Theory Store's entries by `_norm`ed section name, and the artifacts' text parts.
+    A section recurs across parts as it updates, so entries merge by ID, a later part winning."""
     sections: dict[str, dict[str, dict[str, Any]]] = {}
     texts: list[str] = []
     for artifact in artifacts:
@@ -415,9 +387,8 @@ def theory_store(artifacts: list[dict[str, Any]]) -> tuple[dict[str, list[Any]],
 
 
 def theories_data(store: dict[str, list[Any]]) -> dict[str, Any] | None:
-    """The `theories` version 1 data for a Theory Store: each theory's wording, statements
-    and supporting evidence, with `refs` numbering the cited papers in `references` in the
-    order they are first cited. None when the store holds no theories."""
+    """`theories` version 1 data, `refs` numbering papers in `references` by first citation.
+    None when the store holds no theories."""
     if not store.get("theories"):
         return None
     paper_of_evidence = {
@@ -473,8 +444,7 @@ def theories_data(store: dict[str, list[Any]]) -> dict[str, Any] | None:
 
 
 def theories_markdown(data: dict[str, Any]) -> str:
-    """Markdown for `theories` data in plain language: each theory, its statements with their
-    evidence cited by number, and the cited papers at the end."""
+    """Plain-language Markdown: theories, statements with numbered citations, then references."""
     lines: list[str] = []
     for number, theory in enumerate(data["theories"], start=1):
         lines += [f"## {number}. {theory['name']['plain']}"]
@@ -495,16 +465,6 @@ def theories_markdown(data: dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
-def theories_reply(artifacts: list[dict[str, Any]]) -> str:
-    """The whole reply as Markdown: a line counting the theories, then `theories_markdown`,
-    or the artifacts' text when there are no theories."""
-    store, texts = theory_store(artifacts)
-    data = theories_data(store)
-    if data is None:
-        return _without_theories(texts)
-    return theories_summary(data, store) + "\n\n" + theories_markdown(data)
-
-
 def _without_theories(texts: list[str]) -> str:
     """The reply when the Theory Store holds no theories: its text parts, if any."""
     return "\n\n".join(texts) or "The Theorizer finished without theories."
@@ -518,8 +478,7 @@ def theories_summary(data: dict[str, Any], store: dict[str, list[Any]]) -> str:
 
 
 def _norm(key: Any) -> str:
-    """A field name reduced to lowercase letters and digits, so `paper_id`, `paperId` and
-    `Paper ID` match: the Theory Store mixes snake_case and camelCase."""
+    """Lowercase letters and digits only, so `paper_id`, `paperId` and `Paper ID` match."""
     return "".join(c for c in str(key).lower() if c.isalnum())
 
 
@@ -562,8 +521,7 @@ def _paper_key(paper_id: Any) -> str:
 
 
 def _reference(paper: dict[str, Any]) -> dict[str, Any]:
-    """A cited paper as a `theories` reference: title, year and a DOI or Semantic Scholar
-    link."""
+    """A `theories` reference: title, year and a DOI or Semantic Scholar link."""
     metadata = _field(paper, "s2_metadata") or {}
     title = str(_field(paper, "title") or _field(metadata, "title") or "Untitled").strip()
     year = _field(paper, "publication_year") or _field(metadata, "year")
@@ -597,36 +555,3 @@ def _log_task(task: dict[str, Any]) -> None:
         file=sys.stderr,
         flush=True,
     )
-
-
-def _log_shape(label: str, value: Any) -> None:
-    """Logs the keys (never the values) of a response, for checking against what the
-    adapters expect. A list's dict items are merged into one shape, and a dict with many
-    keys (records keyed by ID) shows only its first."""
-
-    def merge(into: dict[str, Any], entry: dict[str, Any]) -> None:
-        for key, val in entry.items():
-            if isinstance(into.get(key), dict) and isinstance(val, dict):
-                merge(into[key], val)
-            else:
-                into.setdefault(key, val)
-
-    def shape(item: Any, depth: int = 0) -> Any:
-        if depth > 12:
-            return "…"
-        if isinstance(item, dict):
-            if len(item) > 30:
-                first = next(iter(item.items()))
-                return {f"<{len(item)} keys, first {first[0]!r}>": shape(first[1], depth + 1)}
-            return {k: shape(v, depth + 1) for k, v in item.items()}
-        if isinstance(item, list):
-            dicts = [i for i in item if isinstance(i, dict)]
-            if dicts:
-                merged: dict[str, Any] = {}
-                for entry in dicts:
-                    merge(merged, entry)
-                return [shape(merged, depth + 1)]
-            return [shape(item[0], depth + 1)] if item else []
-        return type(item).__name__
-
-    print(f"[asta] {label}: {json.dumps(shape(value))}", file=sys.stderr, flush=True)

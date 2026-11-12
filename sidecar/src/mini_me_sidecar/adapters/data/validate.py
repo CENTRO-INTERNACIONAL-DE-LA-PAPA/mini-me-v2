@@ -1,6 +1,5 @@
-"""Validate Data: the default checks and the chosen ones, run with pointblank. Type checks and
-the empty-column check are counted with pandas, since pointblank has no per-value type
-check."""
+"""Validate Data: default and chosen checks with pointblank; type and empty-column checks are
+counted with pandas, since pointblank has no per-value type check."""
 
 from dataclasses import dataclass
 

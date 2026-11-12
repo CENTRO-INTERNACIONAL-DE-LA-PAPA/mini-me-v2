@@ -1,3 +1,7 @@
+export function count(n: number, noun: string, plural = `${noun}s`): string {
+  return `${n} ${n === 1 ? noun : plural}`;
+}
+
 export function formatSize(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;

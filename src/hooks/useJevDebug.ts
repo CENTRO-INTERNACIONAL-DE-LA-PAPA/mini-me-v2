@@ -15,5 +15,5 @@ const jevDebug = sharedValue<JevDebug>(
 /** The Jev debug settings; both off until they have loaded. */
 export const useJevDebug = jevDebug.use;
 
-/** Shows `settings` wherever `useJevDebug` is used; Settings calls it after a change. */
+/** Shows `settings` wherever `useJevDebug` is used. */
 export const refreshJevDebug = jevDebug.show;

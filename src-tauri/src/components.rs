@@ -1,7 +1,6 @@
-//! The check an Interactive Component from a Trait passes before it is stored. Each kind is
-//! hand-coded in the UI (`src/components/interactive/<kind>.tsx`); which kinds a Trait adds
-//! is up to the show tools its adapter uses, so the core does not check the kind against the
-//! Trait.
+//! The check an Interactive Component from a Trait passes before it is stored. Each kind is drawn
+//! by `src/components/interactive/<kind>.tsx`; the kind is not checked against the Trait, since
+//! its adapter's show tools decide which kinds it adds.
 
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -13,8 +12,7 @@ use crate::store::ProjectState;
 /// The most bytes a component's `data` may take as JSON.
 pub const MAX_DATA_BYTES: usize = 2 * 1024 * 1024;
 
-/// Kinds only the core creates, such as the approval a paused Workflow waits on and a
-/// reply's hand-off.
+/// Kinds only the core creates, such as a paused Workflow's approval and a reply's hand-off.
 const CORE_KINDS: [&str; 3] = ["approval", "document-edits", "hand-off"];
 
 /// Refuses a component of a kind only the core creates (`component_not_allowed`), and one
@@ -38,8 +36,7 @@ pub fn check(kind: &str, data: &Value, text: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// The Asset holding a `table` component's full table: its `source_id`, when that is an Asset
-/// of the Project.
+/// A `table`'s `source_id`, when it is an Asset of the Project.
 pub fn source_asset_id(state: &ProjectState, data: &Value) -> Option<Uuid> {
     data["source_id"]
         .as_str()
@@ -73,25 +70,16 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn any_kind_with_text_passes() {
+    fn a_traits_component_needs_text_small_data_and_a_kind_traits_may_add() {
         assert!(check("paper-sources", &json!({ "papers": [] }), "none").is_ok());
         assert!(check("theories", &json!({}), "t").is_ok());
-    }
-
-    #[test]
-    fn an_approval_from_a_trait_is_refused() {
-        let err = check("approval", &json!({}), "t").unwrap_err();
-        assert_eq!(err.code, "component_not_allowed");
-        assert_eq!(check("hand-off", &json!({}), "t").unwrap_err().code, "component_not_allowed");
-    }
-
-    #[test]
-    fn empty_text_or_too_much_data_is_refused() {
-        let err = check("paper-sources", &json!({}), "  ").unwrap_err();
-        assert_eq!(err.code, "invalid_component");
+        for kind in ["approval", "hand-off"] {
+            assert_eq!(check(kind, &json!({}), "t").unwrap_err().code, "component_not_allowed");
+        }
+        let empty = check("paper-sources", &json!({}), "  ").unwrap_err();
+        assert_eq!(empty.code, "invalid_component");
         let big = json!({ "papers": "x".repeat(MAX_DATA_BYTES) });
-        let err = check("paper-sources", &big, "t").unwrap_err();
-        assert_eq!(err.code, "invalid_component");
+        assert_eq!(check("paper-sources", &big, "t").unwrap_err().code, "invalid_component");
     }
 
     #[test]
@@ -111,7 +99,7 @@ mod tests {
 
     #[test]
     fn reading_a_table_names_the_asset_of_its_full_table() {
-        use crate::conversations::{add_component, create, send_message, start_reply};
+        use crate::conversations::{NewComponent, add_component, create, send_message, start_reply};
         use crate::protocol::{Author, AuthorKind, new_id};
 
         let (dir, project) = temp_project();
@@ -125,9 +113,11 @@ mod tests {
         let reply = start_reply(&project, conversation, question.id, author).unwrap();
         let columns = json!([{ "name": "yield", "type": "number" }]);
         let preview = json!({ "columns": columns, "rows": [[1]], "source_id": asset.id });
-        let table = add_component(&project, reply, None, ("table", 1, preview, "t".into())).unwrap();
+        let component =
+            |data| NewComponent { kind: "table".into(), version: 1, data, text: "t".into() };
+        let table = add_component(&project, reply, None, component(preview)).unwrap();
         let plain = json!({ "columns": columns, "rows": [[1]] });
-        let other = add_component(&project, reply, None, ("table", 1, plain, "t".into())).unwrap();
+        let other = add_component(&project, reply, None, component(plain)).unwrap();
 
         let state = project.lock();
         let read = read(&state, conversation, table).unwrap();
