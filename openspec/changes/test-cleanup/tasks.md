@@ -112,7 +112,7 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 
 - [ ] 8.1 Add `sidecar/tests/conftest.py` with `FakeLink`, `FakeContext` and `ECHO`, and use them
   in place of the copies; verify with `uv run pytest`.
-- [ ] 8.2 Delete the model-call tests: `test_decide.py` (and `decide.py`'s `make_chat` parameter),
+- [x] 8.2 Delete the model-call tests: `test_decide.py` (and `decide.py`'s `make_chat` parameter),
   `test_debug.py` replaced by one test of `Recorder.model_call`, the 4 `structured_answer` tests in
   `test_providers.py`, the 2 `_test_model` tests in `test_summary.py`, the `_converse` tests in
   `test_prompt_rounds.py` (its two tests without a model move to `test_tools.py`, then the file

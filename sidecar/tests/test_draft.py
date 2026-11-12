@@ -1,10 +1,7 @@
 import asyncio
 
-import pytest
-
 from mini_me_sidecar import documents as module
-from mini_me_sidecar.adapters.prompt import RESEARCH_CONTEXT
-from mini_me_sidecar.documents import Documents, draft_prompt
+from mini_me_sidecar.documents import Documents
 
 
 class FakeLink:
@@ -73,20 +70,6 @@ def run_draft(chat: FakeChat, monkeypatch, cancel_after: float | None = None) ->
     return link.sent
 
 
-def test_the_draft_prompt_says_whose_research_it_is_and_what_to_write():
-    prompt = draft_prompt()
-    assert prompt.startswith(RESEARCH_CONTEXT)
-    assert "'# Summary'" in prompt and "YAML header" in prompt and "never invent" in prompt
-
-
-def test_a_draft_streams_its_text_then_ends(monkeypatch):
-    chat = FakeChat(["# Summary\n", "Yield falls."])
-    sent = run_draft(chat, monkeypatch)
-    assert [f["type"] for f in sent] == ["draft.delta", "draft.delta", "draft.done"]
-    assert "".join(f.get("text", "") for f in sent) == "# Summary\nYield falls."
-    assert chat.messages[1].content.startswith("Title: Trial design\n\nYou: plot yield")
-
-
 def test_a_cancelled_draft_ends_as_done(monkeypatch):
     chat = FakeChat(["one ", "two ", "three"], pause=0.05)
     sent = run_draft(chat, monkeypatch, cancel_after=0.08)
@@ -99,14 +82,4 @@ def test_a_draft_cancelled_before_it_starts_ends_as_done(monkeypatch):
     assert sent == [{"type": "draft.done", "draft_id": "d1"}]
 
 
-def test_an_empty_draft_is_an_error(monkeypatch):
-    sent = run_draft(FakeChat([]), monkeypatch)
-    assert sent[-1]["type"] == "draft.error"
-    assert sent[-1]["error"]["code"] == "provider_empty"
 
-
-def test_a_draft_request_without_an_id_is_ignored():
-    link = FakeLink()
-    documents = Documents(link, None)  # type: ignore[arg-type]
-    documents.start_draft({"type": "draft.start"})
-    assert link.sent == []
