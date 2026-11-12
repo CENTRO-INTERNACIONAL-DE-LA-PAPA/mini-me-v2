@@ -32,7 +32,7 @@ pub fn list(data_root: &Path) -> AppResult<Vec<ProjectActivity>> {
 }
 
 fn read(project: &ProjectSummary, conn: &Connection) -> AppResult<ProjectActivity> {
-    let conversations_only = comments::not_a_thread(conn, "id")?;
+    let conversations_only = comments::not_a_thread("id");
     let last_activity_at: Option<i64> = conn.query_row(
         &format!("SELECT MAX(last_activity_at) FROM conversations WHERE {conversations_only}"),
         [],
@@ -41,7 +41,7 @@ fn read(project: &ProjectSummary, conn: &Connection) -> AppResult<ProjectActivit
     let mut statement = conn.prepare(&format!(
         "SELECT author_id FROM messages WHERE author_kind = 'mini_me' AND {} \
          GROUP BY author_id ORDER BY MAX(created_at) DESC LIMIT {MINI_ME_COUNT}",
-        comments::not_a_thread(conn, "conversation_id")?
+        comments::not_a_thread("conversation_id")
     ))?;
     let mini_mes = statement
         .query_map([], |row| row.get::<_, String>(0))?

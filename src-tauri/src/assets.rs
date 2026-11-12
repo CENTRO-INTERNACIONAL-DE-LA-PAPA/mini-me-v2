@@ -526,7 +526,7 @@ pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     let mut stmt = state.conn.prepare(&format!(
         "SELECT m.conversation_id, c.title, m.attachments, m.text_components FROM messages m \
          JOIN conversations c ON c.id = m.conversation_id WHERE {} ORDER BY m.rowid",
-        comments::not_a_thread(&state.conn, "c.id")?
+        comments::not_a_thread("c.id")
     ))?;
     let rows = stmt.query_map([], |row| {
         Ok((

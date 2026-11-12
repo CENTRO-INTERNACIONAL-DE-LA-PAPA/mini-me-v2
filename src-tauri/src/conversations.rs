@@ -170,7 +170,7 @@ pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
     let mut stmt = state.conn.prepare(&format!(
         "SELECT id, title, created_at, last_activity_at FROM conversations WHERE {} \
          ORDER BY last_activity_at DESC, created_at DESC",
-        comments::not_a_thread(&state.conn, "id")?
+        comments::not_a_thread("id")
     ))?;
     let rows = stmt.query_map([], |row| {
         Ok((

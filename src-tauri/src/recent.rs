@@ -40,13 +40,12 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<RecentConv
     let mut statement = conn.prepare(&format!(
         "SELECT id, title, last_activity_at FROM conversations WHERE {} \
          ORDER BY last_activity_at DESC LIMIT {RECENT_COUNT}",
-        comments::not_a_thread(conn, "id")?
+        comments::not_a_thread("id")
     ))?;
     let rows = statement.query_map([], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
     })?;
-    // A Project too old to have the table of paused replies still lists its Conversations.
-    let paused = approvals::paused_mini_mes(conn).unwrap_or_default();
+    let paused = approvals::paused_mini_mes(conn)?;
     let mut recent = Vec::new();
     for row in rows {
         let (id, title, last_activity_at) = row?;
@@ -108,7 +107,7 @@ mod tests {
     }
 
     #[test]
-    fn a_paused_reply_gives_its_recent_conversation_a_status_and_a_missing_table_none() {
+    fn a_paused_reply_gives_its_recent_conversation_a_status() {
         let dir = tempfile::tempdir().unwrap();
         let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
         let trial = project(&root, "Trials", &[1, 2]);
@@ -141,12 +140,6 @@ mod tests {
             Some(ConversationStatus::NeedsApproval { mini_me })
         );
         assert_eq!(status(by_project("Survey")), None);
-
-        // A Project from before paused replies had a table is still listed, without a status.
-        let old = Connection::open_in_memory().unwrap();
-        old.execute_batch("CREATE TABLE conversations (id TEXT, title TEXT, last_activity_at INTEGER)")
-            .unwrap();
-        assert!(approvals::paused_mini_mes(&old).is_err());
     }
 
     #[test]

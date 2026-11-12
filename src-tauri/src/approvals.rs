@@ -69,7 +69,7 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<PausedAppr
          JOIN messages m ON m.id = p.message_id \
          JOIN conversations c ON c.id = m.conversation_id \
          JOIN components k ON k.id = p.component_id WHERE {}",
-        comments::not_a_thread(conn, "c.id")?
+        comments::not_a_thread("c.id")
     ))?;
     let rows = statement.query_map([], |row| {
         Ok((

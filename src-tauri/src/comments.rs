@@ -105,20 +105,8 @@ pub fn move_anchors(
 }
 
 /// A SQL condition that holds when the Conversation ID in `column` is not a comment thread's.
-/// Home reads Projects without upgrading their databases, and one from before comment threads
-/// has no `comment_threads` table and no threads.
-pub fn not_a_thread(conn: &Connection, column: &str) -> AppResult<String> {
-    let has_threads: bool = conn.query_row(
-        "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' \
-         AND name = 'comment_threads')",
-        [],
-        |row| row.get(0),
-    )?;
-    Ok(if has_threads {
-        format!("{column} NOT IN (SELECT conversation_id FROM comment_threads)")
-    } else {
-        "1".to_string()
-    })
+pub fn not_a_thread(column: &str) -> String {
+    format!("{column} NOT IN (SELECT conversation_id FROM comment_threads)")
 }
 
 /// Whether the Conversation `conversation_id` is a comment thread.
