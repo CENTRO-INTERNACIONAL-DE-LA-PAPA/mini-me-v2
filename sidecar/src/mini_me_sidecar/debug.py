@@ -1,7 +1,5 @@
-"""Records a run's model calls and tool calls as `run.debug` entries, the reply's debug
-records, while the core asks for them in `context.debug`. A LangChain callback that
-`chat_model()` attaches catches every model call, so no call site records its own; tool calls
-are recorded with `record_tool`."""
+"""Records a run's model and tool calls as `run.debug` entries when `context.debug` asks.
+A callback that `chat_model()` attaches catches every model call; tools call `record_tool`."""
 
 import json
 import sys
@@ -24,8 +22,7 @@ ROLES = {"system": "system", "human": "user", "ai": "assistant", "tool": "tool"}
 
 @dataclass(frozen=True)
 class Parts:
-    """Which parts of each entry to fill: the input messages, the call's details, and the
-    tool calls."""
+    """Which parts of each entry to fill."""
 
     input: bool
     details: bool
@@ -44,8 +41,7 @@ class Parts:
 
 
 class Recorder:
-    """Records the model calls and tool calls of one Trait call or decision, sending each as an
-    entry."""
+    """Sends the model and tool calls of one Trait call or decision as entries."""
 
     def __init__(
         self, parts: Parts, send: Callable[[dict[str, Any]], None], step: str, trait: str | None
@@ -135,8 +131,7 @@ def recording(
 
 
 def callbacks(model: Model) -> list[BaseCallbackHandler]:
-    """The callback handlers for a chat model of `model` built now: one that records its
-    calls inside `recording`, none outside."""
+    """Handlers for a chat model built now: a recorder inside `recording`, none outside."""
     recorder = _recorder.get()
     return [] if recorder is None else [_Handler(recorder, model)]
 
@@ -186,8 +181,7 @@ class _Handler(BaseCallbackHandler):
 
 
 def _serialised(message: BaseMessage) -> dict[str, Any]:
-    """`message` as `{ role, content }`, with a model message's tool calls and a tool result's
-    call ID."""
+    """`{ role, content }`, plus an AI message's `tool_calls` or a tool result's `tool_call_id`."""
     entry: dict[str, Any] = {
         "role": ROLES.get(message.type, message.type),
         "content": _json(message.content),

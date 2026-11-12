@@ -1,7 +1,4 @@
-"""Compiles a Workflow into a LangGraph graph. Each list of Steps becomes a chain of nodes;
-conditions and loops branch with conditional edges, and parallel Steps fan out to their
-branches and join on a barrier. Running Steps is left to an `Env`, so the graph only
-decides the order."""
+"""Compiles a Workflow to a LangGraph graph that only orders the Steps; an `Env` runs them."""
 
 import operator
 from typing import Annotated, Any, Awaitable, Callable, Protocol, TypedDict
@@ -81,8 +78,7 @@ class _Builder:
     def chain(
         self, steps: tuple[Step, ...], parent: str, scope: dict[str, str]
     ) -> tuple[str, Callable[[str], None]]:
-        """Adds `steps` as a chain; returns its first node and a function that links its
-        end to a target node."""
+        """Adds `steps` as a chain: its first node, and a function linking its end to a node."""
         first: str | None = None
         link: Callable[[str], None] | None = None
         for step in steps:
@@ -244,8 +240,7 @@ def compile_workflow(
     trait_names: dict[str, str],
     checkpointer: BaseCheckpointSaver,
 ) -> Any:
-    """The compiled graph of the Workflow `steps`. Its state's `log` gives the Workflow's
-    output with `workflow_output`."""
+    """The compiled graph; `workflow_output` reads the Workflow's output from its state."""
     builder = _Builder(env, trait_names, steps)
     first, link = builder.chain(steps, "", {})
     builder.graph.add_edge(START, first)

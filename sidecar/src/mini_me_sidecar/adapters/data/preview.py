@@ -1,5 +1,4 @@
-"""Turns a DataFrame into the data of a `table` Interactive Component, small enough for the
-core's 2 MiB limit, and into its plain-text alternative."""
+"""A DataFrame as `table` component data within the core's 2 MiB limit, and as plain text."""
 
 import json
 import math
@@ -24,9 +23,8 @@ def table_data(
     source_id: str | None = None,
     sheet: str | None = None,
 ) -> dict[str, Any]:
-    """`{ columns, rows }` with `title`, `total_rows` when the rows are a preview of a larger
-    table, and the file the table was shown from: its name (`source`), Asset ID
-    (`source_id`) and Excel `sheet`."""
+    """`{ columns, rows }`, with `total_rows` when the rows are a preview, and the optional
+    `title` and source file's `source` name, `source_id` and Excel `sheet`."""
     columns = [{"name": str(name), "type": column_type(frame[name])} for name in frame.columns]
     rows = [[json_value(value) for value in row] for row in frame.head(MAX_ROWS).itertuples(False)]
     while rows and len(json.dumps(rows)) > MAX_BYTES:
@@ -55,8 +53,7 @@ def table_text(data: dict[str, Any]) -> str:
 
 
 def json_value(value: Any) -> Any:
-    """A cell as a JSON value: missing values and non-finite numbers as null, dates as ISO
-    text."""
+    """A cell as JSON: missing values and non-finite numbers as null, dates as ISO text."""
     if value is None or value is pd.NaT:
         return None
     value = plain_value(value)

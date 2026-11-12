@@ -1,6 +1,5 @@
-"""Worker processes for the data Traits' computations. Unlike a thread, a worker can be ended
-at once when its run is stopped, and while it computes the sidecar's event loop stays free.
-Workers only compute: reading and saving Assets stay requests to the core."""
+"""Worker processes for the data computations: unlike a thread, one can be ended at once, and
+it leaves the event loop free. Workers only compute; Asset reads and saves stay core requests."""
 
 import asyncio
 import multiprocessing
@@ -14,15 +13,13 @@ from typing import Any
 
 from mini_me_sidecar.context import CallContext, TraitError
 
-# Spawned rather than forked, on every platform: a forked worker would inherit the sidecar's
-# threads and event loop.
+# Spawned on every platform: a forked worker would inherit the sidecar's threads and event loop.
 _SPAWN = multiprocessing.get_context("spawn")
 
 
 class Worker:
-    """One worker process, the pipe it takes work on, and the lifeline it watches. The
-    sidecar holds the only other end of the lifeline, so the worker exits whenever the
-    sidecar does, however it ends."""
+    """A worker process, its work pipe, and a lifeline whose only other end the sidecar holds,
+    so the worker exits however the sidecar ends."""
 
     def __init__(self) -> None:
         self.work, child_work = _SPAWN.Pipe()
@@ -31,8 +28,7 @@ class Worker:
             target=_serve, args=(child_work, child_lifeline), name="mini-me-data", daemon=True
         )
         self.process.start()
-        # The child has its own copies of these ends now. Keeping them open here would stop
-        # the worker from ever seeing its pipes close.
+        # The child has its own copies; open ones here would keep it from seeing its pipes close.
         child_work.close()
         child_lifeline.close()
 
@@ -44,18 +40,16 @@ class Worker:
 
 
 class Workers:
-    """A pool of workers: one stays idle between computations, and more start while several
-    compute at once."""
+    """One worker stays idle between computations; more start while several run at once."""
 
     def __init__(self) -> None:
         self._idle: list[Worker] = []
         self._busy: set[Worker] = set()
 
     async def run(self, ctx: CallContext, function: Callable[..., Any], *args: Any) -> Any:
-        """`function(*args)`, computed in a worker; `function` must be importable by name.
-        Raises the `TraitError` the function raised, or `trait_error` for any other error.
-        When `ctx` is cancelled, or the awaiting task is, ends the worker at once and raises
-        `asyncio.CancelledError`."""
+        """`function(*args)` in a worker; `function` must be importable by name. Raises its
+        `TraitError`, else `trait_error`; when `ctx` or the task is cancelled, ends the worker
+        at once and raises `asyncio.CancelledError`."""
         if ctx.cancelled.is_set():
             raise asyncio.CancelledError
         worker = self._idle.pop() if self._idle else await asyncio.to_thread(Worker)
@@ -80,7 +74,6 @@ class Workers:
                 raise TraitError("trait_error", message)
 
     def close(self) -> None:
-        """Ends every worker."""
         for worker in [*self._idle, *self._busy]:
             worker.kill()
         self._idle.clear()

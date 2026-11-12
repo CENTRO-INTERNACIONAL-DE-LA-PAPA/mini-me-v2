@@ -1,5 +1,4 @@
-"""What the AI model is told about a table: names, types and statistics, and the most frequent
-values of category columns. Rows are never included."""
+"""What the model is told of a table: columns, types, statistics and top values, never rows."""
 
 import re
 from typing import Any
@@ -23,8 +22,7 @@ PERSONAL = re.compile(
 
 
 def describe(table: Table, values: bool = True) -> dict[str, Any]:
-    """The description of `table` for the model. With `values` false, only names and types
-    are given."""
+    """With `values` false, only column names and types."""
     frame = table.frame
     columns = []
     for name in frame.columns:

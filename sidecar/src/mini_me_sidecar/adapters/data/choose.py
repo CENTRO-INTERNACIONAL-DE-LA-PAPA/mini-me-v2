@@ -1,5 +1,4 @@
-"""Asks the AI model to fill one of the catalogue's schemas from the user's message and the
-description of their tables."""
+"""Asks the model to fill a catalogue schema from the message and the tables' descriptions."""
 
 import json
 from typing import Any, TypeVar

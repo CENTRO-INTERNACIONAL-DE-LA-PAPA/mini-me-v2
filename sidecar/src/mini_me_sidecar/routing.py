@@ -1,6 +1,5 @@
-"""Routing decisions from Typesafe's Jev: which Mini-Me answers a message, whether it reacts,
-whether the message needs earlier context, and which of the Conversation's files it means.
-Each `route.start` gets exactly one `route.done` or `route.error`."""
+"""Asks Typesafe's Jev which Mini-Me answers, how it reacts, whether earlier context is needed
+and which file is meant. Each `route.start` gets exactly one `route.done` or `route.error`."""
 
 import asyncio
 import sys
@@ -60,8 +59,7 @@ class Router:
         task.add_done_callback(self._tasks.discard)
 
     async def _route(self, route_id: str, frame: dict[str, Any]) -> None:
-        # What was sent to Jev, for the core's debug record; it stays None when the request
-        # fails before it is sent, such as without a Typesafe key.
+        # For the core's debug record; None when failing before sending, as without a key.
         asked: dict[str, Any] | None = None
         try:
             key = await self._requests.send(route_id, "secret.get", {"provider": "typesafe"})
@@ -112,8 +110,7 @@ class Router:
 
 
 def _asked(state: dict[str, Any], questions: dict[str, Choice]) -> dict[str, Any]:
-    """What a Jev request holds, as the core's debug record shows it: the state, and each
-    question's instructions and the text of each of its options."""
+    """The request as the core's debug record shows it: state, instructions and option texts."""
     return {
         "state": state,
         "questions": {
@@ -155,8 +152,7 @@ def _questions(
 
 
 def _file_criterion(file: dict[str, Any]) -> str:
-    """A `file` option as Jev reads it: the file's name and the tables and charts shown from
-    it, such as "The file trial.csv. Used by components: chart 'Yield', table 'Trial'"."""
+    """A `file` option, e.g. "The file trial.csv. Used by components: chart 'Yield', table 'T'"."""
     used = []
     for component in file.get("components") or []:
         title = component.get("title")

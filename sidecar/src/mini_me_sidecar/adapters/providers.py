@@ -1,5 +1,4 @@
-"""The AI providers a Trait can call: a LangChain chat model for each, and the errors their
-SDKs raise turned into messages the user can act on."""
+"""A LangChain chat model per provider, and SDK errors turned into messages the user can act on."""
 
 import re
 import sys
@@ -21,18 +20,16 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
 HTTP_STATUS = re.compile(r"\b([45]\d\d)\b")
 
-# How providers word an error for a model that cannot call tools, such as OpenRouter's "No
-# endpoints found that support tool use". Checked before the status, which is often a 404.
+# Errors for a model that cannot call tools; checked before the status, which is often a 404.
 NO_TOOLS = re.compile(
     r"support(s|ing)? tool|tool use|tool_use|tools? (are|is) not supported|function call",
     re.IGNORECASE,
 )
 
-# How providers word an error for a model that takes tools but refuses to be made to call one,
-# such as Bedrock's "tool_choice: type "tool" and "any" are not supported for this model".
+# Errors for a model that takes tools but cannot be forced to call one.
 NO_FORCED_TOOL = re.compile(r"tool_choice.{0,80}not supported", re.IGNORECASE | re.DOTALL)
 
-# How providers word an error for a request longer than the model's context.
+# Errors for a request longer than the model's context.
 TOO_LONG = re.compile(
     r"context[ _](length|window)|prompt is too long|too many tokens|maximum.{0,30}tokens|"
     r"tokens?.{0,30}exceed",
@@ -49,9 +46,8 @@ ANTHROPIC_MAX_TOKENS = 4096
 
 
 def chat_model(model: Model, key: str) -> Any:
-    """The LangChain chat model for `model`, which records its calls inside `debug.recording`.
-    Integrations are imported here so the sidecar starts quickly and calls that never use a
-    provider never load its package."""
+    """Records its calls inside `debug.recording`. Integrations are imported here so the
+    sidecar starts quickly and an unused provider's package never loads."""
     callbacks = debug.callbacks(model)
     match model.provider:
         case "openai" | "openrouter":
@@ -80,9 +76,8 @@ def chat_model(model: Model, key: str) -> Any:
 
 
 async def structured_answer(chat: Any, schema: type[BaseModel], turns: list[Any]) -> Any:
-    """The model's answer as an instance of `schema`, or None when it gave none. The call forces
-    the model to use `schema`'s tool, which some models refuse, such as those that run with
-    thinking on; those are then offered the tool and left to call it."""
+    """An instance of `schema`, or None. A model refusing the forced tool call (as some do with
+    thinking on) is offered the tool instead."""
     try:
         return await chat.with_structured_output(schema, method="function_calling").ainvoke(turns)
     except Exception as error:
@@ -97,8 +92,7 @@ async def structured_answer(chat: Any, schema: type[BaseModel], turns: list[Any]
 
 
 def provider_error(error: Exception, model: Model) -> TraitError:
-    """Maps any SDK's exception to an error the user can act on. Provider messages are never
-    passed on: some echo part of the API key."""
+    """An error the user can act on; the provider's text, which may echo the key, is never shown."""
     name = PROVIDER_NAMES[model.provider]
     # `status_code` on OpenAI and Anthropic errors, `code` on Google ones; integrations that
     # wrap the SDK's error keep the status only in the text.
@@ -159,8 +153,7 @@ def provider_error(error: Exception, model: Model) -> TraitError:
 
 
 def log_error(error: Exception, model: Model, key: str) -> None:
-    """Writes a provider's error to the sidecar log, for diagnosis, with the API key and
-    anything shaped like a key removed. The user sees only `provider_error`'s message."""
+    """Logs `error` with anything key-like removed; the user sees only `provider_error`."""
     text = str(error).replace(key, "[redacted]") if key else str(error)
     text = KEY_LIKE.sub("[redacted]", text)[:MAX_LOGGED_CHARS]
     status = getattr(error, "status_code", None)

@@ -6,10 +6,8 @@ from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
 
 
 class ToolError(TraitError):
-    """A tool could not do what it was asked; the message says why. Left uncaught in an
-    adapter, it ends the call with `code`, like any `TraitError`; the `prompt` adapter instead
-    returns the message to its model. `code` is the core's code when the core refused the
-    request."""
+    """A tool failure: ends an adapter's call with `code` (the core's, when it refused), but the
+    `prompt` adapter returns the message to its model."""
 
     def __init__(self, message: str, code: str = "tool_failed") -> None:
         super().__init__(code, message)

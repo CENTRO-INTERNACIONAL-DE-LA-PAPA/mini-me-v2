@@ -16,9 +16,8 @@ from mini_me_sidecar.tools.base import ToolError
 async def hand_off(
     ctx: CallContext, mini_me: str, request: str, file: str | None = None
 ) -> dict[str, Any]:
-    """Hands `request` and the Conversation's file `file` (an Asset ID) to the Mini-Me named
-    `mini_me`, one of the call's `mini_mes`; returns `{ handed_to, next }`, where `next` says
-    what the model does next. The core decides whether the reply may hand off."""
+    """Hands `request` and the Asset `file` to the call's Mini-Me named `mini_me`; returns
+    `{ handed_to, next }`. The core decides whether the reply may hand off."""
     target = next((m for m in ctx.mini_mes if m.get("name") == mini_me), None)
     if target is None:
         names = ", ".join(str(m.get("name")) for m in ctx.mini_mes)

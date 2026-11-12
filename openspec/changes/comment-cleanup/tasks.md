@@ -24,7 +24,7 @@ decision 1). Each is reviewed uncommitted before its commit. The scan's "Comment
 
 ## 3. Sidecar
 
-- [ ] 3.1 Comments and docstrings in `sidecar/` (source, tests and `scripts/`), leaving the
+- [x] 3.1 Comments and docstrings in `sidecar/` (source, tests and `scripts/`), leaving the
   model-facing docstrings and descriptions as they are (design.md, decision 2); verify with
   `uv run pytest` and that `git diff` touches only comments and docstrings.
 

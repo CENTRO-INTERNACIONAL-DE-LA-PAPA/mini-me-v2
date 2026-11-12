@@ -1,5 +1,5 @@
-"""Writing documents: Quarto Markdown (`.qmd`) files the user opens and edits in the app's
-document view, and suggesting edits to them, to a thread's passage or from a Conversation."""
+"""Writes Quarto Markdown (`.qmd`) documents and suggests edits to them, in a thread or from a
+Conversation."""
 
 import json
 import re
@@ -23,8 +23,7 @@ _WINDOWS_RESERVED = {
 
 
 def file_name(title: str) -> str:
-    """The document's file name: `title` with the characters no file system allows replaced,
-    as the core names documents, and the `.qmd` extension."""
+    """`title` made safe on every file system, as the core names documents, plus `.qmd`."""
     stem = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f]', "-", title).strip().rstrip(". ")
     stem = stem or "Document"
     if stem.split(".")[0].upper() in _WINDOWS_RESERVED:
@@ -39,8 +38,7 @@ def document_text(title: str, body: str) -> str:
 
 
 async def write_document(ctx: CallContext, title: str, body: str) -> dict[str, Any]:
-    """Saves a new document and shows a card for it below the reply; returns
-    `{ asset_id, name }`."""
+    """Saves a new document with a card below the reply; returns `{ asset_id, name }`."""
     title = title.strip()
     if not title:
         raise ToolError("A document needs a title.")
@@ -55,8 +53,7 @@ async def write_document(ctx: CallContext, title: str, body: str) -> dict[str, A
 
 
 async def suggest_edit(ctx: CallContext, text: str) -> dict[str, Any]:
-    """Suggests `text` in place of the passage of the comment thread the call answers, for the
-    user to accept or reject; returns `{ component_id }`. The document itself is unchanged."""
+    """Suggests `text` for the thread's passage, to accept or reject; returns `{ component_id }`."""
     if ctx.document is None:
         raise ToolError("Edits can only be suggested in a comment thread.", "not_in_thread")
     if len(text.encode("utf-8")) > MAX_SUGGESTION_BYTES:
@@ -69,9 +66,8 @@ async def suggest_edit(ctx: CallContext, text: str) -> dict[str, Any]:
 async def edit_document(
     ctx: CallContext, document_id: str, edits: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """Suggests `edits`, each `{ find, replace, reason }`, to the document `document_id`, for the
-    user to accept or reject in the document view; returns `{ component_id, threads }`. The
-    document itself is unchanged."""
+    """Suggests `edits`, each `{ find, replace, reason }`, to accept or reject in the document
+    view; returns `{ component_id, threads }`."""
     if ctx.document is not None:
         raise ToolError("In a comment thread, suggest an edit to its passage instead.", "in_thread")
     cleaned = []

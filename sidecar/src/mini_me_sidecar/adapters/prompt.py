@@ -1,8 +1,5 @@
-"""Runs prompt-based Traits: the Trait's instructions as the system prompt, the message and
-a list of the Conversation's files and Interactive Components as the user prompt, answered
-by the provider chosen in Settings. The model reads files and components with the read tools
-when it needs their content, and may use the tools its Trait lists; its text streams into
-the reply."""
+"""Runs prompt-based Traits: instructions as system prompt, the message and a list of the
+Conversation's files and components as user prompt; the model reads them with tools."""
 
 import json
 import sys
@@ -25,9 +22,8 @@ from mini_me_sidecar.tools import CONVERSATION_TOOLS, DEFAULT_TOOLS, THREAD_TOOL
 
 MAX_MATERIAL_CHARS = 400_000
 
-# Told to the model on every call: who it works for, since some Traits' instructions (such as
-# Experiment's) name only their task. It gives context and is no way past a provider's safety
-# filter: some models still decline plant-pathogen requests with it.
+# Who the model works for, as some Traits' instructions name only their task. It is no way past
+# a provider's safety filter: some models still decline plant-pathogen requests with it.
 RESEARCH_CONTEXT = (
     "You work for scientists at the International Potato Center (CIP), a CGIAR research "
     "centre. Their work is agricultural research on potato, sweetpotato and other root and "
@@ -35,23 +31,20 @@ RESEARCH_CONTEXT = (
     "including plant diseases, their pathogens and pests and how to control them."
 )
 
-# Told to the model before every Trait's instructions. Introduced by name alone, models tend
-# to open with a title restating the request ("Skeptic's response to …").
+# Without it, models tend to open with a title restating the request.
 REPLY_RULE = (
     "Start directly with your answer, with no title, heading or introduction that restates "
     "the request."
 )
 
-# Told to the model when it runs as a later Step of a Workflow. Trait instructions speak of
-# "the message"; without this, a Step such as Experiment reports that the user's question
-# holds no hypothesis even when an earlier Step's output states one.
+# For a later Step: without it, a Step such as Experiment says the message has no hypothesis
+# even when an earlier Step's output states one.
 WORKFLOW_RULE = (
     "You are one Step of {name}'s Workflow. The outputs of its earlier Steps come before the "
     "user's message: treat them together with the message as your material, and write your "
     "part of the answer from them. Do not comment on what the user's message alone lacks."
 )
 
-# Told to the model on every call: the files and components come as a list, without content.
 FILES_RULE = (
     "The files and Interactive Components of this Conversation are listed after the user's "
     "message, newest first, with their IDs but without their content. When the answer depends "
@@ -64,27 +57,23 @@ EMPTY_ANSWER_TRIES = 2
 # The most rounds of a call in which the model calls tools; the next round must answer.
 MAX_TOOL_ROUNDS = 8
 
-# The most characters of tool results one call sends its model, across all rounds: three
-# full reads of a file or component. The material has its own limit, `MAX_MATERIAL_CHARS`.
+# Tool-result characters one call sends, across rounds: three full reads of a file or component.
 MAX_TOOL_RESULT_CHARS = 300_000
 
-# Told to the model in the round after its last allowed tool round. The tools stay offered,
-# since some providers reject a chat that holds tool calls but offers no tools; any further
-# tool call is ignored.
+# Sent after the last tool round. Tools stay offered, since some providers reject a chat with
+# tool calls but no tools; further tool calls are ignored.
 LAST_ROUND = (
     "You have used all the tool calls this reply may make. Answer now with what you have, "
     "without calling tools."
 )
 
-# Written before the text of a round that follows a round with text, so that Markdown such
-# as a heading or a list in the later round still starts on its own line.
+# Between rounds' texts, so Markdown in a later round still starts on its own line.
 PARAGRAPH_BREAK = "\n\n"
 
 # The most files, and the most components, listed for the model.
 MAX_LISTED = 50
 
-# Finish reasons with which a provider's safety filter declines to answer; asking again gets
-# the same verdict.
+# Finish reasons of a provider's safety filter; asking again gets the same verdict.
 REFUSED = {"content_filter", "refusal"}
 
 
@@ -106,8 +95,7 @@ class Prompt(Adapter):
             raise TraitError("model_not_set", "Choose an AI model in Settings first.")
         if model.provider not in PROVIDER_NAMES:
             raise TraitError("provider_unavailable", f"Unknown provider {model.provider!r}.")
-        # Imported here: the tools load pandas through the table helpers, and the sidecar
-        # starts without it.
+        # Imported here: the tools load pandas, which the sidecar starts without.
         from mini_me_sidecar.tools.model import MODEL_TOOLS
 
         text = str(input.get("text", ""))
@@ -138,8 +126,7 @@ async def _converse(
     model: Model,
     offered: dict[str, Any],
 ) -> None:
-    """Asks the model until it answers without calling tools, running its tool calls in
-    between, for at most `MAX_TOOL_ROUNDS` rounds of tool calls."""
+    """Asks until the model answers without tools, running its calls for `MAX_TOOL_ROUNDS`."""
     tool_rounds = 0
     wrote = False
     results_size = 0
@@ -181,17 +168,15 @@ async def _converse(
 
 
 def _offered(listed: tuple[str, ...], in_thread: bool) -> list[str]:
-    """The names of the tools offered to the model: the default tools, then those its Trait
-    lists, leaving out the tools that act on a comment thread outside one and those that act
-    from a Conversation inside one."""
+    """The default tools then the Trait's, with thread tools only inside a comment thread and
+    Conversation tools only outside one."""
     names = [*DEFAULT_TOOLS, *(t for t in listed if t not in DEFAULT_TOOLS)]
     left_out = CONVERSATION_TOOLS if in_thread else THREAD_TOOLS
     return [n for n in names if n not in left_out]
 
 
 def _over_budget(size: int, left: int) -> str:
-    """The result told to the model in place of one larger than what is left of
-    `MAX_TOOL_RESULT_CHARS`."""
+    """Told to the model instead of a result of `size` characters, more than the `left` ones."""
     return json.dumps(
         {
             "error": f"This result has {size:,} characters, more than the {max(left, 0):,} "
@@ -224,10 +209,8 @@ async def _answer(
     model: Model,
     separate: bool = False,
 ) -> AIMessage | None:
-    """One round: streams the model's text into the call and returns its whole message, with
-    any tool calls; None when the call was cancelled meanwhile. Asks again when the model
-    sends neither text nor a tool call. With `separate`, the round's text starts a new
-    paragraph, so that it reads apart from the text of earlier rounds."""
+    """One round: streams text into the call and returns the whole message, or None if cancelled.
+    Asks again on an empty answer; with `separate`, the text starts a new paragraph."""
     name = PROVIDER_NAMES[model.provider]
     for _ in range(EMPTY_ANSWER_TRIES):
         wrote = False
@@ -259,8 +242,7 @@ async def _answer(
             )
         if wrote or (reply is not None and _has_calls(reply)):
             return reply
-        # A provider can end a stream with no text and no error, for example when it
-        # reports a failure only through the finish reason.
+        # Some providers end a stream empty, reporting a failure only in the finish reason.
         print(f"[prompt] {name} sent an empty answer: {ending}", file=sys.stderr, flush=True)
         if _filtered(ending):
             raise TraitError(
@@ -288,8 +270,7 @@ async def _run_tool(ctx: CallContext, offered: dict[str, Any], call: dict[str, A
             raise
         return json.dumps({"error": str(error)}, ensure_ascii=False)
     except Exception:
-        # A fault in the tool itself: logged for the developer, and the model is told only
-        # that the tool failed, so it can answer without it.
+        # A fault in the tool: logged, and the model is told only that it failed.
         print(f"[prompt] {tool.name} failed:", file=sys.stderr, flush=True)
         traceback.print_exc(file=sys.stderr)
         return json.dumps({"error": f"{tool.name} failed unexpectedly."})
@@ -304,10 +285,9 @@ def _material(
     picked: dict[str, Any] | None = None,
     mini_mes: list[dict[str, Any]] | None = None,
 ) -> str:
-    """The user prompt: for a comment, the passage of `document` it is about; then `text`, the
-    Conversation's files and components with their IDs, newest first, marking `picked`,
-    routing's pick of the file the user means, the components `message` references with `$`,
-    all without their content, and the Mini-Mes `mini_mes` the model may hand off to."""
+    """The user prompt: a comment's passage of `document`, `text`, the Conversation's files
+    (marking routing's `picked`) and components by ID without content, the components `message`
+    references with `$`, and the Mini-Mes to hand off to."""
     files = (results.get("assets") or [])[:MAX_LISTED]
     picked_id = (picked or {}).get("asset_id")
     components = (results.get("components") or [])[:MAX_LISTED]
@@ -354,9 +334,8 @@ def _material(
 
 
 async def _earlier_turns(ctx: CallContext) -> list[tuple[str, str]]:
-    """The Conversation's earlier messages as chat turns. Only the calling Mini-Me's replies
-    are assistant turns; other Mini-Mes' replies are quoted on the user's side, because models
-    copy any name prefix they see on their own earlier turns."""
+    """Earlier messages as chat turns; other Mini-Mes' replies go on the user's side, because
+    models copy any name prefix they see on their own turns."""
     history = await ctx.history()
     turns: list[tuple[str, str]] = []
     for entry in history.get("messages") or []:
@@ -374,16 +353,14 @@ async def _earlier_turns(ctx: CallContext) -> list[tuple[str, str]]:
             turns.append(("ai", content))
         else:
             turns.append(("human", f"{name} replied:\n{content}"))
-    # Saying that older messages were cut also keeps the chat from opening with an assistant
-    # turn, which some providers reject.
+    # Also keeps the chat from opening with an assistant turn, which some providers reject.
     if history.get("truncated") or (turns and turns[0][0] == "ai"):
         turns.insert(0, ("human", "(earlier messages were left out)"))
     return turns
 
 
 def _system_prompt(mini_me_name: str | None, in_workflow: bool, instructions: str | None) -> str:
-    """The system prompt: who the model is and works for, how to reply, then the Trait's
-    instructions."""
+    """Who the model is and works for, how to reply, then the Trait's instructions."""
     preamble = f"{RESEARCH_CONTEXT} {REPLY_RULE}"
     if mini_me_name:
         preamble = f"You are {mini_me_name}, a Mini-Me. {preamble}"
@@ -405,8 +382,7 @@ def _turns(
     steps: list[dict[str, Any]],
     material: str,
 ) -> list[tuple[str, str]]:
-    """The chat sent to the model: the instructions, the Conversation's earlier messages,
-    the outputs of the Workflow's earlier Steps, then the material to answer."""
+    """Instructions, earlier messages, earlier Steps' outputs, then the material."""
     turns = [("system", instructions), *earlier]
     if steps:
         parts = [f"--- {s.get('name', '')} ---\n{s.get('output', '')}" for s in steps]
@@ -417,8 +393,7 @@ def _turns(
 
 
 def _merged(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """`turns` with consecutive turns of the same role joined, since Anthropic and Google
-    expect user and assistant turns to alternate."""
+    """Joins consecutive same-role turns, since Anthropic and Google expect roles to alternate."""
     merged: list[tuple[str, str]] = []
     for role, content in turns:
         if merged and merged[-1][0] == role and role != "system":
@@ -441,8 +416,7 @@ ENDING_FIELDS = ("finish_reason", "stop_reason", "model_name", "error")
 async def _stream(
     chat: Any, messages: list[BaseMessage]
 ) -> AsyncIterator[tuple[Any, dict[str, Any]]]:
-    """The model's answer, chunk by chunk, with each chunk's finish reason, model name and
-    token counts when the provider sends them."""
+    """Each chunk with its finish reason, model name and token counts, when sent."""
     async for chunk in chat.astream(messages):
         metadata = getattr(chunk, "response_metadata", None) or {}
         ending = {k: metadata[k] for k in ENDING_FIELDS if metadata.get(k) is not None}

@@ -1,6 +1,5 @@
-"""Document requests from the core outside any reply: drafting a report from a Conversation,
-streamed as it is written. Like the Overview summary, each request gets exactly one ending frame,
-and nothing is read from or written to disk."""
+"""Drafts a report from a Conversation, streamed, outside any reply. Each request gets exactly one
+ending frame; nothing touches disk."""
 
 import asyncio
 import sys
@@ -28,7 +27,6 @@ DRAFT_RULE = (
 
 
 def draft_prompt() -> str:
-    """Who the model works for, then how to write the draft."""
     return f"{RESEARCH_CONTEXT} {DRAFT_RULE}"
 
 
@@ -55,8 +53,7 @@ class Documents:
 
         def ended(task: asyncio.Task[None]) -> None:
             self._drafts.pop(draft_id, None)
-            # A draft cancelled before it started never ran `_draft`, which sends the ending
-            # once it has; one cancelled while running ends there normally.
+            # Only a draft cancelled before `_draft` began ends here; `_draft` ends the others.
             if task.cancelled():
                 self._link.send({"type": "draft.done", "draft_id": draft_id})
 
