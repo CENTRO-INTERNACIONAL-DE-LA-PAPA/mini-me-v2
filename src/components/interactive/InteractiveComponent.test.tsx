@@ -8,15 +8,11 @@ function component(kind: string, version: number): Component {
 }
 
 describe("InteractiveComponent", () => {
-  it("shows the text of a kind this app does not know", () => {
-    expect(
-      renderToStaticMarkup(<InteractiveComponent component={component("charts", 1)} />),
-    ).toContain("1. Late blight");
-  });
-
-  it("shows the text of an unknown version of a known kind", () => {
-    expect(
-      renderToStaticMarkup(<InteractiveComponent component={component("paper-sources", 9)} />),
-    ).toContain("1. Late blight");
+  it("shows the text of a kind or version this app cannot draw", () => {
+    const unknown = [component("charts", 1), component("paper-sources", 9), component("toString", 1)];
+    for (const shown of unknown) {
+      const html = renderToStaticMarkup(<InteractiveComponent component={shown} />);
+      expect(html, `${shown.kind} ${shown.version}`).toContain("1. Late blight");
+    }
   });
 });

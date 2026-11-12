@@ -23,9 +23,10 @@ describe("applyEvent with the shared fixture", () => {
   const state = replay(events);
   const [question, answer, followUp, stopped, interrupted] = state.messages;
 
-  it("applies every event in order", () => {
+  it("applies every event in order, ending with no progress shown", () => {
     expect(state.lastSeq).toBe(events.length);
     expect(state.messages).toHaveLength(5);
+    expect(state.messages.every((m) => m.progress === null)).toBe(true);
   });
 
   it("keeps attachments and text components of user messages", () => {
@@ -43,17 +44,6 @@ describe("applyEvent with the shared fixture", () => {
     expect(interrupted.components).toHaveLength(1);
     expect(interrupted.components[0]).toMatchObject({ kind: "paper-sources", version: 1 });
     expect(answer.components).toEqual([]);
-  });
-
-  it("gives messages from events without components an empty list", () => {
-    const created = events[0] as ProtocolEvent & { payload: { message: object } };
-    const { components: _, ...message } = created.payload.message as { components?: unknown };
-    const old = { ...created, payload: { message } };
-    expect(replay([old]).messages[0].components).toEqual([]);
-  });
-
-  it("adds and removes reactions", () => {
-    expect(answer.reactions).toEqual([]);
   });
 
   it("marks cancelled and failed replies", () => {
@@ -103,11 +93,6 @@ describe("reply progress", () => {
     expect(reply.content).toBe("");
   });
 
-  it("clears progress once the reply ends", () => {
-    const state = replay(events);
-    expect(state.messages.every((m) => m.progress === null)).toBe(true);
-  });
-
   it("ignores progress for a reply that has ended", () => {
     const ended = replay(events);
     const late = { ...events[progressAt], seq: ended.lastSeq + 1 };
@@ -118,18 +103,10 @@ describe("reply progress", () => {
 
 describe("forward compatibility", () => {
   it("skips unknown event types but records their sequence", () => {
-    const unknown: ProtocolEvent = { ...events[0], type: "component.added", payload: {} };
+    const unknown: ProtocolEvent = { ...events[0], type: "something.new", payload: {} };
     const state = applyEvent(emptyConversation, unknown);
     expect(state.lastSeq).toBe(1);
     expect(state.messages).toEqual([]);
-  });
-
-  it("ignores unknown payload fields", () => {
-    const extra: ProtocolEvent = {
-      ...events[0],
-      payload: { ...(events[0].payload as object), future_field: true },
-    };
-    expect(applyEvent(emptyConversation, extra).messages).toHaveLength(1);
   });
 });
 

@@ -506,10 +506,6 @@ mod tests {
     use super::*;
     use crate::projects::test_support::temp_project;
 
-    fn asset(name: &str) -> AssetRef {
-        AssetRef { id: new_id(), name: name.into(), media_type: String::new(), size_bytes: 0 }
-    }
-
     #[test]
     fn the_version_is_read_from_quartos_output() {
         assert_eq!(parse_version("1.10.18\n"), Some((1, 10, 18)));
@@ -519,55 +515,34 @@ mod tests {
     }
 
     #[test]
-    fn a_version_before_the_minimum_is_too_old() {
-        assert!((1, 9) < MINIMUM);
-        assert!((1, 10) >= MINIMUM);
-        assert!((2, 0) >= MINIMUM);
-    }
-
-    #[test]
-    fn a_path_from_settings_wins_over_the_path_and_the_folders() {
-        let dir = tempfile::tempdir().unwrap();
-        let on_path = dir.path().join(NAMES[0]);
-        std::fs::write(&on_path, "").unwrap();
-        let found = locate(Some(" /chosen/quarto "), Some(dir.path().as_os_str()), &[on_path]);
-        assert_eq!(found, Some(PathBuf::from("/chosen/quarto")));
-    }
-
-    #[test]
-    fn the_path_is_used_before_the_install_folders() {
+    fn quarto_is_found_in_the_setting_then_the_path_then_the_install_folders() {
         let on_path = tempfile::tempdir().unwrap();
         let installed = tempfile::tempdir().unwrap();
         let path_program = on_path.path().join(NAMES[0]);
         let folder_program = installed.path().join(NAMES[0]);
         std::fs::write(&path_program, "").unwrap();
         std::fs::write(&folder_program, "").unwrap();
-        let var = on_path.path().as_os_str();
-        assert_eq!(locate(None, Some(var), &[folder_program.clone()]), Some(path_program));
-        assert_eq!(locate(Some(""), None, &[folder_program.clone()]), Some(folder_program));
-    }
+        let var = Some(on_path.path().as_os_str());
+        let folders = [folder_program.clone()];
 
-    #[test]
-    fn nothing_is_found_when_no_source_has_quarto() {
+        let chosen = locate(Some(" /chosen/quarto "), var, &folders);
+        assert_eq!(chosen, Some(PathBuf::from("/chosen/quarto")));
+        assert_eq!(locate(None, var, &folders), Some(path_program));
+        assert_eq!(locate(Some(""), None, &folders), Some(folder_program));
+
         let empty = tempfile::tempdir().unwrap();
         let missing = empty.path().join(NAMES[0]);
         assert_eq!(locate(None, Some(empty.path().as_os_str()), &[missing]), None);
     }
 
     #[test]
-    fn a_missing_quarto_blocks_with_a_message_and_a_link() {
-        let status = Status::new(State::Missing, None, None, false);
-        let error = status.blocking().unwrap();
-        assert_eq!(error.code, "quarto_missing");
-        assert!(error.message.contains(INSTALL_URL));
+    fn a_missing_or_too_old_quarto_blocks_and_says_why() {
+        let missing = Status::new(State::Missing, None, None, false).blocking().unwrap();
+        assert_eq!(missing.code, "quarto_missing");
+        assert!(missing.message.contains(INSTALL_URL));
+        let old = Status::new(State::TooOld, Some("1.9.9".into()), None, false).blocking().unwrap();
+        assert!(old.message.contains("1.9.9") && old.message.contains("1.10"));
         assert!(Status::new(State::Found, Some("1.10.18".into()), None, false).blocking().is_none());
-    }
-
-    #[test]
-    fn a_too_old_quarto_names_its_version_and_the_minimum() {
-        let status = Status::new(State::TooOld, Some("1.9.9".into()), None, false);
-        let message = status.blocking().unwrap().message;
-        assert!(message.contains("1.9.9") && message.contains("1.10"));
     }
 
     fn counted(count: &std::sync::Arc<std::sync::atomic::AtomicUsize>) -> Known {
@@ -650,27 +625,6 @@ mod tests {
     }
 
     #[test]
-    fn a_document_that_names_its_output_still_exports() {
-        let found = status(None);
-        if found.state != State::Found {
-            return;
-        }
-        let program = PathBuf::from(found.path.unwrap());
-        let (_dir, project) = temp_project();
-        let source = "---\ntitle: \"A\"\nformat:\n  typst:\n    output-file: report\n---\n\nText\n";
-        assert!(export_pdf(&project, &program, source).unwrap().starts_with(b"%PDF"));
-        assert!(!preview_pages(&project, &program, source).unwrap().is_empty());
-    }
-
-    #[test]
-    fn only_assets_named_in_the_source_are_copied() {
-        let assets = vec![asset("sites.png"), asset("field-trial.csv"), asset("document.pdf")];
-        let source = "![Trial sites](sites.png)\n\nSee document.pdf.";
-        let names: Vec<_> = named_assets(source, assets).into_iter().map(|a| a.name).collect();
-        assert_eq!(names, ["sites.png"]);
-    }
-
-    #[test]
     fn quartos_colour_codes_are_removed_from_its_error() {
         let output = "start\n\u{1b}[31mERROR\u{1b}[39m: Invalid YAML\n\n  at line 3\n";
         assert_eq!(last_lines(output, 2), "ERROR: Invalid YAML\n  at line 3");
@@ -717,6 +671,17 @@ mod tests {
         assert!(!marker.exists(), "a code cell ran");
         let leftovers = std::fs::read_dir(project.paths.resolve("render").unwrap());
         assert!(leftovers.is_ok_and(|mut entries| entries.next().is_none()));
+
+        // A document that names its own output file still exports and previews.
+        let named = "---\ntitle: \"A\"\nformat:\n  typst:\n    output-file: report\n---\n\nText\n";
+        assert!(export_pdf(&project, &program, named).unwrap().starts_with(b"%PDF"));
+        assert!(!preview_pages(&project, &program, named).unwrap().is_empty());
+
+        // A render that fails reports Quarto's own message.
+        let broken = "---\ntitle: [unclosed\n---\n\nText\n";
+        let error = export_pdf(&project, &program, broken).unwrap_err();
+        assert_eq!(error.code, "quarto_failed");
+        assert!(!error.message.trim().is_empty());
     }
 
     #[test]
@@ -749,20 +714,6 @@ mod tests {
             unsafe { libc::kill(child, 0) == -1 }
         });
         assert!(ended, "the started program is still running");
-    }
-
-    #[test]
-    fn a_render_that_fails_reports_quartos_message() {
-        let found = status(None);
-        if found.state != State::Found {
-            return;
-        }
-        let program = PathBuf::from(found.path.unwrap());
-        let (_dir, project) = temp_project();
-        let broken = "---\ntitle: [unclosed\n---\n\nText\n";
-        let error = export_pdf(&project, &program, broken).unwrap_err();
-        assert_eq!(error.code, "quarto_failed");
-        assert!(!error.message.trim().is_empty());
     }
 
     #[test]

@@ -2,7 +2,7 @@
 fixed list."""
 
 import json
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError, create_model
 
@@ -12,7 +12,7 @@ from mini_me_sidecar.adapters.providers import (
     provider_error,
     structured_answer,
 )
-from mini_me_sidecar.context import CallContext, Model, TraitError
+from mini_me_sidecar.context import CallContext, TraitError
 
 SYSTEM = (
     "You decide which path a Mini-Me's Workflow takes next. Read the user's message and the "
@@ -35,7 +35,6 @@ async def decide(
     choices: list[str],
     message: str,
     earlier: list[dict[str, Any]],
-    make_chat: Callable[[Model, str], Any] = chat_model,
 ) -> str:
     """The model's answer to `question`, one of `choices`. Raises `invalid_decision` when the
     model answers anything else."""
@@ -54,7 +53,7 @@ async def decide(
     try:
         # Tool calling works with every provider and with OpenRouter's models.
         answer = await structured_answer(
-            make_chat(model, key.reveal()), schema, [("system", SYSTEM), ("human", material)]
+            chat_model(model, key.reveal()), schema, [("system", SYSTEM), ("human", material)]
         )
     except TraitError:
         raise

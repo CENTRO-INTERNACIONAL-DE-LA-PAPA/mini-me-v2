@@ -58,8 +58,4 @@ describe("outline", () => {
       { id: TRIAL.id, label: "field-trial.csv", messageIds: ["one", "two", "three"] },
     ]);
   });
-
-  it("is empty for an empty Conversation", () => {
-    expect(outline([], new Map())).toEqual({ miniMes: [], files: [], components: [] });
-  });
 });

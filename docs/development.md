@@ -78,7 +78,6 @@ listed in the script's `BUILT_IN`.
 npm test                                          # frontend (Vitest)
 cd sidecar && uv run pytest                       # Python sidecar
 cd src-tauri && cargo test                        # Rust core
-cd src-tauri && cargo test -- --include-ignored   # also the tests that start the real sidecar
 ```
 
 CI ([`ci.yml`](../.github/workflows/ci.yml)) runs the frontend, sidecar and Rust tests on

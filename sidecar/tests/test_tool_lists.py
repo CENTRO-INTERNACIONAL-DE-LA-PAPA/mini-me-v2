@@ -20,7 +20,7 @@ def test_every_listed_tool_is_known_and_prompt_traits_list_only_model_tools():
 
 
 def test_fixed_adapters_use_exactly_the_tools_their_traits_list():
-    adapters = load_adapters(test_adapters=False)
+    adapters = load_adapters()
     for definition in traits():
         adapter = adapters.get(definition["adapter"])
         if adapter is None or definition["adapter"] == "prompt":

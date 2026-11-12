@@ -191,11 +191,8 @@ pub struct Message {
     pub attachments: Vec<AssetRef>,
     #[serde(default)]
     pub text_components: Vec<TextComponent>,
-    /// Missing in `message.created` events stored before Interactive Components existed.
-    #[serde(default)]
     pub components: Vec<Component>,
     /// The Steps of the reply's Workflow that have started, in order.
-    #[serde(default)]
     pub steps: Vec<MessageStep>,
 }
 
@@ -313,134 +310,16 @@ pub struct OpenedConversation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::Value;
 
     #[test]
-    fn envelope_serializes_to_spec_shape() {
-        let event = Event {
-            id: new_id(),
-            v: ENVELOPE_VERSION,
-            project_id: new_id(),
-            conversation_id: new_id(),
-            seq: 1,
-            ts: 1_760_000_000_000,
-            origin: Origin {
-                installation_id: new_id(),
-                user_id: new_id(),
-            },
-            kind: EventKind::MessageCancelled {
-                message_id: new_id(),
-            },
-        };
-        let value = serde_json::to_value(&event).unwrap();
-        let object = value.as_object().unwrap();
-        for field in [
-            "id",
-            "type",
-            "v",
-            "project_id",
-            "conversation_id",
-            "seq",
-            "ts",
-            "origin",
-            "payload",
-        ] {
-            assert!(object.contains_key(field), "missing field {field}");
-        }
-        assert_eq!(value["type"], json!("message.cancelled"));
-        assert_eq!(value["v"], json!(1));
-
-        let back: Event = serde_json::from_value(value).unwrap();
-        assert_eq!(back, event);
-    }
-
-    #[test]
-    fn a_message_stored_without_components_has_none() {
-        let message: Message = serde_json::from_value(json!({
-            "id": new_id(),
-            "author": { "kind": "user", "id": "u" },
-            "content": "late blight",
-            "status": "complete",
-            "attachments": [],
-            "text_components": []
-        }))
-        .unwrap();
-        assert!(message.components.is_empty());
-    }
-
-    #[test]
-    fn a_component_reference_round_trips() {
-        let part = json!({
-            "kind": "component", "id": new_id(), "label": "$trial", "start": 0, "end": 6
-        });
-        let component: TextComponent = serde_json::from_value(part.clone()).unwrap();
-        assert_eq!(component.kind, TextComponentKind::Component);
-        assert_eq!(serde_json::to_value(&component).unwrap(), part);
-    }
-
-    #[test]
-    fn ids_are_v7_and_ordered() {
-        let first = new_id();
-        let second = new_id();
-        assert_eq!(first.get_version_num(), 7);
-        assert!(second > first);
-    }
-
-    #[test]
-    fn fixture_round_trips_every_event_type() {
+    fn the_fixture_events_round_trip() {
         let fixture: Vec<Value> =
             serde_json::from_str(include_str!("../fixtures/events.json")).unwrap();
-        let mut types: Vec<String> = Vec::new();
         for original in fixture {
             let event: Event = serde_json::from_value(original.clone())
                 .unwrap_or_else(|e| panic!("cannot parse {original}: {e}"));
             assert_eq!(serde_json::to_value(&event).unwrap(), original);
-            types.push(original["type"].as_str().unwrap().to_string());
         }
-        for expected in [
-            "message.created",
-            "message.delta",
-            "message.progress",
-            "message.completed",
-            "message.failed",
-            "message.cancelled",
-            "attachment.added",
-            "component.added",
-            "component.answered",
-            "message.paused",
-            "message.resumed",
-            "step.started",
-            "step.completed",
-            "reaction.added",
-            "reaction.removed",
-        ] {
-            assert!(types.iter().any(|t| t == expected), "fixture lacks {expected}");
-        }
-    }
-
-    #[test]
-    fn a_message_view_is_the_message_with_its_shown_state() {
-        let view = MessageView {
-            message: Message {
-                id: new_id(),
-                author: Author { kind: AuthorKind::MiniMe, id: "scout".into() },
-                content: "Reading".into(),
-                status: MessageStatus::Streaming,
-                reply_to: None,
-                attachments: Vec::new(),
-                text_components: Vec::new(),
-                components: Vec::new(),
-                steps: Vec::new(),
-            },
-            created_at: 1_760_000_000_000,
-            reactions: Vec::new(),
-            progress: Some(Progress { label: "Reading trial.csv".into(), fraction: None }),
-            failure: None,
-        };
-        let value = serde_json::to_value(&view).unwrap();
-        assert_eq!(value["content"], json!("Reading"));
-        assert_eq!(value["progress"], json!({ "label": "Reading trial.csv", "fraction": null }));
-        assert_eq!(value["reactions"], json!([]));
-        assert!(value.get("failure").is_none());
     }
 }

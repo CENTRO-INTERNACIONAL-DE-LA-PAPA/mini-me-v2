@@ -66,9 +66,6 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
           ...state.messages,
           {
             ...known.payload.message,
-            // Events stored before Interactive Components existed have no `components`.
-            components: known.payload.message.components ?? [],
-            steps: known.payload.message.steps ?? [],
             created_at: known.ts,
             reactions: [],
             progress: null,

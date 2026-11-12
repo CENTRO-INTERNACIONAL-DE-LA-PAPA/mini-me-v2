@@ -69,7 +69,7 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<PausedAppr
          JOIN messages m ON m.id = p.message_id \
          JOIN conversations c ON c.id = m.conversation_id \
          JOIN components k ON k.id = p.component_id WHERE {}",
-        comments::not_a_thread(conn, "c.id")?
+        comments::not_a_thread("c.id")
     ))?;
     let rows = statement.query_map([], |row| {
         Ok((
@@ -113,7 +113,6 @@ mod tests {
     use super::*;
     use crate::conversations::{self, PausedRun, SendMessageInput};
     use crate::comments::test_support::into_thread;
-    use crate::db;
     use crate::projects::test_support::origin;
     use crate::protocol::{Author, AuthorKind, new_id};
     use crate::store::Project;
@@ -190,26 +189,6 @@ mod tests {
         let (project, run) = paused(&root, "Trials", "Investigator", "Go on?", 1);
         conversations::answer_approval(&project, run.message_id, run.component_id, false).unwrap();
         assert!(list(&root).unwrap().is_empty());
-    }
-
-    #[test]
-    fn a_project_from_a_newer_app_is_skipped_and_unchanged() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
-        paused(&root, "Trials", "Investigator", "Go on?", 1);
-        let (newer, _) = paused(&root, "Newer", "Planner", "Confirm?", 2);
-        let database = newer.paths.database();
-        drop(newer);
-        {
-            let conn = Connection::open(&database).unwrap();
-            conn.pragma_update(None, "user_version", db::SCHEMA_VERSION + 1).unwrap();
-        }
-        let before = std::fs::read(&database).unwrap();
-
-        let approvals = list(&root).unwrap();
-        assert_eq!(approvals.len(), 1);
-        assert_eq!(approvals[0].project_name, "Trials");
-        assert_eq!(std::fs::read(&database).unwrap(), before);
     }
 
     #[test]

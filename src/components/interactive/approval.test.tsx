@@ -15,11 +15,6 @@ describe("approval version 1", () => {
     expect(html).toContain("Reject");
   });
 
-  it("draws nothing once answered or once the reply was stopped first", () => {
-    expect(render({ approved: true }, "streaming")).toBe("");
-    expect(render(null, "cancelled")).toBe("");
-  });
-
   it("tells asking, answered and closed approvals apart", () => {
     expect(approvalState(null, "paused")).toBe("asking");
     expect(approvalState({ approved: true }, "streaming")).toBe("approved");

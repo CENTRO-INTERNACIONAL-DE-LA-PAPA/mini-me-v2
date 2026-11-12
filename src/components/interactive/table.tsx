@@ -79,22 +79,19 @@ function nextSorting(current: Sorting | null, column: number, numeric: boolean):
   return null;
 }
 
-/** The table with an optional starting sort; the catalogue's renderer starts unsorted. */
 export function TableView({
   data,
-  initialSorting = null,
   componentId,
   projectId,
 }: {
   data: unknown;
-  initialSorting?: Sorting | null;
   componentId?: string;
   projectId?: string;
 }) {
   const { columns, rows, title, total_rows, source, source_id } = data as TableData;
   /** What the last action did, or why it failed, shown in the header for a moment. */
   const [notice, setNotice] = useState<string | null>(null);
-  const [sorting, setSorting] = useState<Sorting | null>(initialSorting);
+  const [sorting, setSorting] = useState<Sorting | null>(null);
   const sorted = useMemo(
     () => sortRows(rows, columns[sorting?.column ?? 0]?.type === "number", sorting),
     [rows, columns, sorting],

@@ -204,9 +204,6 @@ line and scatter charts at 5,000 sampled points. The model only chooses entries 
 catalogue (`catalogue.py`, through structured output in `choose.py`); it never sees rows,
 and every result is computed by pandas or pointblank.
 
-Test-only adapters live in `adapters/testing.py` and load only when the sidecar is started
-with `--test-adapters`, as the core's tests do.
-
 ### What a Trait can do: `ctx`
 
 `CallContext` (`context.py`) is the only way a call reaches the core. Adapters read, save and
@@ -438,7 +435,7 @@ one job:
 | Lives in | `adapters/` | `tools/` | `context.py` |
 
 An adapter reads, saves and shows only through tools; no adapter calls `ctx.read_asset`,
-`ctx.component` or `ctx.write_asset` itself (the test-only adapters in `testing.py` aside).
+`ctx.component` or `ctx.write_asset` itself.
 Every tool acts through `ctx`, so the core's checks and Project-folder confinement apply.
 
 | Tool | Does | Offered to models |
@@ -489,12 +486,11 @@ Every tool acts through `ctx`, so the core's checks and Project-folder confineme
 ## Tests
 
 - Rust unit tests sit at the end of each file in `#[cfg(test)] mod tests`; run them with
-  `cd src-tauri && cargo test`. Add `-- --include-ignored` for the tests that start the real
-  sidecar through `uv`.
+  `cd src-tauri && cargo test`.
 - Frontend tests are `*.test.ts(x)` files next to the code they test; run them with
   `npm test`.
 - Sidecar tests use pytest and live in `sidecar/tests/` as `test_<module>.py`; run them
   with `cd sidecar && uv run pytest`. Sample tables for the data Traits are in
-  `sidecar/fixtures/data/`. The ignored Rust tests also run the sidecar end to end.
+  `sidecar/fixtures/data/`.
 - CI (`.github/workflows/ci.yml`) runs all three suites on every pull request into `dev`
   or `main`: the frontend and sidecar on Linux, and the Rust tests on Windows.

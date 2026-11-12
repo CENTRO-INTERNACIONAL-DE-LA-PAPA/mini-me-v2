@@ -135,7 +135,6 @@ impl AppState {
         runs.set_debug(settings.reply_debug(dev_app));
         let sidecar = Supervisor::new(
             launch,
-            false,
             Timing::for_build(),
             Arc::clone(&runs),
             Arc::clone(&log),
