@@ -94,7 +94,7 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 
 ## 7. Frontend tests
 
-- [ ] 7.1 In `src/protocol`, `src/lib`, `src/components/{chat,documents,shell}`: delete
+- [x] 7.1 In `src/protocol`, `src/lib`, `src/components/{chat,documents,shell}`: delete
   `eventStore.test.ts` "adds and removes reactions" and "ignores unknown payload fields", make
   "skips unknown event types" use a made-up type, merge its two full-replay tests; delete
   `conversationStatus.test.ts`, `quarto.test.ts`'s copy-text test and `outline.test.ts` "is empty for

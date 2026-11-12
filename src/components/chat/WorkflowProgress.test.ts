@@ -27,6 +27,7 @@ describe("approvalAnswers", () => {
       step("refine", "trait"),
       step("ask", "approval"),
       step("check", "approval", false),
+      step("confirm", "approval"),
     ];
     const components = [
       approval("c1", "ask", { approved: true }),
@@ -39,11 +40,8 @@ describe("approvalAnswers", () => {
       undefined,
       "rejected",
       undefined,
+      undefined,
     ]);
-  });
-
-  it("gives nothing for an approval Step without a component", () => {
-    expect(approvalAnswers([step("ask", "approval")], [])).toEqual([undefined]);
   });
 });
 
