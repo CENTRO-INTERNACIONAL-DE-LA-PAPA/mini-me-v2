@@ -125,7 +125,7 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
   `test_hand_offs.py`'s `_material` test to `test_prompt_turns.py`, dropping its `_offered` duplicate;
   rewrite `test_a_state_that_cannot_be_read_fails_to_resume` with `pytest.raises`; verify with
   `uv run pytest`.
-- [ ] 8.4 Delete `scripts/third-party-lib.test.mjs`'s `isLicenseFile` test; verify with
+- [x] 8.4 Delete `scripts/third-party-lib.test.mjs`'s `isLicenseFile` test; verify with
   `npm test`.
 
 ## 9. Check
