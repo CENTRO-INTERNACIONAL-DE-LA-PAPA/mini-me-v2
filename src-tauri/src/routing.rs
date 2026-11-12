@@ -1135,18 +1135,12 @@ mod tests {
         let start = frames.iter().find_map(|frame| match frame {
             CoreFrame::RunStart { plan, .. } => Some((
                 plan.traits[0].adapter.clone(),
-                plan.traits[0].tools.clone(),
                 plan.input.clone(),
                 plan.context.needs_context,
             )),
             _ => None,
         });
-        let tools = ["save_file", "show_table", "write_document", "suggest_edit", "edit_document"];
-        let tools: Vec<String> = tools.map(String::from).to_vec();
-        assert_eq!(
-            start,
-            Some(("prompt".into(), tools, json!({ "text": "hi thanks" }), Some(false)))
-        );
+        assert_eq!(start, Some(("prompt".into(), json!({ "text": "hi thanks" }), Some(false))));
     }
 
     #[test]

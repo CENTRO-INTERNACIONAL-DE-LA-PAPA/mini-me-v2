@@ -47,7 +47,7 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
   `user_library.rs`, use `Library::builtin().mini_mes.len()` instead of `16`; verify with
   `cargo test`.
 
-- [ ] 4.2 Remove the hand-written name lists: the exact tool list asserted in `routing.rs`
+- [x] 4.2 Remove the hand-written name lists: the exact tool list asserted in `routing.rs`
   `a_mention_with_a_thumbs_up_gets_a_reply_and_a_reaction_from_that_mini_me`, the event-type
   list in `protocol.rs` `fixture_round_trips_every_event_type` and the frame-type list in `link.rs`
   `fixture_round_trips_every_frame_type`; make `unknown_types_and_unreadable_lines_are_tolerated`

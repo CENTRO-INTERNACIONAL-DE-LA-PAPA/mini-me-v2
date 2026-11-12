@@ -360,10 +360,6 @@ mod tests {
 
     #[test]
     fn unknown_types_and_unreadable_lines_are_tolerated() {
-        assert_eq!(
-            parse_line(r#"{"type":"call.component","call_id":"x"}"#),
-            Some(SidecarFrame::Unknown)
-        );
         assert_eq!(parse_line(r#"{"type":"something.new"}"#), Some(SidecarFrame::Unknown));
         assert_eq!(parse_line("not json"), None);
         assert_eq!(parse_line(r#"{"no_type":1}"#), None);
@@ -387,52 +383,20 @@ mod tests {
     }
 
     #[test]
-    fn fixture_round_trips_every_frame_type() {
+    fn the_fixture_frames_round_trip() {
         let fixture: Value =
             serde_json::from_str(include_str!("../fixtures/sidecar-frames.json"))
                 .unwrap();
-        let mut types = Vec::new();
         for original in fixture["core_to_sidecar"].as_array().unwrap() {
             let frame: CoreFrame = serde_json::from_value(original.clone())
                 .unwrap_or_else(|e| panic!("cannot parse {original}: {e}"));
             assert_eq!(&serde_json::to_value(&frame).unwrap(), original);
-            types.push(original["type"].as_str().unwrap().to_string());
         }
         for original in fixture["sidecar_to_core"].as_array().unwrap() {
             let frame: SidecarFrame = serde_json::from_value(original.clone())
                 .unwrap_or_else(|e| panic!("cannot parse {original}: {e}"));
             assert_ne!(frame, SidecarFrame::Unknown, "{original} parsed as unknown");
             assert_eq!(&serde_json::to_value(&frame).unwrap(), original);
-            types.push(original["type"].as_str().unwrap().to_string());
-        }
-        for expected in [
-            "hello",
-            "adapters.list",
-            "adapters",
-            "ping",
-            "pong",
-            "shutdown",
-            "run.start",
-            "run.cancel",
-            "run.delta",
-            "run.progress",
-            "run.debug",
-            "step.started",
-            "step.completed",
-            "run.paused",
-            "run.done",
-            "run.error",
-            "run.cancelled",
-            "core.request",
-            "core.response",
-            "route.start",
-            "route.done",
-            "route.error",
-            "summary.start",
-            "summary.done",
-            "summary.error",
-        ] {
-            assert!(types.iter().any(|t| t == expected), "fixture lacks {expected}");
         }
     }
 }
