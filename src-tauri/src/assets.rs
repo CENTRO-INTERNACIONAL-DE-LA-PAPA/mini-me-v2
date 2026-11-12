@@ -665,24 +665,41 @@ mod tests {
     }
 
     #[test]
-    fn import_copies_and_registers() {
+    fn imported_generated_and_pasted_files_are_stored_and_registered() {
         let (dir, project) = temp_project();
+        let source_of = |id: Uuid| -> String {
+            let sql = "SELECT source FROM assets WHERE id = ?1";
+            project.lock().conn.query_row(sql, params![id.to_string()], |r| r.get(0)).unwrap()
+        };
+
         let source = dir.path().join("field-trial.csv");
         std::fs::write(&source, "plot,yield\n1,20\n").unwrap();
-
-        let asset = import(&project, &source, &user()).unwrap();
-        assert_eq!(asset.name, "field-trial.csv");
-        assert_eq!(asset.media_type, "text/csv");
-        assert_eq!(asset.size_bytes, 16);
-
-        let stored = file_path(&project, asset.id).unwrap();
-        assert!(stored.starts_with(project.paths.root().join("assets")));
+        let imported = import(&project, &source, &user()).unwrap();
+        let summary = (imported.name.as_str(), imported.media_type.as_str(), imported.size_bytes);
+        assert_eq!(summary, ("field-trial.csv", "text/csv", 16));
+        let assets_folder = project.paths.root().join("assets");
+        assert!(file_path(&project, imported.id).unwrap().starts_with(assets_folder));
         assert_eq!(std::fs::read_to_string(&source).unwrap(), "plot,yield\n1,20\n");
-        assert_eq!(find(&project.lock(), asset.id).unwrap(), asset);
+        assert_eq!(find(&project.lock(), imported.id).unwrap(), imported);
+        assert_eq!(source_of(imported.id), "upload");
+
+        let generated =
+            write_generated(&project, "theory-store.json", "application/json", b"{}", &user()).unwrap();
+        let stored = file_path(&project, generated.id).unwrap();
+        let expected = format!("assets/{}/theory-store.json", generated.id);
+        assert_eq!(stored, project.paths.root().join(expected));
+        assert_eq!(std::fs::read(stored).unwrap(), b"{}");
+        assert_eq!(source_of(generated.id), "generated");
+
+        let name = pasted_name("", "image/png");
+        assert_eq!(name, "Pasted image.png");
+        let pasted = import_bytes(&project, &name, "image/png", b"png", &user()).unwrap();
+        assert_eq!(std::fs::read(file_path(&project, pasted.id).unwrap()).unwrap(), b"png");
+        assert_eq!(source_of(pasted.id), "upload");
     }
 
     #[test]
-    fn same_file_name_does_not_overwrite() {
+    fn files_with_the_same_name_are_both_kept() {
         let (dir, project) = temp_project();
         let first_dir = dir.path().join("a");
         let second_dir = dir.path().join("b");
@@ -690,13 +707,18 @@ mod tests {
         std::fs::create_dir(&second_dir).unwrap();
         std::fs::write(first_dir.join("data.csv"), "first").unwrap();
         std::fs::write(second_dir.join("data.csv"), "second").unwrap();
+        let read = |id| std::fs::read_to_string(file_path(&project, id).unwrap()).unwrap();
 
         let first = import(&project, &first_dir.join("data.csv"), &user()).unwrap();
         let second = import(&project, &second_dir.join("data.csv"), &user()).unwrap();
         assert_ne!(first.id, second.id);
-        let read = |id| std::fs::read_to_string(file_path(&project, id).unwrap()).unwrap();
-        assert_eq!(read(first.id), "first");
-        assert_eq!(read(second.id), "second");
+        assert_eq!((read(first.id), read(second.id)), ("first".into(), "second".into()));
+
+        let first = write_generated(&project, "theory-store.json", "", b"first", &user()).unwrap();
+        let second = write_generated(&project, "theory-store.json", "", b"second", &user()).unwrap();
+        assert_ne!(first.id, second.id);
+        assert_eq!(first.media_type, "application/json");
+        assert_eq!((read(first.id), read(second.id)), ("first".into(), "second".into()));
     }
 
     #[test]
@@ -722,25 +744,6 @@ mod tests {
     }
 
     #[test]
-    fn a_generated_file_is_stored_in_its_own_folder_and_registered() {
-        let (_dir, project) = temp_project();
-        let asset =
-            write_generated(&project, "theory-store.json", "application/json", b"{}", &user()).unwrap();
-        assert_eq!(asset.size_bytes, 2);
-        let stored = file_path(&project, asset.id).unwrap();
-        let expected = format!("assets/{}/theory-store.json", asset.id);
-        assert_eq!(stored, project.paths.root().join(expected));
-        assert_eq!(std::fs::read(stored).unwrap(), b"{}");
-        let id = asset.id.to_string();
-        let source: String = project
-            .lock()
-            .conn
-            .query_row("SELECT source FROM assets WHERE id = ?1", params![id], |r| r.get(0))
-            .unwrap();
-        assert_eq!(source, "generated");
-    }
-
-    #[test]
     fn names_that_could_leave_the_folder_or_fail_on_windows_are_refused() {
         let (_dir, project) = temp_project();
         let long = "a".repeat(256);
@@ -761,27 +764,6 @@ mod tests {
         for name in ["results..final.csv", "a...b.json", "console.txt", "nullable.md", ".env"] {
             assert!(check_name(name).is_ok(), "{name}");
         }
-    }
-
-    #[test]
-    fn generated_files_with_the_same_name_are_both_kept() {
-        let (_dir, project) = temp_project();
-        let first = write_generated(&project, "theory-store.json", "", b"first", &user()).unwrap();
-        let second = write_generated(&project, "theory-store.json", "", b"second", &user()).unwrap();
-        assert_ne!(first.id, second.id);
-        assert_eq!(first.media_type, "application/json");
-        let read = |id| std::fs::read(file_path(&project, id).unwrap()).unwrap();
-        assert_eq!(read(first.id), b"first");
-        assert_eq!(read(second.id), b"second");
-    }
-
-    #[test]
-    fn a_removed_asset_leaves_no_file_or_entry() {
-        let (_dir, project) = temp_project();
-        let asset = write_generated(&project, "notes.txt", "text/plain", b"x", &user()).unwrap();
-        remove(&project, asset.id).unwrap();
-        assert_eq!(find(&project.lock(), asset.id).unwrap_err().code, "not_found");
-        assert_eq!(assets_folder_entries(&project), 0);
     }
 
     #[test]
@@ -822,24 +804,6 @@ mod tests {
         assert_eq!(entry(unused.id).source, "generated");
         assert_eq!(entry(unused.id).added_by, Some(crate::projects::test_support::user()));
         assert!(entry(unused.id).used_in.is_empty());
-    }
-
-    #[test]
-    fn a_pasted_image_is_stored_as_an_upload() {
-        let (_dir, project) = temp_project();
-        let name = pasted_name("", "image/png");
-        assert_eq!(name, "Pasted image.png");
-        let asset = import_bytes(&project, &name, "image/png", b"png", &user()).unwrap();
-        assert_eq!((asset.name.as_str(), asset.size_bytes), ("Pasted image.png", 3));
-        assert_eq!(std::fs::read(file_path(&project, asset.id).unwrap()).unwrap(), b"png");
-        let source: String = project
-            .lock()
-            .conn
-            .query_row("SELECT source FROM assets WHERE id = ?1", [asset.id.to_string()], |r| {
-                r.get(0)
-            })
-            .unwrap();
-        assert_eq!(source, "upload");
     }
 
     #[test]

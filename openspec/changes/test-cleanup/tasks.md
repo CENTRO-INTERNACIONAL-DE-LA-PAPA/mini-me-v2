@@ -76,10 +76,12 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
   without-Jev and the files cases as their own tests, drop the `file_options` check that the
   routed case already makes, and import `SCRIBE` and `FALLBACK_MINI_ME` from `library` instead of
   re-declaring them; verify with `cargo test`.
-- [ ] 6.3 In `store.rs`, `conversations.rs`, `assets.rs` and `history.rs`: merge the pairs listed
-  in the scan, delete `rejects_empty_messages` (one assert folded into
-  `rejects_unknown_attachments_and_references`), and add a `send(project, conversation, text)`
-  test helper in `store.rs`; verify with `cargo test`.
+- [x] 6.3 In `store.rs`, `conversations.rs`, `assets.rs` and `history.rs`: add a
+  `send(project, conversation, text)` test helper in `store.rs` and merge its two debug-record
+  tests; in `conversations.rs`, merge the naming, renaming and rejected-message tests (folding
+  `rejects_empty_messages` in); in `assets.rs`, merge the same-name tests and the three ways a
+  file comes in, and delete the `remove` test that the `delete` test covers; fold
+  `the_first_message_has_no_history` into the history ordering test; verify with `cargo test`.
 - [ ] 6.4 In `quarto.rs`: merge the three render tests into one that still returns early without
   Quarto, merge the three `locate` tests and the two blocking-message tests, and delete
   `only_assets_named_in_the_source_are_copied`; verify with `cargo test`.

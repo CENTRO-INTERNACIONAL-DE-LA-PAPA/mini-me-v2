@@ -986,6 +986,16 @@ mod tests {
         EventKind::MessageCancelled { message_id: id }
     }
 
+    /// Sends the user message `text` to `conversation`.
+    fn send(project: &Project, conversation: Uuid, text: &str) -> Message {
+        let input = conversations::SendMessageInput {
+            content: text.into(),
+            attachments: Vec::new(),
+            text_components: Vec::new(),
+        };
+        conversations::send_message(project, conversation, input, new_id()).unwrap()
+    }
+
     #[test]
     fn sequences_are_contiguous_and_per_conversation() {
         let (_dir, project) = temp_project();
@@ -1161,13 +1171,7 @@ mod tests {
     fn components_are_rebuilt_in_the_order_they_were_added() {
         let (_dir, project) = temp_project();
         let conversation = conversations::create(&project).unwrap().id;
-        let input = conversations::SendMessageInput {
-            content: "papers on late blight".into(),
-            attachments: Vec::new(),
-            text_components: Vec::new(),
-        };
-        let question =
-            conversations::send_message(&project, conversation, input, new_id()).unwrap();
+        let question = send(&project, conversation, "papers on late blight");
         let author = Author {
             kind: AuthorKind::MiniMe,
             id: "researcher".into(),
@@ -1213,20 +1217,13 @@ mod tests {
     }
 
     #[test]
-    fn debug_records_are_replaced_cleared_and_deleted_with_their_conversation() {
+    fn debug_records_are_replaced_or_appended_and_go_with_their_conversation() {
         let (_dir, project) = temp_project();
-        let send = |conversation: Uuid| {
-            let input = conversations::SendMessageInput {
-                content: "check the data".into(),
-                attachments: Vec::new(),
-                text_components: Vec::new(),
-            };
-            conversations::send_message(&project, conversation, input, new_id()).unwrap().id
-        };
         let kept = conversations::create(&project).unwrap().id;
         let deleted = conversations::create(&project).unwrap().id;
-        let (first, second) = (send(kept), send(deleted));
-        let record = |n: u32| serde_json::json!({ "answers": n });
+        let first = send(&project, kept, "check the data").id;
+        let second = send(&project, deleted, "check the data").id;
+        let record = |n: u32| serde_json::json!({ "n": n });
         {
             let state = project.lock();
             state.put_debug_record(kept, first, "jev", &record(1)).unwrap();
@@ -1234,6 +1231,12 @@ mod tests {
             state.put_debug_record(deleted, second, "jev", &record(3)).unwrap();
             assert_eq!(state.debug_records(first, "jev").unwrap(), vec![record(2)]);
             assert_eq!(state.debug_records(first, "reply").unwrap(), Vec::<Value>::new());
+            for n in 4..=6 {
+                state.append_debug_record(kept, first, "reply", &record(n)).unwrap();
+            }
+            let replies = state.debug_records(first, "reply").unwrap();
+            assert_eq!(replies, vec![record(4), record(5), record(6)]);
+            assert_eq!(state.debug_records(first, "jev").unwrap(), vec![record(2)]);
         }
 
         conversations::delete(&project, deleted).unwrap();
@@ -1245,38 +1248,10 @@ mod tests {
     }
 
     #[test]
-    fn appended_debug_records_come_back_in_order_next_to_jevs() {
-        let (_dir, project) = temp_project();
-        let conversation = conversations::create(&project).unwrap().id;
-        let input = conversations::SendMessageInput {
-            content: "check the data".into(),
-            attachments: Vec::new(),
-            text_components: Vec::new(),
-        };
-        let message =
-            conversations::send_message(&project, conversation, input, new_id()).unwrap().id;
-        let record = |n: u32| serde_json::json!({ "n": n });
-        let state = project.lock();
-        state.put_debug_record(conversation, message, "jev", &record(0)).unwrap();
-        for n in 1..=3 {
-            state.append_debug_record(conversation, message, "reply", &record(n)).unwrap();
-        }
-        let replies = state.debug_records(message, "reply").unwrap();
-        assert_eq!(replies, vec![record(1), record(2), record(3)]);
-        assert_eq!(state.debug_records(message, "jev").unwrap(), vec![record(0)]);
-    }
-
-    #[test]
     fn steps_pauses_and_answers_are_rebuilt_from_events() {
         let (_dir, project) = temp_project();
         let conversation = conversations::create(&project).unwrap().id;
-        let input = conversations::SendMessageInput {
-            content: "does early planting reduce late blight?".into(),
-            attachments: Vec::new(),
-            text_components: Vec::new(),
-        };
-        let question =
-            conversations::send_message(&project, conversation, input, new_id()).unwrap();
+        let question = send(&project, conversation, "does early planting reduce late blight?");
         let author = Author {
             kind: AuthorKind::MiniMe,
             id: "investigator".into(),

@@ -761,17 +761,8 @@ mod tests {
         // Titled now, so it is not named again.
         assert_eq!(first_message_to_name(&project, id).unwrap(), None);
         assert!(!set_title_if_default(&project, id, "Another").unwrap());
-    }
 
-    #[test]
-    fn a_title_the_user_set_is_never_replaced_and_later_messages_do_not_name() {
-        let (_dir, project) = temp_project();
-        let renamed = create(&project).unwrap().id;
-        send_message(&project, renamed, text("hello"), new_id()).unwrap();
-        rename(&project, renamed, "My title").unwrap();
-        assert!(!set_title_if_default(&project, renamed, "Generated").unwrap());
-        assert_eq!(title(&project, renamed).unwrap(), "My title");
-
+        // A Conversation past its first exchange is not named either.
         let second = create(&project).unwrap().id;
         let first = send_message(&project, second, text("one"), new_id()).unwrap();
         let reply = start_reply(&project, second, first.id, echo()).unwrap();
@@ -782,13 +773,16 @@ mod tests {
     }
 
     #[test]
-    fn a_conversation_can_be_renamed() {
+    fn a_title_the_user_sets_is_trimmed_and_never_replaced() {
         let (_dir, project) = temp_project();
-        let conversation = create(&project).unwrap().id;
-        rename(&project, conversation, "  Yield by altitude ").unwrap();
-        assert_eq!(title(&project, conversation).unwrap(), "Yield by altitude");
-        assert!(rename(&project, conversation, "   ").is_err());
+        let renamed = create(&project).unwrap().id;
+        send_message(&project, renamed, text("hello"), new_id()).unwrap();
+        rename(&project, renamed, "  Yield by altitude ").unwrap();
+        assert_eq!(title(&project, renamed).unwrap(), "Yield by altitude");
+        assert!(rename(&project, renamed, "   ").is_err());
         assert!(rename(&project, new_id(), "Other").is_err());
+        assert!(!set_title_if_default(&project, renamed, "Generated").unwrap());
+        assert_eq!(title(&project, renamed).unwrap(), "Yield by altitude");
     }
 
     #[test]
@@ -876,17 +870,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_empty_messages() {
-        let (_dir, project) = temp_project();
+    fn rejects_empty_messages_and_unknown_or_misplaced_references() {
+        let (dir, project) = temp_project();
         let conversation = create(&project).unwrap().id;
-        let err = send_message(&project, conversation, text("   "), new_id()).unwrap_err();
-        assert_eq!(err.code, "invalid_input");
-    }
-
-    #[test]
-    fn rejects_unknown_attachments_and_references() {
-        let (_dir, project) = temp_project();
-        let conversation = create(&project).unwrap().id;
+        let empty = send_message(&project, conversation, text("   "), new_id()).unwrap_err();
+        assert_eq!(empty.code, "invalid_input");
 
         let mut with_attachment = text("see file");
         with_attachment.attachments.push(new_id());
@@ -912,12 +900,7 @@ mod tests {
             "not_found"
         );
         assert!(project.lock().events_after(conversation, 0).unwrap().is_empty());
-    }
 
-    #[test]
-    fn rejects_references_outside_the_content() {
-        let (dir, project) = temp_project();
-        let conversation = create(&project).unwrap().id;
         let source = dir.path().join("trial.csv");
         std::fs::write(&source, "a,b").unwrap();
         let asset = assets::import(&project, &source, &project_support::user()).unwrap();
