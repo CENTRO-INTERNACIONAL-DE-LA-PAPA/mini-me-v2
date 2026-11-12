@@ -4,12 +4,10 @@ import { replyNotice } from "./useReplyNotifications";
 
 const reply: RunningReply = {
   project_id: "p",
-  project_name: "Late blight resistance",
   conversation_id: "c",
   conversation_title: "Literature",
   message_id: "m",
   mini_me: { id: "t", name: "Theorist" },
-  step: null,
 };
 
 describe("replyNotice", () => {

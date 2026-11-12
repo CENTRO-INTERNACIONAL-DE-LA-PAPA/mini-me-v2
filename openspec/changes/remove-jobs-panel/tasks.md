@@ -9,7 +9,7 @@
 
 ## 2. UI
 
-- [ ] 2.1 Remove `JobsPanel`, the Jobs button, its count and the `jobs` ordering in `ChatView`,
+- [x] 2.1 Remove `JobsPanel`, the Jobs button, its count and the `jobs` ordering in `ChatView`,
   the two fields from `RunningReply` in `types.ts`, the Jobs mentions in `Sheet.tsx` comments
   and `docs/using.md`, and any import or icon left unused; verify with `npm test`,
   `npx tsc --noEmit`, and in the app that a Conversation offers Outline and Report, Home still

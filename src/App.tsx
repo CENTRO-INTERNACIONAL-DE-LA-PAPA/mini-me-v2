@@ -332,7 +332,6 @@ function Main({
           onActivity={onConversationActivity}
           onRename={(newTitle) => onRenameConversation(view.id, newTitle)}
           onDelete={() => onDeleteConversation(view.id)}
-          onOpenReply={onOpenReply}
           onOpenDocument={(assetId, how) =>
             onNavigate({
               kind: "document",
