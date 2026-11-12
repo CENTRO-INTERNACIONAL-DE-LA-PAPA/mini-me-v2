@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  isLicenseFile,
   metadataHeaders,
   pythonPackage,
   repositoryUrl,
   shippedCrates,
   thirdParty,
 } from "./third-party-lib.mjs";
+
+describe("isLicenseFile", () => {
+  it("takes license and notice files, and nothing else", () => {
+    for (const name of ["LICENSE", "LICENSE-MIT", "licence.txt", "COPYING", "NOTICE.md"]) {
+      expect(isLicenseFile(name)).toBe(true);
+    }
+    expect(isLicenseFile("README.md")).toBe(false);
+  });
+});
 
 describe("repositoryUrl", () => {
   it("turns npm's repository forms into web addresses", () => {

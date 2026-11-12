@@ -125,7 +125,8 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
   `test_hand_offs.py`'s `_material` test to `test_prompt_turns.py`, dropping its `_offered` duplicate;
   rewrite `test_a_state_that_cannot_be_read_fails_to_resume` with `pytest.raises`; verify with
   `uv run pytest`.
-- [x] 8.4 Delete `scripts/third-party-lib.test.mjs`'s `isLicenseFile` test; verify with
+- [x] 8.4 Keep `scripts/third-party-lib.test.mjs`'s `isLicenseFile` test: it checks which file
+  names count as license files, which decides what third-party notices ship; verify with
   `npm test`.
 
 ## 9. Check
@@ -138,7 +139,7 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 | Suite | Before | After |
 |---|---|---|
 | `cargo test` | 306 (298 passed, 8 ignored) | 235 (234 passed, 1 ignored) |
-| `npm test` | 178 passed (49 files) | 153 passed (47 files) |
+| `npm test` | 178 passed (49 files) | 154 passed (47 files) |
 | `uv run pytest` | 138 passed | 112 passed |
 
 ## Workflow follow-up
