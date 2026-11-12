@@ -164,13 +164,10 @@ enum CallKind {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RunningReply {
     pub project_id: Uuid,
-    pub project_name: String,
     pub conversation_id: Uuid,
     pub conversation_title: String,
     pub message_id: Uuid,
     pub mini_me: RunMiniMe,
-    /// The name of the Step the run last started; none before its first Step.
-    pub step: Option<String>,
 }
 
 /// `Running` with its Mini-Me while a reply of the Conversation is in flight.
@@ -200,7 +197,6 @@ struct Run {
     /// Calls that have started and whose Step has not completed, by call ID.
     calls: HashMap<Uuid, (String, CallKind)>,
     cancelling: bool,
-    step: Option<String>,
     /// Kept even when the run needs none, for the reply it hands off to.
     model: Option<CallModel>,
     /// Started when the reply completes.
@@ -533,7 +529,6 @@ impl Runs {
                 provider: model.as_ref().map(|m| m.provider.clone()),
                 calls: HashMap::new(),
                 cancelling: false,
-                step: None,
                 model: chosen,
                 hand_off: None,
             },
@@ -793,7 +788,6 @@ impl Runs {
                         run.conversation_id,
                         run.message_id,
                         run.spec.mini_me.clone(),
-                        run.step.clone(),
                     )
                 })
                 .collect()
@@ -805,15 +799,13 @@ impl Runs {
             .filter(|(_, project, conversation_id, ..)| {
                 !comments::is_thread(&project.lock(), *conversation_id).unwrap_or(false)
             })
-            .map(|(_, project, conversation_id, message_id, mini_me, step)| RunningReply {
+            .map(|(_, project, conversation_id, message_id, mini_me)| RunningReply {
                 project_id: project.id,
-                project_name: project.name(),
                 conversation_id,
                 conversation_title: conversations::title(&project, conversation_id)
                     .unwrap_or_default(),
                 message_id,
                 mini_me,
-                step,
             })
             .collect()
     }
@@ -880,10 +872,8 @@ impl Runs {
                 };
                 run.calls.insert(call_id, (step_id.clone(), kind));
             }
-            run.step = Some(name.clone());
             (Arc::clone(&run.project), run.message_id, step.type_name(), name)
         };
-        self.notify();
         let (project, message_id, step_type, name) = started;
         let _ = conversations::append_step_started(&project, message_id, &step_id, step_type, &name);
     }
@@ -1715,12 +1705,10 @@ mod tests {
         let (project_id, conversation_id) = (new_id(), new_id());
         let reply = |project_id, conversation_id| RunningReply {
             project_id,
-            project_name: "Trials".into(),
             conversation_id,
             conversation_title: "Plan".into(),
             message_id: new_id(),
             mini_me: RunMiniMe { id: new_id(), name: "Researcher".into() },
-            step: None,
         };
         let running = [reply(project_id, conversation_id)];
         assert_eq!(
@@ -1733,7 +1721,7 @@ mod tests {
     }
 
     #[test]
-    fn running_replies_follow_their_runs_steps_and_ends() {
+    fn running_replies_follow_their_runs_until_they_end() {
         let f = quick();
         let lists = watch(&f);
         let (run_id, reply) = f.start("echo");
@@ -1743,12 +1731,7 @@ mod tests {
         let running = last(&lists);
         assert_eq!(running.len(), 1);
         assert_eq!(running[0].message_id, reply);
-        assert_eq!(running[0].project_name, "Test Project");
         assert_eq!(running[0].conversation_title, "New conversation");
-        assert_eq!(running[0].step, None);
-
-        f.step(run_id, STEP);
-        assert_eq!(last(&lists)[0].step.as_deref(), Some("Test"));
 
         f.runs.handle(SidecarFrame::RunDone { run_id });
         assert!(last(&lists).is_empty());
