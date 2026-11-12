@@ -23,7 +23,7 @@ Evidence for each item (copies with `path:line`) is in the scan reports and in P
   `oklch(...)` solids too, with a test that an `oklch` solid gets real wash and edge colours; one
   "open a file" hook; a `count(n, noun)` helper in `lib/format.ts`; a `useLoad` hook for the
   fetch-on-mount effects; verify with `npm test` and `npx tsc --noEmit`.
-- [ ] 2.2 One status-line row and subscription hook for the three status lines; one load-and-save
+- [x] 2.2 One status-line row and subscription hook for the three status lines; one load-and-save
   hook for the Mini-Me and Trait editors; SettingsView's error line as a `SettingRow` prop and one
   `SwitchRow` for its switch rows; verify with `npm test` and `npx tsc --noEmit`.
 - [ ] 2.3 Remove dead code (`useCanFeature`, `useFeatureFlag`, `ui/progress.tsx`, `FileMark`'s
