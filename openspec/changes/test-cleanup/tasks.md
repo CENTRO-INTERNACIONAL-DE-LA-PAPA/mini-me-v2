@@ -72,9 +72,10 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
   outside a run); merge the component refusals, the ended-call refusals and the two timeout tests;
   make `start_route` and `start_summary` use `wait_for`; move the test `Recorder` into
   `runs::test_support` and use it from `routing.rs` and `sidecar.rs`; verify with `cargo test`.
-- [ ] 6.2 In `routing.rs`: turn the 7 `decide` tests into one table test plus the files case,
-  keep one of the two `file_options` checks, and import `SCRIBE` and `FALLBACK_MINI_ME` from
-  `library` instead of re-declaring them; verify with `cargo test`.
+- [x] 6.2 In `routing.rs`: turn the six `decide` tests on Jev's answers into one, keep the
+  without-Jev and the files cases as their own tests, drop the `file_options` check that the
+  routed case already makes, and import `SCRIBE` and `FALLBACK_MINI_ME` from `library` instead of
+  re-declaring them; verify with `cargo test`.
 - [ ] 6.3 In `store.rs`, `conversations.rs`, `assets.rs` and `history.rs`: merge the pairs listed
   in the scan, delete `rejects_empty_messages` (one assert folded into
   `rejects_unknown_attachments_and_references`), and add a `send(project, conversation, text)`
