@@ -1,7 +1,6 @@
 """Asks Typesafe's Jev which Mini-Me answers, how it reacts, whether earlier context is needed
 and which file is meant. Each `route.start` gets exactly one `route.done` or `route.error`."""
 
-import asyncio
 import sys
 import traceback
 from typing import Any
@@ -9,7 +8,7 @@ from typing import Any
 from typesafe_sdk import AsyncTypeSafeClient, Choice, RetryPolicy
 
 from mini_me_sidecar.context import CoreRequestError, Requests
-from mini_me_sidecar.link import Link, log
+from mini_me_sidecar.link import Link, RequestTasks
 
 JEV_MODEL = "jev-latest"
 
@@ -47,16 +46,10 @@ class Router:
     def __init__(self, link: Link, requests: Requests) -> None:
         self._link = link
         self._requests = requests
-        self._tasks: set[asyncio.Task[None]] = set()
+        self._tasks = RequestTasks(link, "route")
 
     def start(self, frame: dict[str, Any]) -> None:
-        route_id = frame.get("route_id")
-        if not isinstance(route_id, str):
-            log(f"ignoring route.start without a route_id: {frame!r}")
-            return
-        task = asyncio.create_task(self._route(route_id, frame))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._tasks.start(frame, self._route)
 
     async def _route(self, route_id: str, frame: dict[str, Any]) -> None:
         # For the core's debug record; None when failing before sending, as without a key.
@@ -70,10 +63,12 @@ class Router:
             asked = _asked(state, questions)
             answers = await self._ask(key["value"], state, questions)
         except CoreRequestError as error:
-            self._error(route_id, error.code, str(error), asked)
+            self._tasks.error(route_id, error.code, str(error), asked=asked)
         except Exception:
             traceback.print_exc(file=sys.stderr)
-            self._error(route_id, "jev_unavailable", "Typesafe could not be reached.", asked)
+            self._tasks.error(
+                route_id, "jev_unavailable", "Typesafe could not be reached.", asked=asked
+            )
         else:
             done = {"type": "route.done", "route_id": route_id, "answers": answers}
             self._link.send({**done, "asked": asked})
@@ -97,16 +92,8 @@ class Router:
             for name, answer in response.choices.items()
         }
 
-    def _error(
-        self, route_id: str, code: str, message: str, asked: dict[str, Any] | None
-    ) -> None:
-        error = {"code": code, "message": message}
-        frame = {"type": "route.error", "route_id": route_id, "error": error, "asked": asked}
-        self._link.send(frame)
-
     async def close(self) -> None:
-        for task in list(self._tasks):
-            task.cancel()
+        await self._tasks.close()
 
 
 def _asked(state: dict[str, Any], questions: dict[str, Choice]) -> dict[str, Any]:

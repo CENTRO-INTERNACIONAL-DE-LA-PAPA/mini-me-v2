@@ -7,7 +7,8 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from mini_me_sidecar import debug
-from mini_me_sidecar.context import Model, TraitError
+from mini_me_sidecar.adapters.base import require_model
+from mini_me_sidecar.context import CallContext, Model, TraitError
 
 PROVIDER_NAMES = {
     "openai": "OpenAI",
@@ -43,6 +44,9 @@ MAX_LOGGED_CHARS = 600
 
 # Anthropic requires an output limit; this leaves room for long summaries.
 ANTHROPIC_MAX_TOKENS = 4096
+
+# Finish reasons of a provider's safety filter; asking again gets the same verdict.
+REFUSED = {"content_filter", "refusal"}
 
 
 def chat_model(model: Model, key: str) -> Any:
@@ -89,6 +93,28 @@ async def structured_answer(chat: Any, schema: type[BaseModel], turns: list[Any]
         return schema(**calls[0]["args"]) if calls else None
     except ValidationError:
         return None
+
+
+async def ask_structured(
+    ctx: CallContext, schema: type[BaseModel], turns: list[Any], none_if_invalid: bool = False
+) -> Any:
+    """Errors become `provider_error`s; with `none_if_invalid`, an off-schema answer is None."""
+    model = require_model(ctx)
+    key = await ctx.secret(model.provider)
+    try:
+        return await structured_answer(chat_model(model, key.reveal()), schema, turns)
+    except TraitError:
+        raise
+    except Exception as error:
+        if none_if_invalid and isinstance(error, ValidationError):
+            return None
+        log_error(error, model, key.reveal())
+        raise provider_error(error, model) from None
+
+
+def filtered(ending: dict[str, Any]) -> bool:
+    """Whether the provider ended the stream because a content filter or refusal stopped it."""
+    return ending.get("finish_reason") in REFUSED or ending.get("stop_reason") in REFUSED
 
 
 def provider_error(error: Exception, model: Model) -> TraitError:

@@ -34,7 +34,7 @@ Evidence for each item (copies with `path:line`) is in the scan reports and in P
 
 ## 3. Sidecar
 
-- [ ] 3.1 Shared helpers in `adapters/base.py` and `adapters/providers.py` for the request-handler
+- [x] 3.1 Shared helpers in `adapters/base.py` and `adapters/providers.py` for the request-handler
   skeleton, the structured-answer error mapping, the `model_not_set` check, the text input schema
   and `component_or_text`; remove `theories_reply`, `papers_reply`'s narrative branch and
   `_log_shape`; verify with `uv run pytest`.

@@ -3,7 +3,7 @@ import re
 from typing import Any
 
 from mini_me_sidecar.context import CallContext
-from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
+from mini_me_sidecar.adapters.base import TEXT_INPUT, Adapter, AdapterInfo
 
 CHUNK_DELAY_S = 0.06
 
@@ -15,11 +15,7 @@ class Echo(Adapter):
     info = AdapterInfo(
         id="echo",
         description="Streams your message back to you, one word at a time.",
-        input_schema={
-            "type": "object",
-            "properties": {"text": {"type": "string"}},
-            "required": ["text"],
-        },
+        input_schema=TEXT_INPUT,
     )
 
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:

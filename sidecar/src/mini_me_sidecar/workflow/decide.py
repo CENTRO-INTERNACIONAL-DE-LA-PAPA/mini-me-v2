@@ -4,14 +4,10 @@ fixed list."""
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError, create_model
+from pydantic import BaseModel, Field, create_model
 
-from mini_me_sidecar.adapters.providers import (
-    chat_model,
-    log_error,
-    provider_error,
-    structured_answer,
-)
+from mini_me_sidecar.adapters.base import require_model
+from mini_me_sidecar.adapters.providers import ask_structured
 from mini_me_sidecar.context import CallContext, TraitError
 
 SYSTEM = (
@@ -38,10 +34,7 @@ async def decide(
 ) -> str:
     """The model's answer to `question`, one of `choices`. Raises `invalid_decision` when the
     model answers anything else."""
-    model = ctx.model
-    if model is None or not model.model:
-        raise TraitError("model_not_set", "Choose an AI model in Settings first.")
-    key = await ctx.secret(model.provider)
+    model = require_model(ctx)
     material = "\n\n".join(
         [
             f"The user's message:\n{message}",
@@ -49,20 +42,9 @@ async def decide(
             f"Question: {question}\nAllowed choices: {json.dumps(choices, ensure_ascii=False)}",
         ]
     )
-    schema = decision_schema(choices)
-    try:
-        # Tool calling works with every provider and with OpenRouter's models.
-        answer = await structured_answer(
-            chat_model(model, key.reveal()), schema, [("system", SYSTEM), ("human", material)]
-        )
-    except TraitError:
-        raise
-    except ValidationError:
-        # The model answered with something outside the allowed choices.
-        answer = None
-    except Exception as error:
-        log_error(error, model, key.reveal())
-        raise provider_error(error, model) from None
+    turns = [("system", SYSTEM), ("human", material)]
+    # Tool calling works with every provider and with OpenRouter's models.
+    answer = await ask_structured(ctx, decision_schema(choices), turns, none_if_invalid=True)
     choice = getattr(answer, "choice", None)
     if choice not in choices:
         raise TraitError(
