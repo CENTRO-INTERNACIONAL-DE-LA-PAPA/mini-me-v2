@@ -130,16 +130,16 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
 
 ## 9. Check
 
-- [ ] 9.1 Run all three suites, write the new counts under "Counts" next to the baseline, and
+- [x] 9.1 Run all three suites, write the new counts under "Counts" next to the baseline, and
   check every remaining test name still says what it checks; verify all suites pass.
 
 ## Counts
 
 | Suite | Before | After |
 |---|---|---|
-| `cargo test` | 306 (298 passed, 8 ignored) | |
-| `npm test` | 178 passed (49 files) | |
-| `uv run pytest` | 138 passed | |
+| `cargo test` | 306 (298 passed, 8 ignored) | 235 (234 passed, 1 ignored) |
+| `npm test` | 178 passed (49 files) | 153 passed (47 files) |
+| `uv run pytest` | 138 passed | 112 passed |
 
 ## Workflow follow-up
 
