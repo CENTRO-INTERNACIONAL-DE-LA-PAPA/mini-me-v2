@@ -82,9 +82,9 @@ removing it. `cargo test` and `uv run pytest` may run on this machine; `npm test
   `rejects_empty_messages` in); in `assets.rs`, merge the same-name tests and the three ways a
   file comes in, and delete the `remove` test that the `delete` test covers; fold
   `the_first_message_has_no_history` into the history ordering test; verify with `cargo test`.
-- [ ] 6.4 In `quarto.rs`: merge the three render tests into one that still returns early without
+- [x] 6.4 In `quarto.rs`: merge the three render tests into one that still returns early without
   Quarto, merge the three `locate` tests and the two blocking-message tests, and delete
-  `only_assets_named_in_the_source_are_copied`; verify with `cargo test`.
+  `only_assets_named_in_the_source_are_copied` with its `asset` helper; verify with `cargo test`.
 - [ ] 6.5 In `updates.rs`, `settings.rs`, `projects.rs`, `components.rs`, `sidecar.rs`,
   `project_activity.rs`, `approvals.rs` and `recent.rs`: merge the pairs listed in the scan into
   table tests, and keep one `a_project_from_a_newer_app_is_skipped_and_unchanged`, moved to
