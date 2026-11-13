@@ -16,6 +16,15 @@ export function formatSize(bytes: number): string {
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
 }
 
+/** The running app as Settings shows it: Mini-Me by its version, Mini-Me Canary by the commit it
+ * was built from, or "(local)" when it was run from the source tree. */
+export function appLabel(name: string, version: string, commit?: string): string {
+  if (!name.endsWith("Canary")) {
+    return `${name} ${version}`;
+  }
+  return `${name} ${commit || "(local)"}`;
+}
+
 const startOfDay = (time: number) => new Date(time).setHours(0, 0, 0, 0);
 
 // Counted in calendar days rather than 24 hours, so a day that changes the clock for

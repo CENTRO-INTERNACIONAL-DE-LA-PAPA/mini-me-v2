@@ -24,7 +24,7 @@
   `plugins.updater.endpoints` in `tauri.canary.conf.json`, and in `AppState::init` start update
   checks in every release build. Verify with `cargo test`, and that a local run logs no update
   check.
-- [ ] 2.2 In Settings → About, show a Canary app by its commit, from the build's `VITE_COMMIT`.
+- [x] 2.2 In Settings → About, show a Canary app by its commit, from the build's `VITE_COMMIT`.
   Verify with a Vitest test of the label ("Mini-Me" with 0.6.0 gives "Mini-Me 0.6.0";
   "Mini-Me Canary" with the commit `a1b2c3d` gives "Mini-Me Canary a1b2c3d", and with none
   "Mini-Me Canary (local)"), and that a local run shows "Mini-Me Canary (local)".
