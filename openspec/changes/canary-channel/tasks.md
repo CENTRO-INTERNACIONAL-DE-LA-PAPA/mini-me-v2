@@ -31,7 +31,7 @@
 
 ## 3. Releasing Mini-Me
 
-- [ ] 3.1 Add `scripts/sync-version.mjs` and the `sync-version` script in `package.json`: it copies
+- [x] 3.1 Add `scripts/sync-version.mjs` and the `sync-version` script in `package.json`: it copies
   the version in the changelog's first line into `package.json` and `package-lock.json`. Delete
   `scripts/release.mjs`, the `release` script, and `releaseVersion`, `latestVersion` and
   `compareVersions` in `scripts/release-lib.mjs` with their tests. Verify with `npm test`, then by
