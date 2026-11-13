@@ -1,6 +1,8 @@
 import Matter from "matter-js";
 import type { MiniMe } from "../../protocol/types";
-import { ACCESSORIES, FACES, baseMarkup, partUrl } from "../avatar/parts";
+import { trackLook } from "../avatar/look";
+import { avatarClass, hop, randomDelay } from "../avatar/motion";
+import { avatarMarkup } from "../avatar/parts";
 import { surfaceStyle } from "../minime/miniMeColors";
 import { isClick, type Press } from "./gesture";
 
@@ -21,30 +23,19 @@ interface Piece {
   miniMe: MiniMe;
   body: Matter.Body;
   element: HTMLElement;
+  stopLooking: () => void;
 }
 
-/** `miniMe`'s avatar as plain elements, layered as the `Avatar` component layers them. */
+/** `miniMe`'s avatar as a plain element, drawn and animated as the `Avatar` component is. */
 function avatar(miniMe: MiniMe): HTMLElement {
   const element = document.createElement("div");
-  element.className = "absolute top-0 left-0";
+  element.className = `absolute top-0 left-0 ${avatarClass(SIZE)}`;
   element.style.width = element.style.height = `${SIZE}px`;
   element.style.setProperty("--avatar-solid", miniMe.colors.solid);
   element.style.setProperty("--avatar-ink", miniMe.colors.ink);
-  const base = document.createElement("div");
-  base.className = "absolute inset-0";
-  // The markup is one of the bundled base SVGs, never user input.
-  base.innerHTML = baseMarkup(miniMe.avatar.base) ?? "";
-  element.append(base);
-  const { face, accessory } = miniMe.avatar;
-  const layers = [partUrl(FACES, face), partUrl(ACCESSORIES, accessory)];
-  for (const url of layers) {
-    if (!url) continue;
-    const image = new Image();
-    image.src = url;
-    image.draggable = false;
-    image.className = "absolute inset-0 size-full";
-    element.append(image);
-  }
+  element.style.setProperty("--avatar-delay", randomDelay());
+  // The markup comes from the bundled part files, never user input.
+  element.innerHTML = avatarMarkup(miniMe.avatar);
   return element;
 }
 
@@ -124,7 +115,8 @@ export function startPlayground(layer: HTMLElement) {
       angle: (Math.random() - 0.5) * 0.6,
     });
     Composite.add(engine.world, body);
-    pieces.push({ miniMe, body, element });
+    const stopLooking = trackLook(element, () => body.angle);
+    pieces.push({ miniMe, body, element, stopLooking });
     if (!running) Runner.run(runner, engine);
     running = true;
   };
@@ -185,6 +177,7 @@ export function startPlayground(layer: HTMLElement) {
     Composite.remove(engine.world, drag.constraint);
     const clicked = isClick(drag.start, { ...point(event), at: event.timeStamp });
     showName(clicked ? drag.piece : null);
+    if (clicked) hop(drag.piece.element);
     drag = null;
     sheet.style.cursor = "";
   };
@@ -202,6 +195,7 @@ export function startPlayground(layer: HTMLElement) {
     window.clearTimeout(nameTimer);
     sheet.removeEventListener("pointerdown", down);
     sheet.removeEventListener("pointermove", move);
+    for (const piece of pieces) piece.stopLooking();
     sheet.removeEventListener("pointerup", up);
     sheet.removeEventListener("pointercancel", up);
     sheet.style.cursor = "";

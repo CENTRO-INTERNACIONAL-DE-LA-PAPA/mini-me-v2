@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import library from "../../../src-tauri/library/builtin.json";
-import { ACCESSORIES, BASES, FACES, baseMarkup, partUrl } from "./parts";
+import { ACCESSORIES, BASES, FACES, baseMarkup, faceMarkup, partUrl } from "./parts";
 
 describe("avatar parts", () => {
   it("loads every part with an id and label from its file name", () => {
@@ -22,9 +22,15 @@ describe("avatar parts", () => {
     }
   });
 
+  it("inlines every face as an svg", () => {
+    for (const face of FACES) {
+      expect(faceMarkup(face.id), face.id).toMatch(/^<svg class="size-full" /);
+    }
+  });
+
   it("draws every built-in Mini-Me from parts that exist", () => {
     for (const { name, avatar } of library.mini_mes) {
-      expect(partUrl(FACES, avatar.face), name).not.toBeNull();
+      expect(faceMarkup(avatar.face), name).not.toBeNull();
       expect(baseMarkup(avatar.base), name).not.toBeNull();
       if ("accessory" in avatar) expect(partUrl(ACCESSORIES, avatar.accessory), name).not.toBeNull();
     }
