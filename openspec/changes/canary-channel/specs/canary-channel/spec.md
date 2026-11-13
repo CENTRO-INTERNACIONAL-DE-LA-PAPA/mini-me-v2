@@ -59,6 +59,10 @@ as one GitHub pre-release, without a manual step, only when every platform built
 - **WHEN** the macOS build of a Canary build fails
 - **THEN** nothing is published, and installed copies are still offered the previous build
 
+#### Scenario: A newer change during a build
+- **WHEN** a second change reaches `dev` while the first is still building
+- **THEN** the first build is stopped and its draft deleted, and only the second is published
+
 ### Requirement: Canary builds are named by their commit
 A Canary build SHALL be named after the commit it was built from, by the first 7 characters of
 its hash: its pre-release SHALL be named "Mini-Me Canary <hash>" and tagged `canary-<hash>` at

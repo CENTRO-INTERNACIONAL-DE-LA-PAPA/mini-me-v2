@@ -38,19 +38,21 @@
   raising the changelog's first line and running `npm run sync-version` followed by
   `npm run check-version` and `git status` (two files changed, nothing committed); by running it
   again, which must change nothing; and with a first line that names no version.
-- [ ] 3.2 Add a `publish` job to `release.yml` that needs every build job and publishes the draft
-  as the latest release; reword the workflow's header comment, which says the draft waits to be
-  published. Verify by reading it against the `releases` delta: a failed platform skips the job,
-  and re-running failed jobs runs it.
+- [x] 3.2 In `release.yml`, add a `publish` job that needs every build job and publishes the draft
+  as the latest release; create the tag when the draft is published instead of up front; delete
+  drafts left by earlier runs; cancel a build in progress when `main` changes again; reword the
+  header comment. Verify by reading it against the `releases` delta and next to `canary.yml`, and
+  by running its draft filter locally with `gh`.
 
 ## 4. The Canary workflow
 
-- [ ] 4.1 Add `canary.yml`: the push trigger on `dev` with the ignored paths, `workflow_dispatch`
-  and the concurrency group; the `draft` job (stops when `canary-<hash>` exists, leftover drafts deleted,
-  draft pre-release "Mini-Me Canary <hash>" with the tag name `canary-<hash>` and the target
-  commit); its own `build` job for the three platforms, which stamps `0.0.<run number>`, sets
-  `VITE_COMMIT` and builds with the Canary config. Verify by reading it, and by running its draft-listing command locally with `gh`.
-- [ ] 4.2 Add the `publish` job to `canary.yml`: publish the draft as a pre-release that is not the
+- [x] 4.1 Add `canary.yml`: the push trigger on `dev` with the ignored paths, `workflow_dispatch`
+  and the concurrency group; the `draft` job, as in `release.yml` (stops when `canary-<hash>` exists, deletes
+  leftover Canary drafts, creates the draft pre-release "Mini-Me Canary <hash>" with the tag name
+  and target commit); its own `build` job for the three platforms, which stamps `0.0.<run number>`, sets
+  `VITE_COMMIT` and builds with the Canary config. Verify by reading it next to `release.yml`, and by running its tag check and draft filter
+  locally with `gh`.
+- [x] 4.2 Add the `publish` job to `canary.yml`: publish the draft as a pre-release that is not the
   latest release, and copy `latest.json` to the `canary` pre-release. Verify by reading it; the
   trial in group 5 runs it.
 - [ ] 4.3 Document both channels: a "Mini-Me Canary" section in `README.md` (what it is, that

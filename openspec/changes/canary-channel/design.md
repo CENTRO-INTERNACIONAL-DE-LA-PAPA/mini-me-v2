@@ -91,7 +91,7 @@ argument. Rejected: the version would be typed twice, or the changelog rewritten
 ### A Mini-Me release publishes itself (workflow)
 `release.yml` gains a `publish` job that needs every build job and turns the draft into the
 latest release. A failed platform skips it, so the release stays a draft; re-running the failed
-jobs runs it afterwards. The tag and the draft are created as today.
+jobs runs it afterwards.
 
 The newest Canary build is the code about to be released. Trying it before merging `dev` into
 `main` replaces trying the draft's installers.
@@ -122,10 +122,10 @@ release files.
 ### One pre-release per build, and a fixed one for the feed (workflow)
 `canary.yml` has three jobs:
 
-1. `draft`: deletes Canary drafts left by cancelled or failed runs, and creates a draft
-   pre-release named "Mini-Me Canary <hash>" with the tag name `canary-<hash>` and the commit as
-   its target. It stops when that tag exists. The tag itself is created by GitHub when the draft is published, so a failed
-   run leaves no tag.
+1. `draft`: stops when the tag `canary-<hash>` exists; otherwise deletes Canary drafts left by
+   cancelled or failed runs, and creates a draft pre-release named "Mini-Me Canary <hash>" with
+   the tag name `canary-<hash>` and the commit as its target. GitHub creates the tag itself when
+   the draft is published, so a failed run leaves no tag.
 2. `build`: one job per platform, with the same runners, bundles and pinned actions as
    `release.yml`. It stamps the version and sets `VITE_COMMIT`, then builds with the Canary config before the release
    and CI configs, uploading into the draft.
@@ -149,14 +149,26 @@ built; one rolling pre-release whose files are replaced; keeping only the newest
 Rejected: testers would wait for changes already merged, platforms would differ, no tag would
 name the build, and pruning is not needed.
 
-### Each channel has its own workflow file (workflow)
-`canary.yml` carries its own build job: no reusable workflow or shared action sits between it
-and `release.yml`, so a change to Canary's builds cannot break a Mini-Me release. The two build
-jobs repeat the pinned actions, the Linux packages and the bundle list; a change to one of
-those is made in both files.
+### Each channel has its own workflow file, and the two read alike (workflow)
+`canary.yml` and `release.yml` share no reusable workflow or action, so a change to Canary's
+builds cannot break a Mini-Me release. They have the same three jobs with the same steps in the
+same order, and the same three safeguards:
 
-*Alternative:* a reusable workflow called by both. Rejected: it would put the production release
-behind a file that Canary work also edits.
+- a newer change cancels a build still in progress, so the newest commit is the one published;
+- the tag is created when the draft is published, so a failed build leaves no tag, and the same
+  version or commit can simply be built again;
+- drafts left by cancelled or failed runs are deleted when the next build starts.
+
+For `release.yml` these replace creating the tag up front and queueing runs. What differs
+between the files is only what each channel needs: the branch, the ignored paths, where the name
+comes from (`package.json` and `check-version`, or the commit), the notes, the version stamp and
+`VITE_COMMIT`, the Canary config, and the copy of `latest.json` to the feed. A change to the
+pinned actions, the Linux packages or the bundle list is made in both files.
+
+*Alternatives:* a reusable workflow called by both. Rejected: it would put the production release
+behind a file that Canary work also edits. Leaving `release.yml` as it was. Rejected: a failed
+release left a tag that had to be deleted by hand, and the two files would handle failure
+differently.
 
 ### Both apps share the update signing key (workflow, config)
 Canary builds are signed with the key Mini-Me's releases use, and `tauri.canary.conf.json`
@@ -184,6 +196,9 @@ can be deleted on GitHub afterwards.
   call; if it fails, the draft is complete and can be published by hand.
 - [The version is not raised before merging into `main`] → Nothing is built, and the workflow's
   log says the version is already tagged; raise it and merge again.
+- [The first release after this change deletes the draft "Mini-Me 0.6.0", left on GitHub since
+  0.6.1 replaced it] → Intended: it is a leftover draft. Delete or publish it beforehand to decide
+  its fate by hand.
 - [The two build jobs drift apart, such as an action pinned to a new version in one file only] →
   Each file says in a comment that the other holds the same job.
 - [Renaming or recreating `canary.yml` restarts `run_number`, so new builds look older and are
