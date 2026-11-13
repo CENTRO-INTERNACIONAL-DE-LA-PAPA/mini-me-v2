@@ -1,0 +1,133 @@
+# Runs when dev receives a change to the app, or by hand. Builds Mini-Me Canary for Windows, macOS
+# and Linux from that commit and, once every platform built, publishes it as the pre-release
+# "Mini-Me Canary <commit>", tagged canary-<commit>. The pre-release tagged `canary` holds only
+# latest.json, the update feed installed copies of Mini-Me Canary read. A commit that already has
+# a tag does nothing. This file follows release.yml job by job: a change to the pinned actions,
+# Linux packages or bundles is made in both.
+name: Canary
+
+on:
+  push:
+    branches: [dev]
+    paths-ignore: ["**.md", "docs/**", "openspec/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# A newer change replaces a build still in progress, so the newest commit is the one published.
+concurrency:
+  group: canary
+  cancel-in-progress: true
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+      commit: ${{ steps.create.outputs.commit }}
+    steps:
+      # The tag is only a name on the draft: GitHub creates it, at this commit, when the draft is
+      # published, so a failed build leaves none. Drafts left by cancelled or failed runs never
+      # became builds, and are deleted. With no release ID, nothing is built.
+      - id: create
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/dev" ]; then
+            echo "Canary builds are made from dev, not from $GITHUB_REF." >&2
+            exit 1
+          fi
+          commit="${GITHUB_SHA::7}"
+          tag="canary-$commit"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
+            echo "$tag already exists, so this change to dev builds nothing."
+            exit 0
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq '.[] | select(.draft and (.tag_name | startswith("canary-"))) | .id' |
+            while read -r stale; do
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$stale"
+            done
+          id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+            -f tag_name="$tag" -f target_commitish="$GITHUB_SHA" \
+            -f name="Mini-Me Canary $commit" -f body="Built from $GITHUB_SHA." \
+            -F draft=true -F prerelease=true --jq .id)
+          test -n "$id"
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: draft
+    if: needs.draft.outputs.release_id != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            bundles: nsis
+          - runner: macos-latest # Apple silicon
+            bundles: app,dmg
+          # An AppImage links against the build machine's glibc, so the oldest supported
+          # Ubuntu keeps it running on that release and newer ones.
+          - runner: ubuntu-22.04
+            bundles: appimage,deb
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          cache: npm
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: src-tauri
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev patchelf
+      - run: npm ci
+      # The updater installs only a version above the running one, and a commit hash has no order,
+      # so each build also carries the run number. It is set here and never committed.
+      - run: npm version "0.0.${{ github.run_number }}" --no-git-tag-version
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Settings → About shows it as the build's name.
+          VITE_COMMIT: ${{ needs.draft.outputs.commit }}
+        with:
+          releaseId: ${{ needs.draft.outputs.release_id }}
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: >-
+            --config src-tauri/tauri.canary.conf.json
+            --config src-tauri/tauri.release.conf.json
+            --config src-tauri/tauri.ci.conf.json
+            --bundles ${{ matrix.bundles }}
+
+  # Skipped while any platform's build has failed, so the build stays a draft; re-running the
+  # failed jobs runs it afterwards. latest.json names each update file by its full URL, so the
+  # copy in the `canary` pre-release points at this build's own files.
+  publish:
+    needs: [draft, build]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ needs.draft.outputs.release_id }}
+          TAG: canary-${{ needs.draft.outputs.commit }}
+        run: |
+          gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
+            -F draft=false -F prerelease=true -f make_latest=false
+          gh release download "$TAG" --pattern latest.json
+          if ! gh release view canary > /dev/null 2>&1; then
+            gh release create canary --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "Mini-Me Canary update feed" \
+              --notes "Holds latest.json, which installed copies of Mini-Me Canary read to find the newest build. To install Mini-Me Canary, download the newest \"Mini-Me Canary\" pre-release instead."
+          fi
+          gh release upload canary latest.json --clobber

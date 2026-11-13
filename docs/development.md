@@ -19,11 +19,11 @@ cd sidecar && uv sync --frozen && cd ..   # once, and after the sidecar's depend
 npm run tauri:dev
 ```
 
-`tauri:dev` runs the app as **Mini-Me Dev** (`src-tauri/tauri.dev.conf.json`): the
-identifier `org.cipotato.mini-me.dev`, the development icon and its own data. Its Projects
-are in `Documents/Mini-Me Data (Dev)`, and its settings, logs and keychain entries are kept
+`tauri:dev` runs the app as **Mini-Me Canary** (`src-tauri/tauri.canary.conf.json`): the
+identifier `org.cipotato.mini-me.canary`, the Canary icon and its own data. Its Projects
+are in `Documents/Mini-Me Data (Canary)`, and its settings, logs and keychain entries are kept
 under its identifier, so development never touches the installed Mini-Me's Projects or keys.
-Set up its API keys and Ai2 sign-in once in Mini-Me Dev's Settings.
+Set up its API keys and Ai2 sign-in once in Mini-Me Canary's Settings.
 
 In development the app starts the sidecar from `sidecar/` with `uv run`. Its log is
 `sidecar.log` in the app's log directory; set `MINI_ME_LOG_FRAMES=1` to also log every frame
@@ -65,12 +65,12 @@ listed in the script's `BUILT_IN`.
   tables and charts), `MetaParts` (details kept apart by a gap), the sheets and headers in
   `src/components/shell/Sheet.tsx` and `SectionPage.tsx`, and `EditorHeader` in
   `src/components/library/LibraryParts.tsx`.
-- **App icons.** `src-tauri/icons/app-icon.svg` is the release icon and `app-icon-dev.svg` the
-  Mini-Me Dev icon (`tauri.dev.conf.json`). Regenerate them with
+- **App icons.** `src-tauri/icons/app-icon.svg` is the release icon and `app-icon-canary.svg` the
+  Mini-Me Canary icon (`tauri.canary.conf.json`). Regenerate them with
   `npx tauri icon src-tauri/icons/app-icon.svg` and
-  `npx tauri icon src-tauri/icons/app-icon-dev.svg --output src-tauri/icons/dev`, keeping only the
-  files the configs list. The release icon is full bleed (Windows); the dev icon's artwork is inset
-  to an 824px shape on the 1024px canvas, as macOS expects.
+  `npx tauri icon src-tauri/icons/app-icon-canary.svg --output src-tauri/icons/canary`, keeping
+  only the files the configs list. The release icon is full bleed (Windows); the Canary icon's
+  artwork is inset to an 824px shape on the 1024px canvas, as macOS expects.
 
 ## Tests
 
@@ -83,38 +83,60 @@ cd src-tauri && cargo test                        # Rust core
 CI ([`ci.yml`](../.github/workflows/ci.yml)) runs the frontend, sidecar and Rust tests on
 every pull request into `dev` or `main`.
 
+## Canary builds
+
+Every push to `dev` that changes more than Markdown files, `docs/` or `openspec/` builds Mini-Me
+Canary for Windows, macOS and Linux ([`canary.yml`](../.github/workflows/canary.yml)). Once every
+platform built, the build is published as a pre-release named and tagged after its commit:
+"Mini-Me Canary a1b2c3d", `canary-a1b2c3d`. Installed copies of Mini-Me Canary update to it at
+their next check; Mini-Me never sees it. Nothing has to be done by hand.
+
+- **By hand:** Actions → Canary → Run workflow builds the newest commit of `dev`. A commit that
+  already has a build is not built again.
+- **The feed:** the pre-release tagged `canary` holds only `latest.json`, which installed copies
+  read to find the newest build. Each build replaces it. Do not delete that pre-release.
+- **The hidden version:** the updater installs only a version above the running one, and a commit
+  hash has no order, so each build is also given the version `0.0.<run number>`, which shows in
+  the installers' file names. The run number belongs to `canary.yml`: renaming that file starts
+  it again from 1, and installed copies would stop updating.
+- **Failures** are handled as for a release, below.
+
+`canary.yml` and `release.yml` have the same jobs and steps in the same order. A change to the
+pinned actions, the Linux packages or the bundle list is made in both.
+
 ## Cutting a release
 
-A release is a version that `main` carries and no tag has yet. You prepare it on `dev` with one
-command, and merging the pull request does the rest
-([`release.yml`](../.github/workflows/release.yml)).
+A release is a version that `main` carries and no tag has yet. Merging `dev` into `main` builds
+and publishes it ([`release.yml`](../.github/workflows/release.yml)).
 
-1. Write `CHANGELOG.md` for the new version and leave it uncommitted. Its first line, `# Mini-Me 0.6.0`,
-   is where the version comes from; then come "New", "Improved" and "Fixed" sections (leave out an
-   empty one), in plain language for users. It holds only this release's notes: the app bundles it
-   for its "What's new" page, and the draft release shows the same text.
-2. On `dev`, run `npm run release`. It checks that `dev` is not behind `origin/dev`, that nothing is
-   changed but the changelog, and that its version is new, then sets the version in `package.json`
-   and `package-lock.json`, commits `chore(release): 0.6.0`, pushes `dev` and opens the pull request
-   from `dev` into `main` with the changelog as its body. `npm run release -- --dry-run` says what it
-   would do without doing it. If a step fails, run it again: it skips what is done.
-3. Wait for CI on the pull request, then merge it into `main`. It never merges for you.
-4. The Release workflow starts when `main` changes. If the version has no tag, it tags the merge
-   commit `v0.6.0`, creates a **draft** release with the changelog as its notes, and builds the
-   Windows installer, the macOS `.dmg` and `.app.tar.gz`, the Linux AppImage and `.deb`, each update
-   file's `.sig`, and `latest.json` with an entry per platform. A merge into `main` whose version is
-   already tagged builds nothing.
-5. Try the installers from the draft, then click **Publish release**. Installed apps only see
-   published releases.
+1. While working, each pull request adds its line to `CHANGELOG.md`, under "New", "Improved" or
+   "Fixed" (leave out an empty section), in plain language for users. The first change after a
+   release replaces that release's notes, so the file holds only the notes of the release being
+   prepared: the app bundles it for its "What's new" page, and the GitHub release shows the same
+   text.
+2. To release, give the changelog's first line the new version, `# Mini-Me 0.8.0`, and run
+   `npm run sync-version`, which copies that version into `package.json` and `package-lock.json`
+   and commits nothing. Commit the three files to `dev` as `chore(release): 0.8.0`.
+3. Try the Canary build of that commit. It is the code about to be released, and nobody tries a
+   release's installers before they reach users.
+4. Open the pull request from `dev` into `main`, wait for CI, and merge it.
+5. The Release workflow starts when `main` changes. If the version has no tag, it creates a draft
+   release with the changelog as its notes, and builds the Windows installer, the macOS `.dmg` and
+   `.app.tar.gz`, the Linux AppImage and `.deb`, each update file's `.sig`, and `latest.json` with
+   an entry per platform. Once every platform built, it publishes the release, which creates the
+   tag `v0.8.0`, and installed apps see it at their next check. A merge into `main` whose version
+   is already tagged builds nothing.
 
-If a platform's build fails, re-run the failed jobs of that run in Actions; they upload into the same
-draft. To start again from scratch, delete the draft release and the tag, then run the Release workflow
-on `main` by hand (Actions → Release → Run workflow).
+If a platform's build fails, the release stays a draft, no tag is made and no user is offered
+anything. Either re-run the failed jobs of that run in Actions, which upload into the same draft
+and then publish it, or merge a fix into `main`: the old draft is deleted and the same version is
+built again from the new commit. A newer change to `main` also replaces a build still in progress.
 
-The app version is set in `package.json` only. `package-lock.json` follows it through `npm version`,
-and `src-tauri/tauri.conf.json` reads it from `../package.json`, so the app, its installers and its
-update files carry it. The version in `src-tauri/Cargo.toml` is a fixed `0.0.0` that nothing reads.
-`npm run check-version` checks that everything agrees, and CI runs it on every pull request.
+The app version is read from `package.json`: `npm run sync-version` copies it there, and into
+`package-lock.json`, from the changelog's first line, and `src-tauri/tauri.conf.json` reads it
+from `../package.json`, so the app, its installers and its update files carry it. The version in
+`src-tauri/Cargo.toml` is a fixed `0.0.0` that nothing reads. `npm run check-version` checks that
+everything agrees, and CI runs it on every pull request.
 
 The update files are signed with the key in the `TAURI_SIGNING_PRIVATE_KEY` repository
 secret. Its password is in `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The maintainer keeps a

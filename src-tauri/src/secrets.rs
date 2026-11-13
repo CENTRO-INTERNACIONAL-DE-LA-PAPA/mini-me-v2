@@ -31,7 +31,7 @@ const KEY_ACCOUNTS: [(&str, &str); 7] = [
 const DEFAULT_KEYCHAIN_SERVICE: &str = "org.cipotato.mini-me";
 static KEYCHAIN_SERVICE: OnceLock<String> = OnceLock::new();
 
-/// Stores keychain entries under `service`, the running app's identifier, so Mini-Me Dev's
+/// Stores keychain entries under `service`, the running app's identifier, so Mini-Me Canary's
 /// keys stay apart from Mini-Me's. Only the first call takes effect.
 pub fn use_keychain_service(service: &str) {
     let _ = KEYCHAIN_SERVICE.set(service.to_string());

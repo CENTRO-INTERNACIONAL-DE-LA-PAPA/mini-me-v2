@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { appLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   FlaskConicalIcon,
@@ -652,10 +653,12 @@ function Collaboration() {
   );
 }
 
-/** Which app and version is running, such as "Mini-Me Dev 0.4.0". */
 function AboutRow({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
   const { value: about } = useLoad(
-    () => Promise.all([getName(), getVersion()]).then(([name, version]) => `${name} ${version}`),
+    () =>
+      Promise.all([getName(), getVersion()]).then(([name, version]) =>
+        appLabel(name, version, import.meta.env.VITE_COMMIT),
+      ),
     [],
   );
 

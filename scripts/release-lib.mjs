@@ -1,5 +1,5 @@
 // The parts of preparing and checking a release that need no git, npm or network, so they can be
-// tested. `release.mjs` and `check-version.mjs` use them.
+// tested. `sync-version.mjs` and `check-version.mjs` use them.
 
 /** The path the Tauri configuration reads the app version from. */
 export const TAURI_VERSION_SOURCE = "../package.json";
@@ -10,39 +10,6 @@ const CHANGELOG_HEADING = /^# Mini-Me (\d+\.\d+\.\d+)\s*$/;
 export function changelogVersion(changelog) {
   const first = changelog.split(/\r?\n/, 1)[0];
   return first.match(CHANGELOG_HEADING)?.[1] ?? null;
-}
-
-/** Negative, zero or positive as version `a` is below, equal to or above `b`; both are `x.y.z`. */
-export function compareVersions(a, b) {
-  const parts = (version) => version.split(".").map(Number);
-  const [left, right] = [parts(a), parts(b)];
-  for (let i = 0; i < 3; i++) {
-    if (left[i] !== right[i]) return left[i] - right[i];
-  }
-  return 0;
-}
-
-/** The highest version among release tags such as `v0.5.2`, or null when there are none. */
-export function latestVersion(tags) {
-  const versions = tags.map((tag) => tag.match(/^v(\d+\.\d+\.\d+)$/)?.[1]).filter(Boolean);
-  return versions.reduce((latest, version) => (latest === null || compareVersions(version, latest) > 0 ? version : latest), null);
-}
-
-/**
- * The version the changelog says to release, as `{ version }`, or `{ problem }` in a sentence when
- * it cannot be one: its first line names no version, or the version is not above `latest`, the latest
- * released version (null when nothing was released yet).
- */
-export function releaseVersion(changelog, latest) {
-  const version = changelogVersion(changelog);
-  if (version === null) {
-    return { problem: 'CHANGELOG.md must start with "# Mini-Me <version>", such as "# Mini-Me 0.6.0".' };
-  }
-  if (latest !== null && compareVersions(version, latest) <= 0) {
-    const state = version === latest ? "already released" : `older than the latest release, ${latest}`;
-    return { problem: `CHANGELOG.md is for ${version}, which is ${state}. Write it for a newer version first.` };
-  }
-  return { version };
 }
 
 /**

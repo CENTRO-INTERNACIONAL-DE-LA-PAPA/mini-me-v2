@@ -1,8 +1,9 @@
-# Runs when main changes. If the version in package.json has no tag yet, tags that commit, builds
-# the Windows, macOS and Linux installers and uploads them, with their signed update files and
-# latest.json, to a draft GitHub Release. Installed apps see the release once it is published. A
-# change to main whose version is already tagged does nothing. To build again from scratch, delete
-# the draft and the tag, then run this workflow on main by hand.
+# Runs when main changes, or by hand. If the version in package.json has no tag yet, builds the
+# Windows, macOS and Linux installers from that commit and uploads them, with their signed update
+# files and latest.json, to a draft GitHub Release; once every platform built, publishes it,
+# tagged v<version>. Installed apps see the release from then on. A change to main whose version
+# is already tagged does nothing. This file follows canary.yml job by job: a change to the pinned
+# actions, Linux packages or bundles is made in both.
 name: Release
 
 on:
@@ -13,10 +14,10 @@ on:
 permissions:
   contents: write
 
-# Two changes to main in quick succession are looked at one after the other.
+# A newer change replaces a build still in progress, so the newest commit is the one published.
 concurrency:
   group: release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   draft:
@@ -25,10 +26,10 @@ jobs:
       release_id: ${{ steps.create.outputs.release_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The tag is made here, from the version main carries, so it can only be on a commit of main
-      # that has it. The draft is created once, so both build jobs upload to the same one; its
-      # notes are CHANGELOG.md without its first line, which is the title GitHub already shows.
-      # With no release ID, nothing is built.
+      # The tag is only a name on the draft: GitHub creates it, at this commit, when the draft is
+      # published, so a failed build leaves none. Drafts left by cancelled or failed runs never
+      # became releases, and are deleted. The notes are CHANGELOG.md without its first line, which
+      # is the title GitHub already shows. With no release ID, nothing is built.
       - id: create
         env:
           GH_TOKEN: ${{ github.token }}
@@ -44,11 +45,16 @@ jobs:
             exit 0
           fi
           node scripts/check-version.mjs "$tag"
-          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA"
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq '.[] | select(.draft and (.tag_name | startswith("v"))) | .id' |
+            while read -r stale; do
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$stale"
+            done
           notes=$(tail -n +2 CHANGELOG.md | sed '/./,$!d')
           id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
-            -f tag_name="$tag" -f name="Mini-Me $version" \
-            -f body="$notes" -F draft=true --jq .id)
+            -f tag_name="$tag" -f target_commitish="$GITHUB_SHA" \
+            -f name="Mini-Me $version" -f body="$notes" \
+            -F draft=true --jq .id)
           test -n "$id"
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
 
@@ -97,3 +103,17 @@ jobs:
             --config src-tauri/tauri.release.conf.json
             --config src-tauri/tauri.ci.conf.json
             --bundles ${{ matrix.bundles }}
+
+  # Skipped while any platform's build has failed, so the release stays a draft; re-running the
+  # failed jobs runs it afterwards.
+  publish:
+    needs: [draft, build]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ needs.draft.outputs.release_id }}
+        run: |
+          gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
+            -F draft=false -f make_latest=true

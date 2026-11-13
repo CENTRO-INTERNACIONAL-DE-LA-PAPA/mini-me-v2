@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { count, formatRelative } from "./format";
+import { appLabel, count, formatRelative } from "./format";
 
 describe("formatRelative", () => {
   const now = new Date(2026, 9, 21, 15, 0).getTime();
@@ -23,5 +23,14 @@ describe("count", () => {
     expect(count(1, "file")).toBe("1 file");
     expect(count(0, "file")).toBe("0 files");
     expect(count(2, "person", "people")).toBe("2 people");
+  });
+});
+
+describe("appLabel", () => {
+  it("names Mini-Me by version and Mini-Me Canary by commit", () => {
+    expect(appLabel("Mini-Me", "0.6.0")).toBe("Mini-Me 0.6.0");
+    expect(appLabel("Mini-Me", "0.6.0", "a1b2c3d")).toBe("Mini-Me 0.6.0");
+    expect(appLabel("Mini-Me Canary", "0.0.42", "a1b2c3d")).toBe("Mini-Me Canary a1b2c3d");
+    expect(appLabel("Mini-Me Canary", "0.7.0")).toBe("Mini-Me Canary (local)");
   });
 });
