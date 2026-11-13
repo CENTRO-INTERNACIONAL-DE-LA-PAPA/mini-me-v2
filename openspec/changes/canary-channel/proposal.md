@@ -74,8 +74,9 @@ Out of scope:
 - **Workflows:** a new `.github/workflows/canary.yml`, with its own build job; `release.yml` gains
   a job that publishes the draft. The two files share
   nothing.
-- **Docs:** `README.md`, `docs/development.md`, `docs/architecture.md`, `docs/feature-flags.md`,
-  `docs/roadmap.md`, `CLAUDE.md`.
+- **Docs:** `README.md` shortened to a summary, with the first-run setup moved to
+  `docs/using.md`; `docs/development.md`, `docs/architecture.md`, `docs/feature-flags.md`,
+  `CLAUDE.md`.
 - **Users:** a Mini-Me release reaches installed apps without anyone having tried its installers
   first. The newest Canary build is the chance to try it.
 - **GitHub:** Canary pre-releases and their tags are never deleted, so one of each is added per

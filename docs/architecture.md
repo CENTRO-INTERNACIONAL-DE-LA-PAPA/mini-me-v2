@@ -2,9 +2,9 @@
 
 A guide for developers: the three processes, how a message becomes a reply, and where to
 add Traits, adapters and Interactive Components. The terms (Project, Conversation, Mini-Me,
-Trait, Workflow, Step, Interactive Component, Text Component, Asset) are defined in the
-README's [Core concepts](../README.md#core-concepts) and in `openspec/config.yaml`. The
-behaviour each part must have is specified in `openspec/specs/`.
+Trait, Workflow, Step, Interactive Component, Text Component, Asset) are defined in
+[`openspec/config.yaml`](../openspec/config.yaml). The behaviour each part must have is specified
+in `openspec/specs/`.
 
 ## The three processes
 

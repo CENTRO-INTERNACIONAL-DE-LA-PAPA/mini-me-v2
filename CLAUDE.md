@@ -1,6 +1,6 @@
 # Working on Mini-Me v2
 
-Product overview and concepts are in `README.md`, and the Roadmap in `docs/roadmap.md`.
+Product overview and concepts are in `README.md`.
 The glossary, architecture rules and per-artifact rules are in `openspec/config.yaml`;
 follow them exactly.
 
@@ -29,8 +29,8 @@ does. AI speeds up the coding; it does not decide for the user.
 ## Picking up work
 
 - Run `openspec list` first. If a change is active, continue it.
-- If none is active, the next change is the first row marked "Next" in the Roadmap
-  (`docs/roadmap.md`). Confirm its scope with the user before writing any artifacts.
+- If none is active, ask the user what the next change is, and confirm its scope before
+  writing any artifacts.
 - Work one change at a time: propose (`/opsx:propose`), let the user review, apply
   (`/opsx:apply`), have the user verify, then finish (below).
 - During planning, ask instead of assuming; the user prefers questions to guesses.
@@ -46,9 +46,9 @@ does. AI speeds up the coding; it does not decide for the user.
 
 ## Finishing a change
 
-1. Archive the change (`/opsx:archive`), syncing its delta specs into `openspec/specs/`.
-2. Update the change's row in the Roadmap (`docs/roadmap.md`) to "Done" and mark the next
-   one "Next".
+1. If users will notice the change, add its line to `CHANGELOG.md` under "New", "Improved" or
+   "Fixed", in plain language. The first change after a release replaces that release's notes.
+2. Archive the change (`/opsx:archive`), syncing its delta specs into `openspec/specs/`.
 3. Ask the user, then open the change's pull request into `dev` (see below).
 
 ## Commits
@@ -69,9 +69,9 @@ does. AI speeds up the coding; it does not decide for the user.
 - `dev` is where all work lands. Every change goes through `dev` first; nothing is pushed
   or merged to `main` by Claude. When enough has gathered on `dev`, the user merges `dev`
   into `main` and cuts a release.
-- Small, non-breaking changes (documentation, comments, README and Roadmap edits, sample
+- Small, non-breaking changes (documentation, comments, README edits, sample
   files, config that changes no behaviour) are committed and pushed directly to `dev`.
-- Anything that changes logic or behaviour, and every roadmap change, is developed on its
+- Anything that changes logic or behaviour, and every OpenSpec change, is developed on its
   own branch from `dev` and reaches `dev` through a pull request into `dev`. Ask the user
   before opening a PR, and merge it only once the user has reviewed and approved it, with a
   merge commit (`gh pr merge --merge`).
@@ -92,7 +92,7 @@ does. AI speeds up the coding; it does not decide for the user.
 One or two sentences: what is wrong, or what is wanted.
 
 ## Context
-Why it matters, and links to the Roadmap row, OpenSpec change or related issues.
+Why it matters, and links to the OpenSpec change or related issues.
 
 ## Steps to reproduce
 (Bugs only.)
@@ -116,7 +116,6 @@ Why it matters, and links to the Roadmap row, OpenSpec change or related issues.
 What this changes and why, in one to three sentences.
 
 Closes #…
-Roadmap #…
 OpenSpec change: `openspec/changes/<name>/`
 (Keep only the links that apply.)
 

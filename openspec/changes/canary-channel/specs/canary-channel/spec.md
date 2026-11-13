@@ -52,7 +52,7 @@ as one GitHub pre-release, without a manual step, only when every platform built
   installers and their update files
 
 #### Scenario: A documentation push
-- **WHEN** a commit that changes only `README.md` and `docs/roadmap.md` is pushed to `dev`
+- **WHEN** a commit that changes only `README.md` and `docs/development.md` is pushed to `dev`
 - **THEN** no Canary build is made
 
 #### Scenario: One platform fails

@@ -1,9 +1,28 @@
 # Using Mini-Me
 
-How to ask Mini-Mes for help and what to expect from them. Setting up an AI provider and
-the Ai2 and Typesafe accounts is described in the README's
-[Getting started](../README.md#getting-started), and what each service receives in
-[What leaves your computer](../README.md#what-leaves-your-computer).
+How to set Mini-Me up, ask Mini-Mes for help and what to expect from them. Where your work is
+stored and which services Mini-Me talks to is described in the README's
+[How it works](../README.md#how-it-works).
+
+## Setting up
+
+You bring your own API key, and every AI call goes straight from your computer to the
+provider you choose, billed to your account there. Typesafe is billed to your Typesafe
+account the same way; Asta's documentation lists no charges for Paper Finder or the
+Theorizer. Mini-Me always asks before an action that would cost extra.
+
+1. Open **Settings** with the gear at the bottom of the sidebar.
+2. On **Models & keys**, click **Add key** next to your provider (OpenAI, Anthropic, Google
+   or OpenRouter), paste the key and click **Save**. The row then shows **Connected**; the
+   key is never shown again. Use **Edit** to replace or remove it.
+3. Under **AI model**, choose the provider and type the model ID exactly as the provider
+   lists it, then click **Save**.
+4. On **Accounts**, under **Choosing a Mini-Me**, add your [Typesafe](https://typesafe.ai)
+   key the same way. Without it, Mini-Me cannot choose for you and you mention a Mini-Me
+   yourself.
+5. Under **Ai2**, click **Sign in** and confirm the code shown in Mini-Me on the Ai2 page
+   that opens in your browser. The row then reads **Signed in as** your email; the sign-in
+   is renewed automatically, and **Sign out** removes it. Researcher and Theorist need it.
 
 ## A Project's Overview
 

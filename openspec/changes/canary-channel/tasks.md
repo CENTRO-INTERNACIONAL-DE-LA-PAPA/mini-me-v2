@@ -55,13 +55,13 @@
 - [x] 4.2 Add the `publish` job to `canary.yml`: publish the draft as a pre-release that is not the
   latest release, and copy `latest.json` to the `canary` pre-release. Verify by reading it; the
   trial in group 5 runs it.
-- [ ] 4.3 Document both channels: a "Mini-Me Canary" section in `README.md` (what it is, that
+- [x] 4.3 Document both channels: a "Mini-Me Canary" section in `README.md` (what it is, that
   important work belongs in Mini-Me, where to download it, its install folder on Windows and the
   IT allowlist path); "Canary builds" in `docs/development.md` (when one is made, its name and
   tag, the feed, re-running a failed build) and "Cutting a release" (write the changelog as
   changes land; to release, raise its first line, run `npm run sync-version`, try the newest
   Canary build, merge `dev` into `main`, and the release publishes itself); in `CLAUDE.md`, that a change adds its line to
-  `CHANGELOG.md`; a "Canary channel" row in `docs/roadmap.md`. Verify by reading them against the
+  `CHANGELOG.md`. Verify by reading them against the
   workflows.
 
 ## 5. Trial
@@ -82,6 +82,5 @@
 - Ask CIP IT to allowlist `%LOCALAPPDATA%\Mini-Me Canary\sidecar\python\python.exe` before
   inviting testers.
 - Archive the change, then delete `openspec/specs/dev-channel/`, left with no requirements.
-- Mark the "Canary channel" row Done in `docs/roadmap.md`.
 - Open the pull request into `dev`; the first merge that changes code makes the first Canary build
   from `dev`.
