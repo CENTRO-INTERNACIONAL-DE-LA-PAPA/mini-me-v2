@@ -38,12 +38,14 @@ import cipLogo from "../../assets/logos/cip-logo.png";
 import type {
   Ai2Status,
   AiSettings,
+  ApiFormat,
   KeyAccount,
   ProviderId,
   QuartoStatus,
   ReplyDebugSettings,
 } from "../../protocol/types";
 import { openLink } from "../interactive/links";
+import { sendsUnencrypted } from "./endpoint";
 import { SectionPage, type Section } from "../shell/SectionPage";
 import type { SettingsPageId } from "../shell/view";
 import { refreshDeveloperMode, useDeveloperMode } from "../../hooks/useDeveloperMode";
@@ -58,6 +60,12 @@ const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "anthropic", name: "Anthropic" },
   { id: "google", name: "Google" },
   { id: "openrouter", name: "OpenRouter" },
+  { id: "custom", name: "Custom" },
+];
+
+const API_FORMATS: { id: ApiFormat; name: string }[] = [
+  { id: "openai", name: "OpenAI-compatible" },
+  { id: "anthropic", name: "Anthropic-compatible" },
 ];
 
 const ACCOUNT_NAMES: Partial<Record<KeyAccount, string>> = {
@@ -709,7 +717,11 @@ function ModelsPage({ settings, onChanged }: { settings: AiSettings; onChanged: 
               key={provider.id}
               account={provider.id}
               saved={settings.saved_keys.includes(provider.id)}
-              hint={`Add an API key to use ${provider.name} models`}
+              hint={
+                provider.id === "custom"
+                  ? "Add an API key if your endpoint needs one"
+                  : `Add an API key to use ${provider.name} models`
+              }
               onChanged={onChanged}
             />
           ))}
@@ -768,18 +780,25 @@ function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged
 function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => void }) {
   const [provider, setProvider] = useState<ProviderId>(settings.provider);
   const [model, setModel] = useState(settings.model);
+  const [endpoint, setEndpoint] = useState(settings.custom.endpoint);
+  const [apiFormat, setApiFormat] = useState<ApiFormat>(settings.custom.api_format);
   const [status, setStatus] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   /** How testing the model went, shown in a popover over its button; null while closed. */
   const [tested, setTested] = useState<string | null>(null);
-  const changed = provider !== settings.provider || model.trim() !== settings.model;
+  const custom = { endpoint, api_format: apiFormat };
+  const changed =
+    provider !== settings.provider ||
+    model.trim() !== settings.model ||
+    endpoint.trim() !== settings.custom.endpoint ||
+    apiFormat !== settings.custom.api_format;
 
   /** Tests the model in the fields, saved or not, and says how it went. */
   async function testModel() {
     setTesting(true);
     setTested("Testing the model…");
     try {
-      await api.testModel(provider, model);
+      await api.testModel(provider, model, custom);
       setTested("This model works with Mini-Me.");
     } catch (e) {
       setTested(errorMessage(e));
@@ -791,7 +810,7 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
   async function save(event: FormEvent) {
     event.preventDefault();
     try {
-      await api.setAiModel(provider, model);
+      await api.setAiModel(provider, model, custom);
       setStatus("Saved.");
       onSaved();
     } catch (e) {
@@ -867,6 +886,56 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
           </Popover>
         </div>
       </SettingRow>
+      {provider === "custom" && (
+        <SettingRow
+          label="Custom endpoint"
+          htmlFor="endpoint"
+          description={
+            <>
+              The address of a server that speaks the OpenAI or Anthropic API, such as LM Studio,
+              Ollama or vLLM.
+              {sendsUnencrypted(endpoint) && (
+                <span className="mt-1 block text-ink-2">
+                  This address is not on this computer and does not use https, so the key and
+                  your messages are sent unencrypted.
+                </span>
+              )}
+            </>
+          }
+        >
+          <Select
+            value={apiFormat}
+            onValueChange={(value) => {
+              setApiFormat(value as ApiFormat);
+              setStatus(null);
+            }}
+          >
+            <SelectTrigger aria-label="API format" className="w-48">
+              <SelectValue>
+                {(value: ApiFormat) => API_FORMATS.find((f) => f.id === value)?.name}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {API_FORMATS.map((f) => (
+                <SelectItem key={f.id} value={f.id}>
+                  {f.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            id="endpoint"
+            className="w-64"
+            value={endpoint}
+            onChange={(e) => {
+              setEndpoint(e.target.value);
+              setStatus(null);
+            }}
+            placeholder="http://localhost:1234/v1"
+            spellCheck={false}
+          />
+        </SettingRow>
+      )}
     </form>
   );
 }
