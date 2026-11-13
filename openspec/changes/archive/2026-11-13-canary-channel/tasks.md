@@ -54,7 +54,7 @@
   locally with `gh`.
 - [x] 4.2 Add the `publish` job to `canary.yml`: publish the draft as a pre-release that is not the
   latest release, and copy `latest.json` to the `canary` pre-release. Verify by reading it; the
-  trial in group 5 runs it.
+  first build on `dev` runs it.
 - [x] 4.3 Document both channels: a "Mini-Me Canary" section in `README.md` (what it is, that
   important work belongs in Mini-Me, where to download it, its install folder on Windows and the
   IT allowlist path); "Canary builds" in `docs/development.md` (when one is made, its name and
@@ -64,23 +64,15 @@
   `CHANGELOG.md`. Verify by reading them against the
   workflows.
 
-## 5. Trial
-
-- [ ] 5.1 Add the feature branch to the push trigger of `canary.yml` and push. Verify that the run
-  publishes "Mini-Me Canary <hash>" with the Windows, macOS and Linux files and the tag
-  `canary-<hash>`,
-  that the `canary` pre-release holds `latest.json` pointing at them, and that GitHub still shows
-  the last Mini-Me release as Latest.
-- [ ] 5.2 Install that build, then push another commit to the branch. Verify that the installed
-  Mini-Me Canary shows the next build downloading and restarts into it, that Settings → About
-  shows its commit, and that an installed Mini-Me reports no update.
-- [ ] 5.3 Remove the feature branch from the push trigger. Verify that a push to the branch starts
-  no Canary run.
-
 ## Workflow follow-up
 
 - Ask CIP IT to allowlist `%LOCALAPPDATA%\Mini-Me Canary\sidecar\python\python.exe` before
   inviting testers.
 - Archive the change, then delete `openspec/specs/dev-channel/`, left with no requirements.
-- Open the pull request into `dev`; the first merge that changes code makes the first Canary build
-  from `dev`.
+- Open the pull request into `dev`. Merging it makes the first Canary build from `dev`.
+- After that build: check that "Mini-Me Canary <commit>" is published with the Windows, macOS and
+  Linux files and the tag `canary-<commit>`, that the `canary` pre-release holds `latest.json`
+  pointing at them, and that GitHub still shows the last Mini-Me release as Latest.
+- Install that build. After the next change merged into `dev`, check that it shows the new build
+  downloading and restarts into it, that Settings → About shows its commit, and that an installed
+  Mini-Me reports no update.

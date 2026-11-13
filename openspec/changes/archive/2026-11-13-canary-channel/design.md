@@ -182,11 +182,14 @@ lost Canary key would make every tester reinstall by hand.
 `take_whats_new` keeps returning false in Mini-Me Canary, as it did in Mini-Me Dev: the bundled
 changelog describes a release, not the build.
 
-### Trying the workflow before it reaches dev (workflow)
-`canary.yml` cannot be started by hand until it is on `main`, and its push trigger names `dev`.
-To verify it before the pull request, the feature branch is added to the push trigger for the
-trial and removed before the pull request. The trial publishes real Canary pre-releases, which
-can be deleted on GitHub afterwards.
+### The Canary workflow is first run on dev (workflow)
+`canary.yml` is not trialled from the feature branch: its first run is the one made by merging
+this change into `dev`. Until a build is published nobody has Mini-Me Canary installed, a failed
+build publishes nothing, and Mini-Me's releases do not depend on it, so a fault found there is
+fixed by the next pull request into `dev`, which builds again.
+
+*Alternative:* add the feature branch to the trigger for a trial, then remove it. Rejected:
+temporary edits to the workflow, for a check that `dev` gives just as safely.
 
 ## Risks / Trade-offs
 
