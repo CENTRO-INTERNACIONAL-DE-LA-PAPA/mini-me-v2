@@ -13,7 +13,7 @@
   Mini-Me Dev. Verify with `cargo test` (the inline folder-name test covers both identifiers), and
   that a local run creates `Documents/Mini-Me Data (Canary)` and starts with Developer mode and
   every feature flag on.
-- [ ] 1.3 Update `docs/development.md`, `docs/architecture.md` and `docs/feature-flags.md` for the
+- [x] 1.3 Update `docs/development.md`, `docs/architecture.md` and `docs/feature-flags.md` for the
   new name, identifier, folder, config file and icon paths. Verify that a search for "Mini-Me Dev",
   "mini-me.dev", "tauri.dev.conf", "icons/dev" and "(Dev)" finds nothing outside
   `openspec/specs/` and `openspec/changes/`.

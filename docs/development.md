@@ -19,11 +19,11 @@ cd sidecar && uv sync --frozen && cd ..   # once, and after the sidecar's depend
 npm run tauri:dev
 ```
 
-`tauri:dev` runs the app as **Mini-Me Dev** (`src-tauri/tauri.dev.conf.json`): the
-identifier `org.cipotato.mini-me.dev`, the development icon and its own data. Its Projects
-are in `Documents/Mini-Me Data (Dev)`, and its settings, logs and keychain entries are kept
+`tauri:dev` runs the app as **Mini-Me Canary** (`src-tauri/tauri.canary.conf.json`): the
+identifier `org.cipotato.mini-me.canary`, the Canary icon and its own data. Its Projects
+are in `Documents/Mini-Me Data (Canary)`, and its settings, logs and keychain entries are kept
 under its identifier, so development never touches the installed Mini-Me's Projects or keys.
-Set up its API keys and Ai2 sign-in once in Mini-Me Dev's Settings.
+Set up its API keys and Ai2 sign-in once in Mini-Me Canary's Settings.
 
 In development the app starts the sidecar from `sidecar/` with `uv run`. Its log is
 `sidecar.log` in the app's log directory; set `MINI_ME_LOG_FRAMES=1` to also log every frame
@@ -65,12 +65,12 @@ listed in the script's `BUILT_IN`.
   tables and charts), `MetaParts` (details kept apart by a gap), the sheets and headers in
   `src/components/shell/Sheet.tsx` and `SectionPage.tsx`, and `EditorHeader` in
   `src/components/library/LibraryParts.tsx`.
-- **App icons.** `src-tauri/icons/app-icon.svg` is the release icon and `app-icon-dev.svg` the
-  Mini-Me Dev icon (`tauri.dev.conf.json`). Regenerate them with
+- **App icons.** `src-tauri/icons/app-icon.svg` is the release icon and `app-icon-canary.svg` the
+  Mini-Me Canary icon (`tauri.canary.conf.json`). Regenerate them with
   `npx tauri icon src-tauri/icons/app-icon.svg` and
-  `npx tauri icon src-tauri/icons/app-icon-dev.svg --output src-tauri/icons/dev`, keeping only the
-  files the configs list. The release icon is full bleed (Windows); the dev icon's artwork is inset
-  to an 824px shape on the 1024px canvas, as macOS expects.
+  `npx tauri icon src-tauri/icons/app-icon-canary.svg --output src-tauri/icons/canary`, keeping
+  only the files the configs list. The release icon is full bleed (Windows); the Canary icon's
+  artwork is inset to an 824px shape on the 1024px canvas, as macOS expects.
 
 ## Tests
 
