@@ -8,20 +8,22 @@ use crate::error::{AppError, AppResult};
 use crate::link::REDACTED;
 
 /// The AI providers, by ID, with the name shown to the user.
-pub const PROVIDERS: [(&str, &str); 4] = [
+pub const PROVIDERS: [(&str, &str); 5] = [
     ("openai", "OpenAI"),
     ("anthropic", "Anthropic"),
     ("google", "Google"),
     ("openrouter", "OpenRouter"),
+    ("custom", "Custom"),
 ];
 
 /// Every key the keychain holds: the AI providers, Typesafe for routing, and the Ai2
 /// account's tokens for Asta.
-const KEY_ACCOUNTS: [(&str, &str); 7] = [
+const KEY_ACCOUNTS: [(&str, &str); 8] = [
     PROVIDERS[0],
     PROVIDERS[1],
     PROVIDERS[2],
     PROVIDERS[3],
+    PROVIDERS[4],
     ("typesafe", "Typesafe"),
     ("ai2", "Ai2"),
     ("dataverse", "CIP Dataverse"),

@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::features::{self, FEATURES, Feature};
-use crate::link::{CallModel, DebugParts};
+use crate::link::{ApiFormat, CallModel, DebugParts};
 use crate::paths::write_atomic;
 use crate::protocol::{Origin, new_id};
 use crate::secrets::is_provider;
@@ -111,6 +111,9 @@ pub struct AiSettings {
     pub provider: String,
     /// Empty until the user types a model ID.
     pub model: String,
+    /// Kept while another provider is chosen.
+    #[serde(default)]
+    pub custom: CustomEndpoint,
 }
 
 impl Default for AiSettings {
@@ -118,28 +121,63 @@ impl Default for AiSettings {
         Self {
             provider: "openai".to_string(),
             model: String::new(),
+            custom: CustomEndpoint::default(),
         }
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CustomEndpoint {
+    pub endpoint: String,
+    pub api_format: ApiFormat,
+}
+
 impl AiSettings {
-    pub fn new(provider: &str, model: &str) -> AppResult<Self> {
+    /// Refuses `custom` without an http(s) endpoint; for other providers `custom` is kept unchecked.
+    pub fn new(provider: &str, model: &str, custom: CustomEndpoint) -> AppResult<Self> {
         if !is_provider(provider) {
             return Err(AppError::invalid_input(format!("Unknown provider {provider:?}.")));
+        }
+        let custom = CustomEndpoint {
+            endpoint: custom.endpoint.trim().to_string(),
+            ..custom
+        };
+        if provider == "custom" {
+            check_endpoint(&custom.endpoint)?;
         }
         Ok(Self {
             provider: provider.to_string(),
             model: model.trim().to_string(),
+            custom,
         })
     }
 
     /// The model for AI Trait calls, or `None` while no model is set.
     pub fn model(&self) -> Option<CallModel> {
+        let custom = (self.provider == "custom").then_some(&self.custom);
         (!self.model.is_empty()).then(|| CallModel {
             provider: self.provider.clone(),
             model: self.model.clone(),
+            endpoint: custom.map(|c| c.endpoint.clone()),
+            api_format: custom.map(|c| c.api_format),
         })
     }
+}
+
+fn check_endpoint(endpoint: &str) -> AppResult<()> {
+    if endpoint.is_empty() {
+        return Err(AppError::invalid_input("Type the URL of the custom endpoint."));
+    }
+    let is_web_address = reqwest::Url::parse(endpoint).is_ok_and(|url| {
+        matches!(url.scheme(), "http" | "https") && url.host_str().is_some_and(|h| !h.is_empty())
+    });
+    if !is_web_address {
+        return Err(AppError::invalid_input(
+            "The endpoint must start with http:// or https://, such as http://localhost:1234/v1.",
+        ));
+    }
+    Ok(())
 }
 
 impl Settings {
@@ -281,6 +319,13 @@ mod tests {
         assert!(settings.developer_mode(true));
         assert_eq!(settings.ai.model(), None);
         assert!(settings.unlocked_features.is_empty() && settings.locked_features.is_empty());
+
+        let without_custom = r#"{ "installation_id": "0199d0a0-0000-7000-8000-0000000000e1",
+                                  "user_id": "0199d0a0-0000-7000-8000-0000000000e2",
+                                  "ai": { "provider": "google", "model": "g" } }"#;
+        std::fs::write(dir.path().join(FILE_NAME), without_custom).unwrap();
+        let settings = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
+        assert_eq!(settings.ai.custom, CustomEndpoint::default());
     }
 
     #[test]
@@ -300,7 +345,8 @@ mod tests {
     fn the_model_is_saved_without_any_key() {
         let dir = tempfile::tempdir().unwrap();
         let mut settings = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
-        settings.ai = AiSettings::new("anthropic", "  example-model ").unwrap();
+        settings.ai =
+            AiSettings::new("anthropic", "  example-model ", CustomEndpoint::default()).unwrap();
         settings.save(dir.path()).unwrap();
         let saved = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
         assert!(!saved.to_lowercase().contains("key"));
@@ -309,10 +355,33 @@ mod tests {
             loaded.ai.model(),
             Some(CallModel {
                 provider: "anthropic".into(),
-                model: "example-model".into()
+                model: "example-model".into(),
+                ..Default::default()
             })
         );
-        assert!(AiSettings::new("dummy", "m").is_err());
+        assert!(AiSettings::new("dummy", "m", CustomEndpoint::default()).is_err());
+    }
+
+    #[test]
+    fn custom_needs_a_web_address_as_its_endpoint() {
+        let custom = |endpoint: &str| CustomEndpoint {
+            endpoint: endpoint.into(),
+            api_format: ApiFormat::Anthropic,
+        };
+        for refused in ["", "  ", "localhost:1234", "ftp://models.example.org", "http://"] {
+            let error = AiSettings::new("custom", "m", custom(refused)).unwrap_err();
+            assert_eq!(error.code, "invalid_input", "{refused:?}");
+        }
+        let ai = AiSettings::new("custom", "m", custom(" http://localhost:1234/v1 ")).unwrap();
+        assert_eq!(ai.custom, custom("http://localhost:1234/v1"));
+        let model = ai.model().unwrap();
+        assert_eq!(model.endpoint.as_deref(), Some("http://localhost:1234/v1"));
+        assert_eq!(model.api_format, Some(ApiFormat::Anthropic));
+        // Another provider keeps whatever Custom endpoint is there, unchecked and not sent.
+        let openai = AiSettings::new("openai", "m", custom("")).unwrap().model().unwrap();
+        assert_eq!((openai.endpoint, openai.api_format), (None, None));
+        let frame = serde_json::to_value(ai.model()).unwrap();
+        assert_eq!(frame["api_format"], "anthropic");
     }
 
     #[test]

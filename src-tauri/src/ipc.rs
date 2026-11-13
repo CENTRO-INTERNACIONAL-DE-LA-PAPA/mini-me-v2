@@ -38,8 +38,8 @@ use crate::quarto;
 use crate::routing::{REACTION_CHANCE, ROUTE_TIMEOUT, RouteSettings, Routing};
 use crate::runs::{self, CANCEL_TIMEOUT, DraftEvent, RunningReply, Runs};
 use crate::secrets::{self, KeychainSecrets};
-use crate::settings::{AiSettings, DebugSettings, HomeSettings, Settings};
-use crate::link::SummaryKind;
+use crate::settings::{AiSettings, CustomEndpoint, DebugSettings, HomeSettings, Settings};
+use crate::link::{ApiFormat, SummaryKind};
 use crate::sidecar::{LOG_FILE, Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
 use crate::sync::locked;
@@ -616,6 +616,7 @@ pub async fn delete_trait(state: State<'_, AppState>, id: Uuid) -> AppResult<Lib
 pub struct AiSettingsView {
     provider: String,
     model: String,
+    custom: CustomEndpoint,
     saved_keys: Vec<String>,
     threshold: f64,
     show_answers: bool,
@@ -640,6 +641,7 @@ pub async fn get_ai_settings(state: State<'_, AppState>) -> AppResult<AiSettings
     Ok(AiSettingsView {
         provider: settings.ai.provider,
         model: settings.ai.model,
+        custom: settings.ai.custom,
         saved_keys: KeychainSecrets::saved(),
         threshold: settings.routing.threshold,
         show_answers: settings.routing.show_answers,
@@ -654,8 +656,10 @@ pub async fn test_model(
     state: State<'_, AppState>,
     provider: String,
     model: String,
+    endpoint: String,
+    api_format: ApiFormat,
 ) -> AppResult<()> {
-    let model = AiSettings::new(&provider, &model)?
+    let model = AiSettings::new(&provider, &model, CustomEndpoint { endpoint, api_format })?
         .model()
         .ok_or_else(|| AppError::invalid_input("Type a model ID first."))?;
     let runs = Arc::clone(&state.runs);
@@ -671,8 +675,10 @@ pub async fn set_ai_model(
     state: State<'_, AppState>,
     provider: String,
     model: String,
+    endpoint: String,
+    api_format: ApiFormat,
 ) -> AppResult<()> {
-    let ai = AiSettings::new(&provider, &model)?;
+    let ai = AiSettings::new(&provider, &model, CustomEndpoint { endpoint, api_format })?;
     state.update_settings(|settings| settings.ai = ai)
 }
 

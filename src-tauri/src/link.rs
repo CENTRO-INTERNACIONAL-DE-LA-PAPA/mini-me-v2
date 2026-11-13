@@ -39,10 +39,23 @@ pub struct RunTrait {
 }
 
 /// The provider and model chosen in Settings.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallModel {
     pub provider: String,
     pub model: String,
+    /// With `api_format`, set only for the `custom` provider.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_format: Option<ApiFormat>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ApiFormat {
+    #[default]
+    Openai,
+    Anthropic,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
