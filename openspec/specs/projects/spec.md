@@ -21,7 +21,7 @@ folder, and SHALL use it as the root for all Projects. Mini-Me Dev SHALL use a f
 - **WHEN** the app starts and the `Mini-Me Data` folder already contains Projects
 - **THEN** those Projects are listed and none of their files are changed
 
-#### Scenario: Mini-Me Dev's first launch
+#### Scenario: Mini-Me Canary's first launch
 - **WHEN** Mini-Me Dev starts for the first time while `Mini-Me Data` holds Projects
 - **THEN** `Mini-Me Data (Dev)` is created, Mini-Me Dev's Project list is empty, and
   `Mini-Me Data` is unchanged

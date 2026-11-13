@@ -63,8 +63,8 @@ const TYPESAFE: &str = "typesafe";
 
 pub struct AppState {
     config_dir: PathBuf,
-    /// Mini-Me Dev has Developer mode on until the user turns it off.
-    is_dev_app: bool,
+    /// Mini-Me Canary has Developer mode on until the user turns it off.
+    is_canary: bool,
     /// From the Tauri configuration.
     app_version: String,
     data_root: PathBuf,
@@ -85,7 +85,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn init(app: &AppHandle) -> AppResult<Self> {
-        // Separates Mini-Me from Mini-Me Dev: settings, logs, Projects folder and keychain.
+        // Separates Mini-Me from Mini-Me Canary: settings, logs, Projects folder and keychain.
         let identifier = app.config().identifier.clone();
         secrets::use_keychain_service(&identifier);
         let path = app.path();
@@ -121,7 +121,7 @@ impl AppState {
         std::thread::spawn(move || {
             warm.status();
         });
-        let is_dev_app = projects::is_mini_me_dev(&identifier);
+        let is_canary = projects::is_canary(&identifier);
         let runs = Arc::new(Runs::new(
             Box::new(AppSecrets {
                 ai2: Arc::clone(&ai2),
@@ -132,8 +132,8 @@ impl AppState {
         ));
         let gate = Arc::clone(&quarto);
         runs.set_document_gate(Arc::new(move || gate.require().map(|_| ())));
-        runs.set_active_features(active_feature_ids(&settings, is_dev_app));
-        runs.set_debug(settings.reply_debug(is_dev_app));
+        runs.set_active_features(active_feature_ids(&settings, is_canary));
+        runs.set_debug(settings.reply_debug(is_canary));
         let sidecar = Supervisor::new(
             launch,
             Timing::for_build(),
@@ -142,12 +142,12 @@ impl AppState {
         );
         sidecar.spawn();
         let updates = Updates::new(log);
-        // Mini-Me Dev has no update feed of its own, and must never install Mini-Me's.
-        if !cfg!(debug_assertions) && !projects::is_mini_me_dev(&identifier) {
+        // Mini-Me Canary has no update feed of its own, and must never install Mini-Me's.
+        if !cfg!(debug_assertions) && !projects::is_canary(&identifier) {
             updates.spawn(app.clone());
         }
         Ok(Self {
-            is_dev_app,
+            is_canary,
             app_version,
             settings: Mutex::new(settings),
             quarto,
@@ -175,13 +175,13 @@ impl AppState {
 
     /// Whether developer options and the web inspector are available.
     pub fn developer_mode(&self) -> bool {
-        self.settings().developer_mode(self.is_dev_app)
+        self.settings().developer_mode(self.is_canary)
     }
 
     /// Saves the flags, then tells running Traits which are on.
     fn change_features(&self, change: impl FnOnce(&mut Settings)) -> AppResult<()> {
         let settings = self.updated_settings(change)?;
-        self.runs.set_active_features(active_feature_ids(&settings, self.is_dev_app));
+        self.runs.set_active_features(active_feature_ids(&settings, self.is_canary));
         Ok(())
     }
 
@@ -465,11 +465,11 @@ pub async fn set_show_jev_asked(state: State<'_, AppState>, show: bool) -> AppRe
     state.update_settings(|settings| settings.routing.show_asked = show)
 }
 
-/// True once per new app version, never in Mini-Me Dev.
+/// True once per new app version, never in Mini-Me Canary.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn take_whats_new(state: State<'_, AppState>) -> AppResult<bool> {
     let mut settings = locked(&state.settings);
-    if !settings.take_whats_new(&state.app_version, state.is_dev_app) {
+    if !settings.take_whats_new(&state.app_version, state.is_canary) {
         return Ok(false);
     }
     settings.save(&state.config_dir)?;
@@ -484,7 +484,7 @@ pub async fn get_developer_mode(state: State<'_, AppState>) -> AppResult<bool> {
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResult<()> {
     let settings = state.updated_settings(|settings| settings.developer_mode = Some(on))?;
-    state.runs.set_debug(settings.reply_debug(state.is_dev_app));
+    state.runs.set_debug(settings.reply_debug(state.is_canary));
     Ok(())
 }
 
@@ -492,18 +492,18 @@ pub async fn set_developer_mode(state: State<'_, AppState>, on: bool) -> AppResu
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_reply_debug(state: State<'_, AppState>, debug: DebugSettings) -> AppResult<()> {
     let settings = state.updated_settings(|settings| settings.debug = debug)?;
-    state.runs.set_debug(settings.reply_debug(state.is_dev_app));
+    state.runs.set_debug(settings.reply_debug(state.is_canary));
     Ok(())
 }
 
-fn active_feature_ids(settings: &Settings, is_dev_app: bool) -> Vec<String> {
-    let active = settings.active_features(is_dev_app);
+fn active_feature_ids(settings: &Settings, is_canary: bool) -> Vec<String> {
+    let active = settings.active_features(is_canary);
     active.iter().map(|feature| feature.id.to_string()).collect()
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_feature_flags(state: State<'_, AppState>) -> AppResult<Vec<FeatureFlag>> {
-    let active = state.settings().active_features(state.is_dev_app);
+    let active = state.settings().active_features(state.is_canary);
     Ok(active.into_iter().map(FeatureFlag::from).collect())
 }
 

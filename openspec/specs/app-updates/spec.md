@@ -119,7 +119,7 @@ the app remembered a version SHALL be treated as updated.
 - **WHEN** Mini-Me is started for the first time on a computer
 - **THEN** no What's new page opens
 
-#### Scenario: Mini-Me Dev
+#### Scenario: Mini-Me Canary
 - **WHEN** Mini-Me Dev is started at a version it has not shown before
 - **THEN** no What's new page opens
 

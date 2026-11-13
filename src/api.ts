@@ -279,9 +279,9 @@ export const api = {
   openSidecarLog: () => invoke<void>("open_sidecar_log"),
   /** The third-party software this build ships; null in a build without it, such as dev. */
   getThirdParty: () => invoke<ThirdParty | null>("get_third_party"),
-  /** Whether to open What's new now; true once after the app updated, never in Mini-Me Dev. */
+  /** Whether to open What's new now; true once after the app updated, never in Mini-Me Canary. */
   takeWhatsNew: () => invoke<boolean>("take_whats_new"),
-  /** Whether developer options are shown: on in Mini-Me Dev and off in Mini-Me until set. */
+  /** Whether developer options are shown: on in Mini-Me Canary and off in Mini-Me until set. */
   getDeveloperMode: () => invoke<boolean>("get_developer_mode"),
   setDeveloperMode: (on: boolean) => invoke<void>("set_developer_mode", { on }),
   /** The feature flags that are on. */

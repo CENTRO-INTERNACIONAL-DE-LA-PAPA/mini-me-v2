@@ -31,7 +31,8 @@ pub struct Settings {
     pub debug: DebugSettings,
     #[serde(default)]
     pub home: HomeSettings,
-    /// Shows developer options; while unset it follows the app (on in Mini-Me Dev, off in Mini-Me).
+    /// Shows developer options; while unset it follows the app (on in Mini-Me Canary, off in
+    /// Mini-Me).
     #[serde(default)]
     pub developer_mode: Option<bool>,
     /// The Quarto program the user chose in Settings; when unset, the app looks for one.
@@ -44,7 +45,7 @@ pub struct Settings {
     /// The feature flags whose key was entered, which are on in Mini-Me.
     #[serde(default)]
     pub unlocked_features: Vec<String>,
-    /// The feature flags turned off, which stay off in Mini-Me Dev until their key is entered.
+    /// The feature flags turned off, which stay off in Mini-Me Canary until their key is entered.
     #[serde(default)]
     pub locked_features: Vec<String>,
 }
@@ -176,21 +177,21 @@ impl Settings {
     }
 
     /// Whether to open What's new for the running `version`: it is not the version last shown,
-    /// and this is not Mini-Me Dev. Records `version` as shown, so the caller saves.
-    pub fn take_whats_new(&mut self, version: &str, is_dev_app: bool) -> bool {
-        if is_dev_app || self.last_seen_version.as_deref() == Some(version) {
+    /// and this is not Mini-Me Canary. Records `version` as shown, so the caller saves.
+    pub fn take_whats_new(&mut self, version: &str, is_canary: bool) -> bool {
+        if is_canary || self.last_seen_version.as_deref() == Some(version) {
             return false;
         }
         self.last_seen_version = Some(version.to_string());
         true
     }
 
-    pub fn developer_mode(&self, is_dev_app: bool) -> bool {
-        self.developer_mode.unwrap_or(is_dev_app)
+    pub fn developer_mode(&self, is_canary: bool) -> bool {
+        self.developer_mode.unwrap_or(is_canary)
     }
 
-    pub fn reply_debug(&self, is_dev_app: bool) -> DebugParts {
-        let on = self.developer_mode(is_dev_app);
+    pub fn reply_debug(&self, is_canary: bool) -> DebugParts {
+        let on = self.developer_mode(is_canary);
         DebugParts {
             input: on && self.debug.reply_input,
             details: on && self.debug.reply_details,
@@ -198,8 +199,8 @@ impl Settings {
         }
     }
 
-    pub fn active_features(&self, is_dev_app: bool) -> Vec<&'static Feature> {
-        features::active(FEATURES, &self.unlocked_features, &self.locked_features, is_dev_app)
+    pub fn active_features(&self, is_canary: bool) -> Vec<&'static Feature> {
+        features::active(FEATURES, &self.unlocked_features, &self.locked_features, is_canary)
     }
 
     /// Records the flag `id` as on, as entering its key does.
@@ -259,7 +260,7 @@ mod tests {
         assert!(settings.take_whats_new("0.5.2", false));
         assert!(!settings.take_whats_new("0.5.2", false));
 
-        // A different version shows once, and Mini-Me Dev never shows or records.
+        // A different version shows once, and Mini-Me Canary never shows or records.
         assert!(!settings.take_whats_new("0.6.0", true));
         assert_eq!(settings.last_seen_version.as_deref(), Some("0.5.2"));
         assert!(settings.take_whats_new("0.6.0", false));
