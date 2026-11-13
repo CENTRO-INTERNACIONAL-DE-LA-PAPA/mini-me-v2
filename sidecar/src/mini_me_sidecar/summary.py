@@ -91,8 +91,7 @@ class Summarizer:
         self._tasks.start(frame, self._summarize)
 
     async def _summarize(self, summary_id: str, frame: dict[str, Any]) -> None:
-        raw = frame.get("model") or {}
-        model = Model(provider=str(raw.get("provider", "")), model=str(raw.get("model", "")))
+        model = Model.from_frame(frame.get("model") or {})
         kind = frame.get("kind") if frame.get("kind") in ("title", "test") else "overview"
         try:
             text = await self._write(summary_id, model, str(frame.get("material") or ""), kind)

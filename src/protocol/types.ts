@@ -449,7 +449,15 @@ export interface SavedDefinition {
   library: LibraryView;
 }
 
-export type ProviderId = "openai" | "anthropic" | "google" | "openrouter";
+export type ProviderId = "openai" | "anthropic" | "google" | "openrouter" | "custom";
+
+export type ApiFormat = "openai" | "anthropic";
+
+/** Kept while another provider is chosen. */
+export interface CustomEndpoint {
+  endpoint: string;
+  api_format: ApiFormat;
+}
 
 /** Every key the keychain can hold: the AI providers, Typesafe (routing) and Dataverse. */
 export type KeyAccount = ProviderId | "typesafe" | "dataverse";
@@ -528,6 +536,7 @@ export interface UserProfile {
 export interface AiSettings {
   provider: ProviderId;
   model: string;
+  custom: CustomEndpoint;
   saved_keys: KeyAccount[];
   /** Below this confidence in Jev's choice, the user is asked to mention a Mini-Me; 0 to 1. */
   threshold: number;

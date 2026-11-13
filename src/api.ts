@@ -5,6 +5,7 @@ import type {
   Ai2Status,
   AcceptedSuggestion,
   AiSettings,
+  CustomEndpoint,
   Anchor,
   CommentThread,
   AssetRef,
@@ -260,11 +261,11 @@ export const api = {
   saveUserName: (name: string) => invoke<UserProfile>("save_user_name", { name }),
 
   getAiSettings: () => invoke<AiSettings>("get_ai_settings"),
-  setAiModel: (provider: ProviderId, model: string) =>
-    invoke<void>("set_ai_model", { provider, model }),
+  setAiModel: (provider: ProviderId, model: string, custom: CustomEndpoint) =>
+    invoke<void>("set_ai_model", { provider, model, ...custom }),
   /** Tries one small request that needs a tool call; fails with why the model did not pass. */
-  testModel: (provider: ProviderId, model: string) =>
-    invoke<void>("test_model", { provider, model }),
+  testModel: (provider: ProviderId, model: string, custom: CustomEndpoint) =>
+    invoke<void>("test_model", { provider, model, ...custom }),
   /** Stores the key in the OS keychain; it is never sent back to the UI. */
   saveApiKey: (provider: KeyAccount, key: string) =>
     invoke<void>("save_api_key", { provider, key }),

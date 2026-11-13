@@ -1299,17 +1299,19 @@ impl Runs {
         self.secret_value(&params.provider)
     }
 
+    /// A `custom` endpoint may need no key, so a missing one is answered as empty.
     fn secret_value(&self, provider: &str) -> AppResult<Value> {
-        let secret = self.secrets.get(provider).ok_or_else(|| {
-            AppError::new(
+        match self.secrets.get(provider) {
+            Some(secret) => Ok(json!({ "value": secret.expose() })),
+            None if provider == "custom" => Ok(json!({ "value": "" })),
+            None => Err(AppError::new(
                 "secret_unavailable",
                 format!(
                     "There is no saved {} API key. Add one in Settings.",
                     provider_name(provider)
                 ),
-            )
-        })?;
-        Ok(json!({ "value": secret.expose() }))
+            )),
+        }
     }
 }
 
@@ -1431,6 +1433,7 @@ pub mod test_support {
         Some(CallModel {
             provider: "dummy".to_string(),
             model: "dummy-model".to_string(),
+            ..Default::default()
         })
     }
 
@@ -2146,6 +2149,7 @@ mod tests {
         let (call, _) = g.start_call("test-use-secret");
         let response = g.runs.respond("r".into(), call, "secret.get", json!({ "provider": "dummy" }));
         assert_eq!(error_code(response).as_deref(), Some("secret_unavailable"));
+        assert_eq!(g.runs.secret_value("custom").unwrap(), json!({ "value": "" }));
     }
 
     /// A run of `adapter` whose Workflow is a condition with one Trait Step per branch.
@@ -2374,7 +2378,7 @@ mod tests {
     ) -> (Uuid, std::thread::JoinHandle<AppResult<String>>) {
         let runs = Arc::clone(&f.runs);
         let handle = std::thread::spawn(move || {
-            let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
+            let model = CallModel { provider: "openai".into(), model: "gpt-x".into(), ..Default::default() };
             runs.summarize(model, "## Trial\nYou: plot yield".into(), SummaryKind::Overview, timeout)
         });
         let summary_id = wait_for(f, |frame| match frame {
@@ -2414,7 +2418,7 @@ mod tests {
         let runs = Arc::clone(&f.runs);
         let draft_id = new_id();
         let handle = std::thread::spawn(move || {
-            let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
+            let model = CallModel { provider: "openai".into(), model: "gpt-x".into(), ..Default::default() };
             let mut events = Vec::new();
             let outcome = runs.draft(draft_id, model, "Trial".into(), "You: hi".into(), idle, |e| {
                 events.push(e.clone())
@@ -2452,7 +2456,7 @@ mod tests {
         let f = quick();
         let draft_id = new_id();
         f.runs.cancel_draft(draft_id);
-        let model = CallModel { provider: "openai".into(), model: "gpt-x".into() };
+        let model = CallModel { provider: "openai".into(), model: "gpt-x".into(), ..Default::default() };
         let (text, ending) =
             f.runs.draft(draft_id, model, "Trial".into(), "You: hi".into(), CANCEL_TIMEOUT, |_| {});
         assert!(text.is_empty() && ending.is_none());

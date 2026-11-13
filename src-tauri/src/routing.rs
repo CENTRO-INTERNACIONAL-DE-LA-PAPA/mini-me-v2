@@ -776,6 +776,7 @@ mod tests {
                 model: Some(CallModel {
                     provider: "dummy".into(),
                     model: "dummy-model".into(),
+                    ..Default::default()
                 }),
                 threshold: 0.5,
                 timeout,

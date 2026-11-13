@@ -12,11 +12,18 @@ account the same way; Asta's documentation lists no charges for Paper Finder or 
 Theorizer. Mini-Me always asks before an action that would cost extra.
 
 1. Open **Settings** with the gear at the bottom of the sidebar.
-2. On **Models & keys**, click **Add key** next to your provider (OpenAI, Anthropic, Google
-   or OpenRouter), paste the key and click **Save**. The row then shows **Connected**; the
+2. On **Models & keys**, click **Add key** next to your provider (OpenAI, Anthropic, Google,
+   OpenRouter or Custom), paste the key and click **Save**. The row then shows **Connected**; the
    key is never shown again. Use **Edit** to replace or remove it.
 3. Under **AI model**, choose the provider and type the model ID exactly as the provider
    lists it, then click **Save**.
+
+   To use your own server, such as LM Studio, Ollama or vLLM, choose **Custom**. Under
+   **Custom endpoint**, choose the API it speaks and type its address, for example
+   `http://localhost:1234/v1` for an OpenAI-compatible server or `http://localhost:8080` for
+   an Anthropic-compatible one (without `/v1`). Add a Custom key only if your server asks for
+   one. Your messages and files go to that server, so use one you trust; Settings warns you
+   when the address is on another computer and does not use `https`.
 4. On **Accounts**, under **Choosing a Mini-Me**, add your [Typesafe](https://typesafe.ai)
    key the same way. Without it, Mini-Me cannot choose for you and you mention a Mini-Me
    yourself.
