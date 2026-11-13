@@ -22,5 +22,12 @@
       "icons/canary/icon.icns",
       "icons/canary/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2/releases/download/canary/latest.json"
+      ]
+    }
   }
 }

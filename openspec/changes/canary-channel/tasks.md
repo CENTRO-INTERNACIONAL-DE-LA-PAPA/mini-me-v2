@@ -20,7 +20,7 @@
 
 ## 2. Mini-Me Canary updates itself
 
-- [ ] 2.1 Add the Canary feed, `releases/download/canary/latest.json`, as
+- [x] 2.1 Add the Canary feed, `releases/download/canary/latest.json`, as
   `plugins.updater.endpoints` in `tauri.canary.conf.json`, and in `AppState::init` start update
   checks in every release build. Verify with `cargo test`, and that a local run logs no update
   check.

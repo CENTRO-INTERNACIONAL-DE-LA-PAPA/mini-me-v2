@@ -142,8 +142,8 @@ impl AppState {
         );
         sidecar.spawn();
         let updates = Updates::new(log);
-        // Mini-Me Canary has no update feed of its own, and must never install Mini-Me's.
-        if !cfg!(debug_assertions) && !projects::is_canary(&identifier) {
+        // A build run from the source tree is not an installed app, so it never updates itself.
+        if !cfg!(debug_assertions) {
             updates.spawn(app.clone());
         }
         Ok(Self {
