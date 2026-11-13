@@ -274,3 +274,65 @@
     height: 20px;
     vertical-align: middle;
 }
+
+/* Avatar animations (src/components/avatar/motion.ts sets the classes). Every rule is inside
+   this query, so under reduced motion avatars are drawn still. Small avatars only blink and play
+   the working animation. */
+@media (prefers-reduced-motion: no-preference) {
+    .avatar .blink {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: avatar-blink 5s infinite var(--avatar-delay, 0s);
+    }
+    .avatar .avatar-react,
+    .avatar .avatar-breathe {
+        transform-origin: 50% 85%;
+    }
+    .avatar:not(.avatar-small) .avatar-breathe {
+        animation: avatar-breathe 3.6s ease-in-out infinite var(--avatar-delay, 0s);
+    }
+    .avatar.avatar-hop:not(.avatar-small) .avatar-react {
+        animation: avatar-hop 450ms ease-out;
+    }
+    .avatar.avatar-working .avatar-breathe {
+        animation: avatar-work 800ms ease-in-out infinite;
+    }
+    /* Looking toward the pointer (src/components/avatar/look.ts): the eyes lean farthest, the
+       mouth less and the accessory least, so the head seems to turn. Inside the face's svg a px is
+       one of its 28 viewBox units. `translate` leaves `transform` free for the blink. */
+    .avatar:not(.avatar-small) .avatar-head :is(svg > *, img) {
+        transition: translate 150ms ease-out;
+    }
+    .avatar:not(.avatar-small) .avatar-head .eye {
+        translate: calc(var(--look-x, 0) * 1.6px) calc(var(--look-y, 0) * 1.6px);
+    }
+    .avatar:not(.avatar-small) .avatar-head svg > :not(.eye) {
+        translate: calc(var(--look-x, 0) * 1px) calc(var(--look-y, 0) * 1px);
+    }
+    .avatar:not(.avatar-small) .avatar-head img {
+        translate: calc(var(--look-x, 0) * 2%) calc(var(--look-y, 0) * 2%);
+    }
+}
+
+@keyframes avatar-blink {
+    0%, 94%, 100% { transform: scaleY(1); }
+    96% { transform: scaleY(0.1); }
+}
+
+@keyframes avatar-breathe {
+    0%, 100% { transform: none; }
+    50% { transform: scale(0.99, 1.03); }
+}
+
+@keyframes avatar-hop {
+    0%, 100% { transform: none; }
+    20% { transform: scale(1.12, 0.86); }
+    50% { transform: translateY(-18%) scale(0.94, 1.08); }
+    75% { transform: scale(1.06, 0.94); }
+}
+
+@keyframes avatar-work {
+    0%, 50%, 100% { transform: none; }
+    25% { transform: translateY(-8%) rotate(-5deg); }
+    75% { transform: translateY(-8%) rotate(5deg); }
+}

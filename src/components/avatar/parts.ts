@@ -41,19 +41,54 @@ export const ACCESSORIES = glob(
   }),
 );
 
-// Bases are inlined rather than drawn with <img>, so the CSS variables reach them. The
-// size class fills the avatar's box and keeps Button's default svg sizing from applying.
-const BASE_MARKUP = new Map(
-  Object.entries(
-    import.meta.glob<string>("../../assets/avatar/bases/*.svg", {
-      eager: true,
-      query: "?raw",
-      import: "default",
-    }),
-  ).map(([path, markup]) => [fileStem(path), markup.replace("<svg ", '<svg class="size-full" ')]),
+export interface AvatarParts {
+  base: string;
+  face: string;
+  accessory?: string | null;
+}
+
+// Bases and faces are inlined rather than drawn with <img>, so the CSS variables reach the bases
+// and the animations reach the faces' eyes. The size class fills the avatar's box and keeps
+// Button's default svg sizing from applying.
+const inlined = (markups: Record<string, string>) =>
+  new Map(
+    Object.entries(markups).map(([path, markup]) => [
+      fileStem(path),
+      markup.replace("<svg ", '<svg class="size-full" '),
+    ]),
+  );
+const BASE_MARKUP = inlined(
+  import.meta.glob<string>("../../assets/avatar/bases/*.svg", {
+    eager: true,
+    query: "?raw",
+    import: "default",
+  }),
+);
+const FACE_MARKUP = inlined(
+  import.meta.glob<string>("../../assets/avatar/faces/*.svg", {
+    eager: true,
+    query: "?raw",
+    import: "default",
+  }),
 );
 
 export const partUrl = (parts: AvatarPart[], id: string | null | undefined) =>
   parts.find((p) => p.id === id)?.url ?? null;
 
 export const baseMarkup = (id: string) => BASE_MARKUP.get(id) ?? null;
+
+export const faceMarkup = (id: string) => FACE_MARKUP.get(id) ?? null;
+
+/** An avatar's layers as HTML from the bundled parts; unknown ids draw nothing. */
+export function avatarMarkup({ base, face, accessory }: AvatarParts): string {
+  const accessoryUrl = partUrl(ACCESSORIES, accessory);
+  const accessoryImage = accessoryUrl
+    ? `<img src="${accessoryUrl}" alt="" draggable="false" class="absolute inset-0 size-full">`
+    : "";
+  return (
+    '<span class="avatar-react absolute inset-0"><span class="avatar-breathe absolute inset-0">' +
+    `<span class="absolute inset-0">${baseMarkup(base) ?? ""}</span>` +
+    `<span class="avatar-head absolute inset-0">${faceMarkup(face) ?? ""}${accessoryImage}</span>` +
+    "</span></span>"
+  );
+}
