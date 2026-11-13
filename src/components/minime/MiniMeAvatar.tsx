@@ -9,10 +9,13 @@ const UNKNOWN = { base: "classic", face: "neutral", color: { solid: "#d0cfc9", i
 export function MiniMeAvatar({
   miniMe,
   size,
+  working,
   className,
 }: {
   miniMe?: MiniMe;
   size: number;
+  /** Plays the working animation, for the avatar of a reply that is streaming. */
+  working?: boolean;
   className?: string;
 }) {
   return miniMe ? (
@@ -22,9 +25,10 @@ export function MiniMeAvatar({
       accessory={miniMe.avatar.accessory}
       color={miniMe.colors}
       size={size}
+      working={working}
       className={className}
     />
   ) : (
-    <Avatar {...UNKNOWN} size={size} className={className} />
+    <Avatar {...UNKNOWN} size={size} working={working} className={className} />
   );
 }

@@ -181,7 +181,11 @@ export const MessageItem = memo(function MessageItem({
         )}
       >
         <header className="flex items-center gap-[9px] text-meta">
-          <MiniMeAvatar miniMe={authorMiniMe} size={compact ? 20 : 28} />
+          <MiniMeAvatar
+            miniMe={authorMiniMe}
+            size={compact ? 20 : 40}
+            working={message.status === "streaming"}
+          />
           <strong className="font-serif text-name font-medium text-foreground">{name}</strong>
           <span className="text-mm-ink">
             <MetaParts parts={[time, message.status !== "failed" && status]} />
