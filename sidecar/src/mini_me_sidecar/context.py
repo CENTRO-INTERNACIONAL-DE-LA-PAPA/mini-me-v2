@@ -84,6 +84,19 @@ class Model:
 
     provider: str
     model: str
+    # Set only for the `custom` provider.
+    endpoint: str | None = None
+    api_format: str | None = None
+
+    @classmethod
+    def from_frame(cls, raw: dict[str, Any]) -> "Model":
+        endpoint, api_format = raw.get("endpoint"), raw.get("api_format")
+        return cls(
+            provider=str(raw.get("provider", "")),
+            model=str(raw.get("model", "")),
+            endpoint=str(endpoint) if endpoint else None,
+            api_format=str(api_format) if api_format else None,
+        )
 
 
 class CallContext:
@@ -112,9 +125,7 @@ class CallContext:
             tools=tuple(str(t) for t in trait.get("tools") or ()),
         )
         self.model = (
-            Model(provider=str(model.get("provider", "")), model=str(model.get("model", "")))
-            if isinstance(model, dict)
-            else None
+            Model.from_frame(model) if isinstance(model, dict) else None
         )
         self.project_id: str | None = context.get("project_id")
         self.conversation_id: str | None = context.get("conversation_id")

@@ -58,8 +58,7 @@ class Documents:
         self._drafts.cancel(draft_id)
 
     async def _draft(self, draft_id: str, frame: dict[str, Any]) -> None:
-        raw = frame.get("model") or {}
-        model = Model(provider=str(raw.get("provider", "")), model=str(raw.get("model", "")))
+        model = Model.from_frame(frame.get("model") or {})
         title = str(frame.get("title") or "")
         material = str(frame.get("material") or "")
         try:
