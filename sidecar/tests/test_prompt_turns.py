@@ -54,11 +54,10 @@ def test_the_conversations_files_and_components_are_listed_without_content():
     assert "- trial.csv (ID: a2) — probably the file the user means" in picked
 
 
-def test_suggest_edit_is_offered_only_in_a_thread_and_edit_document_only_outside():
-    listed = ("save_file", "suggest_edit", "edit_document")
-    defaults = ["read_file", "read_component", "hand_off"]
-    assert _offered(listed, in_thread=False) == [*defaults, "save_file", "edit_document"]
-    assert _offered(listed, in_thread=True) == [*defaults, "save_file", "suggest_edit"]
+def test_every_model_tool_is_offered_with_the_edit_tool_of_the_place():
+    others = ["read_file", "read_component", "hand_off", "save_file", "show_table"]
+    assert _offered(in_thread=False) == [*others, "write_document", "edit_document"]
+    assert _offered(in_thread=True) == [*others, "write_document", "suggest_edit"]
 
 
 def test_a_comment_comes_after_the_passage_it_is_about():

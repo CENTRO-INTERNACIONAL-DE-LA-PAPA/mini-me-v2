@@ -23,7 +23,12 @@ from mini_me_sidecar.adapters.providers import (
     provider_error,
 )
 from mini_me_sidecar.context import CallContext, Model, TraitError
-from mini_me_sidecar.tools import CONVERSATION_TOOLS, DEFAULT_TOOLS, THREAD_TOOLS
+from mini_me_sidecar.tools import (
+    CONVERSATION_TOOLS,
+    DEFAULT_TOOLS,
+    MODEL_TOOL_NAMES,
+    THREAD_TOOLS,
+)
 
 MAX_MATERIAL_CHARS = 400_000
 
@@ -106,7 +111,7 @@ class Prompt(Adapter):
         instructions = _system_prompt(ctx.mini_me_name, bool(ctx.steps), ctx.trait.instructions)
         messages = _messages(_merged(_turns(instructions, earlier, ctx.steps, material)))
 
-        names = _offered(ctx.trait.tools, ctx.document is not None)
+        names = _offered(ctx.document is not None)
         offered = {n: MODEL_TOOLS[n] for n in names if n in MODEL_TOOLS}
         chat = chat_model(model, key.reveal()).bind_tools([t.schema() for t in offered.values()])
 
@@ -161,12 +166,11 @@ async def _converse(
                 messages.append(ToolMessage(content=_malformed(call), tool_call_id=call["id"]))
 
 
-def _offered(listed: tuple[str, ...], in_thread: bool) -> list[str]:
-    """The default tools then the Trait's, with thread tools only inside a comment thread and
-    Conversation tools only outside one."""
-    names = [*DEFAULT_TOOLS, *(t for t in listed if t not in DEFAULT_TOOLS)]
+def _offered(in_thread: bool) -> list[str]:
+    """Every model tool, with thread tools only inside a comment thread and Conversation tools
+    only outside one."""
     left_out = CONVERSATION_TOOLS if in_thread else THREAD_TOOLS
-    return [n for n in names if n not in left_out]
+    return [n for n in (*DEFAULT_TOOLS, *MODEL_TOOL_NAMES) if n not in left_out]
 
 
 def _over_budget(size: int, left: int) -> str:

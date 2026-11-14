@@ -8,7 +8,7 @@ import threading
 from collections.abc import Callable, Coroutine
 from typing import Any, BinaryIO
 
-PROTOCOL = 16
+PROTOCOL = 17
 
 REDACTED = "[redacted]"
 

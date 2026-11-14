@@ -74,8 +74,6 @@ class TraitDefinition:
     id: str
     name: str
     instructions: str | None
-    # Tools the Trait may use; a prompt-based Trait's model gets these besides the read tools.
-    tools: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -122,7 +120,6 @@ class CallContext:
             id=str(trait.get("id", "")),
             name=str(trait.get("name", "")),
             instructions=trait.get("instructions"),
-            tools=tuple(str(t) for t in trait.get("tools") or ()),
         )
         self.model = (
             Model.from_frame(model) if isinstance(model, dict) else None

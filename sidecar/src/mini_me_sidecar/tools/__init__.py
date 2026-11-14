@@ -15,10 +15,10 @@ TOOL_NAMES = (
     "show_chart",
 )
 
-# Offered to every prompt-based Trait's model, so Traits do not list them.
+# Offered first to every prompt-based Trait's model.
 DEFAULT_TOOLS = ("read_file", "read_component", "hand_off")
 
-# The tools with a form for models, which a prompt-based Trait may list.
+# The other tools with a form for models, also offered to every prompt-based Trait's model.
 MODEL_TOOL_NAMES = ("save_file", "show_table", "write_document", "suggest_edit", "edit_document")
 
 # Offered only to a call answering a comment thread, whose passage it changes.
