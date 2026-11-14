@@ -78,11 +78,8 @@ now (`library.rs`).
   the `prompt` adapter and differ only in their instructions.
 - **Placeholder Traits** (*Document*, *Code*, *Predict*…) describe planned capabilities.
   They run on `echo` with no instructions until they are built, and no Mini-Me may use one.
-- A Trait's **`tools`** lists what it can read, save and show; see [Tools](#tools). A
-  Trait on a fixed adapter lists the tools that adapter's code uses; a prompt-based Trait
-  lists the tools its model is offered besides `read_file` and `read_component`, which
-  every prompt-based Trait gets. The library refuses unknown tool names, and prompt-based
-  Traits listing a tool models cannot use.
+- A Trait lists no tools; see [Tools](#tools). A prompt-based Trait's model is offered
+  every tool that has a form for models, and a fixed adapter uses the tools its code calls.
 - A **Mini-Me** has one Workflow, a list of Steps, each with an `id` unique within the
   Workflow. Most Workflows are a single Trait Step; see [Workflows](#workflows) for the
   others.
@@ -187,7 +184,7 @@ class FindPapers(Adapter):
 | Adapter | Runs | What it does |
 |---|---|---|
 | `echo` | placeholder Traits, tests | streams the input back word by word |
-| `prompt` | *Summarize*, *Assist*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment* | the Trait's instructions, the Conversation's earlier messages, earlier Step outputs, the message and a list of the Conversation's files and components (IDs, no content), sent to the model chosen in Settings with the read tools and the Trait's tools; the model calls tools for up to 8 rounds before it answers |
+| `prompt` | *Summarize*, *Assist*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment* | the Trait's instructions, the Conversation's earlier messages, earlier Step outputs, the message and a list of the Conversation's files and components (IDs, no content), sent to the model chosen in Settings with every model tool; the model calls tools for up to 8 rounds before it answers |
 | `asta-paper-finder` | *Find Papers* | Ai2's Paper Finder; saves the papers as the hidden `papers.json` and replies with a `paper-sources` component |
 | `asta-theorizer` | *Theorize* | Ai2's Theorizer; saves its result as the hidden `theory-store.json` and replies with a `theories` component |
 | `data-profile` | *Profile Data* | describes the referenced tables with pandas, without a model |
@@ -225,7 +222,7 @@ directly.
 Frames are one-way. Requests are answered with a result or an error code, which reaches the
 adapter as `CoreRequestError`, so an adapter can react to a refusal.
 
-`ctx` also carries the call's Trait (`ctx.trait.instructions`, `ctx.trait.tools`), the message being answered
+`ctx` also carries the call's Trait (`ctx.trait.instructions`), the message being answered
 (`ctx.message`, with its attachments and Text Components), the answering Mini-Me's name,
 routing's guess at whether the message needs earlier context (`ctx.needs_context`), and the
 outputs of the run's earlier Steps (`ctx.steps`, as `{ step_id, name, output }`).
@@ -454,10 +451,10 @@ Every tool acts through `ctx`, so the core's checks and Project-folder confineme
   `documents.py` hold them; `model.py` holds the forms offered to models (name, description, JSON Schema).
   `ToolError` (`base.py`) is a `TraitError`: uncaught in an adapter it ends the call with
   its code, and the `prompt` adapter returns its message to the model instead.
-- Fixed adapters declare the tools they use (`Adapter.uses_tools`); a test checks their
-  Traits list the same ones in `builtin.json`.
-- The `prompt` adapter offers `read_file`, `read_component` and the Trait's listed tools
-  (`bind_tools`) and loops: the model calls tools, gets their results and continues, for at
+- Fixed adapters declare the tools they use (`Adapter.uses_tools`); a test checks they are
+  known tools.
+- The `prompt` adapter offers every model tool (`bind_tools`), with `suggest_edit` only in a
+  comment thread and `edit_document` only outside one, and loops: the model calls tools, gets their results and continues, for at
   most 8 rounds, then answers. A model that cannot call tools fails with
   `tools_unsupported`.
 

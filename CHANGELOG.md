@@ -7,4 +7,5 @@
 
 ## Improved
 
+- Every Mini-Me can use every tool: Traits no longer list the tools they may use, so there is nothing to tick when you build one.
 - Mini-Mes answer follow-up questions about earlier tables, charts, papers and datasets from their full data. To point at one, describe it in your message; `$` references and the reference button are gone.
