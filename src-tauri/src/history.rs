@@ -2,14 +2,14 @@
 //! the names of its files, and whether it was finished, within a size budget. Also the
 //! Conversation's results: the Assets and Interactive Components its messages hold.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::conversations;
 use crate::library::Library;
-use crate::protocol::{AssetRef, AuthorKind, Message, MessageStatus, TextComponentKind};
+use crate::protocol::{AssetRef, AuthorKind, Component, Message, MessageStatus, TextComponentKind};
 
 /// The most `content` characters a history may hold.
 pub const HISTORY_BUDGET_CHARS: usize = 50_000;
@@ -32,6 +32,8 @@ pub struct ResultAsset {
     pub message_id: Uuid,
     /// Whether the Asset belongs to the call's own user message.
     pub current: bool,
+    /// Whether the Asset is left out of what the user sees, such as a Trait's results file.
+    pub hidden: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -42,8 +44,14 @@ pub struct ResultComponent {
     pub message_id: Uuid,
     /// The name of the Mini-Me whose reply holds the component.
     pub author: String,
-    /// Whether the call's own user message references the component with `$`.
-    pub current: bool,
+}
+
+/// What a component's history line names besides its kind and ID.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ComponentLabel {
+    pub title: Option<String>,
+    /// The name of the component's source Asset.
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -67,7 +75,13 @@ pub struct HistoryEntry {
 
 /// The messages before `before` in `messages` (a Conversation in creation order), filled from the
 /// newest back until the next would exceed `budget` characters. `system` notes are left out.
-pub fn history(messages: &[Message], before: Uuid, library: &Library, budget: usize) -> History {
+/// `labels` gives each component's title and source file for its line.
+pub fn history(
+    messages: &[Message],
+    before: Uuid,
+    (library, labels): (&Library, &HashMap<Uuid, ComponentLabel>),
+    budget: usize,
+) -> History {
     let earlier = messages
         .iter()
         .take_while(|m| m.id != before)
@@ -77,7 +91,7 @@ pub fn history(messages: &[Message], before: Uuid, library: &Library, budget: us
     let mut total = 0;
     for message in earlier.collect::<Vec<_>>().into_iter().rev() {
         total += 1;
-        let entry = entry(message, library);
+        let entry = entry(message, library, labels);
         let size = entry.content.chars().count();
         if used + size > budget {
             break;
@@ -94,29 +108,21 @@ pub fn history(messages: &[Message], before: Uuid, library: &Library, budget: us
 }
 
 /// Assets and components of `messages` (a Conversation in creation order) up to `reply`, newest
-/// first, at most `MAX_RESULTS` of each, each Asset once. Those of `answers` and `reply`, and the
-/// components `answers` references with `$`, are `current`. `find_asset` resolves `#` references,
-/// which carry only an ID and label.
+/// first, at most `MAX_RESULTS` of each, each Asset once. The Assets are the attached and
+/// referenced files and the components' source files; those of `answers` and `reply` are
+/// `current`. `find_asset` resolves an ID to its Asset and whether it is hidden.
 pub fn results(
     messages: &[Message],
     answers: Uuid,
     reply: Uuid,
     library: &Library,
-    find_asset: impl Fn(Uuid) -> Option<AssetRef>,
+    find_asset: impl Fn(Uuid) -> Option<(AssetRef, bool)>,
 ) -> Results {
     let end = messages
         .iter()
         .position(|m| m.id == reply)
         .or_else(|| messages.iter().position(|m| m.id == answers))
         .map_or(messages.len(), |i| i + 1);
-    let referenced: HashSet<Uuid> = messages
-        .iter()
-        .find(|m| m.id == answers)
-        .into_iter()
-        .flat_map(|m| &m.text_components)
-        .filter(|c| c.kind == TextComponentKind::Component)
-        .map(|c| c.id)
-        .collect();
     let mut seen = HashSet::new();
     let mut assets = Vec::new();
     let mut components = Vec::new();
@@ -125,25 +131,38 @@ pub fn results(
             break;
         }
         let current = message.id == answers || message.id == reply;
-        let result = |asset: AssetRef| ResultAsset { asset, message_id: message.id, current };
+        let result = |(asset, hidden): (AssetRef, bool)| ResultAsset {
+            asset,
+            message_id: message.id,
+            current,
+            hidden,
+        };
         for asset in &message.attachments {
             if assets.len() < MAX_RESULTS && seen.insert(asset.id) {
-                assets.push(result(asset.clone()));
+                assets.push(result((asset.clone(), false)));
             }
         }
-        // Only references not listed yet are looked up, while there is room for them.
-        let references =
-            message.text_components.iter().filter(|c| c.kind == TextComponentKind::Asset);
-        for reference in references {
+        // Only files not listed yet are looked up, while there is room for them.
+        let references = message
+            .text_components
+            .iter()
+            .filter(|c| c.kind == TextComponentKind::Asset)
+            .map(|c| c.id);
+        let sources = message
+            .components
+            .iter()
+            .rev()
+            .filter_map(|c| c.source_asset_id);
+        for id in references.chain(sources) {
             if assets.len() >= MAX_RESULTS {
                 break;
             }
-            if seen.contains(&reference.id) {
+            if seen.contains(&id) {
                 continue;
             }
-            if let Some(asset) = find_asset(reference.id) {
-                seen.insert(asset.id);
-                assets.push(result(asset));
+            if let Some(found) = find_asset(id) {
+                seen.insert(id);
+                assets.push(result(found));
             }
         }
         let room = MAX_RESULTS.saturating_sub(components.len());
@@ -156,7 +175,6 @@ pub fn results(
                     version: component.version,
                     message_id: message.id,
                     author: author.clone(),
-                    current: referenced.contains(&component.id),
                 }
             }));
         }
@@ -172,7 +190,11 @@ pub fn author_name(message: &Message, library: &Library) -> String {
         .map_or_else(|| "Mini-Me".to_string(), |m| m.name.clone())
 }
 
-fn entry(message: &Message, library: &Library) -> HistoryEntry {
+fn entry(
+    message: &Message,
+    library: &Library,
+    labels: &HashMap<Uuid, ComponentLabel>,
+) -> HistoryEntry {
     let (author, name) = match message.author.kind {
         AuthorKind::User => ("user", "You".to_string()),
         _ => ("mini_me", author_name(message, library)),
@@ -180,19 +202,35 @@ fn entry(message: &Message, library: &Library) -> HistoryEntry {
     HistoryEntry {
         author,
         name,
-        content: content(message),
+        content: content(message, labels),
         files: conversations::file_names(message),
         complete: message.status == MessageStatus::Complete,
     }
 }
 
-/// A message's text followed by the `text` of each of its Interactive Components, so a
-/// follow-up can refer to what a component showed.
-fn content(message: &Message) -> String {
-    let parts = std::iter::once(message.content.as_str())
-        .chain(message.components.iter().map(|c| c.text.as_str()))
-        .filter(|part| !part.is_empty());
-    parts.collect::<Vec<_>>().join("\n\n")
+/// A message's text followed by one line per Interactive Component, so a follow-up can name a
+/// component the model then reads by its ID.
+fn content(message: &Message, labels: &HashMap<Uuid, ComponentLabel>) -> String {
+    let lines = message
+        .components
+        .iter()
+        .map(|c| component_line(c, labels.get(&c.id)));
+    std::iter::once(message.content.clone())
+        .chain(lines)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+/// `[<kind> "<title>" from <source>, id <id>]`, leaving out what the component lacks.
+fn component_line(component: &Component, label: Option<&ComponentLabel>) -> String {
+    let label = label.cloned().unwrap_or_default();
+    let title = label.title.map(|t| format!(" \"{t}\"")).unwrap_or_default();
+    let source = label
+        .source
+        .map(|s| format!(" from {s}"))
+        .unwrap_or_default();
+    format!("[{}{title}{source}, id {}]", component.kind, component.id)
 }
 
 #[cfg(test)]
@@ -262,7 +300,12 @@ mod tests {
             after,
         ];
 
-        let history = history(&all, current.id, &Library::builtin(), HISTORY_BUDGET_CHARS);
+        let history = history(
+            &all,
+            current.id,
+            (&Library::builtin(), &HashMap::new()),
+            HISTORY_BUDGET_CHARS,
+        );
         assert!(!history.truncated);
         let names: Vec<&str> = history.messages.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(names, ["You", "Scribe", "Mini-Me", "Scribe"]);
@@ -273,33 +316,41 @@ mod tests {
         assert!(!history.messages[3].complete);
         assert_eq!(history.messages[3].content, "The main cause");
 
-        let first = super::history(&all, all[0].id, &Library::builtin(), HISTORY_BUDGET_CHARS);
+        let first = super::history(
+            &all,
+            all[0].id,
+            (&Library::builtin(), &HashMap::new()),
+            HISTORY_BUDGET_CHARS,
+        );
         assert!(first.messages.is_empty() && !first.truncated);
     }
 
     #[test]
-    fn a_reply_includes_the_text_of_its_components_within_the_budget() {
+    fn a_reply_lists_each_component_as_a_line_within_the_budget() {
         let mut reply = scribe("Found 2 papers.", MessageStatus::Complete);
-        reply.components.push(Component {
-            id: new_id(),
-            kind: "paper-sources".into(),
-            version: 1,
-            data: serde_json::json!({ "papers": [] }),
-            text: "1. Late blight\n2. Wild potato".into(),
-            answer: serde_json::Value::Null,
-            step_index: None,
-        });
+        let papers = component(&mut reply, "paper-sources");
+        let approval = component(&mut reply, "approval");
         let all = [user("papers?"), reply, user("summarize the second paper")];
         let library = Library::builtin();
+        let labels = HashMap::from([(
+            papers,
+            ComponentLabel {
+                title: Some("Wild potato".into()),
+                source: Some("papers.json".into()),
+            },
+        )]);
 
-        let history = history(&all, all[2].id, &library, HISTORY_BUDGET_CHARS);
+        let history = history(&all, all[2].id, (&library, &labels), HISTORY_BUDGET_CHARS);
         assert_eq!(
             history.messages[1].content,
-            "Found 2 papers.\n\n1. Late blight\n2. Wild potato"
+            format!(
+                "Found 2 papers.\n\n[paper-sources \"Wild potato\" from papers.json, id {papers}]\
+                 \n\n[approval, id {approval}]"
+            )
         );
 
         let only_text = "Found 2 papers.".chars().count();
-        let tight = super::history(&all, all[2].id, &library, only_text + 7);
+        let tight = super::history(&all, all[2].id, (&library, &labels), only_text + 7);
         assert!(tight.messages.is_empty());
         assert!(tight.truncated);
     }
@@ -310,16 +361,16 @@ mod tests {
         let current = all[3].id;
         let library = Library::builtin();
 
-        let fits = history(&all, current, &library, 8);
+        let fits = history(&all, current, (&library, &HashMap::new()), 8);
         let kept: Vec<&str> = fits.messages.iter().map(|e| e.content.as_str()).collect();
         assert_eq!(kept, ["bbbb", "cccc"]);
         assert!(fits.truncated);
 
-        let exact = history(&all, current, &library, 12);
+        let exact = history(&all, current, (&library, &HashMap::new()), 12);
         assert_eq!(exact.messages.len(), 3);
         assert!(!exact.truncated);
 
-        let too_big = history(&all, current, &library, 3);
+        let too_big = history(&all, current, (&library, &HashMap::new()), 3);
         assert!(too_big.messages.is_empty());
         assert!(too_big.truncated);
     }
@@ -328,14 +379,19 @@ mod tests {
         AssetRef { id: new_id(), name: name.into(), media_type: "text/csv".into(), size_bytes: 1 }
     }
 
-    fn table(reply: &mut Message) -> Uuid {
+    fn component(reply: &mut Message, kind: &str) -> Uuid {
+        component_from(reply, kind, None)
+    }
+
+    fn component_from(reply: &mut Message, kind: &str, source: Option<Uuid>) -> Uuid {
         let id = new_id();
         reply.components.push(Component {
             id,
-            kind: "table".into(),
+            kind: kind.into(),
             version: 1,
-            data: serde_json::Value::Null,
+            preview: serde_json::Value::Null,
             text: "a\tb".into(),
+            source_asset_id: source,
             answer: serde_json::Value::Null,
             step_index: None,
         });
@@ -343,41 +399,53 @@ mod tests {
     }
 
     #[test]
-    fn results_are_newest_first_once_each_with_the_current_files_marked() {
+    fn results_are_newest_first_once_each_with_sources_and_the_current_files_marked() {
         let trial = asset("trial.csv");
+        let profile = asset("trial-profile.csv");
         let mut first = user("profile #trial.csv");
         first.attachments.push(trial.clone());
         let mut reply = scribe("Done.", MessageStatus::Complete);
-        let older = table(&mut reply);
-        let newer = table(&mut reply);
+        let older = component_from(&mut reply, "table", Some(trial.id));
+        let newer = component_from(&mut reply, "table", Some(profile.id));
         let notes = asset("notes.txt");
-        let mut current = user("again #trial.csv and #notes.txt with $older");
-        let references = [
-            (TextComponentKind::Asset, trial.id, "#trial.csv"),
-            (TextComponentKind::Asset, notes.id, "#notes.txt"),
-            (TextComponentKind::Component, older, "$older"),
-        ];
-        for (kind, id, label) in references {
-            current.text_components.push(crate::protocol::TextComponent {
-                kind,
-                id,
-                label: label.into(),
-                start: 0,
-                end: 1,
-            });
+        let mut current = user("again #trial.csv and #notes.txt");
+        for (id, label) in [(trial.id, "#trial.csv"), (notes.id, "#notes.txt")] {
+            current
+                .text_components
+                .push(crate::protocol::TextComponent {
+                    kind: TextComponentKind::Asset,
+                    id,
+                    label: label.into(),
+                    start: 0,
+                    end: 1,
+                });
         }
         let current_id = current.id;
         let all = [first, reply, current];
-        let registry = [trial.clone(), notes.clone()];
-        let find = |id| registry.iter().find(|a| a.id == id).cloned();
+        let registry = [
+            (trial.clone(), false),
+            (notes.clone(), false),
+            (profile.clone(), true),
+        ];
+        let find = |id| registry.iter().find(|(a, _)| a.id == id).cloned();
 
         // The reply has not been created yet, so the results end at the user message.
         let results = results(&all, current_id, new_id(), &Library::builtin(), find);
-        let names: Vec<(&str, bool)> =
-            results.assets.iter().map(|a| (a.asset.name.as_str(), a.current)).collect();
-        assert_eq!(names, [("trial.csv", true), ("notes.txt", true)]);
-        let ids: Vec<(Uuid, bool)> = results.components.iter().map(|c| (c.id, c.current)).collect();
-        assert_eq!(ids, [(newer, false), (older, true)]);
+        let names: Vec<(&str, bool, bool)> = results
+            .assets
+            .iter()
+            .map(|a| (a.asset.name.as_str(), a.current, a.hidden))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("trial.csv", true, false),
+                ("notes.txt", true, false),
+                ("trial-profile.csv", false, true)
+            ]
+        );
+        let ids: Vec<Uuid> = results.components.iter().map(|c| c.id).collect();
+        assert_eq!(ids, [newer, older]);
         assert_eq!(results.components[0].author, "Scribe");
     }
 

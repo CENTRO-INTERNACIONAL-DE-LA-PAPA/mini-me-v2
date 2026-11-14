@@ -368,7 +368,7 @@ fn file_options(
     }
     let state = project.lock();
     let found = results(messages, message.id, message.id, library, |id| {
-        assets::find(&state, id).ok()
+        assets::find_with_hidden(&state, id).ok()
     });
     let mut components = state.file_components(conversation_id).unwrap_or_default();
     found
@@ -922,17 +922,16 @@ mod tests {
         let reply =
             conversations::start_reply(&f.project, f.conversation, question.id, author).unwrap();
         let file = ("field-trial.csv", "text/csv", b"plot\n1\n".as_slice());
-        let asset = conversations::attach_generated(&f.project, reply, &plotter, file).unwrap();
-        let source = json!({ "source": asset.name, "source_id": asset.id });
+        let asset =
+            conversations::attach_generated(&f.project, reply, &plotter, file, false).unwrap();
         let shown = [("table", "Field trial"), ("chart", "Yield by variety")];
         for (kind, title) in shown {
-            let mut data = source.clone();
-            data["title"] = json!(title);
             let component = conversations::NewComponent {
                 kind: kind.into(),
                 version: 1,
-                data,
+                preview: json!({ "source": asset.name, "title": title }),
                 text: title.to_string(),
+                source_asset_id: Some(asset.id),
             };
             conversations::add_component(&f.project, reply, None, component).unwrap();
         }

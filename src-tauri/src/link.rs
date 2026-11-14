@@ -12,7 +12,7 @@ use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 15;
+pub const SIDECAR_PROTOCOL: u32 = 16;
 
 pub const REDACTED: &str = "[redacted]";
 

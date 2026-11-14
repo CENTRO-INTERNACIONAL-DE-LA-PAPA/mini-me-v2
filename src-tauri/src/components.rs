@@ -1,6 +1,6 @@
 //! The check an Interactive Component from a Trait passes before it is stored. Each kind is drawn
 //! by `src/components/interactive/<kind>.tsx`; the kind is not checked against the Trait, since
-//! its adapter's show tools decide which kinds it adds.
+//! its adapter decides which kinds it adds.
 
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -9,15 +9,21 @@ use crate::assets;
 use crate::error::{AppError, AppResult};
 use crate::store::ProjectState;
 
-/// The most bytes a component's `data` may take as JSON.
-pub const MAX_DATA_BYTES: usize = 2 * 1024 * 1024;
+/// The most bytes a component's `preview` may take as JSON.
+pub const MAX_PREVIEW_BYTES: usize = 2 * 1024 * 1024;
 
 /// Kinds only the core creates, such as a paused Workflow's approval and a reply's hand-off.
 const CORE_KINDS: [&str; 3] = ["approval", "document-edits", "hand-off"];
 
 /// Refuses a component of a kind only the core creates (`component_not_allowed`), and one
-/// with an empty `text` or `data` larger than `MAX_DATA_BYTES` (`invalid_component`).
-pub fn check(kind: &str, data: &Value, text: &str) -> AppResult<()> {
+/// with an empty `text`, a `preview` larger than `MAX_PREVIEW_BYTES` or a source that is not an
+/// Asset of the Project (`invalid_component`).
+pub fn check(
+    state: &ProjectState,
+    kind: &str,
+    (preview, text): (&Value, &str),
+    source_asset_id: Option<Uuid>,
+) -> AppResult<()> {
     if CORE_KINDS.contains(&kind) {
         return Err(AppError::new(
             "component_not_allowed",
@@ -27,37 +33,34 @@ pub fn check(kind: &str, data: &Value, text: &str) -> AppResult<()> {
     if text.trim().is_empty() {
         return Err(AppError::new("invalid_component", "The component's text is empty."));
     }
-    if serde_json::to_vec(data)?.len() > MAX_DATA_BYTES {
+    if serde_json::to_vec(preview)?.len() > MAX_PREVIEW_BYTES {
         return Err(AppError::new(
             "invalid_component",
-            format!("The {kind} component's data is larger than 2 MiB."),
+            format!("The {kind} component's preview is larger than 2 MiB."),
+        ));
+    }
+    if source_asset_id.is_some_and(|id| assets::find(state, id).is_err()) {
+        return Err(AppError::new(
+            "invalid_component",
+            format!("The {kind} component's source file is not part of this Project."),
         ));
     }
     Ok(())
 }
 
-/// A `table`'s `source_id`, when it is an Asset of the Project.
-pub fn source_asset_id(state: &ProjectState, data: &Value) -> Option<Uuid> {
-    data["source_id"]
-        .as_str()
-        .and_then(|id| Uuid::parse_str(id).ok())
-        .filter(|id| assets::find(state, *id).is_ok())
-}
-
-/// The answer to a call's `component.read`: a component of `conversation_id` with, for a
-/// `table`, the Asset that holds its full table (`source_asset_id`, else `null`).
+/// The answer to a call's `component.read`: a component of `conversation_id` without its
+/// preview, with the Asset holding its data (`source_asset_id`, `null` when it has none or the
+/// file was deleted).
 pub fn read(state: &ProjectState, conversation_id: Uuid, component_id: Uuid) -> AppResult<Value> {
     let component = state
         .conversation_component(conversation_id, component_id)?
         .ok_or_else(|| AppError::not_found("No such component in this Conversation."))?;
-    let source_asset_id = match component.kind.as_str() {
-        "table" => source_asset_id(state, &component.data),
-        _ => None,
-    };
+    let source_asset_id = component
+        .source_asset_id
+        .filter(|id| assets::find(state, *id).is_ok());
     Ok(json!({
         "kind": component.kind,
         "version": component.version,
-        "data": component.data,
         "text": component.text,
         "source_asset_id": source_asset_id,
     }))
@@ -70,36 +73,47 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn a_traits_component_needs_text_small_data_and_a_kind_traits_may_add() {
-        assert!(check("paper-sources", &json!({ "papers": [] }), "none").is_ok());
-        assert!(check("theories", &json!({}), "t").is_ok());
-        for kind in ["approval", "hand-off"] {
-            assert_eq!(check(kind, &json!({}), "t").unwrap_err().code, "component_not_allowed");
-        }
-        let empty = check("paper-sources", &json!({}), "  ").unwrap_err();
-        assert_eq!(empty.code, "invalid_component");
-        let big = json!({ "papers": "x".repeat(MAX_DATA_BYTES) });
-        assert_eq!(check("paper-sources", &big, "t").unwrap_err().code, "invalid_component");
-    }
-
-    #[test]
-    fn a_table_names_its_source_asset_only_when_the_project_has_it() {
+    fn a_traits_component_needs_text_a_small_preview_a_known_source_and_a_kind_traits_may_add() {
         let (dir, project) = temp_project();
         let source = dir.path().join("trial.csv");
         std::fs::write(&source, "yield\n1").unwrap();
         let asset = assets::import(&project, &source, &user()).unwrap();
         let state = project.lock();
+        let code = |kind, preview: &Value, text, source| {
+            check(&state, kind, (preview, text), source)
+                .err()
+                .map(|e| e.code)
+        };
 
-        let preview = json!({ "source": "trial.csv", "source_id": asset.id });
-        assert_eq!(source_asset_id(&state, &preview), Some(asset.id));
-        let missing = json!({ "source": "trial.csv", "source_id": uuid::Uuid::now_v7() });
-        assert_eq!(source_asset_id(&state, &missing), None);
-        assert_eq!(source_asset_id(&state, &json!({ "source": "trial.csv" })), None);
+        assert_eq!(
+            code("paper-sources", &json!({ "papers": [] }), "none", None),
+            None
+        );
+        assert_eq!(code("table", &json!({}), "t", Some(asset.id)), None);
+        for kind in ["approval", "hand-off"] {
+            assert_eq!(
+                code(kind, &json!({}), "t", None).as_deref(),
+                Some("component_not_allowed")
+            );
+        }
+        let big = json!({ "papers": "x".repeat(MAX_PREVIEW_BYTES) });
+        for (preview, text, source) in [
+            (json!({}), "  ", None),
+            (big, "t", None),
+            (json!({}), "t", Some(Uuid::now_v7())),
+        ] {
+            assert_eq!(
+                code("table", &preview, text, source).as_deref(),
+                Some("invalid_component")
+            );
+        }
     }
 
     #[test]
-    fn reading_a_table_names_the_asset_of_its_full_table() {
-        use crate::conversations::{NewComponent, add_component, create, send_message, start_reply};
+    fn reading_a_component_gives_its_text_and_source_but_not_its_preview() {
+        use crate::conversations::{
+            NewComponent, add_component, create, send_message, start_reply,
+        };
         use crate::protocol::{Author, AuthorKind, new_id};
 
         let (dir, project) = temp_project();
@@ -111,18 +125,23 @@ mod tests {
         let question = send_message(&project, conversation, input, new_id()).unwrap();
         let author = Author { kind: AuthorKind::MiniMe, id: "profiler".into() };
         let reply = start_reply(&project, conversation, question.id, author).unwrap();
-        let columns = json!([{ "name": "yield", "type": "number" }]);
-        let preview = json!({ "columns": columns, "rows": [[1]], "source_id": asset.id });
-        let component =
-            |data| NewComponent { kind: "table".into(), version: 1, data, text: "t".into() };
-        let table = add_component(&project, reply, None, component(preview)).unwrap();
-        let plain = json!({ "columns": columns, "rows": [[1]] });
-        let other = add_component(&project, reply, None, component(plain)).unwrap();
+        let preview = json!({ "columns": [{ "name": "yield", "type": "number" }], "rows": [[1]] });
+        let component = |source_asset_id| NewComponent {
+            kind: "table".into(),
+            version: 1,
+            preview: preview.clone(),
+            text: "t".into(),
+            source_asset_id,
+        };
+        let table = add_component(&project, reply, None, component(Some(asset.id))).unwrap();
+        let other = add_component(&project, reply, None, component(None)).unwrap();
 
         let state = project.lock();
         let read = read(&state, conversation, table).unwrap();
-        assert_eq!(read["source_asset_id"], json!(asset.id));
-        assert_eq!(read["data"]["rows"], json!([[1]]));
+        assert_eq!(
+            read,
+            json!({ "kind": "table", "version": 1, "text": "t", "source_asset_id": asset.id })
+        );
         let plain = super::read(&state, conversation, other).unwrap();
         assert_eq!(plain["source_asset_id"], json!(null));
         assert_eq!(super::read(&state, new_id(), table).unwrap_err().code, "not_found");

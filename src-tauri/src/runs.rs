@@ -257,8 +257,10 @@ pub struct Runs {
 struct ComponentAddParams {
     kind: String,
     version: u32,
-    data: Value,
+    preview: Value,
     text: String,
+    #[serde(default)]
+    source_asset_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -277,6 +279,8 @@ struct AssetWriteParams {
     name: String,
     media_type: String,
     data: String,
+    #[serde(default)]
+    hidden: bool,
 }
 
 #[derive(Deserialize)]
@@ -1101,9 +1105,18 @@ impl Runs {
     }
 
     fn conversation_history(&self, place: &Place) -> AppResult<Value> {
-        let messages = place.project.lock().conversation_messages(place.conversation_id)?;
+        let (messages, labels) = {
+            let state = place.project.lock();
+            let messages = state.conversation_messages(place.conversation_id)?;
+            (messages, state.component_labels(place.conversation_id)?)
+        };
         let library = self.library.current();
-        let history = history(&messages, place.answers, &library, HISTORY_BUDGET_CHARS);
+        let history = history(
+            &messages,
+            place.answers,
+            (&library, &labels),
+            HISTORY_BUDGET_CHARS,
+        );
         Ok(serde_json::to_value(history)?)
     }
 
@@ -1118,9 +1131,14 @@ impl Runs {
         }
         let bytes = decode_asset(&p.data)?;
         let file = (p.name.as_str(), p.media_type.as_str(), bytes.as_slice());
-        let asset =
-            conversations::attach_generated(&place.project, place.reply, &place.author, file)
-                .map_err(reply_ended)?;
+        let asset = conversations::attach_generated(
+            &place.project,
+            place.reply,
+            &place.author,
+            file,
+            p.hidden,
+        )
+        .map_err(reply_ended)?;
         Ok(json!({ "asset": asset }))
     }
 
@@ -1129,13 +1147,18 @@ impl Runs {
         let messages = state.conversation_messages(place.conversation_id)?;
         let library = self.library.current();
         let mut found = results(&messages, place.answers, place.reply, &library, |id| {
-            assets::find(&state, id).ok()
+            assets::find_with_hidden(&state, id).ok()
         });
         // A thread's document is part of what its comment is about.
         if let Some(document) = comments::document_of(&state, place.conversation_id)? {
             found.assets.retain(|a| a.asset.id != document.id);
             let message_id = place.answers;
-            let listed = ResultAsset { asset: document, message_id, current: true };
+            let listed = ResultAsset {
+                asset: document,
+                message_id,
+                current: true,
+                hidden: false,
+            };
             found.assets.insert(0, listed);
         }
         Ok(serde_json::to_value(found)?)
@@ -1159,7 +1182,7 @@ impl Runs {
         let hand_off = self.hand_off_allowed(place, p)?;
         let library = self.library.current();
         let name = library.mini_me(hand_off.mini_me_id).map_or("", |m| m.name.as_str());
-        let data = json!({
+        let preview = json!({
             "mini_me_id": hand_off.mini_me_id,
             "request": hand_off.request,
             "file": hand_off.file,
@@ -1167,7 +1190,13 @@ impl Runs {
         let text = format!("Handed to {name}: {}", hand_off.request);
         self.hold_hand_off(call_id, hand_off)?;
         let step_id = Some(place.step_id.as_str());
-        let card = NewComponent { kind: "hand-off".into(), version: 1, data, text };
+        let card = NewComponent {
+            kind: "hand-off".into(),
+            version: 1,
+            preview,
+            text,
+            source_asset_id: None,
+        };
         let added = conversations::add_core_component(&place.project, place.reply, step_id, card);
         if let Err(err) = added {
             self.drop_hand_off(call_id);
@@ -1199,7 +1228,7 @@ impl Runs {
             Some(id) => {
                 let messages = state.conversation_messages(place.conversation_id)?;
                 let found = results(&messages, place.answers, place.reply, &library, |id| {
-                    assets::find(&state, id).ok()
+                    assets::find_with_hidden(&state, id).ok()
                 });
                 let asset = found
                     .assets
@@ -1364,11 +1393,17 @@ fn read_component(place: &Place, p: ComponentReadParams) -> AppResult<Value> {
 }
 
 fn add_component(place: &Place, p: ComponentAddParams) -> AppResult<Value> {
-    let data = match p.kind.as_str() {
-        "suggestion" => comments::suggestion(&place.project, place.conversation_id, &p.data)?,
-        _ => p.data,
+    let preview = match p.kind.as_str() {
+        "suggestion" => comments::suggestion(&place.project, place.conversation_id, &p.preview)?,
+        _ => p.preview,
     };
-    let component = NewComponent { kind: p.kind, version: p.version, data, text: p.text };
+    let component = NewComponent {
+        kind: p.kind,
+        version: p.version,
+        preview,
+        text: p.text,
+        source_asset_id: p.source_asset_id,
+    };
     let step_id = Some(place.step_id.as_str());
     let id = conversations::add_component(&place.project, place.reply, step_id, component)
         .map_err(reply_ended)?;
@@ -1380,6 +1415,9 @@ fn read_asset(project: &Project, params: AssetReadParams) -> AppResult<Value> {
     let path = assets::file_path(project, params.asset_id)?;
     let mut file = File::open(&path)?;
     let size = file.metadata()?.len();
+    if params.offset == 0 {
+        assets::keep_size(&project.lock(), params.asset_id, size as i64)?;
+    }
     let offset = params.offset.min(size);
     file.seek(SeekFrom::Start(offset))?;
     let mut data = Vec::new();
@@ -1873,7 +1911,10 @@ mod tests {
         assert_eq!(error_code(hand_off(&f, call_id, SCRIBE, None)).as_deref(), refused);
 
         let card = &f.message(reply).components[0];
-        assert_eq!((card.kind.as_str(), card.data["mini_me_id"].clone()), ("hand-off", json!(SCRIBE)));
+        assert_eq!(
+            (card.kind.as_str(), card.preview["mini_me_id"].clone()),
+            ("hand-off", json!(SCRIBE))
+        );
         assert_eq!(plans(&f).len(), 1);
         f.runs.handle(SidecarFrame::RunDone { run_id });
         let plans = plans(&f);
@@ -1952,7 +1993,7 @@ mod tests {
         f.runs.handle(SidecarFrame::StepCompleted { run_id, step_id: STEP.into(), output: None });
         let call_id = f.step(run_id, STEP);
         let params = json!({
-            "kind": "paper-sources", "version": 1, "data": papers(), "text": "1. Late blight"
+            "kind": "paper-sources", "version": 1, "preview": papers(), "text": "1. Late blight"
         });
         result(add_component(&f, call_id, params));
 
@@ -1972,11 +2013,11 @@ mod tests {
     }
 
     #[test]
-    fn a_call_lists_its_conversations_components_and_reads_one_in_full() {
+    fn a_call_lists_its_conversations_components_and_reads_one_without_its_preview() {
         let f = quick();
         let (call_id, _) = f.start_call("echo");
         let params = json!({
-            "kind": "paper-sources", "version": 1, "data": papers(), "text": "1. Late blight"
+            "kind": "paper-sources", "version": 1, "preview": papers(), "text": "1. Late blight"
         });
         let id = result(add_component(&f, call_id, params))["component_id"].clone();
 
@@ -1989,8 +2030,13 @@ mod tests {
             let params = json!({ "component_id": component_id });
             f.runs.respond("r".into(), call_id, "component.read", params)
         };
-        assert_eq!(result(read(id))["data"], papers());
-        assert_eq!(error_code(read(json!(new_id()))).as_deref(), Some("not_found"));
+        let component = result(read(id));
+        assert_eq!(component["text"], "1. Late blight");
+        assert_eq!(component.get("preview"), None);
+        assert_eq!(
+            error_code(read(json!(new_id()))).as_deref(),
+            Some("not_found")
+        );
     }
 
     #[test]
@@ -1998,7 +2044,7 @@ mod tests {
         let f = quick();
         let (call_id, reply) = f.start_call("echo");
         for kind in ["approval", "document-edits"] {
-            let params = json!({ "kind": kind, "version": 1, "data": {}, "text": "t" });
+            let params = json!({ "kind": kind, "version": 1, "preview": {}, "text": "t" });
             assert_eq!(
                 error_code(add_component(&f, call_id, params)).as_deref(),
                 Some("component_not_allowed"),
@@ -2006,7 +2052,8 @@ mod tests {
             );
         }
 
-        let empty = json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": " " });
+        let empty =
+            json!({ "kind": "paper-sources", "version": 1, "preview": papers(), "text": " " });
         assert_eq!(
             error_code(add_component(&f, call_id, empty)).as_deref(),
             Some("invalid_component")
@@ -2024,7 +2071,7 @@ mod tests {
         let call_id = f.step(run_id, STEP);
         f.runs.handle(SidecarFrame::StepCompleted { run_id, step_id: STEP.into(), output: None });
         let params =
-            json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": "t" });
+            json!({ "kind": "paper-sources", "version": 1, "preview": papers(), "text": "t" });
         assert_eq!(
             error_code(add_component(&f, call_id, params)).as_deref(),
             Some("call_not_active")
@@ -2056,6 +2103,23 @@ mod tests {
         assert_eq!(message.attachments.len(), 1);
         let path = assets::file_path(&f.project, message.attachments[0].id).unwrap();
         assert_eq!(std::fs::read(path).unwrap(), b"{\"theories\": []}");
+    }
+
+    #[test]
+    fn a_hidden_asset_is_written_without_an_attachment() {
+        let f = quick();
+        let (call_id, reply) = f.start_call("echo");
+        let data = BASE64.encode(b"[]");
+        let params =
+            json!({ "name": "papers.json", "media_type": "", "data": data, "hidden": true });
+        let written = result(f.runs.respond("r".into(), call_id, "asset.write", params));
+
+        let id: Uuid = serde_json::from_value(written["asset"]["id"].clone()).unwrap();
+        assert!(f.message(reply).attachments.is_empty());
+        assert_eq!(
+            assets::find(&f.project.lock(), id).unwrap().name,
+            "papers.json"
+        );
     }
 
     #[test]
@@ -2181,9 +2245,16 @@ mod tests {
         let decision = f.step(run_id, "pick");
         let ask = |method: &str, params: Value| f.runs.respond("r".into(), decision, method, params);
         let read = json!({ "asset_id": Uuid::nil(), "offset": 0, "length": 1 });
-        assert_eq!(error_code(ask("asset.read", read)).as_deref(), Some("unknown_method"));
-        let add = json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": "t" });
-        assert_eq!(error_code(ask("component.add", add)).as_deref(), Some("unknown_method"));
+        assert_eq!(
+            error_code(ask("asset.read", read)).as_deref(),
+            Some("unknown_method")
+        );
+        let add =
+            json!({ "kind": "paper-sources", "version": 1, "preview": papers(), "text": "t" });
+        assert_eq!(
+            error_code(ask("component.add", add)).as_deref(),
+            Some("unknown_method")
+        );
         assert_eq!(
             error_code(ask("conversation.results", json!({}))).as_deref(),
             Some("unknown_method")

@@ -24,7 +24,7 @@
       "description": "Returns a list of papers and related academic sources on a topic.",
       "color": "oklch(0.74 0.12 270)",
       "adapter": "asta-paper-finder",
-      "tools": ["show_papers"],
+      "tools": ["save_file"],
       "instructions": null
     },
     {
@@ -33,7 +33,7 @@
       "description": "Builds theories from the given information.",
       "color": "oklch(0.76 0.14 345)",
       "adapter": "asta-theorizer",
-      "tools": ["show_theories", "save_file"],
+      "tools": ["save_file"],
       "instructions": null
     },
     {
@@ -82,7 +82,7 @@
       "description": "Finds datasets in CIP's Dataverse, whose files can be downloaded into the Project.",
       "color": "oklch(0.78 0.1 210)",
       "adapter": "cip-dataverse",
-      "tools": ["show_datasets"],
+      "tools": ["save_file"],
       "instructions": "Turn the user's message into a search of CIP's Dataverse, the International Potato Center's research data repository. Write the query as a few keywords that datasets would contain: crops, diseases, traits, places and methods, such as 'late blight resistance Peru'. Leave out filler words, the word 'dataset' and years. Set the earliest and latest year of publication only when the message asks for them."
     },
     {
@@ -131,7 +131,7 @@
       "description": "Reports a dataset's shape, column types, missing values and duplicates.",
       "color": "oklch(0.8 0.09 200)",
       "adapter": "data-profile",
-      "tools": ["read_table", "show_table"],
+      "tools": ["read_table", "show_table", "save_file"],
       "instructions": null
     },
     {

@@ -114,8 +114,9 @@ struct FeaturedRow {
     id: String,
     kind: String,
     version: u32,
-    data: String,
+    preview: String,
     text: String,
+    source_asset_id: Option<String>,
     answer: Option<String>,
     author_kind: String,
     author_id: String,
@@ -127,8 +128,8 @@ struct FeaturedRow {
 fn featured(conn: &Connection, id: &str) -> AppResult<Option<Featured>> {
     let row = conn
         .query_row(
-            "SELECT c.id, c.kind, c.version, c.data, c.text, c.answer, m.author_kind, \
-             m.author_id, m.conversation_id, m.id FROM components c \
+            "SELECT c.id, c.kind, c.version, c.preview, c.text, c.answer, m.author_kind, \
+             m.author_id, m.conversation_id, m.id, c.source_asset_id FROM components c \
              JOIN messages m ON m.id = c.message_id WHERE c.id = ?1",
             params![id],
             |row| {
@@ -136,8 +137,9 @@ fn featured(conn: &Connection, id: &str) -> AppResult<Option<Featured>> {
                     id: row.get(0)?,
                     kind: row.get(1)?,
                     version: row.get(2)?,
-                    data: row.get(3)?,
+                    preview: row.get(3)?,
                     text: row.get(4)?,
+                    source_asset_id: row.get(10)?,
                     answer: row.get(5)?,
                     author_kind: row.get(6)?,
                     author_id: row.get(7)?,
@@ -155,8 +157,13 @@ fn featured(conn: &Connection, id: &str) -> AppResult<Option<Featured>> {
             id: parse_id(&row.id, "ID")?,
             kind: row.kind,
             version: row.version,
-            data: serde_json::from_str(&row.data)?,
+            preview: serde_json::from_str(&row.preview)?,
             text: row.text,
+            source_asset_id: row
+                .source_asset_id
+                .as_deref()
+                .map(|id| parse_id(id, "ID"))
+                .transpose()?,
             answer: row.answer.map(|a| serde_json::from_str(&a)).transpose()?.unwrap_or_default(),
             // The Overview draws the component on its own, outside its reply.
             step_index: None,
@@ -184,12 +191,12 @@ struct ComponentOutputRow {
 
 /// Every component of the Project's Conversations other than an approval, in no set order.
 fn component_outputs(conn: &Connection) -> AppResult<Vec<Output>> {
-    // Only the title and the list lengths are read from `data`, which can be large.
+    // Only the title and the list lengths are read from `preview`, which can be large.
     let in_conversations = comments::not_a_thread("v.id");
     let mut stmt = conn.prepare(&format!(
-        "SELECT c.kind, c.id, json_extract(c.data, '$.title'), \
-         COALESCE(json_array_length(c.data, '$.papers'), json_array_length(c.data, '$.theories'), \
-         json_extract(c.data, '$.total')), \
+        "SELECT c.kind, c.id, json_extract(c.preview, '$.title'), \
+         COALESCE(json_array_length(c.preview, '$.papers'), \
+         json_array_length(c.preview, '$.theories'), json_extract(c.preview, '$.total')), \
          c.text, m.author_kind, m.author_id, m.conversation_id, v.title, m.id, c.created_at \
          FROM components c JOIN messages m ON m.id = c.message_id \
          JOIN conversations v ON v.id = m.conversation_id \
@@ -454,14 +461,15 @@ mod tests {
         conversation: Uuid,
         message: Uuid,
         kind: &str,
-        data: serde_json::Value,
+        preview: serde_json::Value,
     ) -> Uuid {
         let component = Component {
             id: new_id(),
             kind: kind.into(),
             version: 1,
-            data,
+            preview,
             text: format!("{kind} text"),
+            source_asset_id: None,
             answer: serde_json::Value::Null,
             step_index: None,
         };
@@ -488,8 +496,12 @@ mod tests {
         let source = dir.path().join("upload.csv");
         std::fs::write(&source, "a\n1\n").unwrap();
         assets::import(&project, &source, &user()).unwrap();
-        let saved = assets::write_generated(&project, "clean.csv", "", b"a\n1\n", &user()).unwrap();
-        let event = EventKind::AttachmentAdded { message_id: researcher, asset: saved.clone() };
+        let saved =
+            assets::write_generated(&project, "clean.csv", "", b"a\n1\n", &user(), false).unwrap();
+        let event = EventKind::AttachmentAdded {
+            message_id: researcher,
+            asset: saved.clone(),
+        };
         project.lock().persist(second, event).unwrap();
 
         let overview = overview(&project).unwrap();
@@ -528,8 +540,11 @@ mod tests {
 
         feature(&project, Some(chart)).unwrap();
         let featured = overview(&project).unwrap().featured.unwrap();
-        assert_eq!((featured.component.id, featured.message_id), (chart, message));
-        assert_eq!(featured.component.data["title"], "Yield");
+        assert_eq!(
+            (featured.component.id, featured.message_id),
+            (chart, message)
+        );
+        assert_eq!(featured.component.preview["title"], "Yield");
         feature(&project, Some(table)).unwrap();
         assert_eq!(overview(&project).unwrap().featured.unwrap().component.id, table);
         assert_eq!(feature(&project, Some(papers)).unwrap_err().code, "invalid_input");

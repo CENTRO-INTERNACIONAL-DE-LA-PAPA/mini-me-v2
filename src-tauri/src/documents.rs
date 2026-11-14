@@ -150,7 +150,14 @@ pub fn store_pdf(
     user: &Author,
 ) -> AppResult<AssetRef> {
     let author = assets::added_by(project, id)?.unwrap_or_else(|| user.clone());
-    assets::write_generated(project, &pdf_name(name), "application/pdf", pdf, &author)
+    assets::write_generated(
+        project,
+        &pdf_name(name),
+        "application/pdf",
+        pdf,
+        &author,
+        false,
+    )
 }
 
 /// The file of the Asset `id`, which must be a document of this Project.

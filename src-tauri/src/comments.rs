@@ -143,8 +143,8 @@ pub fn run_document(project: &Project, conversation_id: Uuid) -> AppResult<Optio
 
 /// A `suggestion` component's stored data: the document, the passage as saved now (the base Accept
 /// merges from) and the suggested `text`. Fails with `not_in_thread` outside a thread.
-pub fn suggestion(project: &Project, conversation_id: Uuid, data: &Value) -> AppResult<Value> {
-    let text = data["text"]
+pub fn suggestion(project: &Project, conversation_id: Uuid, preview: &Value) -> AppResult<Value> {
+    let text = preview["text"]
         .as_str()
         .ok_or_else(|| AppError::new("invalid_component", "A suggestion needs its text."))?;
     let document = run_document(project, conversation_id)?.ok_or_else(|| {
@@ -255,7 +255,7 @@ fn pending_suggestion(
     if !component.answer.is_null() {
         return Err(AppError::new("not_pending", "This suggestion has already been answered."));
     }
-    Ok((conversation, component.data))
+    Ok((conversation, component.preview))
 }
 
 fn record(
@@ -424,12 +424,13 @@ pub fn edit_document(
         1 => "1 edit".to_string(),
         n => format!("{n} edits"),
     };
-    let data = json!({ "asset_id": asset_id, "title": title, "threads": threads });
+    let preview = json!({ "asset_id": asset_id, "title": title, "threads": threads });
     let card = NewComponent {
         kind: "document-edits".into(),
         version: 1,
-        data,
+        preview,
         text: format!("Suggested {count} to {title}"),
+        source_asset_id: None,
     };
     let component_id = conversations::add_core_component(project, call.reply, call.step_id, card)?;
     Ok(EditedDocument { component_id, threads })
@@ -520,8 +521,9 @@ fn open_suggestion(
         id: new_id(),
         kind: "suggestion".to_string(),
         version: 1,
-        data: json!({ "document_id": asset_id, "base": edit.find, "text": edit.replace }),
+        preview: json!({ "document_id": asset_id, "base": edit.find, "text": edit.replace }),
         text: shown,
+        source_asset_id: None,
         answer: Value::Null,
         step_index: None,
     };
@@ -664,7 +666,7 @@ fn pending(state: &ProjectState, conversation_id: Uuid) -> AppResult<Option<Pend
     let row = state
         .conn
         .query_row(
-            "SELECT c.id, c.message_id, c.data, m.author_kind, m.author_id FROM components c \
+            "SELECT c.id, c.message_id, c.preview, m.author_kind, m.author_id FROM components c \
              JOIN messages m ON m.id = c.message_id WHERE m.conversation_id = ?1 \
              AND c.kind = 'suggestion' AND c.answer IS NULL ORDER BY c.rowid DESC LIMIT 1",
             params![conversation_id.to_string()],
@@ -814,8 +816,9 @@ mod tests {
         let component = NewComponent {
             kind: "suggestion".into(),
             version: 1,
-            data: data.unwrap(),
+            preview: data.unwrap(),
             text: suggested.to_string(),
+            source_asset_id: None,
         };
         let component = conversations::add_component(project, reply, None, component).unwrap();
         (document, thread, (reply, component))
@@ -898,7 +901,7 @@ mod tests {
         assert!(!list(&project, document).unwrap()[0].resolved);
 
         let file = ("notes.txt", "", b"x".as_slice());
-        let saved = conversations::attach_generated(&project, reply, &user(), file).unwrap();
+        let saved = conversations::attach_generated(&project, reply, &user(), file, false).unwrap();
         delete(&project, thread.conversation_id).unwrap();
         assert!(list(&project, document).unwrap().is_empty());
         let state = project.lock();
@@ -1001,7 +1004,7 @@ mod tests {
         let card = card.unwrap();
         let shown = (card.kind.as_str(), card.text.as_str());
         assert_eq!(shown, ("document-edits", "Suggested 2 edits to Report"));
-        assert_eq!(card.data["threads"], json!(edited.threads));
+        assert_eq!(card.preview["threads"], json!(edited.threads));
     }
 
     #[test]

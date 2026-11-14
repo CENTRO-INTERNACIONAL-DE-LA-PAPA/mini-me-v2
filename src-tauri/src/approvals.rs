@@ -64,7 +64,7 @@ pub fn list(data_root: &Path) -> AppResult<Vec<PausedApproval>> {
 
 fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<PausedApproval>> {
     let mut statement = conn.prepare(&format!(
-        "SELECT p.message_id, p.run, p.created_at, m.conversation_id, c.title, k.data \
+        "SELECT p.message_id, p.run, p.created_at, m.conversation_id, c.title, k.preview \
          FROM paused_runs p \
          JOIN messages m ON m.id = p.message_id \
          JOIN conversations c ON c.id = m.conversation_id \
@@ -83,9 +83,9 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<PausedAppr
     })?;
     let mut approvals = Vec::new();
     for row in rows {
-        let (message_id, run, paused_at, conversation_id, title, data) = row?;
+        let (message_id, run, paused_at, conversation_id, title, preview) = row?;
         let run: Value = serde_json::from_str(&run)?;
-        let data: Value = serde_json::from_str(&data)?;
+        let preview: Value = serde_json::from_str(&preview)?;
         let Some(mini_me) = mini_me_of(&run) else {
             continue;
         };
@@ -101,7 +101,11 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<PausedAppr
             conversation_title: title,
             message_id,
             mini_me,
-            prompt: data.get("prompt").and_then(Value::as_str).unwrap_or_default().to_string(),
+            prompt: preview
+                .get("prompt")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
             paused_at,
         });
     }
