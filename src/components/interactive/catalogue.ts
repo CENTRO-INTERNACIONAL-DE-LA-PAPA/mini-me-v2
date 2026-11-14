@@ -11,10 +11,12 @@ import * as suggestion from "./suggestion";
 import * as table from "./table";
 import * as theories from "./theories";
 
-/** What a renderer gets. Any field of `data` may be missing; only kinds that take an answer
+/** What a renderer gets. Any field of `preview` may be missing; only kinds that take an answer
  * use the IDs and `replyStatus`. */
 export interface RendererProps {
-  data: unknown;
+  preview: unknown;
+  /** The Asset holding the component's data. */
+  sourceAssetId?: string | null;
   /** The user's answer; null until answered. */
   answer?: unknown;
   projectId?: string;

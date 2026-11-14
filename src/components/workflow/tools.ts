@@ -11,8 +11,6 @@ const TOOL_LABELS: Record<string, string> = {
   edit_document: "Edit documents",
   show_table: "Show tables",
   show_chart: "Show charts",
-  show_papers: "Show papers",
-  show_theories: "Show theories",
 };
 
 export const toolLabel = (tool: string) => TOOL_LABELS[tool] ?? tool;

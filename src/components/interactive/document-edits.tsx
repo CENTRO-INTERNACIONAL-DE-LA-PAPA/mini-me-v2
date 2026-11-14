@@ -5,7 +5,7 @@ import { useOpenDocument } from "../documents/openDocument";
 import type { Renderers, RendererProps } from "./catalogue";
 import { DocumentCard, useRemoved } from "./document";
 
-/** `document-edits` version 1 data; `threads` are the comment threads the edits opened. */
+/** `document-edits` version 1 preview; `threads` are the comment threads the edits opened. */
 interface DocumentEditsData {
   asset_id?: string;
   title?: string;
@@ -22,8 +22,8 @@ export function editsLabel(waiting: number | null, total: number): string {
 }
 
 /** A reply's suggested edits to a document, with Open to answer them in its Comments sheet. */
-function DocumentEditsV1({ data, projectId }: RendererProps) {
-  const { asset_id: assetId, title, threads = [] } = (data ?? {}) as DocumentEditsData;
+function DocumentEditsV1({ preview, projectId }: RendererProps) {
+  const { asset_id: assetId, title, threads = [] } = (preview ?? {}) as DocumentEditsData;
   const openDocument = useOpenDocument();
   const removed = useRemoved(projectId, assetId);
   // Counted once when shown: edits are answered in the document view, outside the Conversation.

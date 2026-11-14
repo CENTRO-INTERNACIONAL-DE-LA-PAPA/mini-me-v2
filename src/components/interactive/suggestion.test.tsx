@@ -11,7 +11,7 @@ function pending(state: { problem?: string; canAccept?: boolean }) {
 
 describe("suggestion version 1", () => {
   it("shows an answered suggestion's text with its decision and no buttons", () => {
-    const html = renderToStaticMarkup(<Suggestion data={data} answer={{ decision: "rejected" }} />);
+    const html = renderToStaticMarkup(<Suggestion preview={data} answer={{ decision: "rejected" }} />);
     expect(html).toContain("Yield fell above 3,800 m.");
     expect(html).toContain("Discarded");
     expect(html).not.toContain("<button");
@@ -31,7 +31,7 @@ describe("suggestion version 1", () => {
   });
 
   it("offers only Discard outside a thread whose passage is found", () => {
-    const html = renderToStaticMarkup(<Suggestion data={data} answer={null} />);
+    const html = renderToStaticMarkup(<Suggestion preview={data} answer={null} />);
     expect(html).not.toContain("Accept and resolve");
     expect(html).toContain("Discard");
   });

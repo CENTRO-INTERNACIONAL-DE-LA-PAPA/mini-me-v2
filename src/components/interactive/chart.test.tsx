@@ -23,7 +23,7 @@ const data = {
 
 describe("chart card", () => {
   it("shows the title, a toggle between views and the sample note", () => {
-    const html = renderToStaticMarkup(<ChartView data={data} />);
+    const html = renderToStaticMarkup(<ChartView preview={data} />);
     expect(html).toContain("Yield against height");
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain(">Scatter</button>");

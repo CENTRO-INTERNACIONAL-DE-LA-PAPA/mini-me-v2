@@ -26,21 +26,23 @@ export interface AssetRef {
 
 /** `start` and `end` are UTF-16 code unit offsets, i.e. plain JavaScript string indices. */
 export interface TextComponent {
-  kind: "asset" | "mini_me" | "component";
+  kind: "asset" | "mini_me";
   id: Uuid;
   label: string;
   start: number;
   end: number;
 }
 
-/** An Interactive Component below a reply's text. `data` matches the schema of `kind` at
- * `version`; `text` stands in for it where the kind has no renderer. */
+/** An Interactive Component below a reply's text. `preview`, what the UI shows, matches the
+ * schema of `kind` at `version`; `text` stands in for it where the kind has no renderer. */
 export interface Component {
   id: Uuid;
   kind: string;
   version: number;
-  data: unknown;
+  preview: unknown;
   text: string;
+  /** The Asset holding the component's data; null for kinds with no file behind them. */
+  source_asset_id?: Uuid | null;
   /** The user's answer, for kinds that ask for one; null until answered. */
   answer: unknown;
   /** Index in the reply's `steps` of the Trait Step run that added it; absent otherwise. */

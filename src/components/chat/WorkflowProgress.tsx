@@ -35,7 +35,7 @@ export function approvalAnswers(
 ): Array<"approved" | "rejected" | undefined> {
   const asked = (stepId: string) =>
     components.filter(
-      (c) => c.kind === "approval" && (c.data as { step_id?: string } | null)?.step_id === stepId,
+      (c) => c.kind === "approval" && (c.preview as { step_id?: string } | null)?.step_id === stepId,
     );
   const runs = new Map<string, number>();
   return steps.map((step) => {

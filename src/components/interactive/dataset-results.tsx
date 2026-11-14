@@ -13,7 +13,7 @@ import { isDocument } from "../files/files";
 import type { Renderers, RendererProps } from "./catalogue";
 import { openLink, webUrl } from "./links";
 
-/** `dataset-results` version 1 data from *Search CIP Dataverse*; `datasets` is the first page. */
+/** `dataset-results` version 1 preview from *Search CIP Dataverse*; `datasets` is the first page. */
 interface DatasetResultsData {
   query: string;
   from_year: number | null;
@@ -174,8 +174,8 @@ function DatasetCard({ dataset, projectId }: { dataset: Dataset; projectId?: str
   );
 }
 
-function DatasetResults({ data, projectId }: RendererProps) {
-  const first = data as DatasetResultsData;
+function DatasetResults({ preview, projectId }: RendererProps) {
+  const first = preview as DatasetResultsData;
   const [datasets, setDatasets] = useState<Dataset[]>(first.datasets ?? []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

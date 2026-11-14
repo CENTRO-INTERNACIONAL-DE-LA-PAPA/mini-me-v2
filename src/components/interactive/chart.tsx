@@ -2,7 +2,6 @@ import { lazy, Suspense, useMemo, useReducer } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Renderers, RendererProps } from "./catalogue";
-import { ReferenceButton } from "./component-references";
 import { FeatureButton } from "./featuring";
 import {
   chartReducer,
@@ -23,11 +22,11 @@ const PALETTE = SERIES_TOKENS.map((name) => `var(${name})`);
 
 /** A chart card: title, view toggle, figure, and a legend that hides and shows series. */
 export function ChartView({
-  data,
+  preview,
   color,
   componentId,
-}: Pick<RendererProps, "data" | "color" | "componentId">) {
-  const chart = useMemo(() => parseChart(data), [data]);
+}: Pick<RendererProps, "preview" | "color" | "componentId">) {
+  const chart = useMemo(() => parseChart(preview), [preview]);
   const [state, dispatch] = useReducer(chartReducer(chart), initialState);
   const view = chart.views[state.view];
   const series = seriesOf(view);
@@ -55,7 +54,6 @@ export function ChartView({
             ))}
           </div>
         )}
-        <ReferenceButton componentId={componentId} />
         <FeatureButton componentId={componentId} />
       </header>
       <div className="px-4 pt-3 pb-2">
@@ -102,7 +100,7 @@ export function ChartView({
 }
 
 export const renderers: Renderers = {
-  1: ({ data, color, componentId }) => (
-    <ChartView data={data} color={color} componentId={componentId} />
+  1: ({ preview, color, componentId }) => (
+    <ChartView preview={preview} color={color} componentId={componentId} />
   ),
 };

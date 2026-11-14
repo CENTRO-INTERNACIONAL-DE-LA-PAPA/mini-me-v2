@@ -3,7 +3,7 @@ import { useState } from "react";
 import { api, errorMessage } from "../../api";
 import type { RendererProps, Renderers } from "./catalogue";
 
-/** Version 1 data: the approval Step and what it asks. */
+/** Version 1 preview: the approval Step and what it asks. */
 interface ApprovalData {
   step_id?: string;
   prompt?: string;
@@ -21,8 +21,8 @@ export function approvalState(
 }
 
 /** A Workflow's approval Step with Approve and Reject; draws nothing unless it is asking. */
-function Approval({ data, answer, projectId, messageId, componentId, replyStatus }: RendererProps) {
-  const { prompt } = (data ?? {}) as ApprovalData;
+function Approval({ preview, answer, projectId, messageId, componentId, replyStatus }: RendererProps) {
+  const { prompt } = (preview ?? {}) as ApprovalData;
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (approvalState(answer, replyStatus) !== "asking") return null;

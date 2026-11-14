@@ -14,7 +14,7 @@ const approval = (id: string, step_id: string, answer: unknown): Component => ({
   id,
   kind: "approval",
   version: 1,
-  data: { step_id, prompt: "Go on?" },
+  preview: { step_id, prompt: "Go on?" },
   text: "Go on?",
   answer,
 });
@@ -51,7 +51,7 @@ describe("componentPlaces", () => {
     id,
     kind: "paper-sources",
     version: 1,
-    data: { papers: [] },
+    preview: { papers: [] },
     text: id,
     answer: null,
     step_index,

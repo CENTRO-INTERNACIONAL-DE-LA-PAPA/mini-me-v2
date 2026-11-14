@@ -2,14 +2,13 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { ChevronDownIcon, ChevronLeftIcon, ChevronUpIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../../api";
 import { count, formatClock } from "../../lib/format";
 import type { CommentThread, Component, Message, Uuid } from "../../protocol/types";
 import { Composer } from "../chat/Composer";
 import { MessageItem } from "../chat/MessageItem";
 import { useConversation } from "../chat/useConversation";
-import { componentNames } from "../interactive/component-names";
 import { editsLabel } from "../interactive/document-edits";
 import { ThreadSuggestionsProvider } from "../interactive/suggestion";
 import { ItemMenu } from "../shell/ItemMenu";
@@ -297,8 +296,6 @@ function ThreadView({
   onAccept: (messageId: Uuid, componentId: Uuid) => Promise<void>;
 }) {
   const { state, error } = useConversation(projectId, thread.conversation_id);
-  const names = useMemo(() => componentNames(state.messages), [state.messages]);
-  const newestFirst = useMemo(() => [...names.values()].reverse(), [names]);
   const replying = state.messages.some((m) => m.status === "streaming" || m.status === "paused");
   const [failure, setFailure] = useState<string | null>(null);
   const pending = newestPending(state.messages);
@@ -402,7 +399,6 @@ function ThreadView({
             conversationId={thread.conversation_id}
             replying={replying}
             choosing={false}
-            components={newestFirst}
             onSent={() => {}}
             thread
           />

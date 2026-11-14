@@ -68,7 +68,7 @@ export function OutlinePanel({ outline, onClose }: { outline: Outline; onClose: 
   const groups: Array<{ label: string; entries: OutlineEntry[]; sign: string }> = [
     { label: "Mini-Mes", entries: outline.miniMes, sign: "@" },
     { label: "Files", entries: outline.files, sign: "#" },
-    { label: "Tables and charts", entries: outline.components, sign: "$" },
+    { label: "Tables and charts", entries: outline.components, sign: "" },
   ].filter((group) => group.entries.length > 0);
   const total = groups.reduce((sum, group) => sum + group.entries.length, 0);
 

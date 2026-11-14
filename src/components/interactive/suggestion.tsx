@@ -4,7 +4,7 @@ import { api, errorCode, errorMessage } from "../../api";
 import type { SuggestionDecision } from "../../protocol/types";
 import type { RendererProps, Renderers } from "./catalogue";
 
-/** `suggestion` version 1 data, as the core completes it; `base` is the passage it was based on. */
+/** `suggestion` version 1 preview, as the core completes it; `base` is the passage it was based on. */
 interface SuggestionData {
   document_id?: string;
   base?: string;
@@ -48,8 +48,8 @@ export function ThreadSuggestionsProvider({
 }
 
 /** A suggestion in a reply: Accept and resolve and Discard while it waits, then its decision. */
-function SuggestionV1({ data, answer, projectId, messageId, componentId }: RendererProps) {
-  const { text = "" } = (data ?? {}) as SuggestionData;
+function SuggestionV1({ preview, answer, projectId, messageId, componentId }: RendererProps) {
+  const { text = "" } = (preview ?? {}) as SuggestionData;
   const thread = useContext(ThreadSuggestionsContext);
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);

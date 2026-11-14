@@ -6,9 +6,6 @@ import { rendererFor } from "./catalogue";
 const SHOW_TOOL_KINDS: Record<string, string> = {
   show_table: "table",
   show_chart: "chart",
-  show_papers: "paper-sources",
-  show_theories: "theories",
-  show_datasets: "dataset-results",
 };
 
 describe("catalogue", () => {

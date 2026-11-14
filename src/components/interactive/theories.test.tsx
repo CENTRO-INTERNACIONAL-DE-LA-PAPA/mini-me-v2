@@ -32,7 +32,7 @@ describe("theories version 1", () => {
   };
 
   it("shows plain wording first, with citations linking to the references", () => {
-    const html = renderToStaticMarkup(<Theories data={data} />);
+    const html = renderToStaticMarkup(<Theories preview={data} />);
     expect(html).toContain("1. Leaves that last make bigger tubers");
     expect(html).not.toContain("Canopy persistence law");
     const anchors = [...html.matchAll(/href="#(ref-[^"]+)"/g)].map((m) => m[1]);

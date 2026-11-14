@@ -21,7 +21,7 @@ describe("document version 1", () => {
 
   it("treats data without a document as removed", () => {
     const Document = renderers[1];
-    const html = renderToStaticMarkup(<Document data={{ title: "Lost" }} />);
+    const html = renderToStaticMarkup(<Document preview={{ title: "Lost" }} />);
     expect(html).toContain("was removed");
   });
 });
