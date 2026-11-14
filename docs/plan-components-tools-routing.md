@@ -4,6 +4,14 @@ The aim is to normalize how Mini-Me works, the way a UI reuses one Button with d
 parameters: a few building blocks that every Mini-Me shares, each configured by where it is used,
 without turning any of them into a do-anything block.
 
+The plan is built as four OpenSpec changes, in order:
+
+1. **Components from files**: hidden files, component previews and sources, history lines,
+   removing `$` (done).
+2. **Shared tools**: Traits no longer list tools; every Mini-Me's model is offered every tool.
+3. **Suggestions and comments**: one suggestion tool, and comments that work like the chat.
+4. **Jev hints and hand-off**: Jev's component, tool and hand-off hints.
+
 ## Files (Assets)
 
 - The layout doesn't change: `assets/<id>/<name>`. A file is identified by its ID; the name is a
@@ -11,14 +19,15 @@ without turning any of them into a do-anything block.
   a file in Excel and the next Mini-Me reads the edited version.
 - Because files can change outside the app, the core refreshes a file's size and modification
   time when it lists or reads the file.
-- New **hidden** flag. Hidden files are left out of every place that lists Project files:
+- New **hidden** flag. Hidden means hidden from the user only. Hidden files are left out of:
   - the Files screen;
   - the `#` list in the composer;
-  - Jev's file question;
-  - the file list sent to the model (`conversation.results`);
   - the Outline panel;
   - the Overview's latest outputs;
   - attachments on replies.
+
+  Traits and Jev see them like any other file of the Conversation, and the data Traits'
+  fallback to the newest table skips them.
 
 ## Interactive Components
 
@@ -51,10 +60,9 @@ The model reads a component with read_component when it needs it.
 
 - `$` is removed: no `$` typing or list, no component naming rules, and no special `$` handling
   in the tools.
-- There is one chip, `#`, pointing to a file and optionally to one of its components. The
-  reference button on a component inserts that file's `#` chip carrying the component, so the
-  model knows both the file and the exact component.
-- Replies use the same chip, for example to link a document they edited.
+- There is no reference button and no chip for a component: the user describes a table or
+  chart in words, and the model finds it among the Conversation's components by their history
+  lines.
 
 ## Tools
 
@@ -65,14 +73,28 @@ The model reads a component with read_component when it needs it.
 - Jev marks the 4 tools most likely to help, from its answer's probabilities, and the model's
   request says so ("Likely useful: …"). The model can still use any tool.
 
-### Editing a document
+## Suggestions
 
-- suggest-an-edit and edit-a-document become one tool, `edit_document(document_id, find, text)`,
-  with the same logic in a comment thread and in the main chat.
-- In a thread the user opened by selecting a passage, `find` isn't needed: the passage is
-  already known.
-- The `document-edits` card is removed. The reply says which document was edited, as a clickable
-  `#` chip, and the document's button shows a notification badge with the open suggestions.
+- A suggestion is its own thing, separate from comments: a proposed replacement of a passage of
+  a document, with its author.
+- One tool, `suggest(document_id, find, text)`, replaces suggest-an-edit and edit-a-document. It
+  can be called from any reply, in the chat or in a comment thread. The author is the Mini-Me
+  whose reply made the call; the model does not pass it.
+- A suggestion does not record where it was made (which thread or chat message).
+- Suggestions show inline in the document, the passage struck through with the new text after
+  it, and the user accepts or discards each one there. Nothing changes the document until the
+  user accepts.
+- The `document-edits` card is removed. A reply that made suggestions shows the document's plain
+  `document` card (title and Open). There is no badge counting waiting suggestions.
+
+## Comments
+
+- Comments exist only in the document view. The user selects a passage and writes a comment;
+  replies form a thread under it.
+- A comment works like a message in the chat: with an `@` the mentioned Mini-Me answers;
+  without one, Jev picks the Mini-Me, and Assistant answers when Jev cannot.
+- There are no private notes: every comment gets a reply.
+- A Mini-Me answering in a thread calls the suggestion tool when it wants to change the document.
 
 ## Traits
 
