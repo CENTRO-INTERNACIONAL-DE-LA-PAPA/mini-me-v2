@@ -45,7 +45,6 @@ pub struct TraitDraft {
     pub name: String,
     pub description: String,
     pub instructions: String,
-    pub tools: Vec<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -113,7 +112,6 @@ impl LibraryStore {
             color: TRAIT_COLOR.to_string(),
             adapter: PROMPT_ADAPTER.to_string(),
             instructions: Some(draft.instructions),
-            tools: draft.tools,
         };
         let entry = saved.clone();
         self.edit(move |library| {
@@ -304,7 +302,6 @@ mod tests {
             name: name.into(),
             description: "Translates text.".into(),
             instructions: "Translate the message.".into(),
-            tools: vec!["save_file".into()],
         }
     }
 
@@ -367,8 +364,7 @@ mod tests {
             description: "Draws.".into(),
             color: TRAIT_COLOR.into(),
             adapter: "prompt".into(),
-            instructions: Some("Draw.".into()),
-            tools: vec!["show_chart".into()],
+            instructions: Some(" ".into()),
         })
         .unwrap();
         let mut runs_chart = mini_me(&library, "Charter", &[plan]);
@@ -400,7 +396,7 @@ mod tests {
                 (EntryKind::MiniMe, "Grouped".to_string()),
             ]
         );
-        assert!(store.skipped()[0].problems[0].contains("cannot list \"show_chart\""));
+        assert!(store.skipped()[0].problems[0].contains("has no instructions"));
         assert_eq!(names(&store.current()).len(), Library::builtin().mini_mes.len());
 
         store.save_trait(draft("Translate")).unwrap();

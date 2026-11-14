@@ -507,7 +507,6 @@ impl Runs {
                     name: t.name.clone(),
                     instructions: t.instructions.clone(),
                     adapter: t.adapter.clone(),
-                    tools: t.tools.clone(),
                 })
                 .collect(),
             input: spec.input.clone(),
@@ -1448,7 +1447,6 @@ pub mod test_support {
             color: String::new(),
             adapter: adapter.to_string(),
             instructions: None,
-            tools: Vec::new(),
         };
         let step = Step {
             id: STEP.to_string(),

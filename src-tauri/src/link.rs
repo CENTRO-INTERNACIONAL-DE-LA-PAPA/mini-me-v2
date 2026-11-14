@@ -12,7 +12,7 @@ use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 16;
+pub const SIDECAR_PROTOCOL: u32 = 17;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -35,7 +35,6 @@ pub struct RunTrait {
     pub instructions: Option<String>,
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
-    pub tools: Vec<String>,
 }
 
 /// The provider and model chosen in Settings.
