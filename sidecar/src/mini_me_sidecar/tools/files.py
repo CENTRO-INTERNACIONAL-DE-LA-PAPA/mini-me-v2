@@ -46,13 +46,16 @@ def check_file(name: str, content: str) -> tuple[str, bytes]:
     return media_type, data
 
 
-async def save_file(ctx: CallContext, name: str, media_type: str, data: bytes) -> dict[str, Any]:
-    """Saves `data` as the Asset `name`, attached to the reply; returns `{ asset_id, name }`."""
+async def save_file(
+    ctx: CallContext, name: str, media_type: str, data: bytes, hidden: bool = False
+) -> dict[str, Any]:
+    """Saves `data` as the Asset `name`, attached to the reply unless `hidden`; returns
+    `{ asset_id, name }`."""
     if len(data) > MAX_FILE_BYTES:
         raise ToolError(f"{name} is larger than 32 MiB, so it was not saved.", "file_too_large")
     ctx.progress(f"Saving {name}")
     try:
-        asset = await ctx.write_asset(name, media_type, data)
+        asset = await ctx.write_asset(name, media_type, data, hidden)
     except CoreRequestError as error:
         hint = " Use a plain file name, without folders." if error.code == "invalid_input" else ""
         raise ToolError(f"{name} was not saved: {error}.{hint}", error.code) from None

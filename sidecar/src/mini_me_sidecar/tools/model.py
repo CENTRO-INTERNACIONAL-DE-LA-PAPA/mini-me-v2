@@ -89,22 +89,14 @@ MODEL_TOOLS: dict[str, ModelTool] = {
         ModelTool(
             name="read_component",
             description=(
-                "Reads one of the Conversation's Interactive Components by its ID: a table's "
-                "columns and its rows as CSV, or another component's data as JSON, up to "
-                "100,000 characters. A table shown from a file names its `source_asset_id`; "
-                "read that file with read_file when you need rows past those the table "
-                "holds. When `more` is true, read again from a later `start` (a row number "
-                "for tables, a character position for other components)."
+                "Reads one of the Conversation's Interactive Components by its ID: its kind, "
+                "its text and the `source_asset_id` of the file holding its data. Read that "
+                "file with read_file for the data itself."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "component_id": {"type": "string", "description": "The component's ID."},
-                    "start": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description": "Row or character to start from; 0 by default.",
-                    },
                 },
                 "required": ["component_id"],
             },
@@ -204,8 +196,9 @@ MODEL_TOOLS: dict[str, ModelTool] = {
             name="show_table",
             description=(
                 "Shows a table below your reply. Give either `columns` and `rows` (at most "
-                "500 rows, one value per column, dates as YYYY-MM-DD) or the `asset_id` of "
-                "a CSV, TSV or Excel file of the Conversation."
+                "500 rows, one value per column, dates as YYYY-MM-DD), which are also saved "
+                "as a CSV file named after the title, or the `asset_id` of a CSV, TSV or "
+                "Excel file of the Conversation."
             ),
             parameters={
                 "type": "object",

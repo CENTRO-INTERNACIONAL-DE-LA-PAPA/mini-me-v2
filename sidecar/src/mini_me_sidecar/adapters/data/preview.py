@@ -20,11 +20,10 @@ def table_data(
     frame: pd.DataFrame,
     title: str | None = None,
     source: str | None = None,
-    source_id: str | None = None,
     sheet: str | None = None,
 ) -> dict[str, Any]:
     """`{ columns, rows }`, with `total_rows` when the rows are a preview, and the optional
-    `title` and source file's `source` name, `source_id` and Excel `sheet`."""
+    `title` and source file's `source` name and Excel `sheet`."""
     columns = [{"name": str(name), "type": column_type(frame[name])} for name in frame.columns]
     rows = [[json_value(value) for value in row] for row in frame.head(MAX_ROWS).itertuples(False)]
     while rows and len(json.dumps(rows)) > MAX_BYTES:
@@ -34,7 +33,7 @@ def table_data(
         data["title"] = title
     if len(rows) < len(frame):
         data["total_rows"] = len(frame)
-    for key, value in (("source", source), ("source_id", source_id), ("sheet", sheet)):
+    for key, value in (("source", source), ("sheet", sheet)):
         if value:
             data[key] = value
     return data

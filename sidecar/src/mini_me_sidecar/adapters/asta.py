@@ -10,9 +10,7 @@ from typing import Any, TypeVar
 
 from mini_me_sidecar.adapters.base import TEXT_INPUT, Adapter, AdapterInfo, component_or_text
 from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
-from mini_me_sidecar.tools.base import ToolError
-from mini_me_sidecar.tools.components import show_papers, show_theories
-from mini_me_sidecar.tools.files import save_file
+from mini_me_sidecar.tools.components import show_results
 
 AI2 = "ai2"
 
@@ -38,7 +36,7 @@ STATE_LABELS = {"submitted": "Queued at Ai2", "working": "Working"}
 
 
 class FindPapers(Adapter):
-    uses_tools = ("show_papers",)
+    uses_tools = ("save_file",)
     info = AdapterInfo(
         id="asta-paper-finder",
         description="Finds papers on a topic with Ai2's Paper Finder.",
@@ -77,11 +75,19 @@ class FindPapers(Adapter):
             return
         count = len(papers)
         ctx.write(narrative or f"Found {count} paper{'' if count == 1 else 's'}.")
-        await component_or_text(ctx, show_papers, papers_data(papers), papers_reply(papers), "asta")
+        preview = papers_data(papers)
+        await component_or_text(
+            ctx,
+            lambda: show_results(
+                ctx, "paper-sources", "papers.json", preview, preview, papers_reply(papers)
+            ),
+            papers_reply(papers),
+            "asta",
+        )
 
 
 class Theorize(Adapter):
-    uses_tools = ("show_theories", "save_file")
+    uses_tools = ("save_file",)
     info = AdapterInfo(
         id="asta-theorizer",
         description="Builds theories from the literature with Ai2's Theorizer.",
@@ -167,12 +173,13 @@ async def _finish_theorizer(ctx: CallContext, task: dict[str, Any]) -> None:
         ctx.write(_without_theories(texts))
     else:
         ctx.write(theories_summary(data, store))
-        await component_or_text(ctx, show_theories, data, theories_markdown(data), "asta")
-    try:
-        content = json.dumps(artifacts, ensure_ascii=False).encode()
-        await save_file(ctx, "theory-store.json", "application/json", content)
-    except ToolError as error:
-        print(f"[asta] could not save the Theory Store: {error}", file=sys.stderr, flush=True)
+        text = theories_markdown(data)
+        await component_or_text(
+            ctx,
+            lambda: show_results(ctx, "theories", "theory-store.json", artifacts, data, text),
+            text,
+            "asta",
+        )
 
 
 async def _token(ctx: CallContext) -> str:

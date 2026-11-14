@@ -1,7 +1,6 @@
 import asyncio
 import inspect
 import json
-from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -10,10 +9,17 @@ from mini_me_sidecar.adapters.data.tables import Table
 from mini_me_sidecar.adapters.prompt import _run_tool
 from mini_me_sidecar.tools import DEFAULT_TOOLS, MODEL_TOOL_NAMES, TOOL_NAMES, tables
 from mini_me_sidecar.tools.base import ToolError
-from mini_me_sidecar.tools.components import component_result, read_component
-from mini_me_sidecar.tools.files import READ_CHARS, check_file, read_file, text_result
+from mini_me_sidecar.tools.components import read_component, show_results
+from mini_me_sidecar.tools.files import READ_CHARS, check_file, read_file, save_file, text_result
 from mini_me_sidecar.tools.model import MODEL_TOOLS, ModelTool
-from mini_me_sidecar.tools.tables import check_table, given_table, read_reference, table_result
+from mini_me_sidecar.tools.tables import (
+    check_table,
+    csv_name,
+    given_table,
+    show_frame,
+    show_table,
+    table_result,
+)
 
 COLUMNS = [{"name": "variety", "type": "text"}, {"name": "yield", "type": "number"}]
 
@@ -79,34 +85,6 @@ def test_a_table_is_read_from_a_start_row():
     assert part["columns"] == [{"name": "plot", "type": "number"}, {"name": "yield", "type": "number"}]
 
 
-def test_a_table_component_is_read_with_all_its_rows():
-    data = {"columns": COLUMNS, "rows": [["Yungay", 22.5]] * 120, "title": "Yields"}
-    result = component_result({"kind": "table", "data": data})
-    assert result["rows_in_component"] == result["total_rows"] == 120
-    assert result["csv"].splitlines()[:2] == ["variety,yield", "Yungay,22.5"]
-    assert result["more"] is False
-    other = component_result({"kind": "theories", "data": {"theories": []}})
-    assert other == {
-        "kind": "theories",
-        "start": 0,
-        "total_characters": 16,
-        "more": False,
-        "data": '{"theories": []}',
-    }
-
-
-def test_a_long_table_component_is_read_in_whole_rows():
-    rows = [["Yungay", "x" * 1000]] * 150
-    data = {"columns": COLUMNS, "rows": rows}
-    first = component_result({"kind": "table", "data": data})
-    shown = len(first["csv"].splitlines()) - 1
-    assert first["more"] is True and 0 < shown < 150
-    assert len(first["csv"]) <= READ_CHARS
-    rest = component_result({"kind": "table", "data": data}, shown)
-    assert rest["more"] is False
-    assert shown + len(rest["csv"].splitlines()) - 1 == 150
-
-
 class ReadingContext:
     """Serves one text file and counts how often it is read."""
 
@@ -144,93 +122,64 @@ def test_model_tools_are_known_and_their_schemas_match_their_functions():
         assert properties == arguments, tool.name
 
 
-TRIAL_COLUMNS = [
-    {"name": "plot", "type": "number"},
-    {"name": "yield", "type": "number"},
-    {"name": "height", "type": "number"},
-]
-
-
 class ComponentContext:
-    """Serves one component: by default a `table` that previews 3 of the 5 rows of
-    `trial.csv`."""
+    """Serves one component and records the files and components a call adds."""
 
-    def __init__(self, source: bool = True) -> None:
-        self.reads: dict = {}
-        self.cancelled = asyncio.Event()
-        self.trait = SimpleNamespace(name="Profile Data")
-        self.component = {
-            "kind": "table",
-            "data": {
-                "columns": TRIAL_COLUMNS,
-                "rows": [[1, 10.5, 50], [2, 11.0, 52], [3, 9.5, 48]],
-                "total_rows": 5,
-                "source": "trial.csv",
-                "source_id": "a1",
-            },
-            "source_asset_id": "a1" if source else None,
-        }
+    def __init__(self, component: dict | None = None) -> None:
+        self.served = component or {}
+        self.written: list[tuple[str, bool]] = []
+        self.added: list[dict] = []
 
     def progress(self, label: str) -> None:
         pass
 
     async def read_component(self, component_id: str) -> dict:
-        return self.component
+        return self.served
+
+    async def write_asset(self, name, media_type, data, hidden=False) -> dict:
+        self.written.append((name, hidden))
+        return {"id": f"asset-{len(self.written)}", "name": name}
+
+    async def component(self, kind, version, preview, text, source_asset_id) -> str:
+        self.added.append({"kind": kind, "preview": preview, "source": source_asset_id})
+        return "c1"
 
 
-def full_trial(monkeypatch) -> list:
-    """Makes reading `trial.csv` give its 5 rows; returns the names of the files read."""
-    read: list = []
-
-    async def read_table(ctx, asset_id, name, text=""):
-        read.append(name)
-        frame = pd.DataFrame(
-            {"plot": [1, 2, 3, 4, 5], "yield": [10.5, 11.0, 9.5, 12.0, 8.0], "height": [50] * 5}
-        )
-        return Table(name, frame)
-
-    monkeypatch.setattr(tables, "read_table", read_table)
-    return read
+def test_a_component_is_read_as_its_text_and_source_file():
+    table = {"kind": "table", "version": 1, "text": "plot\tyield", "source_asset_id": "a1"}
+    result = asyncio.run(read_component(ComponentContext(table), "c1"))
+    assert result["source_asset_id"] == "a1" and "read_file" in result["note"]
+    approval = {"kind": "approval", "version": 1, "text": "Go on?", "source_asset_id": None}
+    result = asyncio.run(read_component(ComponentContext(approval), "c1"))
+    assert result == {"kind": "approval", "text": "Go on?"}
 
 
-def test_a_preview_names_the_asset_of_its_full_table():
-    result = asyncio.run(read_component(ComponentContext(), "c1"))
-    assert (result["total_rows"], result["source_asset_id"]) == (5, "a1")
-    result = asyncio.run(read_component(ComponentContext(source=False), "c1"))
-    assert "source_asset_id" not in result
-
-
-def test_a_chart_is_read_as_its_views():
+def test_save_file_hides_a_file_only_when_asked():
     ctx = ComponentContext()
-    bars = [{"x": "Alpha", "y": 10.5}]
-    ctx.component = {"kind": "chart", "data": {"title": "Yield", "views": [{"bars": bars}]}}
-    result = asyncio.run(read_component(ctx, "c1"))
-    assert json.loads(result["data"])["views"][0]["bars"] == bars
+    asyncio.run(save_file(ctx, "trial.csv", "text/csv", b"a"))
+    asyncio.run(save_file(ctx, "papers.json", "application/json", b"[]", hidden=True))
+    assert ctx.written == [("trial.csv", False), ("papers.json", True)]
 
 
-def test_a_table_without_a_file_is_read_from_its_component(monkeypatch):
-    read = full_trial(monkeypatch)
-    ctx = ComponentContext(source=False)
-    ctx.component["data"]["columns"] = [*TRIAL_COLUMNS[:2], {"name": "height", "type": "date"}]
-    ctx.component["data"]["rows"] = [
-        [1, 10.5, "2024-05-01"],
-        [2, None, "2024-05-02"],
-        [3, 9.5, None],
+def test_a_shown_table_or_result_is_saved_as_its_source_file_first():
+    ctx = ComponentContext()
+    rows = [["Yungay", 22.5]]
+    asyncio.run(show_table(ctx, "Sample yields", COLUMNS, rows))
+    asyncio.run(show_frame(ctx, pd.DataFrame({"a": [1]}), "Columns", results_name="t-profile.csv"))
+    asyncio.run(show_results(ctx, "paper-sources", "papers.json", [], {"papers": []}, "none"))
+    assert ctx.written == [
+        ("Sample yields.csv", False),
+        ("t-profile.csv", True),
+        ("papers.json", True),
     ]
-    reference = {"kind": "component", "id": "c1", "label": "$Columns-of-trial"}
-    table = asyncio.run(read_reference(ctx, reference))
-    assert table.name == "Columns-of-trial.csv"
-    assert list(table.frame["plot"]) == [1, 2, 3] and table.frame["yield"].dtype == float
-    assert pd.api.types.is_datetime64_any_dtype(table.frame["height"])
-    assert (read, table.source_id) == ([], None)
+    assert [c["source"] for c in ctx.added] == ["asset-1", "asset-2", "asset-3"]
+    assert ctx.added[0]["preview"]["source"] == "Sample yields.csv"
+    assert "source" not in ctx.added[1]["preview"]
 
 
-def test_a_preview_is_read_from_its_file(monkeypatch):
-    read = full_trial(monkeypatch)
-    reference = {"kind": "component", "id": "c1", "label": "$Trial-preview"}
-    table = asyncio.run(read_reference(ComponentContext(), reference))
-    assert (table.name, list(table.frame["plot"])) == ("trial.csv", [1, 2, 3, 4, 5])
-    assert (read, table.source_id) == (["trial.csv"], "a1")
+def test_a_table_file_is_named_after_its_title():
+    names = [csv_name(t) for t in ("Yields", "trial.xlsx", 'a/b: "c"', "", None)]
+    assert names == ["Yields.csv", "trial.csv", "a-b- -c-.csv", "Table.csv", "Table.csv"]
 
 
 def test_a_table_read_from_a_file_carries_the_file(monkeypatch):
@@ -241,14 +190,6 @@ def test_a_table_read_from_a_file_carries_the_file(monkeypatch):
     ctx = ReadingContext()
     table = asyncio.run(tables.read_table(ctx, "a1", "trial.csv"))
     assert (table.name, table.source_id) == ("trial.csv", "a1")
-
-
-def test_a_chart_is_not_read_as_a_table():
-    ctx = ComponentContext()
-    ctx.component = {"kind": "chart", "data": {"title": "Yield", "views": []}}
-    reference = {"kind": "component", "id": "c1", "label": "$Yield"}
-    with pytest.raises(ToolError, match=r"Profile Data reads tables, and \$Yield is a chart"):
-        asyncio.run(read_reference(ctx, reference))
 
 
 async def echo(ctx, value: int = 0) -> dict:

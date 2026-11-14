@@ -13,9 +13,6 @@ TOOL_NAMES = (
     "edit_document",
     "show_table",
     "show_chart",
-    "show_papers",
-    "show_theories",
-    "show_datasets",
 )
 
 # Offered to every prompt-based Trait's model, so Traits do not list them.

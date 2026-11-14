@@ -8,7 +8,7 @@ from mini_me_sidecar.context import CallContext
 
 
 class ProfileData(Adapter):
-    uses_tools = ("read_table", "show_table")
+    uses_tools = ("read_table", "show_table", "save_file")
     info = AdapterInfo(
         id="data-profile",
         description="Describes tables with pandas, without an AI model.",

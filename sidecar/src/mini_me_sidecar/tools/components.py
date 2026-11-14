@@ -1,38 +1,35 @@
-"""Show tools for non-table components (tables are in `tools.tables`), and reading any back."""
+"""Showing charts and provider results (tables are in `tools.tables`), and reading any component
+back."""
 
-import csv
-import io
 import json
 from typing import Any
 
 from mini_me_sidecar.context import CallContext, CoreRequestError
 from mini_me_sidecar.tools.base import ToolError, add_component
+from mini_me_sidecar.tools.files import save_file
 
-# The most characters of a component's data one read returns.
-READ_CHARS = 100_000
-
-
-async def show_chart(ctx: CallContext, data: dict[str, Any], text: str) -> str:
-    return await add_component(ctx, "chart", data, text)
+READ_FILE_NOTE = "The component's data is in its source file; read it with read_file."
 
 
-async def show_papers(ctx: CallContext, data: dict[str, Any], text: str) -> str:
-    return await add_component(ctx, "paper-sources", data, text)
+async def show_chart(
+    ctx: CallContext, preview: dict[str, Any], text: str, source_asset_id: str | None
+) -> str:
+    return await add_component(ctx, "chart", preview, text, source_asset_id)
 
 
-async def show_datasets(ctx: CallContext, data: dict[str, Any], text: str) -> str:
-    return await add_component(ctx, "dataset-results", data, text)
+async def show_results(
+    ctx: CallContext, kind: str, file_name: str, results: Any, preview: Any, text: str
+) -> str:
+    """Saves a provider's `results` as the hidden JSON file `file_name`, then shows them as a
+    `kind` component whose source is that file; returns the component's ID."""
+    data = json.dumps(results, ensure_ascii=False).encode()
+    saved = await save_file(ctx, file_name, "application/json", data, hidden=True)
+    return await add_component(ctx, kind, preview, text, saved["asset_id"])
 
 
-async def show_theories(ctx: CallContext, data: dict[str, Any], text: str) -> str:
-    return await add_component(ctx, "theories", data, text)
-
-
-async def read_component(ctx: CallContext, component_id: str, start: int = 0) -> dict[str, Any]:
-    """Part of one of the Conversation's components, shaped for a model to read: a table's
-    rows from row `start`, or another kind's data from character `start`."""
-    if start < 0:
-        raise ToolError("start cannot be negative.")
+async def read_component(ctx: CallContext, component_id: str) -> dict[str, Any]:
+    """One of the Conversation's components as a model reads it: its kind, its text and the ID
+    of the file holding its data."""
     ctx.progress("Reading a component")
     try:
         component = await ctx.read_component(component_id)
@@ -40,54 +37,12 @@ async def read_component(ctx: CallContext, component_id: str, start: int = 0) ->
         raise ToolError(
             f"No component with the ID {component_id} in this Conversation.", error.code
         ) from None
-    return component_result(component, start)
+    return component_result(component)
 
 
-def component_result(component: dict[str, Any], start: int = 0) -> dict[str, Any]:
-    """A table as CSV rows from row `start`, other kinds as JSON from character `start`: at most
-    `READ_CHARS` characters (a table at least one row), with `more` when more follow."""
-    kind = str(component.get("kind", ""))
-    data = component.get("data") or {}
-    if kind == "table" and isinstance(data, dict):
-        columns = data.get("columns") or []
-        rows = data.get("rows") or []
-        lines = [_csv_line([c.get("name") for c in columns])]
-        size = len(lines[0])
-        for row in rows[start:]:
-            line = _csv_line(row)
-            if len(lines) > 1 and size + len(line) > READ_CHARS:
-                break
-            lines.append(line)
-            size += len(line)
-        end = start + len(lines) - 1
-        result: dict[str, Any] = {
-            "kind": kind,
-            "title": data.get("title"),
-            "columns": columns,
-            "start": start,
-            "rows_in_component": len(rows),
-            "total_rows": data.get("total_rows", len(rows)),
-            "more": end < len(rows),
-            "csv": "".join(lines),
-        }
-        if data.get("source"):
-            # The file the table was shown from; for a preview, it holds the full table.
-            result["source"] = data["source"]
-        if component.get("source_asset_id"):
-            result["source_asset_id"] = component["source_asset_id"]
-        return result
-    content = json.dumps(data, ensure_ascii=False)
-    part = content[start : start + READ_CHARS]
-    return {
-        "kind": kind,
-        "start": start,
-        "total_characters": len(content),
-        "more": start + len(part) < len(content),
-        "data": part,
-    }
-
-
-def _csv_line(values: list[Any]) -> str:
-    buffer = io.StringIO()
-    csv.writer(buffer, lineterminator="\n").writerow(values)
-    return buffer.getvalue()
+def component_result(component: dict[str, Any]) -> dict[str, Any]:
+    result = {"kind": component.get("kind"), "text": component.get("text")}
+    if component.get("source_asset_id"):
+        result["source_asset_id"] = component["source_asset_id"]
+        result["note"] = READ_FILE_NOTE
+    return result

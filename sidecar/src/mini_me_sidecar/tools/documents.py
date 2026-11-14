@@ -46,9 +46,8 @@ async def write_document(ctx: CallContext, title: str, body: str) -> dict[str, A
     if len(data) > MAX_TEXT_FILE_BYTES:
         raise ToolError(f"{title} would be larger than 2 MiB; write a shorter document.")
     saved = await save_file(ctx, file_name(title), MEDIA_TYPE, data)
-    await add_component(
-        ctx, "document", {"asset_id": saved["asset_id"], "title": title}, f"Document: {title}"
-    )
+    preview = {"asset_id": saved["asset_id"], "title": title}
+    await add_component(ctx, "document", preview, f"Document: {title}", None)
     return saved
 
 
@@ -59,7 +58,7 @@ async def suggest_edit(ctx: CallContext, text: str) -> dict[str, Any]:
     if len(text.encode("utf-8")) > MAX_SUGGESTION_BYTES:
         raise ToolError("A suggestion can be at most 64 KiB; suggest a shorter passage.")
     shown = text if text.strip() else "Remove this passage."
-    component_id = await add_component(ctx, "suggestion", {"text": text}, shown)
+    component_id = await add_component(ctx, "suggestion", {"text": text}, shown, None)
     return {"component_id": component_id}
 
 

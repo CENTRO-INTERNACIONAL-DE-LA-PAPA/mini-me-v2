@@ -22,6 +22,7 @@ class ResultAsset(TypedDict):
     size_bytes: int
     message_id: str
     current: bool
+    hidden: bool
 
 
 class ResultComponent(TypedDict):
@@ -30,7 +31,6 @@ class ResultComponent(TypedDict):
     version: int
     message_id: str
     author: str
-    current: bool
 
 
 class Results(TypedDict):
@@ -220,19 +220,29 @@ class CallContext:
         return self._results
 
     async def read_component(self, component_id: str) -> dict[str, Any]:
-        """`{ kind, version, data, text }`; raises `CoreRequestError` `not_found` for another ID."""
+        """`{ kind, version, text, source_asset_id }`; raises `CoreRequestError` `not_found` for
+        another ID."""
         return await self._requests.send(
             self.call_id, "component.read", {"component_id": component_id}
         )
 
-    async def component(self, kind: str, version: int, data: Any, text: str) -> str:
-        """Adds an Interactive Component below the reply and returns its ID; `data` must match
-        `src/components/interactive/<kind>.tsx` at `version`, and `text` is its plain-text form.
-        Raises `CoreRequestError` `component_not_allowed` (`approval`) or `invalid_component`."""
+    async def component(
+        self, kind: str, version: int, preview: Any, text: str, source_asset_id: str | None
+    ) -> str:
+        """Adds an Interactive Component below the reply and returns its ID; `preview` must match
+        `src/components/interactive/<kind>.tsx` at `version`, `text` is its plain-text form, and
+        `source_asset_id` the Asset holding its data. Raises `CoreRequestError`
+        `component_not_allowed` (`approval`) or `invalid_component`."""
         result = await self._requests.send(
             self.call_id,
             "component.add",
-            {"kind": kind, "version": version, "data": data, "text": text},
+            {
+                "kind": kind,
+                "version": version,
+                "preview": preview,
+                "text": text,
+                "source_asset_id": source_asset_id,
+            },
         )
         self._results = None
         return str(result["component_id"])
@@ -258,13 +268,20 @@ class CallContext:
             {"mini_me_id": mini_me_id, "request": request, "asset_id": asset_id},
         )
 
-    async def write_asset(self, name: str, media_type: str, data: bytes) -> dict[str, Any]:
+    async def write_asset(
+        self, name: str, media_type: str, data: bytes, hidden: bool = False
+    ) -> dict[str, Any]:
         """Saves `data` (at most 32 MiB) in the Project as the file `name`, attaches it to the
-        reply, and returns the Asset `{ id, name, media_type, size_bytes }`."""
+        reply unless `hidden`, and returns the Asset `{ id, name, media_type, size_bytes }`."""
         result = await self._requests.send(
             self.call_id,
             "asset.write",
-            {"name": name, "media_type": media_type, "data": base64.b64encode(data).decode()},
+            {
+                "name": name,
+                "media_type": media_type,
+                "data": base64.b64encode(data).decode(),
+                "hidden": hidden,
+            },
         )
         self._results = None
         return result["asset"]

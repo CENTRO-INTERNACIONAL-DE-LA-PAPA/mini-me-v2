@@ -25,12 +25,12 @@ class Call:
     def progress(self, label: str) -> None:
         pass
 
-    async def write_asset(self, name: str, media_type: str, data: bytes) -> dict:
+    async def write_asset(self, name: str, media_type: str, data: bytes, hidden=False) -> dict:
         self.written.append((name, media_type, data))
         return {"id": "asset-1", "name": name}
 
-    async def component(self, kind: str, version: int, data: dict, text: str) -> str:
-        self.components.append((kind, version, data, text))
+    async def component(self, kind: str, version: int, preview: dict, text: str, source) -> str:
+        self.components.append((kind, version, preview, text))
         return "component-1"
 
     async def edit_document(self, asset_id: str, edits: list[dict]) -> dict:

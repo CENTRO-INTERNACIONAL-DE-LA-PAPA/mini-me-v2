@@ -50,7 +50,7 @@ def test_the_conversations_files_and_components_are_listed_without_content():
     assert "- trial.csv (ID: a2)\n" in material
     assert material.endswith("- table from Curator (ID: c1)")
     assert _material("hello", {"assets": [], "components": []}) == "hello"
-    picked = _material("summarize the trial", results, None, None, {"asset_id": "a2"})
+    picked = _material("summarize the trial", results, None, {"asset_id": "a2"})
     assert "- trial.csv (ID: a2) — probably the file the user means" in picked
 
 
@@ -63,30 +63,10 @@ def test_suggest_edit_is_offered_only_in_a_thread_and_edit_document_only_outside
 
 def test_a_comment_comes_after_the_passage_it_is_about():
     document = {"asset_id": "d1", "name": "Report.qmd", "passage": "Yield fell above 3,800 m."}
-    material = _material("make this shorter", {"assets": [], "components": []}, None, document)
+    material = _material("make this shorter", {"assets": [], "components": []}, document)
     assert material == (
         "This comment is about a passage of the document Report.qmd (ID: d1), which read_file "
         'reads in full:\n"""\nYield fell above 3,800 m.\n"""\n\nmake this shorter'
-    )
-
-
-def test_the_messages_references_are_listed_with_their_kind():
-    table = {"id": "c1", "kind": "table", "author": "Curator", "current": True}
-    chart = {"id": "c2", "kind": "chart", "author": "Plotter", "current": True}
-    results = {"assets": [], "components": [chart, table]}
-    message = {
-        "text_components": [
-            {"kind": "component", "id": "c1", "label": "$trial"},
-            {"kind": "component", "id": "c2", "label": "$Yield-by-variety"},
-            {"kind": "mini_me", "id": "scribe", "label": "@Scribe"},
-        ]
-    }
-    material = _material("summarize these", results, message)
-    assert "- table from Curator (ID: c1) — in this message" in material
-    assert material.endswith(
-        "read_component:\n"
-        "- $trial: the table with ID c1\n"
-        "- $Yield-by-variety: the chart with ID c2"
     )
 
 
