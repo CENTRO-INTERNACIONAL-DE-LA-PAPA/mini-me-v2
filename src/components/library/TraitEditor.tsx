@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PuzzleIcon } from "lucide-react";
@@ -13,35 +12,13 @@ import { SheetSection } from "../shell/Sheet";
 import type { View } from "../shell/view";
 import { useDefinitionDraft } from "./useDefinitionDraft";
 
-/** The tools a user-made Trait's model may be offered, besides the read tools. */
-const MODEL_TOOLS = [
-  { id: "save_file", label: "Save files", hint: "Save what it writes as a file in the Project" },
-  { id: "show_table", label: "Show tables", hint: "Show a table below its reply" },
-  {
-    id: "write_document",
-    label: "Write documents",
-    hint: "Write a report you can edit and export as PDF",
-  },
-  {
-    id: "suggest_edit",
-    label: "Suggest edits",
-    hint: "Suggest new text for a passage when asked in a document's comment",
-  },
-  {
-    id: "edit_document",
-    label: "Edit documents",
-    hint: "Suggest edits to a document you reference in a message",
-  },
-];
-
-const EMPTY: TraitDraft = { id: NIL_ID, name: "", description: "", instructions: "", tools: [] };
+const EMPTY: TraitDraft = { id: NIL_ID, name: "", description: "", instructions: "" };
 
 const draftOf = (t: TraitSummary): TraitDraft => ({
   id: t.id,
   name: t.name,
   description: t.description,
   instructions: t.instructions ?? "",
-  tools: t.tools,
 });
 
 /** A Trait's editor: `id` opens one, `from` starts a copy of one, neither a new Trait. */
@@ -152,32 +129,6 @@ export function TraitEditor({
                   onChange={(e) => update({ instructions: e.target.value })}
                 />
               </Field>
-              <Field label="Tools">
-                <ul className="border-t border-border">
-                  <ToolRow
-                    label="Read files"
-                    hint="Read the files and tables the message references"
-                    checked
-                    disabled
-                  />
-                  {MODEL_TOOLS.map((tool) => (
-                    <ToolRow
-                      key={tool.id}
-                      label={tool.label}
-                      hint={tool.hint}
-                      checked={draft.tools.includes(tool.id)}
-                      disabled={readOnly}
-                      onChange={(checked) =>
-                        update({
-                          tools: checked
-                            ? [...draft.tools, tool.id]
-                            : draft.tools.filter((t) => t !== tool.id),
-                        })
-                      }
-                    />
-                  ))}
-                </ul>
-              </Field>
             </>
           ) : (
             <p className="text-meta text-muted-foreground">
@@ -221,32 +172,5 @@ function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: bo
         </ul>
       )}
     </SheetSection>
-  );
-}
-
-/** A tool the Trait's model may use, ticked when it is offered. */
-function ToolRow({
-  label,
-  hint,
-  checked,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  checked: boolean;
-  disabled?: boolean;
-  onChange?: (checked: boolean) => void;
-}) {
-  return (
-    <li>
-      <label className="flex items-center gap-3 border-b border-border py-2.5">
-        <Checkbox checked={checked} disabled={disabled} onCheckedChange={onChange} />
-        <span className="grid gap-px">
-          <span className="text-ui font-medium">{label}</span>
-          <span className="text-meta text-muted-foreground">{hint}</span>
-        </span>
-      </label>
-    </li>
   );
 }

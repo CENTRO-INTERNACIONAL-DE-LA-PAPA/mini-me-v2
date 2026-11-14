@@ -35,7 +35,6 @@ import {
 import type { MiniMe, TraitSummary, WorkflowStep } from "../../protocol/types";
 import { surfaceStyle } from "../minime/miniMeColors";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
-import { toolCount } from "./tools";
 import { useStepDrag, type DragPayload, type DragState } from "./useStepDrag";
 import {
   insertStep,
@@ -304,7 +303,7 @@ function StepCard({
   step: WorkflowStep;
   icon: LucideIcon;
   name: string;
-  meta: string;
+  meta?: string;
 }) {
   const { selectedId, editable } = useCanvas();
   const press = useStepPress(step, name);
@@ -313,8 +312,10 @@ function StepCard({
       {...press}
       className={cn(
         press.className,
-        "group/step flex h-14 w-[220px] items-center gap-2.5 rounded-2xl bg-card px-3.5",
-        "border border-transparent",
+        "group/step flex items-center gap-2.5 rounded-2xl px-3.5",
+        step.type === "trait"
+          ? "h-10 w-[180px] justify-center border border-edge bg-wash"
+          : "h-14 w-[220px] border border-transparent bg-card",
         editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         selectedId === step.id && "border-foreground outline-4 outline-tint",
       )}
@@ -327,7 +328,7 @@ function StepCard({
       />
       <span className="grid min-w-0 gap-px">
         <span className="truncate text-ui font-semibold">{name}</span>
-        <span className="truncate text-meta text-muted-foreground">{meta}</span>
+        {meta && <span className="truncate text-meta text-muted-foreground">{meta}</span>}
       </span>
     </div>
   );
@@ -342,7 +343,6 @@ function TraitNode({ data }: NodeProps<LayoutNode>) {
       step={step}
       icon={PuzzleIcon}
       name={t?.name ?? "Unknown Trait"}
-      meta={t ? toolCount(t.tools) : ""}
     />
   );
 }

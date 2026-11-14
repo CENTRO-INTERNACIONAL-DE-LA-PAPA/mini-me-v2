@@ -414,7 +414,6 @@ export interface TraitSummary {
   name: string;
   description: string;
   instructions: string | null;
-  tools: string[];
   built_in: boolean;
   /** Whether it runs on its instructions; only such Traits can be duplicated. */
   prompt_based: boolean;
@@ -428,7 +427,6 @@ export interface TraitDraft {
   name: string;
   description: string;
   instructions: string;
-  tools: string[];
 }
 
 /** A user-made entry of `library.json` left out because it breaks a rule. */
