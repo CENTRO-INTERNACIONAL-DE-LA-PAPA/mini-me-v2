@@ -165,17 +165,17 @@ built-in library only placeholder Traits use it.
   with `run.done`
 
 ### Requirement: Link protocol version
-The link protocol version SHALL be 16. The Rust core and the sidecar both implement adapter
+The link protocol version SHALL be 17. The Rust core and the sidecar both implement adapter
 discovery, Mini-Me runs (`run.start`, `run.cancel` and the `run.*` and `step.*` frames), the
 routing request, the summary request (`summary.start`, `summary.done` and `summary.error`),
 and the `component.add`, `asset.write`, `conversation.results` and `component.read`
-requests, with `current` Assets, component `preview`, `source_asset_id` and `source`, and
-hidden files, and without `component` Text Components. A side still at an earlier version
-SHALL be reported as a version mismatch.
+requests, with `current` Assets, component `preview`, `source_asset_id` and `source`, hidden
+files and Traits without tools, and without `component` Text Components. A side still at an earlier version SHALL be reported as a version
+mismatch.
 
 #### Scenario: Old sidecar
-- **WHEN** a development build's core implementing version 16 starts a sidecar that sends
-  `hello` with protocol 15
+- **WHEN** a development build's core implementing version 17 starts a sidecar that sends
+  `hello` with protocol 16
 - **THEN** the sidecar is shown as `incompatible`, naming both versions
 
 ### Requirement: Summarize Trait
@@ -314,8 +314,7 @@ hypothesis, it proposes one and says so. Its input is `{ text }`.
 The core SHALL start a run with `run.start`, payload `{ run_id, mini_me, workflow, traits,
 model, input, context, resume }`:
 - `run_id` is a new UUIDv7, and `mini_me` is `{ id, name }`;
-- `traits` lists `{ id, name, instructions, adapter, tools }` for each Trait the Workflow
-  uses, where `tools` is the Trait's list of tool names;
+- `traits` lists `{ id, name, instructions, adapter }` for each Trait the Workflow uses;
 - `model` is `{ provider, model }` from Settings, or `null`; for the provider `custom` it is
   `{ provider, model, endpoint, api_format }`, with `api_format` `"openai"` or `"anthropic"`;
 - `input` is the input of every Trait Step;
@@ -328,7 +327,7 @@ model, input, context, resume }`:
 
 #### Scenario: Tools of a Trait
 - **WHEN** the core starts a run of Assistant
-- **THEN** *Assist*'s entry in `traits` has `tools` `["save_file", "show_table"]`
+- **THEN** *Assist*'s entry in `traits` has no `tools`
 
 #### Scenario: Custom model in a run
 - **WHEN** the provider is Custom and the core starts a run of Scribe

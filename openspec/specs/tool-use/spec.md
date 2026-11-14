@@ -37,11 +37,11 @@ NOT include their content; the model reads content with the read tools.
   model reads the chart with read-a-component before explaining
 
 ### Requirement: Tools offered to the model
-A prompt-based Trait's model SHALL be offered read-a-file, read-a-component and hand-off on
-every call, plus the tools its Trait definition lists. A prompt-based Trait SHALL list only
-tools that have a form for models: save-a-file, show-a-table, write-a-document, suggest-an-edit
-and edit-a-document. Suggest-an-edit SHALL be offered only to a call answering a comment thread,
-and edit-a-document only to a call outside one.
+A prompt-based Trait's model SHALL be offered, on every call, every tool that has a form for
+models: read-a-file, read-a-component, hand-off, save-a-file, show-a-table, write-a-document,
+suggest-an-edit and edit-a-document, except that suggest-an-edit SHALL be offered only to a call
+answering a comment thread, and edit-a-document only to a call outside one. The tools offered
+SHALL NOT depend on the Trait.
 
 #### Scenario: Assistant's tools
 - **WHEN** Assistant answers in a Conversation
@@ -53,8 +53,8 @@ and edit-a-document only to a call outside one.
 - **THEN** its model is also offered suggest-an-edit, and not edit-a-document
 
 #### Scenario: Scout's tools
-- **WHEN** Explorer answers with *Scout*, which lists no tools
-- **THEN** its model is offered read-a-file, read-a-component and hand-off
+- **WHEN** Explorer answers with *Scout*
+- **THEN** its model is offered the same tools as Assistant's
 
 ### Requirement: Answering in tool rounds
 In each round the model either asks for one or more tool calls, which run in the order
