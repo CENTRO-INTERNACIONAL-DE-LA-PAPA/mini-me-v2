@@ -66,7 +66,7 @@ now (`library.rs`).
 
 ```json
 { "id": "…7a04", "name": "Find Papers", "description": "…", "color": "oklch(0.55 0.1 230)",
-  "adapter": "asta-paper-finder", "instructions": null, "tools": ["show_papers"] }
+  "adapter": "asta-paper-finder", "instructions": null, "tools": ["save_file"] }
 
 { "id": "…7b04", "name": "Researcher", "description": "Finds research papers on a topic…",
   "colors": { "tint": "#FFE1D8", "solid": "#FF5A36", "ink": "#B3300F" }, "group": "literature",
@@ -188,8 +188,8 @@ class FindPapers(Adapter):
 |---|---|---|
 | `echo` | placeholder Traits, tests | streams the input back word by word |
 | `prompt` | *Summarize*, *Assist*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment* | the Trait's instructions, the Conversation's earlier messages, earlier Step outputs, the message and a list of the Conversation's files and components (IDs, no content), sent to the model chosen in Settings with the read tools and the Trait's tools; the model calls tools for up to 8 rounds before it answers |
-| `asta-paper-finder` | *Find Papers* | Ai2's Paper Finder; replies with a `paper-sources` component |
-| `asta-theorizer` | *Theorize* | Ai2's Theorizer; replies with a `theories` component and attaches `theory-store.json` |
+| `asta-paper-finder` | *Find Papers* | Ai2's Paper Finder; saves the papers as the hidden `papers.json` and replies with a `paper-sources` component |
+| `asta-theorizer` | *Theorize* | Ai2's Theorizer; saves its result as the hidden `theory-store.json` and replies with a `theories` component |
 | `data-profile` | *Profile Data* | describes the referenced tables with pandas, without a model |
 | `data-validate` | *Validate Data* | runs default checks and checks the model chooses, with pointblank |
 | `data-clean` | *Clean Data* | applies cleaning actions the model chooses and saves the result as a new Asset |
@@ -217,10 +217,10 @@ directly.
 | `await ctx.read_asset(id)` | the bytes of a Project file the message references | `core.request` `asset.read` |
 | `await ctx.history()` | the Conversation's earlier messages, within a 50,000-character budget | `core.request` `conversation.history` |
 | `await ctx.results()` | the Conversation's files and Interactive Components, newest first | `core.request` `conversation.results` |
-| `await ctx.read_component(id)` | one component of the Conversation with its full data | `core.request` `component.read` |
+| `await ctx.read_component(id)` | one component of the Conversation: its kind, text and source file, without its preview | `core.request` `component.read` |
 | `await ctx.secret(provider)` | an API key or the Ai2 token, for a declared provider only | `core.request` `secret.get` |
-| `await ctx.component(kind, version, data, text)` | adds an Interactive Component below the reply's text | `core.request` `component.add` |
-| `await ctx.write_asset(name, media_type, data)` | saves a file in the Project and attaches it to the reply | `core.request` `asset.write` |
+| `await ctx.component(kind, version, preview, text, source_asset_id)` | adds an Interactive Component below the reply's text | `core.request` `component.add` |
+| `await ctx.write_asset(name, media_type, data, hidden)` | saves a file in the Project and attaches it to the reply, unless hidden | `core.request` `asset.write` |
 
 Frames are one-way. Requests are answered with a result or an error code, which reaches the
 adapter as `CoreRequestError`, so an adapter can react to a refusal.
@@ -287,12 +287,14 @@ gets `call_not_active`.
 ## Interactive Components
 
 An Interactive Component is a rich element below a reply's text, such as source cards,
-theories or a table. Each kind is hand-coded in the UI and added by its show tool
-(`show_table`, `show_chart`, `show_papers`, `show_theories`, and `write_document` for
-`document`), so a Trait can add a kind only
-when it lists that tool, component data always comes from code we wrote, and it never
-contains UI code. The one exception is `approval`, which the core adds itself when a run
-pauses and refuses from any Trait.
+theories or a table. Each kind is hand-coded in the UI. Tables and charts are added by their
+show tools (`show_table`, `show_chart`), `document` by `write_document`, and the provider
+kinds (`paper-sources`, `theories`, `dataset-results`) only by the adapter that owns each one,
+through `show_results`. A component's `preview` is only what the UI shows; its data lives in
+its source file (`source_asset_id`), which a Trait reads with `read_file`. Results that are not
+the user's data, such as papers or a profile table, are saved as hidden files: Traits and Jev
+see them, the user does not. The core adds `approval`, `hand-off` and `document-edits` itself
+and refuses them from any Trait.
 
 ### A kind is one file
 
@@ -313,7 +315,8 @@ src/components/interactive/
 ```
 
 - A kind's file exports `renderers`, a React component for each version, and the
-  TypeScript types of each version's data. Renderers get `{ data }`, plus `answer`,
+  TypeScript types of each version's preview. Renderers get `{ preview }`, plus
+  `sourceAssetId`, `answer`,
   `projectId`, `messageId`, `componentId` and `replyStatus` for kinds the user answers,
   such as `approval`, and `color`, the solid colour of the Mini-Me that wrote the reply, for
   kinds that draw in it, such as `chart`; the others ignore them. The spec in
@@ -324,32 +327,31 @@ src/components/interactive/
 - A test (`catalogue.test.ts`) reads `builtin.json` and checks that every kind a Trait's
   show tools add has a renderer.
 
-To add a kind: write its file, add it to `catalogue.ts`, add its show tool to
-`tools/components.py` and its name to `TOOL_NAMES` (`tools/__init__.py`), `TOOLS`
-(`library.rs`) and `SHOW_TOOL_KINDS` (`catalogue.test.ts`), then list the tool on the Trait
-that uses it and call it from that Trait's adapter. Nothing changes in the protocol or the
-database.
+To add a provider kind: write its file, add it to `catalogue.ts`, and show it from its
+adapter with `show_results`. Nothing changes in the protocol or the database.
 
 ### Adding one to a reply
 
-1. The adapter calls the kind's show tool, such as `await show_papers(ctx, data, text)`,
-   once its data is complete; the tool sends `component.add`. Components are not updated
+1. The adapter saves the component's source file, then calls `component.add` through a
+   show tool or `show_results` once its preview is complete. Components are not updated
    after they are added.
-2. The core checks that the reply is still streaming, that the kind is not `approval`, that
-   `data` is at most 2 MiB and that `text` is not empty. It does not check the shape of
-   `data`: that is a contract between the adapter and the renderer.
+2. The core checks that the reply is still streaming, that the kind is not one only the core
+   adds, that `preview` is at most 2 MiB, that `text` is not empty and that the source file is
+   an Asset of the Project. It does not check the shape of `preview`: that is a contract
+   between the adapter and the renderer.
 3. **Refused:** the core answers `component_not_allowed` or `invalid_component` and stores
    nothing; the show tool fails with that code. The Asta adapters and Plot then write `text`
    into the reply.
 4. **Accepted:** the core stores `component.added` with `{ message_id, component: { id,
-   kind, version, data, text } }` and a row in the `components` table, and answers with the
-   component's UUIDv7 ID.
+   kind, version, preview, text, source_asset_id } }` and a row in the `components` table,
+   and answers with the component's UUIDv7 ID.
 5. The UI shows the components below the reply's text, in order. `InteractiveComponent`
    shows `text` instead when the kind or version has no renderer, or when the renderer fails.
 
-`text` is a plain-text version of the component. It also goes into conversation history, so
-a Mini-Me that reads earlier messages can refer to a component ("summarize the third
-paper"), and it is what an app version without the kind shows.
+`text` is a plain-text version of the component, which read-a-component returns and an app
+version without the kind shows. Conversation history gives each component one line instead,
+`[<kind> "<title>" from <source file>, id <id>]`, so a Mini-Me can find the component a
+message describes ("summarize the third paper") and read it by ID.
 
 ### Changing a kind
 
@@ -441,12 +443,12 @@ Every tool acts through `ctx`, so the core's checks and Project-folder confineme
 | Tool | Does | Offered to models |
 |---|---|---|
 | `read_file` | reads a Conversation file: a table's rows (500 at a time) or text (100,000 characters at a time) | always, to prompt-based Traits |
-| `read_component` | reads a Conversation component: a table's rows, or another kind's data | always, to prompt-based Traits |
+| `read_component` | reads a Conversation component: its kind, text and source file's ID | always, to prompt-based Traits |
 | `read_table` | reads a table file into a DataFrame (data Traits) | no |
-| `save_file` | saves a file and attaches it to the reply | as text files (CSV, TSV, TXT, Markdown, JSON) up to 2 MiB |
-| `show_table` | adds a `table`, from a DataFrame, from given rows or from a file | yes |
+| `save_file` | saves a file and attaches it to the reply, or saves it hidden | as text files (CSV, TSV, TXT, Markdown, JSON) up to 2 MiB, never hidden |
+| `show_table` | adds a `table` from a file, or from a DataFrame or given rows saved as a file first | yes |
 | `write_document` | saves a Quarto (`.qmd`) document, attaches it and adds a `document` card; needs Quarto | yes, up to 2 MiB |
-| `show_chart`, `show_papers`, `show_theories` | add a `chart`, `paper-sources` or `theories` | no |
+| `show_chart` | adds Plot's `chart` | no |
 
 - `tools/__init__.py` names the tools; `files.py`, `tables.py`, `components.py` and
   `documents.py` hold them; `model.py` holds the forms offered to models (name, description, JSON Schema).
