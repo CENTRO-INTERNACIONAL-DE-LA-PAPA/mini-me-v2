@@ -11,7 +11,7 @@ export function ConversationStatusLine({ status }: { status: ConversationStatus 
     <span className="flex w-full items-center gap-1.5 text-meta font-normal">
       {/* Menu buttons size every svg as an icon; avatar bodies are svgs that fill their box. */}
       <span className="flex size-4 shrink-0 [&_svg]:size-full!">
-        <MiniMeAvatar miniMe={miniMe} size={16} />
+        <MiniMeAvatar miniMe={miniMe} size={16} working={status.kind === "running"} />
       </span>
       <span
         className="truncate text-muted-foreground"
