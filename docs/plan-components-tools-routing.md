@@ -8,9 +8,11 @@ The plan is built as four OpenSpec changes, in order:
 
 1. **Components from files**: hidden files, component previews and sources, history lines,
    removing `$` (done).
-2. **Shared tools**: Traits no longer list tools; every Mini-Me's model is offered every tool.
-3. **Suggestions and comments**: one suggestion tool, and comments that work like the chat.
-4. **Jev hints and hand-off**: Jev's component, tool and hand-off hints.
+2. **Shared tools**: Traits no longer list tools; every Mini-Me's model is offered every tool
+   (done).
+3. **Suggestions and comments**: one suggestion tool, and comments that work like the chat
+   (planned in `openspec/changes/document-suggestions/`).
+4. **Jev hints and hand-off**: Jev's component, tool and hand-off hints (not planned yet).
 
 ## Files (Assets)
 
@@ -94,7 +96,10 @@ The model reads a component with read_component when it needs it.
 - A comment works like a message in the chat: with an `@` the mentioned Mini-Me answers;
   without one, Jev picks the Mini-Me, and Assistant answers when Jev cannot.
 - There are no private notes: every comment gets a reply.
-- A Mini-Me answering in a thread calls the suggestion tool when it wants to change the document.
+- Jev routes a comment without the `file` question: the thread's document is already the reply's
+  context.
+- A Mini-Me answering in a thread calls the suggestion tool when it wants to change the document,
+  and can hand off as in the chat; the other Mini-Me answers next in the same thread.
 
 ## Traits
 
@@ -111,7 +116,7 @@ One request per message, with these questions:
 | `reaction` | Always | Applied directly (cosmetic) |
 | `needs_context` | Always | Hint to the Trait calls |
 | `file` | No file tagged and the Conversation has files | Hint: "the user probably means X" |
-| `component` | No component in the message's chips | Hint, like `file` |
+| `component` | The Conversation has tables or charts | Hint, like `file` |
 | tools | Always | Hint: the most probable tools |
 | `next_mini_me` | Always | Who should handle the part of the request the answering Mini-Me doesn't cover, or `none` |
 
