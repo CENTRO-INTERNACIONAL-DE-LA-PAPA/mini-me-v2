@@ -1,8 +1,9 @@
-//! Jev decides who answers, any reaction, whether context is needed and which file is meant;
-//! when Jev is unsure or cannot be asked, the fallback Mini-Me answers.
+//! Jev decides who answers a message or a hand-off, any reaction, whether context is needed,
+//! and hints at the file, component, tools and next Mini-Me; when Jev is unsure or cannot be
+//! asked, the fallback Mini-Me answers.
 
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -17,10 +18,10 @@ use crate::library::{FALLBACK_MINI_ME, Library};
 use crate::user_library::LibraryStore;
 use crate::link::{
     CallModel, ChoiceAnswer, RouteComponent, RouteComponentOption, RouteFile, RouteMiniMe, RunComponent,
-    RunFile,
+    RunFile, RunHandOff,
 };
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
-use crate::runs::{RouteAnswers, Routed, RunSpec, Runs};
+use crate::runs::{HandedOff, RouteAnswers, Routed, RunSpec, Runs};
 use crate::store::Project;
 use crate::sync::{Watched, locked};
 
@@ -40,7 +41,7 @@ const RECENT_TURNS: usize = 4;
 const RECENT_CHARS: usize = 200;
 
 /// What a routing decision depends on besides the message.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RouteSettings {
     pub model: Option<CallModel>,
     pub threshold: f64,
@@ -63,6 +64,46 @@ pub struct ShownComponent {
     pub source_name: String,
 }
 
+/// What Jev is asked about: a user's message or comment, or a Mini-Me's hand-off.
+struct Request<'a> {
+    project: &'a Arc<Project>,
+    conversation_id: Uuid,
+    /// The message the reply answers: the user's, or the reply that handed off.
+    message: &'a Message,
+    /// What Jev reads as the message, and the reply's input.
+    text: String,
+    files: Vec<String>,
+    /// Who answers whatever Jev picks: the mentioned Mini-Me, or the one handed to.
+    answerer: Option<Uuid>,
+    handed_off: bool,
+}
+
+impl<'a> Request<'a> {
+    fn message(project: &'a Arc<Project>, conversation_id: Uuid, message: &'a Message) -> Self {
+        Self {
+            project,
+            conversation_id,
+            message,
+            text: input_text(message),
+            files: conversations::file_names(message),
+            answerer: first_mention(message),
+            handed_off: false,
+        }
+    }
+
+    fn hand_off(handed: &'a HandedOff) -> Self {
+        Self {
+            project: &handed.project,
+            conversation_id: handed.conversation_id,
+            message: &handed.reply,
+            text: handed.request.clone(),
+            files: handed.file.iter().map(|f| f.name.clone()).collect(),
+            answerer: Some(handed.mini_me_id),
+            handed_off: true,
+        }
+    }
+}
+
 /// The author ID of the notes that say why a message got no reply.
 const ROUTING_AUTHOR: &str = "routing";
 
@@ -75,6 +116,7 @@ struct Decision {
     file: Option<RunFile>,
     component: Option<RunComponent>,
     tools: Vec<String>,
+    hand_off: Option<RunHandOff>,
 }
 
 /// Shown while Jev cannot choose, so the fallback answers every message without a mention.
@@ -160,27 +202,55 @@ impl Routing {
         message: &Message,
     ) {
         let library = self.library.current();
-        let decision = self.ask_jev(calls, settings, project, conversation_id, message, &library);
+        let request = Request::message(project, conversation_id, message);
+        let decision = self.ask_jev(calls, settings, &request, &library);
         let model = settings.model.clone();
-        let started =
-            self.start_reply(&library, calls, model, project, conversation_id, message, &decision);
-        match started {
+        match self.start_reply(&library, calls, &request, &decision, model, Some(settings)) {
             Ok(author) => react(project, message.id, decision.reaction, author),
             Err(err) => explain(project, conversation_id, message.id, &err),
         }
     }
 
-    /// Without Jev's answers the mentioned Mini-Me or the fallback answers.
+    /// On its own thread, since Jev's answer arrives on the thread that reported the run's end.
+    pub fn hand_off(self: &Arc<Self>, calls: Weak<Runs>, handed: HandedOff) {
+        let this = Arc::clone(self);
+        std::thread::spawn(move || {
+            if let Some(calls) = calls.upgrade() {
+                this.route_hand_off(&calls, handed);
+            }
+        });
+    }
+
+    /// Without routing settings, as for a resumed run, the reply starts without Jev's hints.
+    fn route_hand_off(&self, calls: &Runs, handed: HandedOff) {
+        let library = self.library.current();
+        let request = Request::hand_off(&handed);
+        let mut decision = match &handed.route {
+            Some(settings) => self.ask_jev(calls, settings, &request, &library),
+            None => decide(None, request.answerer, Offered::default(), 1.0, false, &library),
+        };
+        decision.needs_context = decision.needs_context.or(Some(true));
+        if handed.file.is_some() {
+            decision.file = handed.file.clone();
+        }
+        let model = handed.model.clone();
+        let started =
+            self.start_reply(&library, calls, &request, &decision, model, handed.route.as_ref());
+        if let Err(err) = started {
+            explain(&handed.project, handed.conversation_id, handed.reply.id, &err);
+        }
+    }
+
+    /// Without Jev's answers the mentioned or handed-to Mini-Me, or else the fallback, answers.
     fn ask_jev(
         &self,
         calls: &Runs,
         settings: &RouteSettings,
-        project: &Project,
-        conversation_id: Uuid,
-        message: &Message,
+        request: &Request,
         library: &Library,
     ) -> Decision {
-        let mentioned = first_mention(message);
+        let (project, conversation_id, message) =
+            (request.project, request.conversation_id, request.message);
         let messages = project.lock().conversation_messages(conversation_id).unwrap_or_default();
         // A thread's document is already its reply's context, so Jev picks no file,
         // component or tools there.
@@ -189,17 +259,21 @@ impl Routing {
             true => (Vec::new(), Vec::new()),
             false => {
                 let shown = project.lock().shown_components(conversation_id).unwrap_or_default();
-                let files = file_options(project, &messages, message, library, &shown);
+                let files = match request.files.is_empty() {
+                    true => file_options(project, &messages, message.id, library, &shown),
+                    false => Vec::new(),
+                };
                 (files, component_options(shown))
             }
         };
         let ask = questions(Asks {
-            mini_me: mentioned.is_none(),
+            mini_me: request.answerer.is_none(),
+            reaction: !request.handed_off,
             file: !files.is_empty(),
             component: !components.is_empty(),
             tools: !in_thread,
         });
-        let state = state(message, recent(&messages, message.id, library));
+        let state = state(request, recent(seen_before(&messages, request), library));
         let mini_mes = route_mini_mes(library);
         let Routed { answers: routed, asked } =
             calls.route(state, mini_mes, files.clone(), components.clone(), ask, settings.timeout);
@@ -221,7 +295,7 @@ impl Routing {
         };
         let reacts = draw() < settings.reaction_chance;
         let offered = Offered { files: &files, components: &components };
-        decide(answers.as_ref(), mentioned, offered, settings.threshold, reacts, library)
+        decide(answers.as_ref(), request.answerer, offered, settings.threshold, reacts, library)
     }
 
     /// Returns the reply's author.
@@ -229,17 +303,16 @@ impl Routing {
         &self,
         library: &Library,
         calls: &Runs,
-        model: Option<CallModel>,
-        project: &Arc<Project>,
-        conversation_id: Uuid,
-        message: &Message,
+        request: &Request,
         decision: &Decision,
+        model: Option<CallModel>,
+        route: Option<&RouteSettings>,
     ) -> AppResult<Author> {
         let author = Author {
             kind: AuthorKind::MiniMe,
             id: decision.answerer.to_string(),
         };
-        let input = json!({ "text": input_text(message) });
+        let input = json!({ "text": request.text });
         let mut spec = RunSpec::for_mini_me(
             library,
             decision.answerer,
@@ -250,14 +323,19 @@ impl Routing {
         spec.file = decision.file.clone();
         spec.component = decision.component.clone();
         spec.tools = decision.tools.clone();
-        calls.start(Arc::clone(project), conversation_id, message, spec, model)?;
+        spec.hand_off = decision.hand_off.clone();
+        spec.route = route.cloned();
+        let (project, conversation_id) = (Arc::clone(request.project), request.conversation_id);
+        calls.start(project, conversation_id, request.message, spec, model)?;
         Ok(author)
     }
 }
 
-/// Which of the optional questions Jev is asked besides `reaction` and `needs_context`.
+/// Which of the optional questions Jev is asked besides `reaction`, `needs_context` and
+/// `next_mini_me`.
 struct Asks {
     mini_me: bool,
+    reaction: bool,
     file: bool,
     component: bool,
     tools: bool,
@@ -267,11 +345,12 @@ fn questions(asks: Asks) -> Vec<String> {
     let optional = |asked: bool, id: &str| asked.then(|| id.to_string());
     [
         optional(asks.mini_me, "mini_me"),
-        Some("reaction".to_string()),
+        optional(asks.reaction, "reaction"),
         Some("needs_context".to_string()),
         optional(asks.file, "file"),
         optional(asks.component, "component"),
         optional(asks.tools, "tools"),
+        Some("next_mini_me".to_string()),
     ]
     .into_iter()
     .flatten()
@@ -331,22 +410,26 @@ fn first_mention(message: &Message) -> Option<Uuid> {
         .map(|c| c.id)
 }
 
-/// What Jev sees of a message; file contents stay on the user's computer.
-fn state(message: &Message, recent: Value) -> Value {
+/// What Jev sees of a request; file contents stay on the user's computer.
+fn state(request: &Request, recent: Value) -> Value {
     json!({
-        "message": input_text(message),
-        "files": conversations::file_names(message),
+        "message": request.text,
+        "files": request.files,
         "recent": recent,
     })
 }
 
-/// Up to `RECENT_TURNS` turns before `before`, oldest first, without components (table data).
-fn recent(messages: &[Message], before: Uuid, library: &Library) -> Value {
-    let earlier: Vec<&Message> = messages
-        .iter()
-        .take_while(|m| m.id != before)
-        .filter(|m| m.author.kind != AuthorKind::System)
-        .collect();
+/// The messages before a user's message, or up to and including the reply that handed off.
+fn seen_before<'m>(messages: &'m [Message], request: &Request) -> &'m [Message] {
+    let at = messages.iter().position(|m| m.id == request.message.id).unwrap_or(messages.len());
+    let end = if request.handed_off { (at + 1).min(messages.len()) } else { at };
+    &messages[..end]
+}
+
+/// The last `RECENT_TURNS` turns, oldest first, without components (table data).
+fn recent(earlier: &[Message], library: &Library) -> Value {
+    let earlier: Vec<&Message> =
+        earlier.iter().filter(|m| m.author.kind != AuthorKind::System).collect();
     let start = earlier.len().saturating_sub(RECENT_TURNS);
     let turns: Vec<Value> = earlier[start..]
         .iter()
@@ -375,20 +458,16 @@ fn warning_after(routed: &AppResult<RouteAnswers>) -> Option<Option<&'static str
     }
 }
 
-/// Files Jev may pick, newest first, with the tables and charts in `shown` made from each;
-/// none if the message has one.
+/// Files Jev may pick, newest first, with the tables and charts in `shown` made from each.
 fn file_options(
     project: &Project,
     messages: &[Message],
-    message: &Message,
+    message_id: Uuid,
     library: &Library,
     shown: &[ShownComponent],
 ) -> Vec<RouteFile> {
-    if !conversations::file_names(message).is_empty() {
-        return Vec::new();
-    }
     let state = project.lock();
-    let found = results(messages, message.id, message.id, library, |id| {
+    let found = results(messages, message_id, message_id, library, |id| {
         assets::find_with_hidden(&state, id).ok()
     });
     found
@@ -448,8 +527,6 @@ fn draw() -> f64 {
     (random & ((1 << 53) - 1)) as f64 / (1u64 << 53) as f64
 }
 
-/// A confidence equal to the threshold passes, and a reaction only when `reacts`; else the
-/// fallback answers and no file is picked.
 /// How many of Jev's most probable tools a reply is told about.
 const LIKELY_TOOLS: usize = 4;
 
@@ -460,6 +537,8 @@ struct Offered<'a> {
     components: &'a [RouteComponentOption],
 }
 
+/// A confidence equal to the threshold passes, and a reaction only when `reacts`; else the
+/// fallback answers and no file is picked.
 fn decide(
     answers: Option<&RouteAnswers>,
     mentioned: Option<Uuid>,
@@ -497,6 +576,9 @@ fn decide(
         .and_then(|c| offered.components.iter().find(|o| o.id.to_string() == c.choice))
         .map(|o| RunComponent { component_id: o.id });
     let tools = answer("tools").map(likely_tools).unwrap_or_default();
+    let hand_off = answer("next_mini_me")
+        .and_then(|next| handed_to(next, answerer, threshold, library))
+        .map(|mini_me_id| RunHandOff { mini_me_id });
     Decision {
         answerer,
         reaction,
@@ -504,7 +586,23 @@ fn decide(
         file,
         component,
         tools,
+        hand_off,
     }
+}
+
+/// The most probable Mini-Me other than `answerer`, when all of them together reach `threshold`,
+/// since Jev often splits a hand-off between Mini-Mes that could all do it.
+fn handed_to(answer: &ChoiceAnswer, answerer: Uuid, threshold: f64, library: &Library) -> Option<Uuid> {
+    let others: Vec<(Uuid, f64)> = answer
+        .probabilities
+        .iter()
+        .filter_map(|(option, p)| Some((Uuid::parse_str(option).ok()?, *p)))
+        .filter(|(id, _)| *id != answerer && library.mini_me(*id).is_some())
+        .collect();
+    if others.iter().map(|(_, p)| p).sum::<f64>() < threshold {
+        return None;
+    }
+    others.into_iter().max_by(|a, b| a.1.total_cmp(&b.1)).map(|(id, _)| id)
 }
 
 /// The most probable tools, most probable first, whatever their confidence.
@@ -554,7 +652,7 @@ mod tests {
     use super::*;
     use crate::comments::test_support::into_thread;
     use crate::link::{AdapterInfo, CoreFrame};
-    use crate::protocol::{AssetRef, EventKind, MessageStatus, TextComponent, new_id};
+    use crate::protocol::{EventKind, MessageStatus, TextComponent, new_id};
     use crate::secrets::NoSecrets;
     use crate::sidecar::SidecarLog;
     use crate::runs::FrameSink;
@@ -662,6 +760,7 @@ mod tests {
             file: None,
             component: None,
             tools: Vec::new(),
+            hand_off: None,
         };
         assert_eq!(mentioned, expected);
     }
@@ -716,6 +815,25 @@ mod tests {
     }
 
     #[test]
+    fn jev_recommends_the_top_other_mini_me_when_the_others_reach_the_threshold() {
+        let library = Library::builtin();
+        let third = library.mini_mes.iter().find(|m| m.id != SCRIBE && m.id != ASSISTANT);
+        let (scribe, third) = (SCRIBE.to_string(), third.unwrap().id.to_string());
+        let (assistant, unknown) = (ASSISTANT.to_string(), new_id().to_string());
+        let next = |probabilities: &[(&str, f64)]| {
+            let given = answers(vec![("next_mini_me", answer("", 0.0, probabilities))]);
+            decide(Some(&given), Some(ASSISTANT), Offered::default(), 0.5, true, &library).hand_off
+        };
+        let to_scribe = Some(RunHandOff { mini_me_id: SCRIBE });
+        // Split between two others, neither alone at the threshold.
+        assert_eq!(next(&[(&scribe, 0.3), (&third, 0.2), ("none", 0.5)]), to_scribe);
+        assert_eq!(next(&[(&scribe, 0.3), (&third, 0.1), ("none", 0.6)]), None);
+        // The answerer and unknown Mini-Mes don't count.
+        assert_eq!(next(&[(&scribe, 0.1), (&assistant, 0.9)]), None);
+        assert_eq!(next(&[(&scribe, 0.1), (&unknown, 0.9)]), None);
+    }
+
+    #[test]
     fn mentions_are_removed_from_the_input() {
         let assistant = |content: &str| input_text(&message(content, &[("@Assistant", ASSISTANT)]));
         assert_eq!(assistant("@Assistant late blight"), "late blight");
@@ -731,6 +849,7 @@ mod tests {
 
     #[test]
     fn jev_gets_the_text_and_file_names_only() {
+        let f = fixture();
         let mut sent = message(
             "@Assistant summarize #notes.txt",
             &[("@Assistant", ASSISTANT)],
@@ -743,7 +862,7 @@ mod tests {
             end: 31,
         });
         assert_eq!(
-            state(&sent, json!([])),
+            state(&Request::message(&f.project, f.conversation, &sent), json!([])),
             json!({ "message": "summarize #notes.txt", "files": ["notes.txt"], "recent": [] })
         );
     }
@@ -765,7 +884,7 @@ mod tests {
             by(AuthorKind::MiniMe, &scribe, &"é".repeat(RECENT_CHARS + 50)),
             by(AuthorKind::User, "user", "now remove the empty rows"),
         ];
-        let turns = recent(&messages, messages[6].id, &Library::builtin());
+        let turns = recent(&messages[..6], &Library::builtin());
         let turns = turns.as_array().unwrap();
         let names: Vec<&str> = turns.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert_eq!(names, ["You", "Scribe", "You", "Scribe"]);
@@ -868,7 +987,18 @@ mod tests {
                 attachments: Vec::new(),
                 text_components: message(content, mentions).text_components,
             };
-            let settings = RouteSettings {
+            self.routing.send(
+                Arc::clone(&self.calls),
+                self.settings(timeout),
+                Arc::clone(&self.project),
+                self.conversation,
+                input,
+                new_id(),
+            )
+        }
+
+        fn settings(&self, timeout: Duration) -> RouteSettings {
+            RouteSettings {
                 model: Some(CallModel {
                     provider: "dummy".into(),
                     model: "dummy-model".into(),
@@ -879,15 +1009,7 @@ mod tests {
                 show_answers: self.debug,
                 show_asked: self.debug,
                 reaction_chance: 1.0,
-            };
-            self.routing.send(
-                Arc::clone(&self.calls),
-                settings,
-                Arc::clone(&self.project),
-                self.conversation,
-                input,
-                new_id(),
-            )
+            }
         }
 
         fn events(&self) -> Vec<EventKind> {
@@ -979,21 +1101,8 @@ mod tests {
     }
 
     #[test]
-    fn no_file_or_component_question_without_them_or_with_a_tagged_file() {
+    fn no_file_or_component_question_without_them() {
         let f = fixture();
-        let library = Library::builtin();
-        let mut earlier = message("here it is", &[]);
-        earlier.attachments.push(AssetRef {
-            id: new_id(),
-            name: "trial.csv".into(),
-            media_type: "text/csv".into(),
-            size_bytes: 1,
-        });
-        let mut tagged = message("check #trial.csv", &[]);
-        tagged.attachments = earlier.attachments.clone();
-        let messages = [earlier, tagged.clone()];
-        assert!(file_options(&f.project, &messages, &tagged, &library, &[]).is_empty());
-
         f.send("check the data", &[], ROUTE_TIMEOUT).unwrap();
         f.route_id();
         let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
@@ -1001,7 +1110,7 @@ mod tests {
             panic!("expected one route.start, got {starts:?}");
         };
         assert!(files.is_empty() && components.is_empty());
-        assert_eq!(ask, &["mini_me", "reaction", "needs_context", "tools"]);
+        assert_eq!(ask, &["mini_me", "reaction", "needs_context", "tools", "next_mini_me"]);
     }
 
     #[test]
@@ -1228,10 +1337,54 @@ mod tests {
             panic!("expected one route.start, got {starts:?}");
         };
         assert!(files.is_empty());
-        assert_eq!(ask, &["mini_me", "reaction", "needs_context"]);
+        assert_eq!(ask, &["mini_me", "reaction", "needs_context", "next_mini_me"]);
 
         let events = f.wait_for("the reply", |events| reply_to(events, comment.id).is_some());
         let reply = reply_to(&events, comment.id).unwrap();
         assert_eq!(reply.author.id, FALLBACK_MINI_ME.to_string());
+    }
+
+    #[test]
+    fn a_hand_off_is_routed_without_mini_me_reaction_or_a_passed_files_question() {
+        let f = fixture();
+        let question = f.send("@Assistant hi", &[("@Assistant", ASSISTANT)], ROUTE_TIMEOUT);
+        let question = question.unwrap();
+        f.route_id();
+        let assistant = Author { kind: AuthorKind::MiniMe, id: ASSISTANT.to_string() };
+        let reply = conversations::start_reply(&f.project, f.conversation, question.id, assistant);
+        let reply = reply.unwrap();
+        conversations::complete_reply(&f.project, reply).unwrap();
+        let reply = f.project.lock().load_message_with(reply, false).unwrap().unwrap().1;
+        let file = RunFile { asset_id: new_id(), name: "trial.csv".into() };
+        let settings = f.settings(Duration::from_millis(200));
+        f.sink.0.lock().unwrap().clear();
+        let handed = HandedOff {
+            project: Arc::clone(&f.project),
+            conversation_id: f.conversation,
+            reply: reply.clone(),
+            mini_me_id: SCRIBE,
+            request: "summarize this".into(),
+            file: Some(file.clone()),
+            model: settings.model.clone(),
+            route: Some(settings),
+        };
+        f.routing.route_hand_off(&f.calls, handed);
+
+        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
+        let [CoreFrame::RouteStart { state, files, ask, .. }] = starts.as_slice() else {
+            panic!("expected one route.start, got {starts:?}");
+        };
+        assert!(files.is_empty());
+        assert_eq!(ask, &["needs_context", "tools", "next_mini_me"]);
+        assert_eq!((&state["message"], &state["files"]), (&json!("summarize this"), &json!(["trial.csv"])));
+        assert_eq!(state["recent"].as_array().unwrap().last().unwrap()["name"], "Assistant");
+
+        let runs = sent(&f, |frame| matches!(frame, CoreFrame::RunStart { .. }));
+        let [CoreFrame::RunStart { plan, .. }] = runs.as_slice() else {
+            panic!("expected one run.start, got {runs:?}");
+        };
+        assert_eq!((plan.mini_me.id, &plan.input), (SCRIBE, &json!({ "text": "summarize this" })));
+        assert_eq!((plan.context.message.id, plan.context.needs_context), (reply.id, Some(true)));
+        assert_eq!(plan.context.file, Some(file));
     }
 }

@@ -10,7 +10,7 @@ use crate::assets;
 use crate::comments;
 use crate::components;
 use crate::error::{AppError, AppResult};
-use crate::link::RunMiniMe;
+use crate::link::{RunFile, RunMiniMe};
 use crate::protocol::{
     AssetRef, Author, AuthorKind, Component, ErrorInfo, EventKind, Message, MessageStatus,
     TextComponent, TextComponentKind, new_id, now_ms,
@@ -620,16 +620,25 @@ pub fn answer_approval(
 
 /// Attached and referenced file names, without duplicates.
 pub fn file_names(message: &Message) -> Vec<String> {
-    let mut names: Vec<String> = message.attachments.iter().map(|a| a.name.clone()).collect();
+    message_files(message).into_iter().map(|f| f.name).collect()
+}
+
+/// The files a message attaches, then those it references, each once.
+pub fn message_files(message: &Message) -> Vec<RunFile> {
+    let mut files: Vec<RunFile> = message
+        .attachments
+        .iter()
+        .map(|a| RunFile { asset_id: a.id, name: a.name.clone() })
+        .collect();
     for component in &message.text_components {
         if component.kind == TextComponentKind::Asset {
             let name = component.label.trim_start_matches('#').to_string();
-            if !names.contains(&name) {
-                names.push(name);
+            if !files.iter().any(|f| f.name == name) {
+                files.push(RunFile { asset_id: component.id, name });
             }
         }
     }
-    names
+    files
 }
 
 /// A reply the app writes itself, complete from the start.

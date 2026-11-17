@@ -39,6 +39,14 @@ Settled with the user while planning:
   unchanged.
 - **Chains have no limit**, and a reply still hands off at most once.
 - **`next_mini_me` equal to the answering Mini-Me counts as `none`.**
+- **`next_mini_me` asks about what is asked after the first thing.** Jev answers every question
+  of the one request on its own, so it doesn't know who answers; asked about "the part the
+  answering assistant doesn't cover", it picked the answerer again. A one-part message gets the
+  answerer or `none`, both counted as `none`. A second Jev request naming the answerer was
+  turned down for its extra wait and cost.
+- **A hand-off is recommended when the other Mini-Mes together reach the threshold**, and goes
+  to the most probable of them: Jev splits a hand-off between Mini-Mes that could all do it
+  (Scribe 47%, Assistant 41%), so no single one reaches it.
 
 Settled with the user after drafting, each the recommended option:
 
@@ -54,8 +62,8 @@ Settled with the user after drafting, each the recommended option:
   the request comes from the earlier reply.
 - **The file of a hand-off made by the core.** The message's first referenced or
   attached file, else the reply's `context.file`.
-- **The prompt lines.** "Jev suggests Scribe for the part of the request you don't
-  cover; hand it off with the hand-off tool if so." and "Your Workflow runs these Traits after
+- **The prompt lines.** "It's suggested that Scribe handle the part of the request
+  you don't cover; hand it off with the hand_off tool if so." (the model doesn't know Jev) and "Your Workflow runs these Traits after
   you: Make Report. Don't hand off their work."
 
 How the work is split between processes:

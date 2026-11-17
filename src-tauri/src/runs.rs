@@ -20,14 +20,14 @@ use crate::conversations::{self, ConversationStatus, NewComponent, PausedRun};
 use crate::dataverse;
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
-use crate::library::{Library, StepKind, TraitDef, Workflow};
-use crate::routing::{explain, route_mini_mes};
+use crate::library::{Library, PROMPT_ADAPTER, StepKind, TraitDef, Workflow};
+use crate::routing::{RouteSettings, route_mini_mes};
 use crate::user_library::LibraryStore;
 use crate::link::{
     AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, DebugParts, RouteComponentOption, RouteFile,
-    RouteMiniMe, RunComponent, RunContext, RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
+    RouteMiniMe, RunComponent, RunContext, RunFile, RunHandOff, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
 };
-use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
+use crate::protocol::{Author, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
 use crate::sidecar::SidecarLog;
 use crate::store::Project;
@@ -101,6 +101,10 @@ pub struct RunSpec {
     pub file: Option<RunFile>,
     pub component: Option<RunComponent>,
     pub tools: Vec<String>,
+    pub hand_off: Option<RunHandOff>,
+    /// How the reply was routed, so its hand-off is routed the same way; not kept while paused.
+    #[serde(skip)]
+    pub route: Option<RouteSettings>,
 }
 
 impl RunSpec {
@@ -125,6 +129,8 @@ impl RunSpec {
             file: None,
             component: None,
             tools: Vec::new(),
+            hand_off: None,
+            route: None,
         })
     }
 
@@ -216,6 +222,21 @@ struct HandOff {
     file: Option<RunFile>,
 }
 
+/// A completed reply's hand-off, which routing turns into the other Mini-Me's reply.
+pub struct HandedOff {
+    pub project: Arc<Project>,
+    pub conversation_id: Uuid,
+    /// The reply that handed off, which the next reply answers.
+    pub reply: Message,
+    pub mini_me_id: Uuid,
+    pub request: String,
+    pub file: Option<RunFile>,
+    pub model: Option<CallModel>,
+    pub route: Option<RouteSettings>,
+}
+
+pub type HandOffRouter = Arc<dyn Fn(HandedOff) + Send + Sync>;
+
 #[derive(Default)]
 struct Inner {
     sink: Option<Arc<dyn FrameSink>>,
@@ -252,6 +273,8 @@ pub struct Runs {
     cancel_timeout: Duration,
     /// Asked before a Mini-Me writes or edits a document; none until the app sets one.
     document_gate: Mutex<Option<DocumentGate>>,
+    /// Starts the reply a hand-off asks for; none until the app sets one.
+    hand_off_router: Mutex<Option<HandOffRouter>>,
     /// Feature flags that are on.
     features: Mutex<Vec<String>>,
     /// What new runs collect for reply debug records.
@@ -337,6 +360,7 @@ impl Runs {
             log,
             cancel_timeout,
             document_gate: Mutex::new(None),
+            hand_off_router: Mutex::new(None),
             features: Mutex::new(Vec::new()),
             debug: Mutex::new(DebugParts::default()),
         }
@@ -353,6 +377,10 @@ impl Runs {
 
     pub fn set_document_gate(&self, gate: DocumentGate) {
         *locked(&self.document_gate) = Some(gate);
+    }
+
+    pub fn set_hand_off_router(&self, router: HandOffRouter) {
+        *locked(&self.hand_off_router) = Some(router);
     }
 
     /// Fails with the gate's error when document work is not possible.
@@ -524,6 +552,7 @@ impl Runs {
                 file: spec.file.clone(),
                 component: spec.component.clone(),
                 tools: spec.tools.clone(),
+                hand_off: spec.hand_off.clone(),
                 mini_mes: route_mini_mes(&self.library.current()),
                 document: comments::run_document(&project, conversation_id).ok().flatten(),
                 debug: *locked(&self.debug),
@@ -983,9 +1012,10 @@ impl Runs {
             }
             SidecarFrame::RunDone { run_id } => {
                 if let Some(run) = self.finish(run_id) {
+                    let hand_off = run.hand_off.clone().or_else(|| self.hand_off_for(&run));
                     let completed = conversations::complete_reply(&run.project, run.message_id);
-                    if let (Ok(reply), Some(hand_off)) = (completed, run.hand_off.clone()) {
-                        self.hand_off(&run, &reply, hand_off);
+                    if let (Ok(reply), Some(hand_off)) = (completed, hand_off) {
+                        self.hand_off(&run, reply, hand_off);
                     }
                 }
             }
@@ -1183,23 +1213,9 @@ impl Runs {
 
     fn accept_hand_off(&self, call_id: Uuid, place: &Place, p: HandOffParams) -> AppResult<Value> {
         let hand_off = self.hand_off_allowed(place, p)?;
-        let library = self.library.current();
-        let name = library.mini_me(hand_off.mini_me_id).map_or("", |m| m.name.as_str());
-        let preview = json!({
-            "mini_me_id": hand_off.mini_me_id,
-            "request": hand_off.request,
-            "file": hand_off.file,
-        });
-        let text = format!("Handed to {name}: {}", hand_off.request);
+        let card = self.hand_off_card(&hand_off);
         self.hold_hand_off(call_id, hand_off)?;
         let step_id = Some(place.step_id.as_str());
-        let card = NewComponent {
-            kind: "hand-off".into(),
-            version: 1,
-            preview,
-            text,
-            source_asset_id: None,
-        };
         let added = conversations::add_core_component(&place.project, place.reply, step_id, card);
         if let Err(err) = added {
             self.drop_hand_off(call_id);
@@ -1208,8 +1224,38 @@ impl Runs {
         Ok(json!({ "ok": true }))
     }
 
-    /// Not to its own or an unknown Mini-Me, not from a handed-off reply or comment thread,
-    /// and only with a file of the Conversation.
+    fn hand_off_card(&self, hand_off: &HandOff) -> NewComponent {
+        let library = self.library.current();
+        let name = library.mini_me(hand_off.mini_me_id).map_or("", |m| m.name.as_str());
+        NewComponent {
+            kind: "hand-off".into(),
+            version: 1,
+            preview: json!({
+                "mini_me_id": hand_off.mini_me_id,
+                "request": hand_off.request,
+                "file": hand_off.file,
+            }),
+            text: format!("Handed to {name}: {}", hand_off.request),
+            source_asset_id: None,
+        }
+    }
+
+    /// Routing's recommended hand-off for a Mini-Me without a prompt Trait, shown on its reply.
+    fn hand_off_for(&self, run: &Run) -> Option<HandOff> {
+        let mini_me_id = run.spec.hand_off.as_ref()?.mini_me_id;
+        if run.spec.traits.iter().any(|t| t.adapter == PROMPT_ADAPTER) {
+            return None;
+        }
+        let message = run.project.lock().load_message_with(run.answers, false).ok()??.1;
+        let file = conversations::message_files(&message).into_iter().next();
+        let request = run.spec.input["text"].as_str().unwrap_or_default().to_string();
+        let hand_off = HandOff { mini_me_id, request, file: file.or(run.spec.file.clone()) };
+        let card = self.hand_off_card(&hand_off);
+        conversations::add_core_component(&run.project, run.message_id, None, card).ok()?;
+        Some(hand_off)
+    }
+
+    /// Not to its own or an unknown Mini-Me, and only with a file of the Conversation.
     fn hand_off_allowed(&self, place: &Place, params: HandOffParams) -> AppResult<HandOff> {
         let library = self.library.current();
         if library.mini_me(params.mini_me_id).is_none() {
@@ -1219,10 +1265,6 @@ impl Runs {
             return Err(hand_off_refused("A Mini-Me can't hand off to itself."));
         }
         let state = place.project.lock();
-        let answers = state.load_message_with(place.answers, false)?;
-        if answers.is_some_and(|(_, m)| m.author.kind == AuthorKind::MiniMe) {
-            return Err(hand_off_refused("A reply that was handed off can't hand off again."));
-        }
         let file = match params.asset_id {
             None => None,
             Some(id) => {
@@ -1264,20 +1306,20 @@ impl Runs {
         }
     }
 
-    /// As if the user sent the request, with the run's model; notes why when it cannot start.
-    fn hand_off(&self, run: &Run, reply: &Message, hand_off: HandOff) {
-        let library = self.library.current();
-        let author = Author { kind: AuthorKind::MiniMe, id: hand_off.mini_me_id.to_string() };
-        let input = json!({ "text": hand_off.request });
-        let started = RunSpec::for_mini_me(&library, hand_off.mini_me_id, author, input, Some(true))
-            .and_then(|mut spec| {
-                spec.file = hand_off.file;
-                let project = Arc::clone(&run.project);
-                self.start(project, run.conversation_id, reply, spec, run.model.clone())
-            });
-        if let Err(err) = started {
-            explain(&run.project, run.conversation_id, reply.id, &err);
-        }
+    fn hand_off(&self, run: &Run, reply: Message, hand_off: HandOff) {
+        let Some(router) = locked(&self.hand_off_router).clone() else {
+            return;
+        };
+        router(HandedOff {
+            project: Arc::clone(&run.project),
+            conversation_id: run.conversation_id,
+            reply,
+            mini_me_id: hand_off.mini_me_id,
+            request: hand_off.request,
+            file: hand_off.file,
+            model: run.model.clone(),
+            route: run.spec.route.clone(),
+        });
     }
 
     /// Answers a routing, summary or decision request: only `secret.get` for `allowed`.
@@ -1481,6 +1523,8 @@ pub mod test_support {
             file: None,
             component: None,
             tools: Vec::new(),
+            hand_off: None,
+            route: None,
         }
     }
 
@@ -1897,27 +1941,28 @@ mod tests {
         f.runs.respond("r".into(), call_id, "component.add", params)
     }
 
-    /// The plans of the runs started so far, in order.
-    fn plans(f: &Fixture) -> Vec<RunPlan> {
-        f.sink
-            .frames()
-            .into_iter()
-            .filter_map(|frame| match frame {
-                CoreFrame::RunStart { plan, .. } => Some(plan),
-                _ => None,
-            })
-            .collect()
-    }
-
     /// Asks to hand off to `mini_me` from `call_id`.
     fn hand_off(f: &Fixture, call_id: Uuid, mini_me: Uuid, asset: Option<Uuid>) -> CoreFrame {
         let params = json!({ "mini_me_id": mini_me, "request": "profile\n this", "asset_id": asset });
         f.runs.respond("r".into(), call_id, "reply.hand_off", params)
     }
 
+    /// The hand-offs passed to routing: Mini-Me, request, file, and the reply that handed off.
+    type HandedOffs = Arc<Mutex<Vec<(Uuid, String, Option<RunFile>, Uuid)>>>;
+
+    fn record_hand_offs(f: &Fixture) -> HandedOffs {
+        let handed = HandedOffs::default();
+        let log = Arc::clone(&handed);
+        f.runs.set_hand_off_router(Arc::new(move |h| {
+            locked(&log).push((h.mini_me_id, h.request, h.file, h.reply.id));
+        }));
+        handed
+    }
+
     #[test]
-    fn a_reply_hands_off_once_shows_a_card_and_starts_the_other_mini_me() {
+    fn a_reply_hands_off_once_shows_a_card_and_passes_it_to_routing() {
         let f = quick();
+        let handed = record_hand_offs(&f);
         let (run_id, reply) = f.start("echo");
         let call_id = f.step(run_id, STEP);
         let refused = Some("hand_off_not_allowed");
@@ -1933,18 +1978,14 @@ mod tests {
             (card.kind.as_str(), card.preview["mini_me_id"].clone()),
             ("hand-off", json!(SCRIBE))
         );
-        assert_eq!(plans(&f).len(), 1);
+        assert!(locked(&handed).is_empty());
         f.runs.handle(SidecarFrame::RunDone { run_id });
-        let plans = plans(&f);
-        let [_, scribe] = plans.as_slice() else { panic!("expected two runs, got {plans:?}") };
-        assert_eq!((scribe.mini_me.id, scribe.input.clone()), (SCRIBE, json!({ "text": "profile this" })));
-        assert_eq!((scribe.context.message.id, scribe.context.needs_context), (reply, Some(true)));
         let picked = RunFile { asset_id, name: "trial.csv".into() };
-        assert_eq!(scribe.context.file, Some(picked));
+        assert_eq!(*locked(&handed), [(SCRIBE, "profile this".to_string(), Some(picked), reply)]);
     }
 
     #[test]
-    fn a_reply_cannot_hand_off_to_itself_or_again_but_can_in_a_thread() {
+    fn a_reply_cannot_hand_off_to_itself_but_can_in_a_chain_or_a_thread() {
         let f = quick();
         let refused = Some("hand_off_not_allowed");
         let mut own = spec("echo", json!({ "text": "hi" }));
@@ -1960,7 +2001,7 @@ mod tests {
         let run = spec("echo", json!({ "text": "profile this" }));
         f.runs.start(Arc::clone(&f.project), conversation, &answering, run, dummy_model()).unwrap();
         let call_id = f.step(f.sink.last_run(), STEP);
-        assert_eq!(error_code(hand_off(&f, call_id, FALLBACK_MINI_ME, None)).as_deref(), refused);
+        result(hand_off(&f, call_id, FALLBACK_MINI_ME, None));
 
         let thread = create(&f.project).unwrap().id;
         into_thread(&f.project, thread);
@@ -1972,13 +2013,33 @@ mod tests {
     }
 
     #[test]
+    fn the_core_hands_off_as_recommended_only_for_a_mini_me_without_a_prompt_trait() {
+        let f = quick();
+        let handed = record_hand_offs(&f);
+        let picked = RunFile { asset_id: new_id(), name: "trial.csv".into() };
+        let replies = ["prompt", "echo"].map(|adapter| {
+            let mut run = spec(adapter, json!({ "text": "find papers and write a report" }));
+            run.hand_off = Some(RunHandOff { mini_me_id: SCRIBE });
+            run.file = Some(picked.clone());
+            let (run_id, reply) = f.start_spec(run, dummy_model());
+            f.runs.handle(SidecarFrame::RunDone { run_id });
+            reply
+        });
+        let reply = replies[1];
+        let request = "find papers and write a report".to_string();
+        assert_eq!(*locked(&handed), [(SCRIBE, request, Some(picked), reply)]);
+        assert_eq!(f.message(reply).components[0].kind, "hand-off");
+    }
+
+    #[test]
     fn a_stopped_reply_does_not_hand_off() {
         let f = quick();
+        let handed = record_hand_offs(&f);
         let (run_id, _) = f.start("echo");
         let call_id = f.step(run_id, STEP);
         result(hand_off(&f, call_id, SCRIBE, None));
         f.runs.handle(SidecarFrame::RunCancelled { run_id });
-        assert_eq!(plans(&f).len(), 1);
+        assert!(locked(&handed).is_empty());
     }
 
     #[test]

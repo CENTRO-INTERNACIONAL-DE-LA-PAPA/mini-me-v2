@@ -88,6 +88,7 @@
         "file": null,
         "component": { "component_id": "0199d0a0-0000-7000-8000-000000000701" },
         "tools": ["show_table", "save_file"],
+        "hand_off": { "mini_me_id": "0199d0a0-0000-7000-8000-000000000702" },
         "mini_mes": [],
         "debug": { "input": true, "details": true, "tools": false }
       },
@@ -115,7 +116,7 @@
           "file": "field-trial.csv"
         }
       ],
-      "ask": ["mini_me", "reaction", "needs_context", "component", "tools"]
+      "ask": ["mini_me", "reaction", "needs_context", "component", "tools", "next_mini_me"]
     },
     {
       "type": "summary.start",

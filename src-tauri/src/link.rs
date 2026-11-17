@@ -12,7 +12,7 @@ use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 19;
+pub const SIDECAR_PROTOCOL: u32 = 20;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -74,6 +74,8 @@ pub struct RunContext {
     /// The tools routing judged most likely to help, most likely first.
     #[serde(default)]
     pub tools: Vec<String>,
+    #[serde(default)]
+    pub hand_off: Option<RunHandOff>,
     /// Every Mini-Me of the library, which a call's model may hand off to.
     #[serde(default)]
     pub mini_mes: Vec<RouteMiniMe>,
@@ -107,6 +109,12 @@ pub struct RunFile {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunComponent {
     pub component_id: Uuid,
+}
+
+/// The Mini-Me routing recommends handing off to.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunHandOff {
+    pub mini_me_id: Uuid,
 }
 
 /// A comment thread's document: its Asset, its name, and the thread's passage as it reads when

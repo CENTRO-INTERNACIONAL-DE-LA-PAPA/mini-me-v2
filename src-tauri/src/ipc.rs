@@ -135,6 +135,12 @@ impl AppState {
         runs.set_document_gate(Arc::new(move || gate.require().map(|_| ())));
         runs.set_active_features(active_feature_ids(&settings, is_canary));
         runs.set_debug(settings.reply_debug(is_canary));
+        let routing = Routing::new(
+            Arc::clone(&library),
+            KeychainSecrets::saved().iter().any(|k| k == TYPESAFE),
+        );
+        let (router, calls) = (Arc::clone(&routing), Arc::downgrade(&runs));
+        runs.set_hand_off_router(Arc::new(move |handed| router.hand_off(calls.clone(), handed)));
         let sidecar = Supervisor::new(
             launch,
             Timing::for_build(),
@@ -156,10 +162,7 @@ impl AppState {
             config_dir,
             open_projects: Mutex::new(HashMap::new()),
             runs,
-            routing: Routing::new(
-                Arc::clone(&library),
-                KeychainSecrets::saved().iter().any(|k| k == TYPESAFE),
-            ),
+            routing,
             library,
             profile,
             sidecar,

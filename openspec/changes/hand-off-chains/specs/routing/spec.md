@@ -19,8 +19,8 @@ with the message as the state and these Choice questions:
 - `tools`: one option per tool with a form for models except hand-off, keyed by the tool's
   name and described by the description its model reads, plus `none`;
 - `next_mini_me`: one option per Mini-Me, keyed and described as in `mini_me`, plus `none`,
-  asking which Mini-Me should handle the part of the message the answering Mini-Me does not
-  cover.
+  asking, when the message asks for more than one thing, which Mini-Me should handle what is
+  asked after the first thing.
 
 #### Scenario: Message without a mention
 - **WHEN** the user sends "summarize #field-notes.txt" in a Conversation without tables or
@@ -149,19 +149,21 @@ of the library with the names of its Traits, passed to each of its Trait calls.
 ## ADDED Requirements
 
 ### Requirement: Jev recommends a hand-off above the threshold
-When Jev's `next_mini_me` answer is a Mini-Me of the library other than the reply's own, with a
-confidence at or above the confidence threshold, that Mini-Me SHALL be the reply's recommended
-hand-off. A `none` answer, the reply's own Mini-Me, a lower confidence or no answer SHALL leave
-the reply without one. It SHALL be passed to the reply's run as `context.hand_off`,
-`{ mini_me_id }`, or `null` without one.
+When the probabilities of Jev's `next_mini_me` answer for the Mini-Mes of the library other than
+the reply's own add up to at least the confidence threshold, the most probable of those Mini-Mes
+SHALL be the reply's recommended hand-off. Otherwise, or without an answer, the reply SHALL have
+none. It SHALL be passed to the reply's run as `context.hand_off`, `{ mini_me_id }`, or `null`
+without one.
 
 #### Scenario: Confident recommendation
-- **WHEN** the threshold is 0.5, the user sends "find papers on late blight and make a report",
-  Jev picks Researcher for `mini_me` and Scribe for `next_mini_me` at 0.7
+- **WHEN** the threshold is 0.5, the user sends "find papers on late blight and write a short
+  report", Jev picks Researcher for `mini_me`, and its `next_mini_me` probabilities are Scribe
+  0.47, Assistant 0.41, Researcher 0.05 and `none` 0.03
 - **THEN** Researcher's `run.start` carries `context.hand_off` with Scribe's ID
 
 #### Scenario: The answering Mini-Me
-- **WHEN** Jev picks Researcher for both `mini_me` and `next_mini_me` above the threshold
+- **WHEN** Jev picks Researcher for `mini_me`, and its `next_mini_me` probabilities are
+  Researcher 0.92, `none` 0.04 and Scribe 0.02
 - **THEN** Researcher's `run.start` carries `context.hand_off: null`
 
 ### Requirement: The model is told Jev's recommendation
