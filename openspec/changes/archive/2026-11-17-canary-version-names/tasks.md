@@ -31,7 +31,7 @@
 
 ## 4. Check
 
-- [ ] 4.1 After the pull request is merged into `dev` and the version on `dev` is bumped (by the
+- [x] 4.1 After the pull request is merged into `dev` and the version on `dev` is bumped (by the
   user): the first build is published as "Mini-Me <version>-canary.1", tagged
   `v<version>-canary.1`; an installed Mini-Me Canary updates to it; Settings → About shows that
   name; a second push builds `<version>-canary.2`. Before the bump, the run fails saying to
