@@ -51,6 +51,26 @@ def test_the_conversations_files_and_components_are_listed_without_content():
     assert _material("hello", {"assets": [], "components": []}) == "hello"
     picked = _material("summarize the trial", results, None, {"asset_id": "a2"})
     assert "- trial.csv (ID: a2) — probably the file the user means" in picked
+    assert "Likely useful" not in picked
+
+
+def test_routings_hints_mark_the_component_and_name_the_likely_tools():
+    results = {
+        "assets": [],
+        "components": [
+            {"id": "c1", "kind": "chart", "author": "Plotter"},
+            {"id": "c2", "kind": "table", "author": "Curator"},
+        ],
+    }
+    material = _material(
+        "make it a bar chart",
+        results,
+        component={"component_id": "c1"},
+        tools=["show_table", "save_file"],
+    )
+    assert "- chart from Plotter (ID: c1) — probably the component the user means" in material
+    assert "- table from Curator (ID: c2)\n" in material
+    assert material.endswith("Likely useful: show_table, save_file")
 
 
 def test_a_comment_comes_after_the_passage_it_is_about():

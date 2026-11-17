@@ -15,7 +15,7 @@ def test_the_file_question_offers_each_file_and_none():
         {"id": "a1", "name": "trial.csv", "components": []},
         {"id": "a2", "name": "field-trial.csv", "components": components},
     ]
-    question = _questions(["file"], [], files)["file"]
+    question = _questions(["file"], [], files, [])["file"]
     assert question.criteria == {
         "a1": "The file trial.csv",
         "a2": "The file field-trial.csv. Used by components: chart 'Yield by variety', "
@@ -24,10 +24,39 @@ def test_the_file_question_offers_each_file_and_none():
     }
 
 
+def test_mini_me_component_and_tools_options():
+    mini_mes = [
+        {
+            "id": "m1",
+            "name": "Researcher",
+            "description": "Finds papers.",
+            "traits": ["Find Papers", "Summarize"],
+        },
+        {"id": "m2", "name": "Echo", "description": "Repeats you", "traits": []},
+    ]
+    components = [
+        {"id": "c1", "kind": "chart", "title": "Yield by variety", "file": "field-trial.csv"},
+        {"id": "c2", "kind": "table", "title": None, "file": "trial.csv"},
+    ]
+    questions = _questions(["mini_me", "component", "tools"], mini_mes, [], components)
+    assert questions["mini_me"].criteria == {
+        "m1": "Researcher: Finds papers. Traits: Find Papers, Summarize",
+        "m2": "Echo: Repeats you",
+    }
+    assert questions["component"].criteria == {
+        "c1": "chart 'Yield by variety' from field-trial.csv",
+        "c2": "table from trial.csv",
+        "none": "The message is not about one of these tables or charts",
+    }
+    tools = questions["tools"].criteria
+    assert "hand_off" not in tools and "none" in tools
+    assert {"read_file", "show_table", "suggest"} <= tools.keys()
+
+
 def test_asked_holds_the_state_and_each_question_as_sent():
     files = [{"id": "a1", "name": "trial.csv", "components": []}]
     state = {"message": "check the data", "files": [], "recent": []}
-    asked = _asked(state, _questions(["needs_context", "file"], [], files))
+    asked = _asked(state, _questions(["needs_context", "file"], [], files, []))
     assert asked["state"] == state
     assert asked["questions"]["needs_context"] == {
         "instructions": "Does answering this message need the earlier messages of the "

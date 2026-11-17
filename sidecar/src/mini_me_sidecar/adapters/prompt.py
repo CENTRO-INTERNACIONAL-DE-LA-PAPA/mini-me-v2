@@ -100,7 +100,15 @@ class Prompt(Adapter):
                 "input_too_large",
                 f"This is {len(text):,} characters; the limit is {MAX_MATERIAL_CHARS:,}.",
             )
-        material = _material(text, await ctx.results(), ctx.document, ctx.file, ctx.mini_mes)
+        material = _material(
+            text,
+            await ctx.results(),
+            ctx.document,
+            ctx.file,
+            ctx.mini_mes,
+            component=ctx.component,
+            tools=ctx.tools,
+        )
         earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []
         key = await ctx.secret(model.provider)
         instructions = _system_prompt(ctx.mini_me_name, bool(ctx.steps), ctx.trait.instructions)
@@ -269,12 +277,15 @@ def _material(
     document: dict[str, Any] | None = None,
     picked: dict[str, Any] | None = None,
     mini_mes: list[dict[str, Any]] | None = None,
+    component: dict[str, Any] | None = None,
+    tools: list[str] | None = None,
 ) -> str:
     """The user prompt: a comment's passage of `document`, `text`, the Conversation's files
-    (marking routing's `picked`) and components by ID without content, and the Mini-Mes to hand
-    off to."""
+    and components by ID without content (marking routing's `picked` file and `component`),
+    routing's likely `tools`, and the Mini-Mes to hand off to."""
     files = (results.get("assets") or [])[:MAX_LISTED]
     picked_id = (picked or {}).get("asset_id")
+    component_id = (component or {}).get("component_id")
     components = (results.get("components") or [])[:MAX_LISTED]
     parts = []
     if document:
@@ -294,9 +305,13 @@ def _material(
         parts.append("Files in this Conversation:\n" + "\n".join(lines))
     if components:
         lines = [
-            f"- {c.get('kind')} from {c.get('author')} (ID: {c.get('id')})" for c in components
+            f"- {c.get('kind')} from {c.get('author')} (ID: {c.get('id')})"
+            + (" — probably the component the user means" if c.get("id") == component_id else "")
+            for c in components
         ]
         parts.append("Interactive Components in this Conversation:\n" + "\n".join(lines))
+    if tools:
+        parts.append(f"Likely useful: {', '.join(tools)}")
     if mini_mes:
         lines = [f"- {m.get('name')}: {m.get('description')}" for m in mini_mes]
         parts.append("Mini-Mes you can hand off to:\n" + "\n".join(lines))

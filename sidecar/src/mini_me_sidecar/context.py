@@ -131,6 +131,10 @@ class CallContext:
         self.needs_context: bool | None = context.get("needs_context")
         # Routing's pick of the file an untagged message means, `{ asset_id, name }`, or None.
         self.file: dict[str, Any] | None = context.get("file")
+        # Routing's pick of the table or chart the message means, `{ component_id }`, or None.
+        self.component: dict[str, Any] | None = context.get("component")
+        # The tool names routing judged most likely to help, most likely first.
+        self.tools: list[str] = context.get("tools") or []
         # Every Mini-Me of the library, `{ id, name, description }`, for hand-offs.
         self.mini_mes: list[dict[str, Any]] = context.get("mini_mes") or []
         # For a call answering a comment: the thread's document, `{ asset_id, name, passage }`.

@@ -15,11 +15,11 @@
 
 ## 2. Sidecar
 
-- [ ] 2.1 In `routing.py`, write Mini-Me options with their Trait names, add the `component`
+- [x] 2.1 In `routing.py`, write Mini-Me options with their Trait names, add the `component`
   question and the `tools` question from the model tools' names and descriptions without
   `hand_off`; set the protocol to 19. Update `test_routing.py`. Verify: `cd sidecar && uv run
   pytest` passes.
-- [ ] 2.2 Read `context.component` and `context.tools` in `CallContext`; in `_material`, mark
+- [x] 2.2 Read `context.component` and `context.tools` in `CallContext`; in `_material`, mark
   the picked component and add the "Likely useful" line when `tools` is not empty. Update
   `test_prompt_turns.py` where it checks the material. Verify: `uv run pytest` passes.
 
