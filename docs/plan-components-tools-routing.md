@@ -4,15 +4,18 @@ The aim is to normalize how Mini-Me works, the way a UI reuses one Button with d
 parameters: a few building blocks that every Mini-Me shares, each configured by where it is used,
 without turning any of them into a do-anything block.
 
-The plan is built as four OpenSpec changes, in order:
+The plan is built as five OpenSpec changes, in order:
 
 1. **Components from files**: hidden files, component previews and sources, history lines,
    removing `$` (done).
 2. **Shared tools**: Traits no longer list tools; every Mini-Me's model is offered every tool
    (done).
 3. **Suggestions and comments**: one suggestion tool, and comments that work like the chat
-   (planned in `openspec/changes/document-suggestions/`).
-4. **Jev hints and hand-off**: Jev's component, tool and hand-off hints (not planned yet).
+   (done).
+4. **Jev hints**: Trait names in Jev's Mini-Me options, and Jev's component and tools hints
+   (planned in `openspec/changes/jev-hints/`).
+5. **Hand-off chains**: `next_mini_me`, hand-offs made by the run engine, the Traits a call
+   comes before, and chains (not planned yet).
 
 ## Files (Assets)
 
@@ -73,7 +76,8 @@ The model reads a component with read_component when it needs it.
 - Adapter-coded Traits (data Traits, Asta, Dataverse) keep calling their tools in code. Showing
   a chart stays the Plot Trait's job.
 - Jev marks the 4 tools most likely to help, from its answer's probabilities, and the model's
-  request says so ("Likely useful: …"). The model can still use any tool.
+  request says so ("Likely useful: …"). The model can still use any tool. Hand-off is not one of
+  the options, since `next_mini_me` gives that hint.
 
 ## Suggestions
 
@@ -116,13 +120,15 @@ One request per message, with these questions:
 | `reaction` | Always | Applied directly (cosmetic) |
 | `needs_context` | Always | Hint to the Trait calls |
 | `file` | No file tagged and the Conversation has files | Hint: "the user probably means X" |
-| `component` | The Conversation has tables or charts | Hint, like `file` |
+| `component` | The Conversation has tables or charts | Hint, like `file`: marked in the model's list of components |
 | tools | Always | Hint: the most probable tools |
 | `next_mini_me` | Always | Who should handle the part of the request the answering Mini-Me doesn't cover, or `none` |
 
 - Jev reads each Mini-Me option as its description plus the names of its Traits. The Trait
   names are added automatically, so a Mini-Me with a vague description is still described by
   what it can do.
+- `file`, `component` and tools are not asked for a comment: the thread's document is the
+  reply's context.
 - A `next_mini_me` equal to the answering Mini-Me counts as `none`.
 - Several files or components in one message are out of scope for now.
 - Jev's picks are not read into the model's request in advance. The model reads files and
