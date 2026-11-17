@@ -135,8 +135,12 @@ class CallContext:
         self.picked_component: dict[str, Any] | None = context.get("component")
         # The tool names routing judged most likely to help, most likely first.
         self.tools: list[str] = context.get("tools") or []
-        # Every Mini-Me of the library, `{ id, name, description }`, for hand-offs.
+        # Every Mini-Me of the library, `{ id, name, description, traits }`, for hand-offs.
         self.mini_mes: list[dict[str, Any]] = context.get("mini_mes") or []
+        # The Mini-Me routing recommends handing off to, `{ mini_me_id }`, or None.
+        self.hand_off: dict[str, Any] | None = context.get("hand_off")
+        # Names of the Traits the run's Workflow can still run after this call.
+        self.later_traits: list[str] = context.get("later_traits") or []
         # For a call answering a comment: the thread's document, `{ asset_id, name, passage }`.
         self.document: dict[str, Any] | None = context.get("document")
         # The Mini-Me writing this reply, to tell its own earlier replies from others'.

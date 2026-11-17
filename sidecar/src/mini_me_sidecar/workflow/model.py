@@ -1,5 +1,6 @@
 """A Workflow as data, and the rules that do not depend on running it: which Trait Steps
-stream into the reply, what a Step's output is, and which earlier outputs a Step sees."""
+stream into the reply, which Traits can follow a Step, what a Step's output is, and which
+earlier outputs a Step sees."""
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -66,6 +67,40 @@ def final_steps(steps: tuple[Step, ...]) -> set[str]:
     if last.type == "condition":
         return set().union(*(final_steps(b.steps) for b in last.branches))
     return set()
+
+
+def later_traits(steps: tuple[Step, ...], step_id: str) -> list[str]:
+    """IDs of the Traits that can still run after Step `step_id`, each once, in Workflow order:
+    the rest of its sequences, and every Step of a loop it is in, but not other branches."""
+    return list(dict.fromkeys(_later_traits(steps, step_id) or []))
+
+
+def _later_traits(steps: tuple[Step, ...], step_id: str) -> list[str] | None:
+    """None when `step_id` is not among `steps` or inside them."""
+    for i, step in enumerate(steps):
+        if step.id == step_id:
+            inner: list[str] | None = []
+        elif step.type == "loop":
+            inner = _later_traits(step.steps, step_id)
+            inner = None if inner is None else inner + _traits(step.steps)
+        else:
+            found = (_later_traits(b.steps, step_id) for b in step.branches)
+            inner = next((f for f in found if f is not None), None)
+        if inner is not None:
+            return inner + _traits(steps[i + 1 :])
+    return None
+
+
+def _traits(steps: tuple[Step, ...]) -> list[str]:
+    """Every Trait of `steps` and the Steps inside them, in order."""
+    ids: list[str] = []
+    for step in steps:
+        if step.type == "trait" and step.trait:
+            ids.append(step.trait)
+        ids += _traits(step.steps)
+        for branch in step.branches:
+            ids += _traits(branch.steps)
+    return ids
 
 
 @dataclass(frozen=True)

@@ -24,7 +24,7 @@ def test_the_file_question_offers_each_file_and_none():
     }
 
 
-def test_mini_me_component_and_tools_options():
+def test_mini_me_next_mini_me_component_and_tools_options():
     mini_mes = [
         {
             "id": "m1",
@@ -38,10 +38,15 @@ def test_mini_me_component_and_tools_options():
         {"id": "c1", "kind": "chart", "title": "Yield by variety", "file": "field-trial.csv"},
         {"id": "c2", "kind": "table", "title": None, "file": "trial.csv"},
     ]
-    questions = _questions(["mini_me", "component", "tools"], mini_mes, [], components)
+    asked = ["mini_me", "component", "tools", "next_mini_me"]
+    questions = _questions(asked, mini_mes, [], components)
     assert questions["mini_me"].criteria == {
         "m1": "Researcher: Finds papers. Traits: Find Papers, Summarize",
         "m2": "Echo: Repeats you",
+    }
+    assert questions["next_mini_me"].criteria == {
+        **questions["mini_me"].criteria,
+        "none": "The message asks for one thing only",
     }
     assert questions["component"].criteria == {
         "c1": "chart 'Yield by variety' from field-trial.csv",

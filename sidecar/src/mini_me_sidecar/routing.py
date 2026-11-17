@@ -1,6 +1,6 @@
 """Asks Typesafe's Jev which Mini-Me answers, how it reacts, whether earlier context is needed,
-which file and component are meant and which tools are likely useful. Each `route.start` gets
-exactly one `route.done` or `route.error`."""
+which file and component are meant, which tools are likely useful and which Mini-Me should
+continue. Each `route.start` gets exactly one `route.done` or `route.error`."""
 
 import sys
 import traceback
@@ -120,7 +120,7 @@ def _questions(
     available = {
         "mini_me": lambda: Choice(
             instructions="Which assistant should answer the user's message?",
-            criteria={str(m.get("id")): _mini_me_criterion(m) for m in mini_mes},
+            criteria=_mini_me_criteria(mini_mes),
         ),
         "reaction": lambda: Choice(
             instructions="Should the assistant react to the user's message with an emoji?",
@@ -154,12 +154,25 @@ def _questions(
             instructions="Which tool would most help the assistant answer the user's message?",
             criteria={**_tool_criteria(), "none": "No tool is needed to answer"},
         ),
+        "next_mini_me": lambda: Choice(
+            instructions="If the user's message asks for more than one thing, which assistant "
+            "should handle what is asked after the first thing?",
+            criteria={
+                **_mini_me_criteria(mini_mes),
+                "none": "The message asks for one thing only",
+            },
+        ),
     }
     return {name: available[name]() for name in ask if name in available}
 
 
-def _mini_me_criterion(mini_me: dict[str, Any]) -> str:
-    """A `mini_me` option, e.g. "Researcher: Finds papers. Traits: Find Papers, Summarize"."""
+def _mini_me_criteria(mini_mes: list[dict[str, Any]]) -> dict[str, str]:
+    return {str(m.get("id")): mini_me_text(m) for m in mini_mes}
+
+
+def mini_me_text(mini_me: dict[str, Any]) -> str:
+    """A Mini-Me as Jev and the hand-off list read it, e.g. "Researcher: Finds papers. Traits:
+    Find Papers, Summarize"."""
     criterion = f"{mini_me.get('name')}: {str(mini_me.get('description')).rstrip('. ')}"
     traits = mini_me.get("traits") or []
     if not traits:

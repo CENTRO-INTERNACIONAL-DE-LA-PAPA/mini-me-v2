@@ -23,6 +23,7 @@ from mini_me_sidecar.adapters.providers import (
     provider_error,
 )
 from mini_me_sidecar.context import CallContext, Model, TraitError
+from mini_me_sidecar.routing import mini_me_text
 from mini_me_sidecar.tools import DEFAULT_TOOLS, MODEL_TOOL_NAMES
 
 MAX_MATERIAL_CHARS = 400_000
@@ -105,7 +106,7 @@ class Prompt(Adapter):
             await ctx.results(),
             ctx.document,
             ctx.file,
-            ctx.mini_mes,
+            _hand_offs(ctx.mini_mes, ctx.hand_off, ctx.later_traits),
             component=ctx.picked_component,
             tools=ctx.tools,
         )
@@ -276,13 +277,13 @@ def _material(
     results: dict[str, Any],
     document: dict[str, Any] | None = None,
     picked: dict[str, Any] | None = None,
-    mini_mes: list[dict[str, Any]] | None = None,
+    hand_offs: str = "",
     component: dict[str, Any] | None = None,
     tools: list[str] | None = None,
 ) -> str:
     """The user prompt: a comment's passage of `document`, `text`, the Conversation's files
     and components by ID without content (marking routing's `picked` file and `component`),
-    routing's likely `tools`, and the Mini-Mes to hand off to."""
+    routing's likely `tools`, and `hand_offs`."""
     files = (results.get("assets") or [])[:MAX_LISTED]
     picked_id = (picked or {}).get("asset_id")
     component_id = (component or {}).get("component_id")
@@ -312,10 +313,32 @@ def _material(
         parts.append("Interactive Components in this Conversation:\n" + "\n".join(lines))
     if tools:
         parts.append(f"Likely useful: {', '.join(tools)}")
-    if mini_mes:
-        lines = [f"- {m.get('name')}: {m.get('description')}" for m in mini_mes]
-        parts.append("Mini-Mes you can hand off to:\n" + "\n".join(lines))
+    parts.append(hand_offs)
     return "\n\n".join(p for p in parts if p)
+
+
+def _hand_offs(
+    mini_mes: list[dict[str, Any]], recommended: dict[str, Any] | None, later: list[str]
+) -> str:
+    """The Mini-Mes to hand off to, routing's `recommended` one, and the `later` Traits of the
+    Workflow, whose work is not handed off."""
+    parts = []
+    if mini_mes:
+        lines = [f"- {mini_me_text(m)}" for m in mini_mes]
+        parts.append("Mini-Mes you can hand off to:\n" + "\n".join(lines))
+    wanted = (recommended or {}).get("mini_me_id")
+    name = next((m.get("name") for m in mini_mes if m.get("id") == wanted), None)
+    if name:
+        parts.append(
+            f"It's suggested that {name} handle the part of the request you don't cover; hand "
+            "it off with the hand_off tool if so."
+        )
+    if later:
+        parts.append(
+            f"Your Workflow runs these Traits after you: {', '.join(later)}. "
+            "Don't hand off their work."
+        )
+    return "\n\n".join(parts)
 
 
 async def _earlier_turns(ctx: CallContext) -> list[tuple[str, str]]:

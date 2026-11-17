@@ -2,6 +2,7 @@ from mini_me_sidecar.workflow.model import (
     EARLIER_BUDGET_CHARS,
     Entry,
     final_steps,
+    later_traits,
     parallel_output,
     parse_steps,
     visible_outputs,
@@ -26,6 +27,14 @@ def test_only_steps_nothing_can_follow_are_final():
     assert final_steps(INVESTIGATOR) == {"experiment", "more-questions"}
     assert final_steps(parse_steps([{"id": "summarize", "trait": "s"}])) == {"summarize"}
     assert final_steps(INVESTIGATOR[:3]) == set()
+
+
+def test_later_traits_are_the_rest_of_the_workflow_and_the_loop_but_not_other_branches():
+    assert later_traits(INVESTIGATOR, "scout") == ["p", "r", "e", "w"]
+    assert later_traits(INVESTIGATOR, "refute") == ["p", "r", "e", "w"]
+    assert later_traits(INVESTIGATOR, "experiment") == []
+    assert later_traits(INVESTIGATOR, "more-questions") == []
+    assert later_traits(INVESTIGATOR, "unknown") == []
 
 
 def test_parallel_output_puts_each_branch_under_its_label():

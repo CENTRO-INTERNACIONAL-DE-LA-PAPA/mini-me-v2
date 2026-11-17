@@ -2,6 +2,7 @@ from mini_me_sidecar.adapters.prompt import (
     FILES_RULE,
     REPLY_RULE,
     RESEARCH_CONTEXT,
+    _hand_offs,
     _material,
     _merged,
     _system_prompt,
@@ -82,14 +83,20 @@ def test_a_comment_comes_after_the_passage_it_is_about():
     )
 
 
-def test_the_prompt_lists_the_mini_mes_to_hand_off_to():
+def test_the_hand_off_part_lists_the_mini_mes_the_recommended_one_and_the_later_traits():
     mini_mes = [
-        {"id": "m-profiler", "name": "Profiler", "description": "Describes a data table"},
-        {"id": "m-plotter", "name": "Plotter", "description": "Draws charts of a data table"},
+        {"id": "m-profiler", "name": "Profiler", "description": "Describes a data table",
+         "traits": ["Profile Data"]},
+        {"id": "m-plotter", "name": "Plotter", "description": "Draws charts", "traits": []},
     ]
-    material = _material("profile it", {"assets": [], "components": []}, mini_mes=mini_mes)
-    assert material.endswith(
+    assert _hand_offs(mini_mes, None, []) == (
         "Mini-Mes you can hand off to:\n"
-        "- Profiler: Describes a data table\n"
-        "- Plotter: Draws charts of a data table"
+        "- Profiler: Describes a data table. Traits: Profile Data\n"
+        "- Plotter: Draws charts"
     )
+    hinted = _hand_offs(mini_mes, {"mini_me_id": "m-plotter"}, ["Make Report"])
+    assert "It's suggested that Plotter handle the part of the request you don't cover" in hinted
+    assert hinted.endswith("after you: Make Report. Don't hand off their work.")
+    assert _hand_offs([], {"mini_me_id": "m-plotter"}, []) == ""
+    material = _material("profile it", {"assets": [], "components": []}, hand_offs=hinted)
+    assert material.startswith("profile it\n\nMini-Mes you can hand off to:")
