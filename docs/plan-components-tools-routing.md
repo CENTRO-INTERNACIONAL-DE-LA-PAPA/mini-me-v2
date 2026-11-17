@@ -14,8 +14,8 @@ The plan is built as five OpenSpec changes, in order:
    (done).
 4. **Jev hints**: Trait names in Jev's Mini-Me options, and Jev's component and tools hints
    (done).
-5. **Hand-off chains**: `next_mini_me`, hand-offs made by the run engine, the Traits a call
-   comes before, and chains (not planned yet).
+5. **Hand-off chains**: `next_mini_me`, hand-offs made by the core, the Traits a call
+   comes before, and chains (planned in `openspec/changes/hand-off-chains/`).
 
 ## Files (Assets)
 
@@ -144,7 +144,7 @@ depending on the Mini-Me:
   on its own judgment, for example because of something it finds mid-task, or following Jev's
   recommendation in its context.
 - **A Mini-Me whose Traits don't use a model** (for example, Researcher runs only Find Papers)
-  can't decide on its own. When Jev recommends a hand-off, the run engine makes the request for
+  can't decide on its own. When Jev recommends a hand-off, the core makes the hand-off for
   it, with the reply's input as the request and the message's file or Jev's file pick.
 
 Each model call is told which Traits its Mini-Me's Workflow can still run after it, so it doesn't
