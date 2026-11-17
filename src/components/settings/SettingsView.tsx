@@ -665,7 +665,7 @@ function AboutRow({ onOpenWhatsNew }: { onOpenWhatsNew: () => void }) {
   const { value: about } = useLoad(
     () =>
       Promise.all([getName(), getVersion()]).then(([name, version]) =>
-        appLabel(name, version, import.meta.env.VITE_COMMIT),
+        appLabel(name, version),
       ),
     [],
   );
