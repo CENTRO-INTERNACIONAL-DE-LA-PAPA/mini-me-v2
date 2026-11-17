@@ -1,4 +1,4 @@
-# Mini-Me 0.7.1
+# Mini-Me 0.8.0
 
 ## New
 
