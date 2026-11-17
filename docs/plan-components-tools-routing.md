@@ -15,7 +15,7 @@ The plan is built as five OpenSpec changes, in order:
 4. **Jev hints**: Trait names in Jev's Mini-Me options, and Jev's component and tools hints
    (done).
 5. **Hand-off chains**: `next_mini_me`, hand-offs made by the core, the Traits a call
-   comes before, and chains (planned in `openspec/changes/hand-off-chains/`).
+   comes before, and chains (done).
 
 ## Files (Assets)
 
