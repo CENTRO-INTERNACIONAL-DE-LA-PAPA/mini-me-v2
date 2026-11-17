@@ -10,12 +10,14 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::Value;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::history::ComponentLabel;
+use crate::routing::ShownComponent;
 use crate::paths::ProjectPaths;
 use crate::sync::locked;
 use crate::protocol::{
@@ -480,32 +482,30 @@ impl ProjectState {
         Ok(labels)
     }
 
-    /// `(kind, title)` of tables and charts by source Asset ID, newest first; reads no other data.
-    pub fn file_components(
-        &self,
-        conversation_id: Uuid,
-    ) -> AppResult<HashMap<Uuid, Vec<(String, Option<String>)>>> {
+    /// The Conversation's tables and charts, newest first; reads no other part of their preview.
+    pub fn shown_components(&self, conversation_id: Uuid) -> AppResult<Vec<ShownComponent>> {
         let mut stmt = self.conn.prepare(
-            "SELECT c.source_asset_id, c.kind, json_extract(c.preview, '$.title') \
+            "SELECT c.id, c.kind, json_extract(c.preview, '$.title'), a.id, a.name \
              FROM components c JOIN messages m ON m.id = c.message_id \
-             WHERE m.conversation_id = ?1 AND c.kind IN ('table', 'chart') \
-             AND c.source_asset_id IS NOT NULL ORDER BY c.rowid DESC",
+             JOIN assets a ON a.id = c.source_asset_id \
+             WHERE m.conversation_id = ?1 AND c.kind IN ('table', 'chart') ORDER BY c.rowid DESC",
         )?;
         let rows = stmt.query_map(params![conversation_id.to_string()], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, Option<String>>(2)?,
-            ))
+            let uuid = |column: usize| {
+                let text: String = row.get(column)?;
+                Uuid::parse_str(&text).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(column, Type::Text, Box::new(e))
+                })
+            };
+            Ok(ShownComponent {
+                id: uuid(0)?,
+                kind: row.get(1)?,
+                title: row.get(2)?,
+                source_id: uuid(3)?,
+                source_name: row.get(4)?,
+            })
         })?;
-        let mut shown: HashMap<Uuid, Vec<(String, Option<String>)>> = HashMap::new();
-        for row in rows {
-            let (source_id, kind, title) = row?;
-            if let Ok(asset_id) = Uuid::parse_str(&source_id) {
-                shown.entry(asset_id).or_default().push((kind, title));
-            }
-        }
-        Ok(shown)
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     /// Replaces the message's only debug record of `kind`.

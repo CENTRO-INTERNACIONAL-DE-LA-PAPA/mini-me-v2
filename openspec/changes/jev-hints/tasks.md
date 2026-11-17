@@ -2,14 +2,14 @@
 
 ## 1. Core
 
-- [ ] 1.1 Add `traits` to `RouteMiniMe`, filled with each Mini-Me's Trait names in the order
+- [x] 1.1 Add `traits` to `RouteMiniMe`, filled with each Mini-Me's Trait names in the order
   of their first Step; add `components` to `route.start` and `component` and `tools` to
   `RunContext`; set the protocol to 19. Verify: `cd src-tauri && cargo test` passes.
-- [ ] 1.2 Read the Conversation's tables and charts with their IDs, kinds, titles and source
+- [x] 1.2 Read the Conversation's tables and charts with their IDs, kinds, titles and source
   file names, newest first, and send them as the `component` options. Ask `component` when
   there are some and `tools` always, neither in a comment thread. Update the question tests
   in `routing.rs`. Verify: `cargo test` passes.
-- [ ] 1.3 In `decide`, pick the component at or above the threshold among the offered IDs and
+- [x] 1.3 In `decide`, pick the component at or above the threshold among the offered IDs and
   take the top four tool names, `none` left out; pass both to the run's context. Extend the
   `decide` test with these cases. Verify: `cargo test` passes.
 

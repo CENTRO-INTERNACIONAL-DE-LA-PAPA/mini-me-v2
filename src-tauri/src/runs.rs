@@ -21,11 +21,11 @@ use crate::dataverse;
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
 use crate::library::{Library, StepKind, TraitDef, Workflow};
-use crate::routing::explain;
+use crate::routing::{explain, route_mini_mes};
 use crate::user_library::LibraryStore;
 use crate::link::{
-    AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, DebugParts, RouteFile, RouteMiniMe,
-    RunContext, RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
+    AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, DebugParts, RouteComponentOption, RouteFile,
+    RouteMiniMe, RunComponent, RunContext, RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
 };
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
@@ -99,6 +99,8 @@ pub struct RunSpec {
     pub needs_context: Option<bool>,
     /// The file routing picked as the one the message means.
     pub file: Option<RunFile>,
+    pub component: Option<RunComponent>,
+    pub tools: Vec<String>,
 }
 
 impl RunSpec {
@@ -121,6 +123,8 @@ impl RunSpec {
             input,
             needs_context,
             file: None,
+            component: None,
+            tools: Vec::new(),
         })
     }
 
@@ -518,7 +522,9 @@ impl Runs {
                 message: message.clone(),
                 needs_context: spec.needs_context,
                 file: spec.file.clone(),
-                mini_mes: mini_me_list(&self.library.current()),
+                component: spec.component.clone(),
+                tools: spec.tools.clone(),
+                mini_mes: route_mini_mes(&self.library.current()),
                 document: comments::run_document(&project, conversation_id).ok().flatten(),
                 debug: *locked(&self.debug),
             },
@@ -557,11 +563,12 @@ impl Runs {
         state: Value,
         mini_mes: Vec<RouteMiniMe>,
         files: Vec<RouteFile>,
+        components: Vec<RouteComponentOption>,
         ask: Vec<String>,
         timeout: Duration,
     ) -> Routed {
         let route_id = new_id();
-        let frame = CoreFrame::RouteStart { route_id, state, mini_mes, files, ask };
+        let frame = CoreFrame::RouteStart { route_id, state, mini_mes, files, components, ask };
         let no_answer = NoAnswer {
             when_not_ready: "Mini-Me's runtime is not ready.",
             when_timed_out: ("jev_timeout", "Typesafe did not answer in time."),
@@ -1356,14 +1363,6 @@ fn hand_off_refused(message: &str) -> AppError {
     AppError::new("hand_off_not_allowed", message)
 }
 
-fn mini_me_list(library: &Library) -> Vec<RouteMiniMe> {
-    library
-        .summaries()
-        .into_iter()
-        .map(|m| RouteMiniMe { id: m.id, name: m.name, description: m.description })
-        .collect()
-}
-
 /// A reply stopped while its call winds down takes no more output, as if the call had ended.
 fn reply_ended(err: AppError) -> AppError {
     if err.code == "reply_finished" {
@@ -1480,6 +1479,8 @@ pub mod test_support {
             input,
             needs_context: None,
             file: None,
+            component: None,
+            tools: Vec::new(),
         }
     }
 
@@ -2428,7 +2429,7 @@ mod tests {
         let runs = Arc::clone(&f.runs);
         let handle = std::thread::spawn(move || {
             let ask = vec!["reaction".into()];
-            runs.route(json!({ "message": "hi" }), Vec::new(), Vec::new(), ask, timeout)
+            runs.route(json!({ "message": "hi" }), Vec::new(), Vec::new(), Vec::new(), ask, timeout)
         });
         let route_id = wait_for(f, |frame| match frame {
             CoreFrame::RouteStart { route_id, .. } => Some(route_id),

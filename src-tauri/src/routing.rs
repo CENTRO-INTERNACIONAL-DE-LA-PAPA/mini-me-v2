@@ -15,7 +15,10 @@ use crate::error::{AppError, AppResult};
 use crate::history::{author_name, results};
 use crate::library::{FALLBACK_MINI_ME, Library};
 use crate::user_library::LibraryStore;
-use crate::link::{CallModel, RouteComponent, RouteFile, RouteMiniMe, RunFile};
+use crate::link::{
+    CallModel, ChoiceAnswer, RouteComponent, RouteComponentOption, RouteFile, RouteMiniMe, RunComponent,
+    RunFile,
+};
 use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, TextComponentKind};
 use crate::runs::{RouteAnswers, Routed, RunSpec, Runs};
 use crate::store::Project;
@@ -50,6 +53,16 @@ pub struct RouteSettings {
     pub reaction_chance: f64,
 }
 
+/// A table or chart of a Conversation and its source file.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShownComponent {
+    pub id: Uuid,
+    pub kind: String,
+    pub title: Option<String>,
+    pub source_id: Uuid,
+    pub source_name: String,
+}
+
 /// The author ID of the notes that say why a message got no reply.
 const ROUTING_AUTHOR: &str = "routing";
 
@@ -60,6 +73,8 @@ struct Decision {
     needs_context: Option<bool>,
     /// The Conversation's file the message means, when it tags none.
     file: Option<RunFile>,
+    component: Option<RunComponent>,
+    tools: Vec<String>,
 }
 
 /// Shown while Jev cannot choose, so the fallback answers every message without a mention.
@@ -167,16 +182,27 @@ impl Routing {
     ) -> Decision {
         let mentioned = first_mention(message);
         let messages = project.lock().conversation_messages(conversation_id).unwrap_or_default();
-        // A thread's document is already its reply's context, so Jev picks no file there.
+        // A thread's document is already its reply's context, so Jev picks no file,
+        // component or tools there.
         let in_thread = comments::is_thread(&project.lock(), conversation_id).unwrap_or(false);
-        let files = match in_thread {
-            true => Vec::new(),
-            false => file_options(project, conversation_id, &messages, message, library),
+        let (files, components) = match in_thread {
+            true => (Vec::new(), Vec::new()),
+            false => {
+                let shown = project.lock().shown_components(conversation_id).unwrap_or_default();
+                let files = file_options(project, &messages, message, library, &shown);
+                (files, component_options(shown))
+            }
         };
-        let ask = questions(mentioned.is_none(), !files.is_empty());
+        let ask = questions(Asks {
+            mini_me: mentioned.is_none(),
+            file: !files.is_empty(),
+            component: !components.is_empty(),
+            tools: !in_thread,
+        });
         let state = state(message, recent(&messages, message.id, library));
+        let mini_mes = route_mini_mes(library);
         let Routed { answers: routed, asked } =
-            calls.route(state, route_mini_mes(library), files.clone(), ask, settings.timeout);
+            calls.route(state, mini_mes, files.clone(), components.clone(), ask, settings.timeout);
         if let Some(record) = jev_record(&routed, asked, settings) {
             let stored = project.lock().put_debug_record(conversation_id, message.id, "jev", &record);
             if let Err(err) = stored {
@@ -194,7 +220,8 @@ impl Routing {
             }
         };
         let reacts = draw() < settings.reaction_chance;
-        decide(answers.as_ref(), mentioned, &files, settings.threshold, reacts, library)
+        let offered = Offered { files: &files, components: &components };
+        decide(answers.as_ref(), mentioned, offered, settings.threshold, reacts, library)
     }
 
     /// Returns the reply's author.
@@ -221,31 +248,45 @@ impl Routing {
             decision.needs_context,
         )?;
         spec.file = decision.file.clone();
+        spec.component = decision.component.clone();
+        spec.tools = decision.tools.clone();
         calls.start(Arc::clone(project), conversation_id, message, spec, model)?;
         Ok(author)
     }
 }
 
-/// What Jev is asked: who answers only without a mention, and which file only when there are some.
-fn questions(asks_mini_me: bool, asks_file: bool) -> Vec<String> {
-    let mut ask = vec!["reaction".to_string(), "needs_context".to_string()];
-    if asks_mini_me {
-        ask.insert(0, "mini_me".to_string());
-    }
-    if asks_file {
-        ask.push("file".to_string());
-    }
-    ask
+/// Which of the optional questions Jev is asked besides `reaction` and `needs_context`.
+struct Asks {
+    mini_me: bool,
+    file: bool,
+    component: bool,
+    tools: bool,
 }
 
-fn route_mini_mes(library: &Library) -> Vec<RouteMiniMe> {
+fn questions(asks: Asks) -> Vec<String> {
+    let optional = |asked: bool, id: &str| asked.then(|| id.to_string());
+    [
+        optional(asks.mini_me, "mini_me"),
+        Some("reaction".to_string()),
+        Some("needs_context".to_string()),
+        optional(asks.file, "file"),
+        optional(asks.component, "component"),
+        optional(asks.tools, "tools"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+pub fn route_mini_mes(library: &Library) -> Vec<RouteMiniMe> {
     library
-        .summaries()
-        .into_iter()
+        .mini_mes
+        .iter()
         .map(|m| RouteMiniMe {
             id: m.id,
-            name: m.name,
-            description: m.description,
+            name: m.name.clone(),
+            description: m.description.clone(),
+            traits: library.workflow_traits(&m.workflow).iter().map(|t| t.name.clone()).collect(),
         })
         .collect()
 }
@@ -334,13 +375,14 @@ fn warning_after(routed: &AppResult<RouteAnswers>) -> Option<Option<&'static str
     }
 }
 
-/// Files Jev may pick, newest first, with their tables and charts; none if the message has one.
+/// Files Jev may pick, newest first, with the tables and charts in `shown` made from each;
+/// none if the message has one.
 fn file_options(
     project: &Project,
-    conversation_id: Uuid,
     messages: &[Message],
     message: &Message,
     library: &Library,
+    shown: &[ShownComponent],
 ) -> Vec<RouteFile> {
     if !conversations::file_names(message).is_empty() {
         return Vec::new();
@@ -349,19 +391,29 @@ fn file_options(
     let found = results(messages, message.id, message.id, library, |id| {
         assets::find_with_hidden(&state, id).ok()
     });
-    let mut components = state.file_components(conversation_id).unwrap_or_default();
     found
         .assets
         .into_iter()
         .map(|a| RouteFile {
             id: a.asset.id,
-            name: a.asset.name,
-            components: components
-                .remove(&a.asset.id)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|(kind, title)| RouteComponent { kind, title })
+            components: shown
+                .iter()
+                .filter(|c| c.source_id == a.asset.id)
+                .map(|c| RouteComponent { kind: c.kind.clone(), title: c.title.clone() })
                 .collect(),
+            name: a.asset.name,
+        })
+        .collect()
+}
+
+fn component_options(shown: Vec<ShownComponent>) -> Vec<RouteComponentOption> {
+    shown
+        .into_iter()
+        .map(|c| RouteComponentOption {
+            id: c.id,
+            kind: c.kind,
+            title: c.title,
+            file: c.source_name,
         })
         .collect()
 }
@@ -398,10 +450,20 @@ fn draw() -> f64 {
 
 /// A confidence equal to the threshold passes, and a reaction only when `reacts`; else the
 /// fallback answers and no file is picked.
+/// How many of Jev's most probable tools a reply is told about.
+const LIKELY_TOOLS: usize = 4;
+
+/// The options Jev was offered for the questions whose answer must be one of them.
+#[derive(Clone, Copy, Default)]
+struct Offered<'a> {
+    files: &'a [RouteFile],
+    components: &'a [RouteComponentOption],
+}
+
 fn decide(
     answers: Option<&RouteAnswers>,
     mentioned: Option<Uuid>,
-    files: &[RouteFile],
+    offered: Offered,
     threshold: f64,
     reacts: bool,
     library: &Library,
@@ -425,17 +487,36 @@ fn decide(
     });
     let file = answer("file")
         .filter(|f| f.confidence >= threshold)
-        .and_then(|f| files.iter().find(|o| o.id.to_string() == f.choice))
+        .and_then(|f| offered.files.iter().find(|o| o.id.to_string() == f.choice))
         .map(|o| RunFile {
             asset_id: o.id,
             name: o.name.clone(),
         });
+    let component = answer("component")
+        .filter(|c| c.confidence >= threshold)
+        .and_then(|c| offered.components.iter().find(|o| o.id.to_string() == c.choice))
+        .map(|o| RunComponent { component_id: o.id });
+    let tools = answer("tools").map(likely_tools).unwrap_or_default();
     Decision {
         answerer,
         reaction,
         needs_context,
         file,
+        component,
+        tools,
     }
+}
+
+/// The most probable tools, most probable first, whatever their confidence.
+fn likely_tools(answer: &ChoiceAnswer) -> Vec<String> {
+    let mut tools: Vec<(&String, f64)> = answer
+        .probabilities
+        .iter()
+        .filter(|(tool, _)| tool.as_str() != "none")
+        .map(|(tool, p)| (tool, *p))
+        .collect();
+    tools.sort_by(|a, b| b.1.total_cmp(&a.1));
+    tools.into_iter().take(LIKELY_TOOLS).map(|(tool, _)| tool.clone()).collect()
 }
 
 /// A mention between two spaces takes one along, leaving no double space; offsets are UTF-16 units.
@@ -472,13 +553,13 @@ mod tests {
 
     use super::*;
     use crate::comments::test_support::into_thread;
-    use crate::link::{AdapterInfo, ChoiceAnswer, CoreFrame};
+    use crate::link::{AdapterInfo, CoreFrame};
     use crate::protocol::{AssetRef, EventKind, MessageStatus, TextComponent, new_id};
     use crate::secrets::NoSecrets;
     use crate::sidecar::SidecarLog;
     use crate::runs::FrameSink;
     use crate::runs::test_support::Recorder;
-    use crate::library::{FALLBACK_MINI_ME as ASSISTANT, SCRIBE};
+    use crate::library::{FALLBACK_MINI_ME as ASSISTANT, SCRIBE, Step, StepKind};
 
     /// A message whose `@Name` mentions are found in `content` in order of `mentions`.
     fn message(content: &str, mentions: &[(&str, Uuid)]) -> Message {
@@ -539,7 +620,7 @@ mod tests {
         let library = Library::builtin();
         let decided = |given: Vec<(&'static str, ChoiceAnswer)>, mentioned, reacts| {
             let given = answers(given);
-            let d = decide(Some(&given), mentioned, &[], 0.5, reacts, &library);
+            let d = decide(Some(&given), mentioned, Offered::default(), 0.5, reacts, &library);
             (d.answerer, d.reaction, d.needs_context)
         };
         let mini_me = |id: Uuid, confidence| ("mini_me", answer(&id.to_string(), confidence, &[]));
@@ -571,31 +652,67 @@ mod tests {
     #[test]
     fn without_jev_a_mentioned_mini_me_answers_or_else_the_fallback() {
         let library = Library::builtin();
-        assert_eq!(decide(None, None, &[], 0.5, true, &library).answerer, FALLBACK_MINI_ME);
-        let mentioned = decide(None, Some(SCRIBE), &[], 0.5, true, &library);
-        let expected =
-            Decision { answerer: SCRIBE, reaction: None, needs_context: None, file: None };
+        let none = Offered::default();
+        assert_eq!(decide(None, None, none, 0.5, true, &library).answerer, FALLBACK_MINI_ME);
+        let mentioned = decide(None, Some(SCRIBE), none, 0.5, true, &library);
+        let expected = Decision {
+            answerer: SCRIBE,
+            reaction: None,
+            needs_context: None,
+            file: None,
+            component: None,
+            tools: Vec::new(),
+        };
         assert_eq!(mentioned, expected);
     }
 
     #[test]
-    fn jev_picks_one_of_the_offered_files_at_or_above_the_threshold() {
+    fn jev_picks_one_of_the_offered_files_and_components_at_or_above_the_threshold() {
         let library = Library::builtin();
         let cleaned = RouteFile {
             id: new_id(),
             name: "field-trial-cleaned.csv".into(),
             components: Vec::new(),
         };
-        let files = [cleaned.clone()];
-        let pick = |choice: &str, confidence: f64| {
-            let answers = answers(vec![("file", answer(choice, confidence, &[]))]);
-            decide(Some(&answers), None, &files, 0.5, true, &library).file
+        let chart = RouteComponentOption {
+            id: new_id(),
+            kind: "chart".into(),
+            title: Some("Yield by variety".into()),
+            file: "field-trial.csv".into(),
+        };
+        let (files, components) = ([cleaned.clone()], [chart.clone()]);
+        let offered = Offered { files: &files, components: &components };
+        let pick = |question: &'static str, choice: &str, confidence: f64| {
+            let answers = answers(vec![(question, answer(choice, confidence, &[]))]);
+            decide(Some(&answers), None, offered, 0.5, true, &library)
         };
         let picked = RunFile { asset_id: cleaned.id, name: cleaned.name.clone() };
-        assert_eq!(pick(&cleaned.id.to_string(), 0.5), Some(picked));
-        assert_eq!(pick(&cleaned.id.to_string(), 0.4), None);
-        assert_eq!(pick("none", 0.9), None);
-        assert_eq!(pick(&new_id().to_string(), 0.9), None);
+        assert_eq!(pick("file", &cleaned.id.to_string(), 0.5).file, Some(picked));
+        assert_eq!(pick("file", &cleaned.id.to_string(), 0.4).file, None);
+        assert_eq!(pick("file", "none", 0.9).file, None);
+        assert_eq!(pick("file", &new_id().to_string(), 0.9).file, None);
+        let picked = RunComponent { component_id: chart.id };
+        assert_eq!(pick("component", &chart.id.to_string(), 0.5).component, Some(picked));
+        assert_eq!(pick("component", &chart.id.to_string(), 0.4).component, None);
+        assert_eq!(pick("component", "none", 0.9).component, None);
+        assert_eq!(pick("component", &new_id().to_string(), 0.9).component, None);
+    }
+
+    #[test]
+    fn the_four_most_probable_tools_are_passed_on_without_none() {
+        let library = Library::builtin();
+        let probabilities = [
+            ("read_file", 0.1),
+            ("show_table", 0.4),
+            ("none", 0.2),
+            ("suggest", 0.02),
+            ("save_file", 0.15),
+            ("read_component", 0.08),
+            ("write_document", 0.05),
+        ];
+        let given = answers(vec![("tools", answer("show_table", 0.4, &probabilities))]);
+        let decided = decide(Some(&given), None, Offered::default(), 0.5, true, &library);
+        assert_eq!(decided.tools, ["show_table", "save_file", "read_file", "read_component"]);
     }
 
     #[test]
@@ -862,7 +979,7 @@ mod tests {
     }
 
     #[test]
-    fn no_file_question_without_files_or_with_a_tagged_one() {
+    fn no_file_or_component_question_without_them_or_with_a_tagged_file() {
         let f = fixture();
         let library = Library::builtin();
         let mut earlier = message("here it is", &[]);
@@ -875,19 +992,20 @@ mod tests {
         let mut tagged = message("check #trial.csv", &[]);
         tagged.attachments = earlier.attachments.clone();
         let messages = [earlier, tagged.clone()];
-        assert!(file_options(&f.project, f.conversation, &messages, &tagged, &library).is_empty());
+        assert!(file_options(&f.project, &messages, &tagged, &library, &[]).is_empty());
 
         f.send("check the data", &[], ROUTE_TIMEOUT).unwrap();
         f.route_id();
         let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
-        let [CoreFrame::RouteStart { files, ask, .. }] = starts.as_slice() else {
+        let [CoreFrame::RouteStart { files, components, ask, .. }] = starts.as_slice() else {
             panic!("expected one route.start, got {starts:?}");
         };
-        assert!(files.is_empty() && !ask.contains(&"file".to_string()));
+        assert!(files.is_empty() && components.is_empty());
+        assert_eq!(ask, &["mini_me", "reaction", "needs_context", "tools"]);
     }
 
     #[test]
-    fn a_file_option_lists_the_tables_and_charts_shown_from_it_newest_first() {
+    fn file_and_component_options_list_the_tables_and_charts_newest_first() {
         let f = fixture();
         let input = SendMessageInput {
             content: "plot the trial".into(),
@@ -904,6 +1022,7 @@ mod tests {
         let asset =
             conversations::attach_generated(&f.project, reply, &plotter, file, false).unwrap();
         let shown = [("table", "Field trial"), ("chart", "Yield by variety")];
+        let mut ids = Vec::new();
         for (kind, title) in shown {
             let component = conversations::NewComponent {
                 kind: kind.into(),
@@ -912,14 +1031,14 @@ mod tests {
                 text: title.to_string(),
                 source_asset_id: Some(asset.id),
             };
-            conversations::add_component(&f.project, reply, None, component).unwrap();
+            ids.push(conversations::add_component(&f.project, reply, None, component).unwrap());
         }
         conversations::complete_reply(&f.project, reply).unwrap();
 
         f.send("make that chart a bar chart", &[], ROUTE_TIMEOUT).unwrap();
         f.route_id();
         let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
-        let [CoreFrame::RouteStart { files, .. }] = starts.as_slice() else {
+        let [CoreFrame::RouteStart { files, components, ask, .. }] = starts.as_slice() else {
             panic!("expected one route.start, got {starts:?}");
         };
         let component = |kind: &str, title: &str| RouteComponent {
@@ -935,6 +1054,31 @@ mod tests {
             ],
         };
         assert_eq!(files, &vec![expected]);
+        let option = |id: Uuid, kind: &str, title: &str| RouteComponentOption {
+            id,
+            kind: kind.into(),
+            title: Some(title.into()),
+            file: asset.name.clone(),
+        };
+        let expected =
+            vec![option(ids[1], "chart", "Yield by variety"), option(ids[0], "table", "Field trial")];
+        assert_eq!(components, &expected);
+        assert!(ask.contains(&"component".to_string()));
+    }
+
+    #[test]
+    fn a_mini_me_option_names_its_traits_once_in_workflow_order() {
+        let mut library = Library::builtin();
+        let (first, second) = (library.traits[0].clone(), library.traits[1].clone());
+        let step = |id: &str, trait_id: Uuid| Step {
+            id: id.into(),
+            label: None,
+            kind: StepKind::Trait { trait_id },
+        };
+        library.mini_mes[0].workflow.steps =
+            vec![step("a", second.id), step("b", first.id), step("c", second.id)];
+        let option = &route_mini_mes(&library)[0];
+        assert_eq!(option.traits, vec![second.name, first.name]);
     }
 
     #[test]
@@ -1007,6 +1151,7 @@ mod tests {
             answers: answers(vec![
                 ("reaction", answer("👍", 0.9, &[])),
                 ("needs_context", answer("no", 0.9, &[])),
+                ("tools", answer("save_file", 0.6, &[("save_file", 0.6), ("none", 0.4)])),
             ]),
             asked: Value::Null,
         });
@@ -1025,15 +1170,17 @@ mod tests {
                 if *message_id == sent.id && emoji == "👍" && *by == assistant
         )));
         let frames = f.sink.0.lock().unwrap().clone();
-        let start = frames.iter().find_map(|frame| match frame {
-            CoreFrame::RunStart { plan, .. } => Some((
-                plan.traits[0].adapter.clone(),
-                plan.input.clone(),
-                plan.context.needs_context,
-            )),
-            _ => None,
-        });
-        assert_eq!(start, Some(("prompt".into(), json!({ "text": "hi thanks" }), Some(false))));
+        let plan = frames
+            .iter()
+            .find_map(|frame| match frame {
+                CoreFrame::RunStart { plan, .. } => Some(plan.clone()),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(plan.traits[0].adapter, "prompt");
+        assert_eq!(plan.input, json!({ "text": "hi thanks" }));
+        assert_eq!(plan.context.needs_context, Some(false));
+        assert_eq!(plan.context.tools, ["save_file"]);
     }
 
     #[test]
@@ -1071,7 +1218,7 @@ mod tests {
     }
 
     #[test]
-    fn a_comment_is_routed_like_a_message_without_the_file_question() {
+    fn a_comment_is_routed_like_a_message_without_the_file_component_and_tools_questions() {
         let f = fixture();
         into_thread(&f.project, f.conversation);
         let comment = f.send("too long", &[], Duration::from_millis(300)).unwrap();
