@@ -239,8 +239,12 @@ pub struct Component {
     pub id: Uuid,
     pub kind: String,
     pub version: u32,
-    pub data: Value,
+    /// What the UI shows; the component's data lives in its source Asset.
+    pub preview: Value,
     pub text: String,
+    /// The Asset holding the component's data; none for kinds with no file behind them.
+    #[serde(default)]
+    pub source_asset_id: Option<Uuid>,
     /// The user's answer, for kinds that ask for one; `null` until answered.
     #[serde(default)]
     pub answer: Value,
@@ -255,8 +259,6 @@ pub struct Component {
 pub enum TextComponentKind {
     Asset,
     MiniMe,
-    /// A `$` reference to a whole `table` or `chart` Interactive Component.
-    Component,
 }
 
 /// An inline reference inside a message. `start` and `end` are UTF-16 code unit offsets into

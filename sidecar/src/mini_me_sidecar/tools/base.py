@@ -13,10 +13,12 @@ class ToolError(TraitError):
         super().__init__(code, message)
 
 
-async def add_component(ctx: CallContext, kind: str, data: Any, text: str) -> str:
-    """Adds a version 1 component of `kind` and returns its ID."""
+async def add_component(
+    ctx: CallContext, kind: str, preview: Any, text: str, source_asset_id: str | None
+) -> str:
+    """Adds a version 1 component of `kind` whose data is in `source_asset_id`; returns its ID."""
     try:
-        return await ctx.component(kind, 1, data, text)
+        return await ctx.component(kind, 1, preview, text, source_asset_id)
     except CoreRequestError as error:
         raise ToolError(f"The {kind} was not shown: {error}", error.code) from None
 

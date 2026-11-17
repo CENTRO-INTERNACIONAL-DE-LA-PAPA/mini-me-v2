@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 12;
+pub const SCHEMA_VERSION: i32 = 14;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -195,6 +195,34 @@ DROP TABLE debug_records;
 ALTER TABLE debug_records_new RENAME TO debug_records;
 CREATE INDEX debug_records_by_conversation ON debug_records(conversation_id);
 "#,
+    r#"
+-- A hidden Asset is left out of every list the user sees; Traits still see it.
+ALTER TABLE assets ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+-- A component's data lives in its source Asset; the stored JSON is only what the UI shows.
+ALTER TABLE components RENAME COLUMN data TO preview;
+ALTER TABLE components ADD COLUMN source_asset_id TEXT;
+"#,
+    r#"
+-- Suggested replacements of a document's passage, anchored like comment threads (UTF-16
+-- offsets and `quote`, the passage's text when last saved) and merged against `base`, its text
+-- when suggested. `state` is waiting, accepted, discarded or replaced.
+CREATE TABLE suggestions (
+    id             TEXT PRIMARY KEY,
+    asset_id       TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    passage_start  INTEGER NOT NULL,
+    passage_end    INTEGER NOT NULL,
+    quote          TEXT NOT NULL,
+    base           TEXT NOT NULL,
+    text           TEXT NOT NULL,
+    author_kind    TEXT NOT NULL,
+    author_id      TEXT NOT NULL,
+    state          TEXT NOT NULL,
+    created_at     INTEGER NOT NULL
+);
+CREATE INDEX suggestions_by_asset ON suggestions(asset_id);
+-- Threads are opened only by the user.
+ALTER TABLE comment_threads DROP COLUMN opened_from;
+"#,
 ];
 
 fn user_version(conn: &Connection) -> AppResult<i32> {
@@ -327,6 +355,62 @@ mod tests {
         let row: (String, i64, String) =
             conn.query_row(sql, [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).unwrap();
         assert_eq!(row, ("jev".into(), 0, "{}".into()));
+    }
+
+    #[test]
+    fn a_version_12_database_keeps_its_components_as_previews() {
+        let (_dir, path) = at_version(
+            12,
+            "INSERT INTO conversations (id, title, created_at, last_activity_at) \
+             VALUES ('c', 'Trial', 1, 1); \
+             INSERT INTO messages (id, conversation_id, author_kind, author_id, content, \
+             status, attachments, text_components, created_at) \
+             VALUES ('m', 'c', 'mini_me', 'x', '', 'complete', '[]', '[]', 1); \
+             INSERT INTO components (id, message_id, kind, version, data, text, created_at) \
+             VALUES ('k', 'm', 'table', 1, '{}', 't', 1); \
+             INSERT INTO assets (id, name, media_type, size_bytes, source, rel_path, created_at) \
+             VALUES ('a', 'f.csv', 'text/csv', 1, 'upload', 'assets/a/f.csv', 1);",
+        );
+        let conn = open(&path).unwrap();
+        let sql = "SELECT preview, source_asset_id FROM components WHERE id = 'k'";
+        let row: (String, Option<String>) = conn
+            .query_row(sql, [], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap();
+        assert_eq!(row, ("{}".into(), None));
+        let hidden: bool = conn
+            .query_row("SELECT hidden FROM assets WHERE id = 'a'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(!hidden);
+    }
+
+    #[test]
+    fn a_version_13_database_keeps_its_threads_and_deletes_suggestions_with_their_document() {
+        let (_dir, path) = at_version(
+            13,
+            "INSERT INTO assets (id, name, media_type, size_bytes, source, rel_path, created_at) \
+             VALUES ('a', 'r.qmd', 'text/x-quarto', 1, 'upload', 'assets/a/r.qmd', 1); \
+             INSERT INTO conversations (id, title, created_at, last_activity_at) \
+             VALUES ('c', 'Trial', 1, 1), ('t', 'Thread', 1, 1); \
+             INSERT INTO comment_threads (conversation_id, asset_id, passage_start, passage_end, \
+             quote, created_at, opened_from) VALUES ('t', 'a', 0, 1, 'x', 1, 'c');",
+        );
+        let conn = open(&path).unwrap();
+        let threads: i64 =
+            conn.query_row("SELECT count(*) FROM comment_threads", [], |row| row.get(0)).unwrap();
+        assert_eq!(threads, 1);
+        conn.execute("DELETE FROM comment_threads", []).unwrap();
+        conn.execute_batch(
+            "INSERT INTO suggestions (id, asset_id, passage_start, passage_end, quote, base, \
+             text, author_kind, author_id, state, created_at) \
+             VALUES ('s', 'a', 0, 1, 'x', 'x', 'y', 'mini_me', 'scribe', 'waiting', 1); \
+             DELETE FROM assets WHERE id = 'a';",
+        )
+        .unwrap();
+        let count: i64 =
+            conn.query_row("SELECT count(*) FROM suggestions", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 0);
     }
 
     #[test]

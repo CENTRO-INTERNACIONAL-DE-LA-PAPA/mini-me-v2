@@ -24,8 +24,7 @@ export function shownOutputs(outputs: OverviewOutput[], all: boolean): OverviewO
   return all ? outputs : outputs.slice(0, LATEST_SHOWN);
 }
 
-/** A piece of a summary: text, or the name of a file, table or chart the model wrote as
- * `[name]()`. */
+/** A piece of a summary: text, or the name of a file the model wrote as `[name]()`. */
 export type SummaryPart = { text: string; named?: boolean };
 
 const NAMED = /\[([^\]]+)\]\(\)/g;
@@ -52,27 +51,17 @@ export function summaryLine(summary: string): string {
   return text.match(/^[\s\S]*?[.!?](?=\s|$)/)?.[0] ?? text;
 }
 
-/** A name as `$` references spell it, lower-cased and without its `#` or `$`; characters other than
+/** A name compared loosely: lower-cased and without a leading `#`; characters other than
  * letters, digits, `.`, `_` and `-` become `-`, and a run of `-` one. */
-const asReference = (name: string) =>
+const loose = (name: string) =>
   name
-    .replace(/^[#$]/, "")
+    .replace(/^#/, "")
     .replace(/[^\p{L}\p{N}._-]/gu, "-")
     .replace(/-{2,}/g, "-")
     .toLowerCase();
 
-/** What a name in the summary refers to: the Project's file of that name, else the newest
- * table or chart output whose title gives that name; undefined when nothing has it. */
-export function findNamed(
-  name: string,
-  files: AssetRef[],
-  outputs: OverviewOutput[],
-): { file: AssetRef } | { component: OverviewOutput } | undefined {
-  const wanted = asReference(name);
-  const file = files.find((f) => asReference(f.name) === wanted);
-  if (file) return { file };
-  const component = outputs.find(
-    (o) => (o.kind === "table" || o.kind === "chart") && asReference(o.title) === wanted,
-  );
-  return component && { component };
+/** The Project's file a name in the summary refers to; undefined when none has it. */
+export function findNamed(name: string, files: AssetRef[]): AssetRef | undefined {
+  const wanted = loose(name);
+  return files.find((f) => loose(f.name) === wanted);
 }

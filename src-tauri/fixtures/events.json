@@ -15,7 +15,7 @@
       "message": {
         "id": "0199d0a0-0000-7000-8000-000000000101",
         "author": { "kind": "user", "id": "0199d0a0-0000-7000-8000-0000000000e1" },
-        "content": "Summarize #field-trial.csv with $trial-yield",
+        "content": "Summarize #field-trial.csv",
         "status": "complete",
         "reply_to": null,
         "attachments": [
@@ -33,13 +33,6 @@
             "label": "#field-trial.csv",
             "start": 10,
             "end": 26
-          },
-          {
-            "kind": "component",
-            "id": "0199d0a0-0000-7000-8000-000000000401",
-            "label": "$trial-yield",
-            "start": 32,
-            "end": 44
           }
         ],
         "components": [],
@@ -312,7 +305,7 @@
         "id": "0199d0a0-0000-7000-8000-000000000301",
         "kind": "paper-sources",
         "version": 1,
-        "data": {
+        "preview": {
           "papers": [
             {
               "title": "Late blight resistance in wild potato",
@@ -325,6 +318,7 @@
           ]
         },
         "text": "1. **Late blight resistance in wild potato** (2021)",
+        "source_asset_id": null,
         "answer": null
       }
     }

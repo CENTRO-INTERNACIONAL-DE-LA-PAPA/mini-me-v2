@@ -20,17 +20,18 @@ use crate::conversations::{self, ConversationStatus, NewComponent, PausedRun};
 use crate::dataverse;
 use crate::error::{AppError, AppResult};
 use crate::history::{HISTORY_BUDGET_CHARS, ResultAsset, history, results};
-use crate::library::{Library, StepKind, TraitDef, Workflow};
-use crate::routing::explain;
+use crate::library::{Library, PROMPT_ADAPTER, StepKind, TraitDef, Workflow};
+use crate::routing::{RouteSettings, route_mini_mes};
 use crate::user_library::LibraryStore;
 use crate::link::{
-    AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, DebugParts, RouteFile, RouteMiniMe,
-    RunContext, RunFile, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
+    AdapterInfo, CallModel, ChoiceAnswer, CoreFrame, DebugParts, RouteComponentOption, RouteFile,
+    RouteMiniMe, RunComponent, RunContext, RunFile, RunHandOff, RunMiniMe, RunPlan, RunResume, RunTrait, SidecarFrame, SummaryKind,
 };
-use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
+use crate::protocol::{Author, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
 use crate::sidecar::SidecarLog;
 use crate::store::Project;
+use crate::suggestions;
 use crate::sync::locked;
 
 pub const ASSET_CHUNK_BYTES: u64 = 1024 * 1024;
@@ -98,6 +99,12 @@ pub struct RunSpec {
     pub needs_context: Option<bool>,
     /// The file routing picked as the one the message means.
     pub file: Option<RunFile>,
+    pub component: Option<RunComponent>,
+    pub tools: Vec<String>,
+    pub hand_off: Option<RunHandOff>,
+    /// How the reply was routed, so its hand-off is routed the same way; not kept while paused.
+    #[serde(skip)]
+    pub route: Option<RouteSettings>,
 }
 
 impl RunSpec {
@@ -120,6 +127,10 @@ impl RunSpec {
             input,
             needs_context,
             file: None,
+            component: None,
+            tools: Vec::new(),
+            hand_off: None,
+            route: None,
         })
     }
 
@@ -211,6 +222,21 @@ struct HandOff {
     file: Option<RunFile>,
 }
 
+/// A completed reply's hand-off, which routing turns into the other Mini-Me's reply.
+pub struct HandedOff {
+    pub project: Arc<Project>,
+    pub conversation_id: Uuid,
+    /// The reply that handed off, which the next reply answers.
+    pub reply: Message,
+    pub mini_me_id: Uuid,
+    pub request: String,
+    pub file: Option<RunFile>,
+    pub model: Option<CallModel>,
+    pub route: Option<RouteSettings>,
+}
+
+pub type HandOffRouter = Arc<dyn Fn(HandedOff) + Send + Sync>;
+
 #[derive(Default)]
 struct Inner {
     sink: Option<Arc<dyn FrameSink>>,
@@ -247,6 +273,8 @@ pub struct Runs {
     cancel_timeout: Duration,
     /// Asked before a Mini-Me writes or edits a document; none until the app sets one.
     document_gate: Mutex<Option<DocumentGate>>,
+    /// Starts the reply a hand-off asks for; none until the app sets one.
+    hand_off_router: Mutex<Option<HandOffRouter>>,
     /// Feature flags that are on.
     features: Mutex<Vec<String>>,
     /// What new runs collect for reply debug records.
@@ -257,14 +285,17 @@ pub struct Runs {
 struct ComponentAddParams {
     kind: String,
     version: u32,
-    data: Value,
+    preview: Value,
     text: String,
+    #[serde(default)]
+    source_asset_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
-struct DocumentEditParams {
+struct DocumentSuggestParams {
     asset_id: Uuid,
-    edits: Vec<comments::DocumentEdit>,
+    find: String,
+    text: String,
 }
 
 #[derive(Deserialize)]
@@ -277,6 +308,8 @@ struct AssetWriteParams {
     name: String,
     media_type: String,
     data: String,
+    #[serde(default)]
+    hidden: bool,
 }
 
 #[derive(Deserialize)]
@@ -327,6 +360,7 @@ impl Runs {
             log,
             cancel_timeout,
             document_gate: Mutex::new(None),
+            hand_off_router: Mutex::new(None),
             features: Mutex::new(Vec::new()),
             debug: Mutex::new(DebugParts::default()),
         }
@@ -343,6 +377,10 @@ impl Runs {
 
     pub fn set_document_gate(&self, gate: DocumentGate) {
         *locked(&self.document_gate) = Some(gate);
+    }
+
+    pub fn set_hand_off_router(&self, router: HandOffRouter) {
+        *locked(&self.hand_off_router) = Some(router);
     }
 
     /// Fails with the gate's error when document work is not possible.
@@ -503,7 +541,6 @@ impl Runs {
                     name: t.name.clone(),
                     instructions: t.instructions.clone(),
                     adapter: t.adapter.clone(),
-                    tools: t.tools.clone(),
                 })
                 .collect(),
             input: spec.input.clone(),
@@ -513,7 +550,10 @@ impl Runs {
                 message: message.clone(),
                 needs_context: spec.needs_context,
                 file: spec.file.clone(),
-                mini_mes: mini_me_list(&self.library.current()),
+                component: spec.component.clone(),
+                tools: spec.tools.clone(),
+                hand_off: spec.hand_off.clone(),
+                mini_mes: route_mini_mes(&self.library.current()),
                 document: comments::run_document(&project, conversation_id).ok().flatten(),
                 debug: *locked(&self.debug),
             },
@@ -552,11 +592,12 @@ impl Runs {
         state: Value,
         mini_mes: Vec<RouteMiniMe>,
         files: Vec<RouteFile>,
+        components: Vec<RouteComponentOption>,
         ask: Vec<String>,
         timeout: Duration,
     ) -> Routed {
         let route_id = new_id();
-        let frame = CoreFrame::RouteStart { route_id, state, mini_mes, files, ask };
+        let frame = CoreFrame::RouteStart { route_id, state, mini_mes, files, components, ask };
         let no_answer = NoAnswer {
             when_not_ready: "Mini-Me's runtime is not ready.",
             when_timed_out: ("jev_timeout", "Typesafe did not answer in time."),
@@ -971,9 +1012,10 @@ impl Runs {
             }
             SidecarFrame::RunDone { run_id } => {
                 if let Some(run) = self.finish(run_id) {
+                    let hand_off = run.hand_off.clone().or_else(|| self.hand_off_for(&run));
                     let completed = conversations::complete_reply(&run.project, run.message_id);
-                    if let (Ok(reply), Some(hand_off)) = (completed, run.hand_off.clone()) {
-                        self.hand_off(&run, &reply, hand_off);
+                    if let (Ok(reply), Some(hand_off)) = (completed, hand_off) {
+                        self.hand_off(&run, reply, hand_off);
                     }
                 }
             }
@@ -1091,7 +1133,7 @@ impl Runs {
             "conversation.results" => self.conversation_results(&place),
             "component.read" => read_component(&place, parse_params(params)?),
             "component.add" => add_component(&place, parse_params(params)?),
-            "document.edit" => self.edit_document(&place, parse_params(params)?),
+            "document.suggest" => self.suggest(&place, parse_params(params)?),
             "reply.hand_off" => self.accept_hand_off(call_id, &place, parse_params(params)?),
             other => Err(AppError::new(
                 "unknown_method",
@@ -1101,9 +1143,18 @@ impl Runs {
     }
 
     fn conversation_history(&self, place: &Place) -> AppResult<Value> {
-        let messages = place.project.lock().conversation_messages(place.conversation_id)?;
+        let (messages, labels) = {
+            let state = place.project.lock();
+            let messages = state.conversation_messages(place.conversation_id)?;
+            (messages, state.component_labels(place.conversation_id)?)
+        };
         let library = self.library.current();
-        let history = history(&messages, place.answers, &library, HISTORY_BUDGET_CHARS);
+        let history = history(
+            &messages,
+            place.answers,
+            (&library, &labels),
+            HISTORY_BUDGET_CHARS,
+        );
         Ok(serde_json::to_value(history)?)
     }
 
@@ -1118,9 +1169,14 @@ impl Runs {
         }
         let bytes = decode_asset(&p.data)?;
         let file = (p.name.as_str(), p.media_type.as_str(), bytes.as_slice());
-        let asset =
-            conversations::attach_generated(&place.project, place.reply, &place.author, file)
-                .map_err(reply_ended)?;
+        let asset = conversations::attach_generated(
+            &place.project,
+            place.reply,
+            &place.author,
+            file,
+            p.hidden,
+        )
+        .map_err(reply_ended)?;
         Ok(json!({ "asset": asset }))
     }
 
@@ -1129,45 +1185,37 @@ impl Runs {
         let messages = state.conversation_messages(place.conversation_id)?;
         let library = self.library.current();
         let mut found = results(&messages, place.answers, place.reply, &library, |id| {
-            assets::find(&state, id).ok()
+            assets::find_with_hidden(&state, id).ok()
         });
         // A thread's document is part of what its comment is about.
         if let Some(document) = comments::document_of(&state, place.conversation_id)? {
             found.assets.retain(|a| a.asset.id != document.id);
             let message_id = place.answers;
-            let listed = ResultAsset { asset: document, message_id, current: true };
+            let listed = ResultAsset {
+                asset: document,
+                message_id,
+                current: true,
+                hidden: false,
+            };
             found.assets.insert(0, listed);
         }
         Ok(serde_json::to_value(found)?)
     }
 
-    fn edit_document(&self, place: &Place, p: DocumentEditParams) -> AppResult<Value> {
+    fn suggest(&self, place: &Place, p: DocumentSuggestParams) -> AppResult<Value> {
         self.document_allowed()?;
-        let call = comments::EditingCall {
-            conversation_id: place.conversation_id,
-            answers: place.answers,
-            reply: place.reply,
-            author: &place.author,
-            step_id: Some(place.step_id.as_str()),
-        };
-        let edited = comments::edit_document(&place.project, &call, p.asset_id, &p.edits)
-            .map_err(reply_ended)?;
-        Ok(serde_json::to_value(edited)?)
+        let id = suggestions::add(&place.project, p.asset_id, &place.author, &p.find, &p.text)?;
+        if !comments::is_thread(&place.project.lock(), place.conversation_id)? {
+            show_document(place, p.asset_id).map_err(reply_ended)?;
+        }
+        Ok(json!({ "suggestion_id": id }))
     }
 
     fn accept_hand_off(&self, call_id: Uuid, place: &Place, p: HandOffParams) -> AppResult<Value> {
         let hand_off = self.hand_off_allowed(place, p)?;
-        let library = self.library.current();
-        let name = library.mini_me(hand_off.mini_me_id).map_or("", |m| m.name.as_str());
-        let data = json!({
-            "mini_me_id": hand_off.mini_me_id,
-            "request": hand_off.request,
-            "file": hand_off.file,
-        });
-        let text = format!("Handed to {name}: {}", hand_off.request);
+        let card = self.hand_off_card(&hand_off);
         self.hold_hand_off(call_id, hand_off)?;
         let step_id = Some(place.step_id.as_str());
-        let card = NewComponent { kind: "hand-off".into(), version: 1, data, text };
         let added = conversations::add_core_component(&place.project, place.reply, step_id, card);
         if let Err(err) = added {
             self.drop_hand_off(call_id);
@@ -1176,8 +1224,38 @@ impl Runs {
         Ok(json!({ "ok": true }))
     }
 
-    /// Not to its own or an unknown Mini-Me, not from a handed-off reply or comment thread,
-    /// and only with a file of the Conversation.
+    fn hand_off_card(&self, hand_off: &HandOff) -> NewComponent {
+        let library = self.library.current();
+        let name = library.mini_me(hand_off.mini_me_id).map_or("", |m| m.name.as_str());
+        NewComponent {
+            kind: "hand-off".into(),
+            version: 1,
+            preview: json!({
+                "mini_me_id": hand_off.mini_me_id,
+                "request": hand_off.request,
+                "file": hand_off.file,
+            }),
+            text: format!("Handed to {name}: {}", hand_off.request),
+            source_asset_id: None,
+        }
+    }
+
+    /// Routing's recommended hand-off for a Mini-Me without a prompt Trait, shown on its reply.
+    fn hand_off_for(&self, run: &Run) -> Option<HandOff> {
+        let mini_me_id = run.spec.hand_off.as_ref()?.mini_me_id;
+        if run.spec.traits.iter().any(|t| t.adapter == PROMPT_ADAPTER) {
+            return None;
+        }
+        let message = run.project.lock().load_message_with(run.answers, false).ok()??.1;
+        let file = conversations::message_files(&message).into_iter().next();
+        let request = run.spec.input["text"].as_str().unwrap_or_default().to_string();
+        let hand_off = HandOff { mini_me_id, request, file: file.or(run.spec.file.clone()) };
+        let card = self.hand_off_card(&hand_off);
+        conversations::add_core_component(&run.project, run.message_id, None, card).ok()?;
+        Some(hand_off)
+    }
+
+    /// Not to its own or an unknown Mini-Me, and only with a file of the Conversation.
     fn hand_off_allowed(&self, place: &Place, params: HandOffParams) -> AppResult<HandOff> {
         let library = self.library.current();
         if library.mini_me(params.mini_me_id).is_none() {
@@ -1187,19 +1265,12 @@ impl Runs {
             return Err(hand_off_refused("A Mini-Me can't hand off to itself."));
         }
         let state = place.project.lock();
-        if comments::is_thread(&state, place.conversation_id)? {
-            return Err(hand_off_refused("A reply to a comment can't hand off."));
-        }
-        let answers = state.load_message_with(place.answers, false)?;
-        if answers.is_some_and(|(_, m)| m.author.kind == AuthorKind::MiniMe) {
-            return Err(hand_off_refused("A reply that was handed off can't hand off again."));
-        }
         let file = match params.asset_id {
             None => None,
             Some(id) => {
                 let messages = state.conversation_messages(place.conversation_id)?;
                 let found = results(&messages, place.answers, place.reply, &library, |id| {
-                    assets::find(&state, id).ok()
+                    assets::find_with_hidden(&state, id).ok()
                 });
                 let asset = found
                     .assets
@@ -1235,20 +1306,20 @@ impl Runs {
         }
     }
 
-    /// As if the user sent the request, with the run's model; notes why when it cannot start.
-    fn hand_off(&self, run: &Run, reply: &Message, hand_off: HandOff) {
-        let library = self.library.current();
-        let author = Author { kind: AuthorKind::MiniMe, id: hand_off.mini_me_id.to_string() };
-        let input = json!({ "text": hand_off.request });
-        let started = RunSpec::for_mini_me(&library, hand_off.mini_me_id, author, input, Some(true))
-            .and_then(|mut spec| {
-                spec.file = hand_off.file;
-                let project = Arc::clone(&run.project);
-                self.start(project, run.conversation_id, reply, spec, run.model.clone())
-            });
-        if let Err(err) = started {
-            explain(&run.project, run.conversation_id, reply.id, &err);
-        }
+    fn hand_off(&self, run: &Run, reply: Message, hand_off: HandOff) {
+        let Some(router) = locked(&self.hand_off_router).clone() else {
+            return;
+        };
+        router(HandedOff {
+            project: Arc::clone(&run.project),
+            conversation_id: run.conversation_id,
+            reply,
+            mini_me_id: hand_off.mini_me_id,
+            request: hand_off.request,
+            file: hand_off.file,
+            model: run.model.clone(),
+            route: run.spec.route.clone(),
+        });
     }
 
     /// Answers a routing, summary or decision request: only `secret.get` for `allowed`.
@@ -1334,14 +1405,6 @@ fn hand_off_refused(message: &str) -> AppError {
     AppError::new("hand_off_not_allowed", message)
 }
 
-fn mini_me_list(library: &Library) -> Vec<RouteMiniMe> {
-    library
-        .summaries()
-        .into_iter()
-        .map(|m| RouteMiniMe { id: m.id, name: m.name, description: m.description })
-        .collect()
-}
-
 /// A reply stopped while its call winds down takes no more output, as if the call had ended.
 fn reply_ended(err: AppError) -> AppError {
     if err.code == "reply_finished" {
@@ -1363,12 +1426,43 @@ fn read_component(place: &Place, p: ComponentReadParams) -> AppResult<Value> {
     components::read(&place.project.lock(), place.conversation_id, p.component_id)
 }
 
-fn add_component(place: &Place, p: ComponentAddParams) -> AppResult<Value> {
-    let data = match p.kind.as_str() {
-        "suggestion" => comments::suggestion(&place.project, place.conversation_id, &p.data)?,
-        _ => p.data,
+/// Adds the document's `document` card to the reply, unless the reply already shows it.
+fn show_document(place: &Place, asset_id: Uuid) -> AppResult<()> {
+    let name = {
+        let state = place.project.lock();
+        let (_, reply) = state
+            .load_message_with(place.reply, true)?
+            .ok_or_else(|| AppError::not_found("Message not found"))?;
+        let shown = reply
+            .components
+            .iter()
+            .any(|c| c.kind == "document" && c.preview["asset_id"] == json!(asset_id));
+        if shown {
+            return Ok(());
+        }
+        assets::find(&state, asset_id)?.name
     };
-    let component = NewComponent { kind: p.kind, version: p.version, data, text: p.text };
+    let title = name.strip_suffix(crate::documents::EXTENSION).unwrap_or(&name).to_string();
+    let card = NewComponent {
+        kind: "document".into(),
+        version: 1,
+        text: format!("Document: {title}"),
+        preview: json!({ "asset_id": asset_id, "title": title }),
+        source_asset_id: None,
+    };
+    let step_id = Some(place.step_id.as_str());
+    conversations::add_core_component(&place.project, place.reply, step_id, card)?;
+    Ok(())
+}
+
+fn add_component(place: &Place, p: ComponentAddParams) -> AppResult<Value> {
+    let component = NewComponent {
+        kind: p.kind,
+        version: p.version,
+        preview: p.preview,
+        text: p.text,
+        source_asset_id: p.source_asset_id,
+    };
     let step_id = Some(place.step_id.as_str());
     let id = conversations::add_component(&place.project, place.reply, step_id, component)
         .map_err(reply_ended)?;
@@ -1380,6 +1474,9 @@ fn read_asset(project: &Project, params: AssetReadParams) -> AppResult<Value> {
     let path = assets::file_path(project, params.asset_id)?;
     let mut file = File::open(&path)?;
     let size = file.metadata()?.len();
+    if params.offset == 0 {
+        assets::keep_size(&project.lock(), params.asset_id, size as i64)?;
+    }
     let offset = params.offset.min(size);
     file.seek(SeekFrom::Start(offset))?;
     let mut data = Vec::new();
@@ -1410,7 +1507,6 @@ pub mod test_support {
             color: String::new(),
             adapter: adapter.to_string(),
             instructions: None,
-            tools: Vec::new(),
         };
         let step = Step {
             id: STEP.to_string(),
@@ -1425,6 +1521,10 @@ pub mod test_support {
             input,
             needs_context: None,
             file: None,
+            component: None,
+            tools: Vec::new(),
+            hand_off: None,
+            route: None,
         }
     }
 
@@ -1841,27 +1941,28 @@ mod tests {
         f.runs.respond("r".into(), call_id, "component.add", params)
     }
 
-    /// The plans of the runs started so far, in order.
-    fn plans(f: &Fixture) -> Vec<RunPlan> {
-        f.sink
-            .frames()
-            .into_iter()
-            .filter_map(|frame| match frame {
-                CoreFrame::RunStart { plan, .. } => Some(plan),
-                _ => None,
-            })
-            .collect()
-    }
-
     /// Asks to hand off to `mini_me` from `call_id`.
     fn hand_off(f: &Fixture, call_id: Uuid, mini_me: Uuid, asset: Option<Uuid>) -> CoreFrame {
         let params = json!({ "mini_me_id": mini_me, "request": "profile\n this", "asset_id": asset });
         f.runs.respond("r".into(), call_id, "reply.hand_off", params)
     }
 
+    /// The hand-offs passed to routing: Mini-Me, request, file, and the reply that handed off.
+    type HandedOffs = Arc<Mutex<Vec<(Uuid, String, Option<RunFile>, Uuid)>>>;
+
+    fn record_hand_offs(f: &Fixture) -> HandedOffs {
+        let handed = HandedOffs::default();
+        let log = Arc::clone(&handed);
+        f.runs.set_hand_off_router(Arc::new(move |h| {
+            locked(&log).push((h.mini_me_id, h.request, h.file, h.reply.id));
+        }));
+        handed
+    }
+
     #[test]
-    fn a_reply_hands_off_once_shows_a_card_and_starts_the_other_mini_me() {
+    fn a_reply_hands_off_once_shows_a_card_and_passes_it_to_routing() {
         let f = quick();
+        let handed = record_hand_offs(&f);
         let (run_id, reply) = f.start("echo");
         let call_id = f.step(run_id, STEP);
         let refused = Some("hand_off_not_allowed");
@@ -1873,19 +1974,18 @@ mod tests {
         assert_eq!(error_code(hand_off(&f, call_id, SCRIBE, None)).as_deref(), refused);
 
         let card = &f.message(reply).components[0];
-        assert_eq!((card.kind.as_str(), card.data["mini_me_id"].clone()), ("hand-off", json!(SCRIBE)));
-        assert_eq!(plans(&f).len(), 1);
+        assert_eq!(
+            (card.kind.as_str(), card.preview["mini_me_id"].clone()),
+            ("hand-off", json!(SCRIBE))
+        );
+        assert!(locked(&handed).is_empty());
         f.runs.handle(SidecarFrame::RunDone { run_id });
-        let plans = plans(&f);
-        let [_, scribe] = plans.as_slice() else { panic!("expected two runs, got {plans:?}") };
-        assert_eq!((scribe.mini_me.id, scribe.input.clone()), (SCRIBE, json!({ "text": "profile this" })));
-        assert_eq!((scribe.context.message.id, scribe.context.needs_context), (reply, Some(true)));
         let picked = RunFile { asset_id, name: "trial.csv".into() };
-        assert_eq!(scribe.context.file, Some(picked));
+        assert_eq!(*locked(&handed), [(SCRIBE, "profile this".to_string(), Some(picked), reply)]);
     }
 
     #[test]
-    fn a_reply_cannot_hand_off_to_itself_again_or_in_a_thread() {
+    fn a_reply_cannot_hand_off_to_itself_but_can_in_a_chain_or_a_thread() {
         let f = quick();
         let refused = Some("hand_off_not_allowed");
         let mut own = spec("echo", json!({ "text": "hi" }));
@@ -1901,7 +2001,7 @@ mod tests {
         let run = spec("echo", json!({ "text": "profile this" }));
         f.runs.start(Arc::clone(&f.project), conversation, &answering, run, dummy_model()).unwrap();
         let call_id = f.step(f.sink.last_run(), STEP);
-        assert_eq!(error_code(hand_off(&f, call_id, FALLBACK_MINI_ME, None)).as_deref(), refused);
+        result(hand_off(&f, call_id, FALLBACK_MINI_ME, None));
 
         let thread = create(&f.project).unwrap().id;
         into_thread(&f.project, thread);
@@ -1909,17 +2009,37 @@ mod tests {
         let run = spec("echo", json!({ "text": "check this" }));
         f.runs.start(Arc::clone(&f.project), thread, &comment, run, dummy_model()).unwrap();
         let call_id = f.step(f.sink.last_run(), STEP);
-        assert_eq!(error_code(hand_off(&f, call_id, FALLBACK_MINI_ME, None)).as_deref(), refused);
+        result(hand_off(&f, call_id, SCRIBE, None));
+    }
+
+    #[test]
+    fn the_core_hands_off_as_recommended_only_for_a_mini_me_without_a_prompt_trait() {
+        let f = quick();
+        let handed = record_hand_offs(&f);
+        let picked = RunFile { asset_id: new_id(), name: "trial.csv".into() };
+        let replies = ["prompt", "echo"].map(|adapter| {
+            let mut run = spec(adapter, json!({ "text": "find papers and write a report" }));
+            run.hand_off = Some(RunHandOff { mini_me_id: SCRIBE });
+            run.file = Some(picked.clone());
+            let (run_id, reply) = f.start_spec(run, dummy_model());
+            f.runs.handle(SidecarFrame::RunDone { run_id });
+            reply
+        });
+        let reply = replies[1];
+        let request = "find papers and write a report".to_string();
+        assert_eq!(*locked(&handed), [(SCRIBE, request, Some(picked), reply)]);
+        assert_eq!(f.message(reply).components[0].kind, "hand-off");
     }
 
     #[test]
     fn a_stopped_reply_does_not_hand_off() {
         let f = quick();
+        let handed = record_hand_offs(&f);
         let (run_id, _) = f.start("echo");
         let call_id = f.step(run_id, STEP);
         result(hand_off(&f, call_id, SCRIBE, None));
         f.runs.handle(SidecarFrame::RunCancelled { run_id });
-        assert_eq!(plans(&f).len(), 1);
+        assert!(locked(&handed).is_empty());
     }
 
     #[test]
@@ -1934,14 +2054,28 @@ mod tests {
     }
 
     #[test]
-    fn a_call_can_ask_to_edit_only_a_document_its_message_references() {
+    fn a_suggestion_shows_its_document_once_in_a_conversation_and_not_in_a_thread() {
         let f = quick();
-        let (call_id, _) = f.start_call("echo");
+        let (call_id, reply) = f.start_call("echo");
         let report = crate::documents::create(&f.project, "Report", None, &user()).unwrap();
-        let edit = json!({ "find": "Report", "replace": "Trial report", "reason": "Clearer." });
-        let params = json!({ "asset_id": report.id, "edits": [edit] });
-        let refused = f.runs.respond("r".into(), call_id, "document.edit", params);
-        assert_eq!(error_code(refused).as_deref(), Some("document_not_referenced"));
+        let text = "Yield fell above 3,800 m, mainly at Huancayo.";
+        crate::documents::save(&f.project, report.id, text, &Default::default()).unwrap();
+        let suggest = |call_id: Uuid, find: &str| {
+            let params = json!({ "asset_id": report.id, "find": find, "text": "x" });
+            result(f.runs.respond("r".into(), call_id, "document.suggest", params))
+        };
+        suggest(call_id, "Yield");
+        suggest(call_id, "Huancayo");
+        assert_eq!(crate::suggestions::list(&f.project, report.id).unwrap().len(), 2);
+        let cards: Vec<(String, String)> =
+            f.message(reply).components.into_iter().map(|c| (c.kind, c.text)).collect();
+        assert_eq!(cards, [("document".to_string(), "Document: Report".to_string())]);
+
+        let (call_id, reply) = f.start_call("echo");
+        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
+        into_thread(&f.project, conversation);
+        suggest(call_id, "above");
+        assert!(f.message(reply).components.is_empty());
     }
 
     #[test]
@@ -1952,7 +2086,7 @@ mod tests {
         f.runs.handle(SidecarFrame::StepCompleted { run_id, step_id: STEP.into(), output: None });
         let call_id = f.step(run_id, STEP);
         let params = json!({
-            "kind": "paper-sources", "version": 1, "data": papers(), "text": "1. Late blight"
+            "kind": "paper-sources", "version": 1, "preview": papers(), "text": "1. Late blight"
         });
         result(add_component(&f, call_id, params));
 
@@ -1972,11 +2106,11 @@ mod tests {
     }
 
     #[test]
-    fn a_call_lists_its_conversations_components_and_reads_one_in_full() {
+    fn a_call_lists_its_conversations_components_and_reads_one_without_its_preview() {
         let f = quick();
         let (call_id, _) = f.start_call("echo");
         let params = json!({
-            "kind": "paper-sources", "version": 1, "data": papers(), "text": "1. Late blight"
+            "kind": "paper-sources", "version": 1, "preview": papers(), "text": "1. Late blight"
         });
         let id = result(add_component(&f, call_id, params))["component_id"].clone();
 
@@ -1989,16 +2123,21 @@ mod tests {
             let params = json!({ "component_id": component_id });
             f.runs.respond("r".into(), call_id, "component.read", params)
         };
-        assert_eq!(result(read(id))["data"], papers());
-        assert_eq!(error_code(read(json!(new_id()))).as_deref(), Some("not_found"));
+        let component = result(read(id));
+        assert_eq!(component["text"], "1. Late blight");
+        assert_eq!(component.get("preview"), None);
+        assert_eq!(
+            error_code(read(json!(new_id()))).as_deref(),
+            Some("not_found")
+        );
     }
 
     #[test]
     fn components_a_trait_may_not_add_are_refused() {
         let f = quick();
         let (call_id, reply) = f.start_call("echo");
-        for kind in ["approval", "document-edits"] {
-            let params = json!({ "kind": kind, "version": 1, "data": {}, "text": "t" });
+        for kind in ["approval", "hand-off"] {
+            let params = json!({ "kind": kind, "version": 1, "preview": {}, "text": "t" });
             assert_eq!(
                 error_code(add_component(&f, call_id, params)).as_deref(),
                 Some("component_not_allowed"),
@@ -2006,7 +2145,8 @@ mod tests {
             );
         }
 
-        let empty = json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": " " });
+        let empty =
+            json!({ "kind": "paper-sources", "version": 1, "preview": papers(), "text": " " });
         assert_eq!(
             error_code(add_component(&f, call_id, empty)).as_deref(),
             Some("invalid_component")
@@ -2024,7 +2164,7 @@ mod tests {
         let call_id = f.step(run_id, STEP);
         f.runs.handle(SidecarFrame::StepCompleted { run_id, step_id: STEP.into(), output: None });
         let params =
-            json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": "t" });
+            json!({ "kind": "paper-sources", "version": 1, "preview": papers(), "text": "t" });
         assert_eq!(
             error_code(add_component(&f, call_id, params)).as_deref(),
             Some("call_not_active")
@@ -2056,6 +2196,23 @@ mod tests {
         assert_eq!(message.attachments.len(), 1);
         let path = assets::file_path(&f.project, message.attachments[0].id).unwrap();
         assert_eq!(std::fs::read(path).unwrap(), b"{\"theories\": []}");
+    }
+
+    #[test]
+    fn a_hidden_asset_is_written_without_an_attachment() {
+        let f = quick();
+        let (call_id, reply) = f.start_call("echo");
+        let data = BASE64.encode(b"[]");
+        let params =
+            json!({ "name": "papers.json", "media_type": "", "data": data, "hidden": true });
+        let written = result(f.runs.respond("r".into(), call_id, "asset.write", params));
+
+        let id: Uuid = serde_json::from_value(written["asset"]["id"].clone()).unwrap();
+        assert!(f.message(reply).attachments.is_empty());
+        assert_eq!(
+            assets::find(&f.project.lock(), id).unwrap().name,
+            "papers.json"
+        );
     }
 
     #[test]
@@ -2181,9 +2338,16 @@ mod tests {
         let decision = f.step(run_id, "pick");
         let ask = |method: &str, params: Value| f.runs.respond("r".into(), decision, method, params);
         let read = json!({ "asset_id": Uuid::nil(), "offset": 0, "length": 1 });
-        assert_eq!(error_code(ask("asset.read", read)).as_deref(), Some("unknown_method"));
-        let add = json!({ "kind": "paper-sources", "version": 1, "data": papers(), "text": "t" });
-        assert_eq!(error_code(ask("component.add", add)).as_deref(), Some("unknown_method"));
+        assert_eq!(
+            error_code(ask("asset.read", read)).as_deref(),
+            Some("unknown_method")
+        );
+        let add =
+            json!({ "kind": "paper-sources", "version": 1, "preview": papers(), "text": "t" });
+        assert_eq!(
+            error_code(ask("component.add", add)).as_deref(),
+            Some("unknown_method")
+        );
         assert_eq!(
             error_code(ask("conversation.results", json!({}))).as_deref(),
             Some("unknown_method")
@@ -2326,7 +2490,7 @@ mod tests {
         let runs = Arc::clone(&f.runs);
         let handle = std::thread::spawn(move || {
             let ask = vec!["reaction".into()];
-            runs.route(json!({ "message": "hi" }), Vec::new(), Vec::new(), ask, timeout)
+            runs.route(json!({ "message": "hi" }), Vec::new(), Vec::new(), Vec::new(), ask, timeout)
         });
         let route_id = wait_for(f, |frame| match frame {
             CoreFrame::RouteStart { route_id, .. } => Some(route_id),

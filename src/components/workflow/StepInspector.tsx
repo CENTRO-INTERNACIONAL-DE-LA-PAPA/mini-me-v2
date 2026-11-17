@@ -17,7 +17,6 @@ import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { count } from "../../lib/format";
 import { ToolSheet } from "../shell/Sheet";
 import type { View } from "../shell/view";
-import { toolLabel } from "./tools";
 import {
   allIds,
   asksBeforeRunning,
@@ -113,13 +112,6 @@ export function StepInspector({
                   </Button>
                 </div>
               </MiniMeSurface>
-            )}
-            {trait && (
-              <Row label="Tools">
-                <p className="text-ui text-ink-2">
-                  {trait.tools.length === 0 ? "None" : trait.tools.map(toolLabel).join(", ")}
-                </p>
-              </Row>
             )}
             <div className="flex items-start justify-between gap-4">
               <div className="grid gap-0.5">

@@ -12,7 +12,7 @@ use crate::library::Workflow;
 use crate::protocol::{ErrorInfo, Message};
 
 /// The link protocol version. Both sides must report the same number.
-pub const SIDECAR_PROTOCOL: u32 = 15;
+pub const SIDECAR_PROTOCOL: u32 = 20;
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -35,7 +35,6 @@ pub struct RunTrait {
     pub instructions: Option<String>,
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
-    pub tools: Vec<String>,
 }
 
 /// The provider and model chosen in Settings.
@@ -69,6 +68,14 @@ pub struct RunContext {
     /// The file routing picked for a message that tags and attaches none.
     #[serde(default)]
     pub file: Option<RunFile>,
+    /// The table or chart routing picked as the one the message means.
+    #[serde(default)]
+    pub component: Option<RunComponent>,
+    /// The tools routing judged most likely to help, most likely first.
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub hand_off: Option<RunHandOff>,
     /// Every Mini-Me of the library, which a call's model may hand off to.
     #[serde(default)]
     pub mini_mes: Vec<RouteMiniMe>,
@@ -97,6 +104,17 @@ pub struct DebugParts {
 pub struct RunFile {
     pub asset_id: Uuid,
     pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunComponent {
+    pub component_id: Uuid,
+}
+
+/// The Mini-Me routing recommends handing off to.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunHandOff {
+    pub mini_me_id: Uuid,
 }
 
 /// A comment thread's document: its Asset, its name, and the thread's passage as it reads when
@@ -143,6 +161,8 @@ pub struct RouteMiniMe {
     pub id: Uuid,
     pub name: String,
     pub description: String,
+    /// Its Traits' names, each once, in Workflow order.
+    pub traits: Vec<String>,
 }
 
 /// An option of Jev's `file` question: an Asset of the Conversation, with the tables and
@@ -159,6 +179,16 @@ pub struct RouteFile {
 pub struct RouteComponent {
     pub kind: String,
     pub title: Option<String>,
+}
+
+/// An option of Jev's `component` question: a table or chart of the Conversation and the name
+/// of its source file.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouteComponentOption {
+    pub id: Uuid,
+    pub kind: String,
+    pub title: Option<String>,
+    pub file: String,
 }
 
 /// Jev's answer to one Choice question.
@@ -209,7 +239,10 @@ pub enum CoreFrame {
         mini_mes: Vec<RouteMiniMe>,
         /// The options of the `file` question, newest first; empty when it is not asked.
         files: Vec<RouteFile>,
-        /// The question IDs to ask: `mini_me`, `reaction`, `needs_context`, `file`.
+        /// The options of the `component` question, newest first; empty when it is not asked.
+        components: Vec<RouteComponentOption>,
+        /// The question IDs to ask: `mini_me`, `reaction`, `needs_context`, `file`,
+        /// `component`, `tools`.
         ask: Vec<String>,
     },
     /// Asks for a short text of `kind` written from `material`.

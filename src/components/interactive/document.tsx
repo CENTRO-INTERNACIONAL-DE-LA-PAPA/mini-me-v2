@@ -5,7 +5,7 @@ import { useLoad } from "../../hooks/useLoad";
 import { useOpenFile } from "../documents/openDocument";
 import type { Renderers, RendererProps } from "./catalogue";
 
-/** `document` version 1 data, `{ asset_id, title }`, as the write-a-document tool adds it. */
+/** `document` version 1 preview, `{ asset_id, title }`, as the write-a-document tool adds it. */
 interface DocumentData {
   asset_id?: string;
   title?: string;
@@ -53,8 +53,8 @@ export function useRemoved(projectId: string | undefined, assetId: string | unde
   return removed ?? false;
 }
 
-function DocumentV1({ data, projectId }: RendererProps) {
-  const { asset_id: assetId, title } = (data ?? {}) as DocumentData;
+function DocumentV1({ preview, projectId }: RendererProps) {
+  const { asset_id: assetId, title } = (preview ?? {}) as DocumentData;
   const openFile = useOpenFile(projectId);
   const removed = useRemoved(projectId, assetId);
 

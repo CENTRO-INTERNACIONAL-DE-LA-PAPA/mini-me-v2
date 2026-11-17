@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useRef, type ReactNode } from "react";
 import { api } from "../../api";
 
-/** Opens `assetId` in the document view, with the Comments sheet on `edits` when given. */
-type OpenDocument = (assetId: string, edits?: string[]) => void;
+/** Opens `assetId` in the document view. */
+type OpenDocument = (assetId: string) => void;
 
 // Provided around a Conversation; elsewhere documents open in the system's default app.
 const OpenDocumentContext = createContext<OpenDocument | null>(null);

@@ -23,7 +23,8 @@ from mini_me_sidecar.adapters.providers import (
     provider_error,
 )
 from mini_me_sidecar.context import CallContext, Model, TraitError
-from mini_me_sidecar.tools import CONVERSATION_TOOLS, DEFAULT_TOOLS, THREAD_TOOLS
+from mini_me_sidecar.routing import mini_me_text
+from mini_me_sidecar.tools import DEFAULT_TOOLS, MODEL_TOOL_NAMES
 
 MAX_MATERIAL_CHARS = 400_000
 
@@ -101,14 +102,20 @@ class Prompt(Adapter):
                 f"This is {len(text):,} characters; the limit is {MAX_MATERIAL_CHARS:,}.",
             )
         material = _material(
-            text, await ctx.results(), ctx.message, ctx.document, ctx.file, ctx.mini_mes
+            text,
+            await ctx.results(),
+            ctx.document,
+            ctx.file,
+            _hand_offs(ctx.mini_mes, ctx.hand_off, ctx.later_traits),
+            component=ctx.picked_component,
+            tools=ctx.tools,
         )
         earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []
         key = await ctx.secret(model.provider)
         instructions = _system_prompt(ctx.mini_me_name, bool(ctx.steps), ctx.trait.instructions)
         messages = _messages(_merged(_turns(instructions, earlier, ctx.steps, material)))
 
-        names = _offered(ctx.trait.tools, ctx.document is not None)
+        names = (*DEFAULT_TOOLS, *MODEL_TOOL_NAMES)
         offered = {n: MODEL_TOOLS[n] for n in names if n in MODEL_TOOLS}
         chat = chat_model(model, key.reveal()).bind_tools([t.schema() for t in offered.values()])
 
@@ -161,14 +168,6 @@ async def _converse(
         for call in reply.invalid_tool_calls:
             if call.get("id"):
                 messages.append(ToolMessage(content=_malformed(call), tool_call_id=call["id"]))
-
-
-def _offered(listed: tuple[str, ...], in_thread: bool) -> list[str]:
-    """The default tools then the Trait's, with thread tools only inside a comment thread and
-    Conversation tools only outside one."""
-    names = [*DEFAULT_TOOLS, *(t for t in listed if t not in DEFAULT_TOOLS)]
-    left_out = CONVERSATION_TOOLS if in_thread else THREAD_TOOLS
-    return [n for n in names if n not in left_out]
 
 
 def _over_budget(size: int, left: int) -> str:
@@ -276,16 +275,18 @@ async def _run_tool(ctx: CallContext, offered: dict[str, Any], call: dict[str, A
 def _material(
     text: str,
     results: dict[str, Any],
-    message: dict[str, Any] | None = None,
     document: dict[str, Any] | None = None,
     picked: dict[str, Any] | None = None,
-    mini_mes: list[dict[str, Any]] | None = None,
+    hand_offs: str = "",
+    component: dict[str, Any] | None = None,
+    tools: list[str] | None = None,
 ) -> str:
     """The user prompt: a comment's passage of `document`, `text`, the Conversation's files
-    (marking routing's `picked`) and components by ID without content, the components `message`
-    references with `$`, and the Mini-Mes to hand off to."""
+    and components by ID without content (marking routing's `picked` file and `component`),
+    routing's likely `tools`, and `hand_offs`."""
     files = (results.get("assets") or [])[:MAX_LISTED]
     picked_id = (picked or {}).get("asset_id")
+    component_id = (component or {}).get("component_id")
     components = (results.get("components") or [])[:MAX_LISTED]
     parts = []
     if document:
@@ -306,27 +307,38 @@ def _material(
     if components:
         lines = [
             f"- {c.get('kind')} from {c.get('author')} (ID: {c.get('id')})"
-            + (" — in this message" if c.get("current") else "")
+            + (" — probably the component the user means" if c.get("id") == component_id else "")
             for c in components
         ]
         parts.append("Interactive Components in this Conversation:\n" + "\n".join(lines))
-    references = [
-        c for c in (message or {}).get("text_components") or [] if c.get("kind") == "component"
-    ]
-    if references:
-        kinds = {c.get("id"): c.get("kind") for c in results.get("components") or []}
-        lines = [
-            f"- {c.get('label')}: the {kinds.get(c.get('id'), 'component')} with ID {c.get('id')}"
-            for c in references
-        ]
-        parts.append(
-            "Components referenced in this message, to read with read_component:\n"
-            + "\n".join(lines)
-        )
-    if mini_mes:
-        lines = [f"- {m.get('name')}: {m.get('description')}" for m in mini_mes]
-        parts.append("Mini-Mes you can hand off to:\n" + "\n".join(lines))
+    if tools:
+        parts.append(f"Likely useful: {', '.join(tools)}")
+    parts.append(hand_offs)
     return "\n\n".join(p for p in parts if p)
+
+
+def _hand_offs(
+    mini_mes: list[dict[str, Any]], recommended: dict[str, Any] | None, later: list[str]
+) -> str:
+    """The Mini-Mes to hand off to, routing's `recommended` one, and the `later` Traits of the
+    Workflow, whose work is not handed off."""
+    parts = []
+    if mini_mes:
+        lines = [f"- {mini_me_text(m)}" for m in mini_mes]
+        parts.append("Mini-Mes you can hand off to:\n" + "\n".join(lines))
+    wanted = (recommended or {}).get("mini_me_id")
+    name = next((m.get("name") for m in mini_mes if m.get("id") == wanted), None)
+    if name:
+        parts.append(
+            f"It's suggested that {name} handle the part of the request you don't cover; hand "
+            "it off with the hand_off tool if so."
+        )
+    if later:
+        parts.append(
+            f"Your Workflow runs these Traits after you: {', '.join(later)}. "
+            "Don't hand off their work."
+        )
+    return "\n\n".join(parts)
 
 
 async def _earlier_turns(ctx: CallContext) -> list[tuple[str, str]]:

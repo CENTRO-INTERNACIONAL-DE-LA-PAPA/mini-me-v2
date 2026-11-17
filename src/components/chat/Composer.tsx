@@ -1,4 +1,4 @@
-import { Extension, type Editor } from "@tiptap/core";
+import { Extension } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import HardBreak from "@tiptap/extension-hard-break";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -10,7 +10,6 @@ import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "reac
 import { api, errorCode, errorMessage } from "../../api";
 import {
   assetTarget,
-  componentTarget,
   draftFromDoc,
   fold,
   miniMeSuggestions,
@@ -20,7 +19,6 @@ import {
 } from "../../protocol/references";
 import type { AssetRef, FileEntry, Message, MiniMe } from "../../protocol/types";
 import { AttachmentTray } from "./AttachmentTray";
-import type { ComponentName } from "../interactive/component-names";
 import { surfaceStyle } from "../minime/miniMeColors";
 import { MiniMePill } from "../minime/MiniMePill";
 import { ReferenceNode } from "./ReferenceNode";
@@ -31,11 +29,9 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowUpIcon,
   AtSignIcon,
-  ChartColumnIcon,
   FileSearchIcon,
   PaperclipIcon,
   SquareIcon,
-  Table2Icon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,8 +43,6 @@ interface Props {
   /** Mini-Me is deciding who answers the last message; sending waits until it has. */
   choosing: boolean;
   onSent: (message: Message) => void;
-  /** The Conversation's tables and charts, newest first, for the `$` list. */
-  components: ComponentName[];
   /** A tool sheet is open beside the Conversation, so the chat column is narrower. */
   narrow?: boolean;
   /** In a comment thread's card: placed in the card instead of floating over the sheet, and a
@@ -69,18 +63,14 @@ export function chatColumn(narrow: boolean, part: "composer" | "messages"): stri
 
 /** What the rest of the Conversation can do to the composer. */
 export interface ComposerHandle {
-  /** Adds a reference at the end of the text, leaving the rest and the caret as they are. */
-  appendReference: (target: ReferenceTarget) => void;
   /** Imports the files of a drop on the window and attaches them to the message. */
   attachDropped: (paths: string[]) => void;
 }
 
-/** An entry in the `@`, `#` or `$` list. */
+/** An entry in the `@` or `#` list. */
 interface Suggestion {
   target: ReferenceTarget;
   miniMe?: MiniMe;
-  /** For a `$` entry, what the component is. */
-  kind?: ComponentName["kind"];
   /** For a `#` entry, when and by whom the file was added. */
   detail?: string;
 }
@@ -95,7 +85,6 @@ interface Query {
 const SIGNS: Array<[string, ReferenceKind]> = [
   ["@", "mini_me"],
   ["#", "asset"],
-  ["$", "component"],
 ];
 
 /** A pasted image without the name browsers give any pasted bitmap (`image.png`), so the
@@ -104,19 +93,12 @@ function pastedFile(image: File): File {
   return /^image\.[a-z]+$/i.test(image.name) ? new File([image], "", { type: image.type }) : image;
 }
 
-/** Whether the document ends in a character after which a new reference needs a space. */
-function endsInWord(editor: Editor): boolean {
-  const last = editor.state.doc.lastChild?.lastChild;
-  return last !== null && last !== undefined && !(last.isText && /\s$/.test(last.text ?? ""));
-}
-
 export function Composer({
   projectId,
   conversationId,
   replying,
   choosing,
   onSent,
-  components,
   narrow = false,
   thread = false,
   ref,
@@ -217,35 +199,24 @@ export function Composer({
   const assetSuggestions =
     query?.kind === "asset" ? files.filter((f) => fold(f.name).includes(fold(query.query))) : [];
 
-  const componentSuggestions: Suggestion[] =
-    query?.kind === "component"
-      ? components
-          .filter((c) => fold(c.name).includes(fold(query.query)))
-          .map((c) => ({ target: componentTarget(c.name, c.id), kind: c.kind }))
-      : [];
-
-  /** The list's sections: a heading (empty for files, tables and charts) and its entries. */
+  /** The list's sections: a heading (empty for files) and its entries. */
   const sections: Array<{ heading: string; entries: Suggestion[] }> =
     query?.kind === "mini_me"
       ? miniMeSuggestions(miniMes, query.query).map((section) => ({
           heading: section.label,
           entries: section.miniMes.map((m) => ({ target: miniMeTarget(m), miniMe: m })),
         }))
-      : query?.kind === "component"
-        ? componentSuggestions.length > 0
-          ? [{ heading: "", entries: componentSuggestions }]
-          : []
-        : query?.kind === "asset" && assetSuggestions.length > 0
-          ? [
-              {
-                heading: "",
-                entries: assetSuggestions.map((a) => ({
-                  target: assetTarget(a),
-                  detail: fileDetail(a, miniMes),
-                })),
-              },
-            ]
-          : [];
+      : query?.kind === "asset" && assetSuggestions.length > 0
+        ? [
+            {
+              heading: "",
+              entries: assetSuggestions.map((a) => ({
+                target: assetTarget(a),
+                detail: fileDetail(a, miniMes),
+              })),
+            },
+          ]
+        : [];
   const suggestions = sections.flatMap((section) => section.entries);
 
   listKeys.current = (event) => {
@@ -289,13 +260,6 @@ export function Composer({
   useImperativeHandle(
     ref,
     () => ({
-      appendReference(target) {
-        if (!editor) return;
-        const reference = { type: "reference", attrs: target };
-        const content = endsInWord(editor) ? [{ type: "text", text: " " }, reference] : [reference];
-        const end = editor.state.doc.content.size - 1;
-        editor.chain().insertContentAt(end, content, { updateSelection: false }).run();
-      },
       attachDropped(paths) {
         api
           .importDropped(projectId, paths)
@@ -341,7 +305,7 @@ export function Composer({
   }
 
   /** Types `sign` at the caret, with a space before it when needed, to open its list. */
-  function startReference(sign: "@" | "#" | "$") {
+  function startReference(sign: "@" | "#") {
     if (!editor) return;
     const { from } = editor.state.selection;
     // A reference before the caret counts as a word, so the sign gets a space after it.
@@ -395,11 +359,7 @@ export function Composer({
         <div
           role="listbox"
           aria-label={
-            query?.kind === "mini_me"
-              ? "Mini-Mes"
-              : query?.kind === "component"
-                ? "Tables and charts"
-                : "Files"
+            query?.kind === "mini_me" ? "Mini-Mes" : "Files"
           }
           className={cn(
             "absolute bottom-full left-9 mb-2 max-h-80 w-80 overflow-y-auto rounded-well border",
@@ -480,15 +440,6 @@ export function Composer({
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Reference a table or chart"
-              title="Reference a table or chart"
-              onClick={() => startReference("$")}
-            >
-              <ChartColumnIcon />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
               aria-label="Attach files"
               title="Attach files"
               onClick={attach}
@@ -512,8 +463,7 @@ export function Composer({
   );
 }
 
-/** One entry in the `@`, `#` or `$` list: a Mini-Me's pill and description, a table's or
- * chart's name, or a file name. */
+/** One entry in the `@` or `#` list: a Mini-Me's pill and description, or a file name. */
 function SuggestionRow({
   suggestion,
   selected,
@@ -552,15 +502,6 @@ function SuggestionRow({
             {suggestion.miniMe.description}
           </span>
         </>
-      ) : suggestion.kind ? (
-        <span className="flex items-center gap-1.5 text-ui">
-          {suggestion.kind === "chart" ? (
-            <ChartColumnIcon aria-label="Chart" className="size-3.5 shrink-0" />
-          ) : (
-            <Table2Icon aria-label="Table" className="size-3.5 shrink-0" />
-          )}
-          {suggestion.target.label}
-        </span>
       ) : (
         <>
           <span className="text-ui">{suggestion.target.label}</span>

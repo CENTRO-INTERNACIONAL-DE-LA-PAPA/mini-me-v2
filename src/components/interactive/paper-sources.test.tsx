@@ -12,7 +12,7 @@ describe("paper-sources version 1", () => {
   }));
 
   it("shows the first sources and offers the rest", () => {
-    const html = renderToStaticMarkup(<Sources data={{ papers }} />);
+    const html = renderToStaticMarkup(<Sources preview={{ papers }} />);
     expect(html).toContain(`Paper ${SHOWN_SOURCES}<`);
     expect(html).not.toContain(`Paper ${SHOWN_SOURCES + 1}<`);
     expect(html).toContain("Show all sources (18)");
@@ -20,7 +20,7 @@ describe("paper-sources version 1", () => {
   });
 
   it("makes a card without a web address plain text", () => {
-    const html = renderToStaticMarkup(<Sources data={{ papers: papers.slice(0, 2) }} />);
+    const html = renderToStaticMarkup(<Sources preview={{ papers: papers.slice(0, 2) }} />);
     expect(html.match(/<button/g)).toHaveLength(1);
     expect(html).not.toContain("Show all sources");
   });

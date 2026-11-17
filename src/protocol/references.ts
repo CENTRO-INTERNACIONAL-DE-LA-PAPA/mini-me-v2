@@ -3,7 +3,7 @@ import type { AssetRef, MiniMe, MiniMeGroup, TextComponent } from "./types";
 
 export type ReferenceKind = TextComponent["kind"];
 
-/** What a reference points to: the Asset, Mini-Me or component `id`, labelled `label`. */
+/** What a reference points to: the Asset or Mini-Me `id`, labelled `label`. */
 export type ReferenceTarget = Pick<TextComponent, "kind" | "id" | "label">;
 
 export const assetTarget = (asset: AssetRef): ReferenceTarget => ({
@@ -16,13 +16,6 @@ export const miniMeTarget = (miniMe: MiniMe): ReferenceTarget => ({
   kind: "mini_me",
   id: miniMe.id,
   label: `@${miniMe.name}`,
-});
-
-/** A `$` reference to the table or chart `componentId`, which goes by `name`. */
-export const componentTarget = (name: string, componentId: string): ReferenceTarget => ({
-  kind: "component",
-  id: componentId,
-  label: `$${name}`,
 });
 
 /** The composer's document as a message: its text with each reference's label in place and a

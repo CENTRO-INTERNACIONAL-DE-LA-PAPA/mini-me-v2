@@ -15,8 +15,9 @@ TEXT_INPUT: dict[str, Any] = {
     "required": ["text"],
 }
 
-# Errors with which the core refuses a component; the reply then falls back to its text.
-COMPONENT_REFUSED = {"component_not_allowed", "invalid_component"}
+# Errors with which the core refuses a component, or its results file is too large to save; the
+# reply then falls back to its text.
+COMPONENT_REFUSED = {"component_not_allowed", "invalid_component", "file_too_large"}
 
 
 @dataclass(frozen=True)
@@ -39,8 +40,6 @@ class AdapterInfo:
 
 class Adapter(ABC):
     info: ClassVar[AdapterInfo]
-    # Tools the adapter's own code uses; one that offers tools to a model reads each Trait's.
-    uses_tools: ClassVar[tuple[str, ...]] = ()
 
     @abstractmethod
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
@@ -56,15 +55,11 @@ def require_model(ctx: CallContext) -> Model:
 
 
 async def component_or_text(
-    ctx: CallContext,
-    show: Callable[[CallContext, Any, str], Awaitable[str]],
-    data: Any,
-    text: str,
-    label: str,
+    ctx: CallContext, show: Callable[[], Awaitable[str]], text: str, label: str
 ) -> None:
-    """Shows `data` with `show`, or writes `text` when the core refuses the component."""
+    """Shows a component with `show`, or writes `text` when it is refused."""
     try:
-        await show(ctx, data, text)
+        await show()
     except ToolError as error:
         if error.code not in COMPONENT_REFUSED:
             raise

@@ -2,8 +2,8 @@ from mini_me_sidecar.adapters.prompt import (
     FILES_RULE,
     REPLY_RULE,
     RESEARCH_CONTEXT,
+    _hand_offs,
     _material,
-    _offered,
     _merged,
     _system_prompt,
     _turns,
@@ -50,54 +50,53 @@ def test_the_conversations_files_and_components_are_listed_without_content():
     assert "- trial.csv (ID: a2)\n" in material
     assert material.endswith("- table from Curator (ID: c1)")
     assert _material("hello", {"assets": [], "components": []}) == "hello"
-    picked = _material("summarize the trial", results, None, None, {"asset_id": "a2"})
+    picked = _material("summarize the trial", results, None, {"asset_id": "a2"})
     assert "- trial.csv (ID: a2) — probably the file the user means" in picked
+    assert "Likely useful" not in picked
 
 
-def test_suggest_edit_is_offered_only_in_a_thread_and_edit_document_only_outside():
-    listed = ("save_file", "suggest_edit", "edit_document")
-    defaults = ["read_file", "read_component", "hand_off"]
-    assert _offered(listed, in_thread=False) == [*defaults, "save_file", "edit_document"]
-    assert _offered(listed, in_thread=True) == [*defaults, "save_file", "suggest_edit"]
+def test_routings_hints_mark_the_component_and_name_the_likely_tools():
+    results = {
+        "assets": [],
+        "components": [
+            {"id": "c1", "kind": "chart", "author": "Plotter"},
+            {"id": "c2", "kind": "table", "author": "Curator"},
+        ],
+    }
+    material = _material(
+        "make it a bar chart",
+        results,
+        component={"component_id": "c1"},
+        tools=["show_table", "save_file"],
+    )
+    assert "- chart from Plotter (ID: c1) — probably the component the user means" in material
+    assert "- table from Curator (ID: c2)\n" in material
+    assert material.endswith("Likely useful: show_table, save_file")
 
 
 def test_a_comment_comes_after_the_passage_it_is_about():
     document = {"asset_id": "d1", "name": "Report.qmd", "passage": "Yield fell above 3,800 m."}
-    material = _material("make this shorter", {"assets": [], "components": []}, None, document)
+    material = _material("make this shorter", {"assets": [], "components": []}, document)
     assert material == (
         "This comment is about a passage of the document Report.qmd (ID: d1), which read_file "
         'reads in full:\n"""\nYield fell above 3,800 m.\n"""\n\nmake this shorter'
     )
 
 
-def test_the_messages_references_are_listed_with_their_kind():
-    table = {"id": "c1", "kind": "table", "author": "Curator", "current": True}
-    chart = {"id": "c2", "kind": "chart", "author": "Plotter", "current": True}
-    results = {"assets": [], "components": [chart, table]}
-    message = {
-        "text_components": [
-            {"kind": "component", "id": "c1", "label": "$trial"},
-            {"kind": "component", "id": "c2", "label": "$Yield-by-variety"},
-            {"kind": "mini_me", "id": "scribe", "label": "@Scribe"},
-        ]
-    }
-    material = _material("summarize these", results, message)
-    assert "- table from Curator (ID: c1) — in this message" in material
-    assert material.endswith(
-        "read_component:\n"
-        "- $trial: the table with ID c1\n"
-        "- $Yield-by-variety: the chart with ID c2"
-    )
-
-
-def test_the_prompt_lists_the_mini_mes_to_hand_off_to():
+def test_the_hand_off_part_lists_the_mini_mes_the_recommended_one_and_the_later_traits():
     mini_mes = [
-        {"id": "m-profiler", "name": "Profiler", "description": "Describes a data table"},
-        {"id": "m-plotter", "name": "Plotter", "description": "Draws charts of a data table"},
+        {"id": "m-profiler", "name": "Profiler", "description": "Describes a data table",
+         "traits": ["Profile Data"]},
+        {"id": "m-plotter", "name": "Plotter", "description": "Draws charts", "traits": []},
     ]
-    material = _material("profile it", {"assets": [], "components": []}, mini_mes=mini_mes)
-    assert material.endswith(
+    assert _hand_offs(mini_mes, None, []) == (
         "Mini-Mes you can hand off to:\n"
-        "- Profiler: Describes a data table\n"
-        "- Plotter: Draws charts of a data table"
+        "- Profiler: Describes a data table. Traits: Profile Data\n"
+        "- Plotter: Draws charts"
     )
+    hinted = _hand_offs(mini_mes, {"mini_me_id": "m-plotter"}, ["Make Report"])
+    assert "It's suggested that Plotter handle the part of the request you don't cover" in hinted
+    assert hinted.endswith("after you: Make Report. Don't hand off their work.")
+    assert _hand_offs([], {"mini_me_id": "m-plotter"}, []) == ""
+    material = _material("profile it", {"assets": [], "components": []}, hand_offs=hinted)
+    assert material.startswith("profile it\n\nMini-Mes you can hand off to:")

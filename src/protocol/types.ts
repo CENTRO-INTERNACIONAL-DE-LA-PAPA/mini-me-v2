@@ -26,21 +26,23 @@ export interface AssetRef {
 
 /** `start` and `end` are UTF-16 code unit offsets, i.e. plain JavaScript string indices. */
 export interface TextComponent {
-  kind: "asset" | "mini_me" | "component";
+  kind: "asset" | "mini_me";
   id: Uuid;
   label: string;
   start: number;
   end: number;
 }
 
-/** An Interactive Component below a reply's text. `data` matches the schema of `kind` at
- * `version`; `text` stands in for it where the kind has no renderer. */
+/** An Interactive Component below a reply's text. `preview`, what the UI shows, matches the
+ * schema of `kind` at `version`; `text` stands in for it where the kind has no renderer. */
 export interface Component {
   id: Uuid;
   kind: string;
   version: number;
-  data: unknown;
+  preview: unknown;
   text: string;
+  /** The Asset holding the component's data; null for kinds with no file behind them. */
+  source_asset_id?: Uuid | null;
   /** The user's answer, for kinds that ask for one; null until answered. */
   answer: unknown;
   /** Index in the reply's `steps` of the Trait Step run that added it; absent otherwise. */
@@ -287,43 +289,39 @@ export interface CommentThread {
   created_at: number;
   /** How many comments and replies the thread holds. */
   comments: number;
-  /** Its newest suggestion still waiting for an answer. */
-  pending: PendingSuggestion | null;
-  /** Where a Mini-Me opened it; null for a thread the user started. */
-  opened_from: OpenedFrom | null;
 }
 
-/** The Conversation a Mini-Me opened a thread from, by suggesting an edit there. */
-export interface OpenedFrom {
-  conversation_id: Uuid;
-  /** The Conversation's title; null once it no longer exists. */
-  title: string | null;
-  /** The Mini-Me that opened it. */
-  by: Author;
-}
-
-/** A suggestion waiting for the user's answer. */
-export interface PendingSuggestion {
-  message_id: Uuid;
-  component_id: Uuid;
-  author: Author;
+/** A waiting suggestion to replace a document's passage with `text`. `start`/`end` are UTF-16
+ * offsets in the source; `quote` is the passage when last saved, `base` when suggested. */
+export interface Suggestion {
+  id: Uuid;
+  asset_id: Uuid;
+  start: number;
+  end: number;
+  quote: string;
+  base: string;
   text: string;
+  author: Author;
+  created_at: number;
 }
 
-/** What the user decided about a suggestion. */
-export type SuggestionDecision = "accepted" | "rejected" | "dismissed";
-
-/** A document after a suggestion was accepted: its text and its threads, anchored anew. */
+/** A document after a suggestion was accepted, with its threads and suggestions anchored anew. */
 export interface AcceptedSuggestion {
   text: string;
   threads: CommentThread[];
+  suggestions: Suggestion[];
 }
 
-/** Where a comment thread's passage is now: UTF-16 offsets in the document's source. */
+/** Where a thread's or suggestion's passage is now: UTF-16 offsets in the document's source. */
 export interface Anchor {
-  thread_id: Uuid;
+  id: Uuid;
   start: number;
   end: number;
+}
+
+export interface Anchors {
+  threads: Anchor[];
+  suggestions: Anchor[];
 }
 
 /** A document as the document view opens it. */
@@ -412,7 +410,6 @@ export interface TraitSummary {
   name: string;
   description: string;
   instructions: string | null;
-  tools: string[];
   built_in: boolean;
   /** Whether it runs on its instructions; only such Traits can be duplicated. */
   prompt_based: boolean;
@@ -426,7 +423,6 @@ export interface TraitDraft {
   name: string;
   description: string;
   instructions: string;
-  tools: string[];
 }
 
 /** A user-made entry of `library.json` left out because it breaks a rule. */

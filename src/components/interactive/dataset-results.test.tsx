@@ -24,12 +24,12 @@ describe("dataset-results version 1", () => {
   it("offers more datasets while more match, and files only inside a Project", () => {
     const data = { query: "late blight", from_year: null, to_year: null, total: 213 };
     const page = renderToStaticMarkup(
-      <Results data={{ ...data, datasets: [dataset(1), dataset(2)] }} projectId="p" />,
+      <Results preview={{ ...data, datasets: [dataset(1), dataset(2)] }} projectId="p" />,
     );
     expect(page).toContain("Show more");
     expect(page).toContain("Files (3)");
 
-    const all = renderToStaticMarkup(<Results data={{ ...data, total: 1, datasets: [dataset(1)] }} />);
+    const all = renderToStaticMarkup(<Results preview={{ ...data, total: 1, datasets: [dataset(1)] }} />);
     expect(all).not.toContain("Show more");
     expect(all).not.toContain("Files (3)");
   });

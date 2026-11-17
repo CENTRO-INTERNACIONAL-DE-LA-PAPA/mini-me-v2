@@ -28,26 +28,38 @@ The failure SHALL NOT end the reply by itself.
   fails saying to use a plain file name
 
 ### Requirement: Adapters act through the tools
-An adapter SHALL save files, show Interactive Components and read files only through the
-tools, never through `asset.write`, `component.add` or `asset.read` directly. The data
-Traits SHALL read their tables through the read-a-table tool. An adapter that runs fixed
-code SHALL use exactly the tools its Traits list. The data and Asta Traits' replies, files
-and components SHALL be the same as when they acted on their own.
+An adapter SHALL save files, show tables and charts and read files only through the tools,
+never through `asset.write`, `component.add` or `asset.read` directly. The data Traits SHALL
+read their tables through the read-a-table tool. An adapter that runs fixed code SHALL declare
+the tools its code uses. A provider adapter (Find Papers, Theorize, Search CIP
+Dataverse) SHALL save its results with the save-a-file tool as a hidden file, then add its
+own component kind with that file as its source. The data and Asta Traits' replies and files
+SHALL be the same as when they acted on their own, apart from their hidden files.
 
 #### Scenario: Cleaned table
 - **WHEN** Curator cleans `field-trial.csv`
 - **THEN** `field-trial-cleaned.csv` is saved by the save-a-file tool and the tables are
   shown by the show-a-table tool, and the reply looks as it did before
 
+#### Scenario: Papers
+- **WHEN** Researcher finds 12 papers
+- **THEN** its adapter saves them as a hidden JSON file and adds a `paper-sources` component
+  whose `source_asset_id` is that file
+
 ### Requirement: Saving a file
-The save-a-file tool SHALL take a file name, a media type and the file's bytes, at most
-32 MiB. The file SHALL be saved through `asset.write`, so it is attached to the reply, and
-the tool SHALL return the saved Asset's ID and name. A larger file SHALL fail without
-anything being written.
+The save-a-file tool SHALL take a file name, a media type, the file's bytes, at most
+32 MiB, and whether the file is hidden (by default not). The file SHALL be saved through
+`asset.write`, so a file that is not hidden is attached to the reply, and the tool SHALL
+return the saved Asset's ID and name. A larger file SHALL fail without anything being
+written. The form of the tool offered to a model SHALL NOT offer hidden files.
 
 #### Scenario: Validation report
 - **WHEN** Validator saves `field-trial-validation.html` as `text/html`
 - **THEN** it is attached to the reply as a generated Asset
+
+#### Scenario: Hidden results
+- **WHEN** Theorize saves `theory-store.json` as hidden
+- **THEN** it is stored in the Project and not attached to the reply
 
 ### Requirement: Saving a text file for a model
 The form of save-a-file offered to a model SHALL take a file name and text content. The
@@ -65,20 +77,20 @@ name SHALL end in `.csv`, `.tsv`, `.txt`, `.md` or `.json`, and the content SHAL
   and nothing is written
 
 ### Requirement: One show tool per component kind
-Each Interactive Component kind a Trait can add SHALL have its own show tool: show-a-table
-(`table`), show-a-chart (`chart`), show-papers (`paper-sources`) and show-theories
-(`theories`). A Trait SHALL be able to show only the kinds whose tools its adapter uses;
-there SHALL be no tool that shows any kind. Each tool SHALL add its component through
-`component.add`, with version 1, the data and a plain-text alternative, and return its ID.
+The `table` and `chart` kinds SHALL each have a show tool: show-a-table (`table`) and
+show-a-chart (`chart`, used only by Plot). The `paper-sources`, `theories` and
+`dataset-results` kinds SHALL have no tool: only the provider adapter that owns each one adds
+it. There SHALL be no tool that shows any kind. Each tool SHALL add its component through
+`component.add`, with version 1, its preview, a plain-text alternative and its source file,
+and return its ID.
 
 #### Scenario: Paper list
-- **WHEN** Find Papers shows its results with show-papers
-- **THEN** the reply shows the paper list, as before
+- **WHEN** Find Papers shows its results
+- **THEN** the reply shows the paper list, as before, without a show-papers tool
 
 #### Scenario: Assistant cannot show theories
 - **WHEN** Assistant answers a request about theories
-- **THEN** it can show a table but not a `theories` component, since its adapter offers
-  only show-a-table
+- **THEN** it can show a table but not a `theories` component, since no tool adds one
 
 ### Requirement: Refused components fall back to text
 When the core refuses a component, its show tool SHALL fail with the core's code, so the
@@ -122,20 +134,28 @@ and the 20-row text are the same for every Trait.
 ### Requirement: Showing a table from given rows
 The show-a-table tool SHALL accept a title, columns (each a name and a type: `number`,
 `text`, `date` or `boolean`) and at most 500 rows, each with one value per column or
-`null` and each value matching its column's type. It SHALL add a `table` version 1
-component with that data and a plain-text version of its first 20 rows.
+`null` and each value matching its column's type. It SHALL first save the rows as a CSV file
+named after the title (or `Table`), then add a `table` version 1 component with that data,
+the file as its source and a plain-text version of its first 20 rows. Rows a model gives SHALL
+be saved as a visible file attached to the reply; rows an adapter computed, as a hidden file.
 
 #### Scenario: Given rows
-- **WHEN** the tool shows a table of 3 columns and 50 rows
-- **THEN** the reply gets a `table` component with those columns and rows
+- **WHEN** a model shows a table "Sample yields" of 3 columns and 50 rows
+- **THEN** `Sample yields.csv` is attached to the reply, and the reply gets a `table`
+  component with those columns and rows whose source is that file
+
+#### Scenario: Rows a Trait computed
+- **WHEN** Profiler shows its table of `field-trial.csv`'s columns
+- **THEN** the rows are saved as a hidden CSV file, which is the table's source and is not
+  attached to the reply
 
 #### Scenario: Row of the wrong length
 - **WHEN** a row has 2 values for 3 columns
-- **THEN** the tool fails naming the row, and no component is added
+- **THEN** the tool fails naming the row, and no file or component is added
 
 #### Scenario: Too many rows
 - **WHEN** the tool is given 800 rows
-- **THEN** it fails saying the limit is 500 rows, and no component is added
+- **THEN** it fails saying the limit is 500 rows, and no file or component is added
 
 ### Requirement: Showing a table from an Asset
 The show-a-table tool SHALL also accept the ID of a CSV, TSV or Excel Asset of the Project
@@ -153,11 +173,11 @@ count and `source` names the Asset.
 - **THEN** it fails saying only CSV, TSV and Excel files can be shown as tables
 
 ### Requirement: Reading a file
-The read-a-file tool SHALL read one Asset of the call's Conversation by ID, from an
-optional start. A CSV, TSV or Excel file SHALL be returned as its columns and up to 500
-rows from the start row, with the total row count. Another UTF-8 file SHALL be returned as
-up to 100,000 characters from the start character, with the total length. A file of any
-other kind SHALL fail as unreadable.
+The read-a-file tool SHALL read by ID one Asset of the call's Conversation, hidden or not,
+from an optional start. A CSV, TSV or Excel file
+SHALL be returned as its columns and up to 500 rows from the start row, with the total row
+count. Another UTF-8 file SHALL be returned as up to 100,000 characters from the start
+character, with the total length. A file of any other kind SHALL fail as unreadable.
 
 #### Scenario: Long report in pieces
 - **WHEN** a model reads a 250,000-character `report.md`
@@ -172,26 +192,28 @@ other kind SHALL fail as unreadable.
 - **WHEN** the tool reads a PNG Asset
 - **THEN** it fails saying the file is not text or a table and cannot be read
 
+#### Scenario: Hidden source file
+- **WHEN** a model reads the source file of an earlier `paper-sources` component
+- **THEN** it gets the papers as JSON text
+
 ### Requirement: Reading a component
 The read-a-component tool SHALL read one Interactive Component of the call's Conversation
-by ID through `component.read`. A `table` component SHALL be returned as its columns and
-rows, with its total row count, and for a table whose `source_asset_id` is set, that Asset's
-ID, so the full table can be read with the read-a-file tool. Another kind SHALL be returned
-as its data, at most 100,000 characters, saying when it was cut; for a `chart`, that is its
-views with their plotted values.
+by ID through `component.read`, and return its kind, its text and its source file's ID, with
+a note to read that file with the read-a-file tool for its data. A component without a source
+file SHALL be returned as its kind and text.
 
 #### Scenario: Earlier table's rows
-- **WHEN** the tool reads an earlier `table` component of 120 rows
-- **THEN** it returns all 120 rows, not only the 20 rows of the component's text
+- **WHEN** the tool reads an earlier `table` component of 120 rows shown from `trial.csv`
+- **THEN** it returns the table's text and the ID of `trial.csv` to read with read-a-file
 
 #### Scenario: Preview of a file
 - **WHEN** the tool reads a preview holding 500 of 12,340 rows of `field-trial-cleaned.csv`
-- **THEN** it returns the 500 rows, the total of 12,340 and the Asset ID of
-  `field-trial-cleaned.csv`
+- **THEN** it returns the table's text and the ID of `field-trial-cleaned.csv`, whose 12,340
+  rows the model reads with read-a-file
 
 #### Scenario: Chart
-- **WHEN** the tool reads a bar chart of mean yield by variety
-- **THEN** it returns the chart's title and views with their bars
+- **WHEN** the tool reads a bar chart of mean yield by variety drawn from `field-trial.csv`
+- **THEN** it returns the chart's text and the ID of `field-trial.csv`
 
 ### Requirement: Tools show what they are doing
 While a tool runs, it SHALL report progress on the reply: "Saving <name>", "Showing a
@@ -200,23 +222,6 @@ table", "Reading <name>" or "Reading a component".
 #### Scenario: Saving
 - **WHEN** the save-a-file tool saves `sample-yields.csv`
 - **THEN** the reply shows "Saving sample-yields.csv" until the tool finishes
-
-### Requirement: Reading a referenced table
-The read-a-table tool SHALL also read a `component` Text Component that references a `table`
-as a table: from the component's source Asset when its `source_asset_id` is set, and from
-the component's columns and rows otherwise. The table SHALL be named after the table's name
-with a `.csv` extension, and keep the column types of the component. The source Asset is
-read through `asset.read` by ID, so Project-folder confinement holds.
-
-#### Scenario: Reference to a preview
-- **WHEN** a data Trait reads `$field-trial-cleaned`, a preview of
-  `field-trial-cleaned.csv`
-- **THEN** it gets all rows of `field-trial-cleaned.csv` as a table named
-  `field-trial-cleaned.csv`
-
-#### Scenario: Table without a file
-- **WHEN** a data Trait reads `$Profile-of-trial`, a table with no source file
-- **THEN** it gets the component's columns and rows as a table named `Profile-of-trial.csv`
 
 ### Requirement: Writing a document
 The write-a-document tool (`write_document`, with a form for models) SHALL take a `title` and
@@ -234,67 +239,44 @@ body SHALL be at most 2 MiB; a tool result SHALL give the new Asset's ID.
 - **THEN** the document is saved under a name without `:` or `/`, and keeps the title in its
   header
 
-### Requirement: Suggesting an edit
-The suggest-an-edit tool (`suggest_edit`, with a form for models) SHALL take the replacement
-`text` for the passage of the comment thread the call answers, at most 64 KiB, and add a
-`suggestion` component to the reply. The Rust core SHALL complete the component with the
-document and the passage's text as it is when the suggestion is made. Outside a comment thread
-the tool SHALL fail with `not_in_thread`. A tool result SHALL give the new component's ID. The
-tool SHALL NOT change the document; only the user's Accept does.
+### Requirement: Suggesting a change
+The suggest tool (`suggest`, with a form for models) SHALL take a document's Asset ID, the
+passage to replace (`find`) and the new text (`text`, empty to remove the passage). The core
+SHALL add a waiting suggestion by the Mini-Me whose reply made the call, from a Conversation or a
+comment thread, on any document of the Project, and the tool SHALL return its ID. The document's
+file SHALL NOT change.
 
-#### Scenario: Scribe suggests a shorter passage
-- **WHEN** Scribe, answering "@Scribe make this shorter", calls suggest-an-edit with "Yield fell
-  above 3,800 m."
-- **THEN** a suggestion with that text, based on the passage as it read then, is added to
-  Scribe's reply, and the document is unchanged
+#### Scenario: From the chat
+- **WHEN** Scribe, answering "make the methods in Trial report shorter", calls suggest on
+  "Trial report.qmd" with a sentence that occurs once
+- **THEN** a waiting suggestion by Scribe is added on that sentence, and the file is unchanged
 
-#### Scenario: Outside a thread
-- **WHEN** a Trait call in a Conversation calls suggest-an-edit
-- **THEN** the call fails with `not_in_thread` and no component is added
+#### Scenario: From a thread
+- **WHEN** Scribe, answering "too long" in a thread, calls suggest on the thread's sentence
+- **THEN** a waiting suggestion by Scribe is added on that sentence, as from the chat
 
-### Requirement: Editing a document
-The edit-a-document tool (`edit_document`, with a form for models) SHALL take a document's Asset
-ID and a list of edits, each with the exact text it replaces (`find`), the new text (`replace`,
-at most 64 KiB) and a short `reason`. It SHALL open one comment thread per edit, as the comment
-threads describe, and add one `document-edits` component to the reply. It SHALL only read the
-saved document and write to the Project's database; the document's file SHALL NOT change. Inside
-a comment thread the tool SHALL fail with `in_thread`.
-
-#### Scenario: Scribe edits a referenced document
-- **WHEN** Scribe, answering "tighten the methods in #Trial report", calls edit-a-document on
-  "Trial report.qmd" with two edits whose quotes each occur once
-- **THEN** two threads open on the quoted passages, a `document-edits` card for "Trial report"
-  is added to Scribe's reply, and the file is unchanged
+### Requirement: Checks on a suggestion
+The tool SHALL send the request `document.suggest`, params `{ asset_id, find, text }`, whose
+result is `{ suggestion_id }`. The core SHALL refuse it, adding nothing, with `not_a_document`
+unless the Asset is a `.qmd` document of the Project; with `passage_not_found` or
+`passage_not_unique` unless `find` occurs exactly once in the saved document; and with
+`invalid_input` when `find` is empty or `text` is larger than 64 KiB. The document SHALL be read
+through the Project-folder confinement check.
 
 #### Scenario: A quote that occurs twice
-- **WHEN** one edit's `find` is "Huancayo", which occurs three times
-- **THEN** the call fails with `passage_not_unique` naming that edit, and no thread or card is
-  added
+- **WHEN** a call suggests a change to "Huancayo", which occurs three times
+- **THEN** the call fails with `passage_not_unique`, and nothing is added
 
-#### Scenario: A document the message does not reference
-- **WHEN** Scribe calls edit-a-document on a document the message neither references nor
-  attaches
-- **THEN** the call fails with `document_not_referenced`
+#### Scenario: Not a document
+- **WHEN** a call suggests a change to `field-trial.csv`
+- **THEN** the call fails with `not_a_document`
 
-### Requirement: Checks on a document edit
-The tool SHALL send the edits to the Rust core with the `document.edit` request,
-`{ asset_id, edits: [{ find, replace, reason }] }`, whose result is `{ component_id, threads }`.
-The core SHALL fail the request, changing nothing, with `document_not_referenced` unless the
-document is a `.qmd` Asset of the Project that the message being answered `#`-references or
-attaches; with `passage_not_found` or `passage_not_unique` naming the edit unless its `find`
-occurs exactly once in the saved document; and with `edits_overlap` when two edits overlap.
+### Requirement: Events of a suggestion
+Adding a suggestion SHALL be stored in the Project's database without an event. A reply in a
+Conversation that adds a suggestion SHALL get a `component.added` with the document's `document`
+card, unless the reply already shows that document's card. A reply in a comment thread SHALL get
+no card.
 
-#### Scenario: Overlapping edits
-- **WHEN** two edits quote "above 3,800 m" and "3,800 m in both"
-- **THEN** the call fails with `edits_overlap`, and no thread or card is added
-
-### Requirement: Events of a document edit
-A successful `document.edit` SHALL add, in each new thread's Conversation, `message.created`
-with the Mini-Me's message (its reason as `content`, status complete) and `component.added`
-with its `suggestion`; and in the reply's Conversation, `component.added` with the
-`document-edits` component. No other protocol event SHALL change.
-
-#### Scenario: What the UI receives
-- **WHEN** Scribe's call edits a document with two edits
-- **THEN** each new thread's Conversation gets one `message.created` and one `component.added`,
-  and Scribe's reply gets one `component.added` for the `document-edits` card
+#### Scenario: Two suggestions from one reply
+- **WHEN** Scribe's reply in "Trial design" suggests two changes to "Trial report.qmd"
+- **THEN** the reply shows one "Trial report" card

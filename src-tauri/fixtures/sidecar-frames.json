@@ -57,8 +57,7 @@
           "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01",
           "name": "Summarize",
           "instructions": "Write a short, faithful summary.",
-          "adapter": "prompt",
-          "tools": []
+          "adapter": "prompt"
         }
       ],
       "model": { "provider": "anthropic", "model": "example-model" },
@@ -87,6 +86,9 @@
         },
         "needs_context": false,
         "file": null,
+        "component": { "component_id": "0199d0a0-0000-7000-8000-000000000701" },
+        "tools": ["show_table", "save_file"],
+        "hand_off": { "mini_me_id": "0199d0a0-0000-7000-8000-000000000702" },
         "mini_mes": [],
         "debug": { "input": true, "details": true, "tools": false }
       },
@@ -101,11 +103,20 @@
         {
           "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b01",
           "name": "Scribe",
-          "description": "Summarizes your messages and the files you reference"
+          "description": "Summarizes your messages and the files you reference",
+          "traits": ["Summarize"]
         }
       ],
       "files": [],
-      "ask": ["mini_me", "reaction", "needs_context"]
+      "components": [
+        {
+          "id": "0199d0a0-0000-7000-8000-000000000701",
+          "kind": "chart",
+          "title": "Yield by variety",
+          "file": "field-trial.csv"
+        }
+      ],
+      "ask": ["mini_me", "reaction", "needs_context", "component", "tools", "next_mini_me"]
     },
     {
       "type": "summary.start",

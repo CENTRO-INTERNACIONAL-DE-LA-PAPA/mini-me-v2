@@ -92,6 +92,8 @@ export const MessageItem = memo(function MessageItem({
 
   const status = STATUS_LABEL[message.status];
   const fromUser = message.author.kind === "user";
+  // Jev is asked about a hand-off as about a message, and its record is kept on the reply.
+  const handedOff = message.components.some((c) => c.kind === "hand-off");
   const time = formatClock(message.created_at);
 
   const text = (
@@ -123,7 +125,7 @@ export const MessageItem = memo(function MessageItem({
 
   const notes = (
     <>
-      {fromUser && !compact && developer && (jevDebug.answers || jevDebug.asked) && (
+      {(fromUser || handedOff) && !compact && developer && (jevDebug.answers || jevDebug.asked) && (
         <JevDebugBlock
           projectId={projectId}
           messageId={message.id}

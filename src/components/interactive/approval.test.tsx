@@ -6,7 +6,7 @@ describe("approval version 1", () => {
   const Approval = renderers[1];
   const data = { step_id: "ask", prompt: "Design an experiment to test this plan's hypothesis?" };
   const render = (answer: unknown, replyStatus: "paused" | "streaming" | "cancelled") =>
-    renderToStaticMarkup(<Approval data={data} answer={answer} replyStatus={replyStatus} />);
+    renderToStaticMarkup(<Approval preview={data} answer={answer} replyStatus={replyStatus} />);
 
   it("asks while the reply waits for an answer", () => {
     const html = render(null, "paused");
