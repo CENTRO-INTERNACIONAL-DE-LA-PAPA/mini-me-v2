@@ -8,6 +8,7 @@ const QUESTION_WORDS: Record<string, string> = {
   file: "Which file?",
   component: "Which table or chart?",
   tools: "Likely tools?",
+  next_mini_me: "Who continues?",
 };
 
 export function questionWords(question: string): string {

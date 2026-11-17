@@ -239,9 +239,10 @@ For "@Researcher drought in Andean landraces":
    Jev's confidence is below the threshold in Settings or Jev cannot be asked, Assistant
    answers (`FALLBACK_MINI_ME` in `library.rs`). Jev also judges whether the message needs
    earlier context, whether the Mini-Me reacts with an emoji, which file and which table or
-   chart the message means, and which four tools are likely to help; the model's request marks
-   these picks as hints (`routing.rs` in the core, `routing.py` in the sidecar). A comment in a
-   thread is routed the same way, without the file, table or chart and tools questions.
+   chart the message means, which four tools are likely to help, and which other Mini-Me should
+   handle what the answering one doesn't cover; the model's request marks these picks as hints
+   (`routing.rs` in the core, `routing.py` in the sidecar). A comment in a thread is routed the
+   same way, without the file, table or chart and tools questions.
 3. **Start.** The core creates an empty streaming reply and sends `run.start` with the
    Mini-Me's Workflow, the Traits it uses, the model, the message and its context
    (`runs.rs`). A run needs a model if any of its adapters declares providers or if it has
@@ -254,6 +255,13 @@ For "@Researcher drought in Andean landraces":
    that sent them, and the core checks them against that Step's Trait.
 6. **End.** The sidecar sends `run.done` and the core stores `message.completed`. Stop sends
    `run.cancel`; a run that ignores it is treated as cancelled after five seconds.
+7. **Hand off.** A reply hands off at most once: its model calls the hand-off tool
+   (`reply.hand_off`), or, for a Mini-Me without a prompt-based Trait, the core hands off to
+   the Mini-Me Jev recommended. Each model call is told which Traits its Workflow still runs
+   after it, so it doesn't hand off their work. When the reply completes, `Runs` passes the
+   hand-off to `Routing`, which asks Jev about the hand-off's request as about a message
+   (without the Mini-Me and reaction questions) and starts the other Mini-Me's reply, which
+   may hand off in turn.
 
 Runs execute concurrently; every frame carries its `run_id`, and the core ignores frames
 for a run that has ended. `step.completed` ends its call, so a later request from that call
@@ -475,7 +483,8 @@ Every tool acts through `ctx`, so the core's checks and Project-folder confineme
   `paused_runs` the replies waiting for an approval, and `debug_records` the developer
   debug records.
 - **Jev:** "Show Jev's answers" and "Show what Jev was asked" in Settings → Developer store a
-  `jev` debug record for each routed message, shown in "[DEBUG] Jev" under it. Records are kept
+  `jev` debug record for each routed message, shown in "[DEBUG] Jev" under it; a hand-off's
+  record is kept on the reply that handed off. Records are kept
   apart from the events and read only when the block is opened; "Debug data" clears the open
   Project's.
 - **Replies:** "Show what the AI read", "Show model call details" and "Show tool calls" in
