@@ -103,7 +103,6 @@ impl Routing {
     }
 
     /// Routes on a background thread; `reply_in_progress` while an earlier message awaits routing.
-    /// In a comment thread Jev is not asked: the first mentioned Mini-Me answers, or it is a note.
     pub fn send(
         self: &Arc<Self>,
         calls: Arc<Runs>,
@@ -114,31 +113,6 @@ impl Routing {
         user_id: Uuid,
     ) -> AppResult<Message> {
         check_mentions(&input, &self.library.current())?;
-        if comments::is_thread(&project.lock(), conversation_id)? {
-            let message = conversations::send_message(&project, conversation_id, input, user_id)?;
-            if let Some(mini_me) = first_mention(&message) {
-                let library = self.library.current();
-                let decision = Decision {
-                    answerer: mini_me,
-                    reaction: None,
-                    needs_context: Some(true),
-                    file: None,
-                };
-                let started = self.start_reply(
-                    &library,
-                    &calls,
-                    settings.model,
-                    &project,
-                    conversation_id,
-                    &message,
-                    &decision,
-                );
-                if let Err(err) = started {
-                    explain(&project, conversation_id, message.id, &err);
-                }
-            }
-            return Ok(message);
-        }
         let message = {
             let mut pending = locked(&self.pending);
             if pending.contains(&conversation_id) {
@@ -193,7 +167,12 @@ impl Routing {
     ) -> Decision {
         let mentioned = first_mention(message);
         let messages = project.lock().conversation_messages(conversation_id).unwrap_or_default();
-        let files = file_options(project, conversation_id, &messages, message, library);
+        // A thread's document is already its reply's context, so Jev picks no file there.
+        let in_thread = comments::is_thread(&project.lock(), conversation_id).unwrap_or(false);
+        let files = match in_thread {
+            true => Vec::new(),
+            false => file_options(project, conversation_id, &messages, message, library),
+        };
         let ask = questions(mentioned.is_none(), !files.is_empty());
         let state = state(message, recent(&messages, message.id, library));
         let Routed { answers: routed, asked } =
@@ -1092,29 +1071,20 @@ mod tests {
     }
 
     #[test]
-    fn a_note_in_a_thread_starts_no_run_and_asks_no_jev() {
+    fn a_comment_is_routed_like_a_message_without_the_file_question() {
         let f = fixture();
         into_thread(&f.project, f.conversation);
-        let note = f.send("check the 2024 plots too", &[], ROUTE_TIMEOUT).unwrap();
-        assert!(sent(&f, |_| true).is_empty());
-        assert!(reply_to(&f.events(), note.id).is_none());
-    }
-
-    #[test]
-    fn a_mention_in_a_thread_runs_that_mini_me_with_the_threads_history() {
-        let f = fixture();
-        into_thread(&f.project, f.conversation);
-        let mention = [("@Assistant", ASSISTANT)];
-        let comment = f.send("@Assistant shorten this", &mention, ROUTE_TIMEOUT).unwrap();
-        assert!(sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. })).is_empty());
-        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RunStart { .. }));
-        let [CoreFrame::RunStart { plan, .. }] = starts.as_slice() else {
-            panic!("expected one run.start, got {starts:?}");
+        let comment = f.send("too long", &[], Duration::from_millis(300)).unwrap();
+        f.route_id();
+        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
+        let [CoreFrame::RouteStart { files, ask, .. }] = starts.as_slice() else {
+            panic!("expected one route.start, got {starts:?}");
         };
-        assert_eq!((plan.mini_me.id, plan.context.needs_context), (ASSISTANT, Some(true)));
-        assert!(reply_to(&f.events(), comment.id).is_some());
+        assert!(files.is_empty());
+        assert_eq!(ask, &["mini_me", "reaction", "needs_context"]);
 
-        let again = f.send("and the next one", &[], ROUTE_TIMEOUT).unwrap_err();
-        assert_eq!(again.code, "reply_in_progress");
+        let events = f.wait_for("the reply", |events| reply_to(events, comment.id).is_some());
+        let reply = reply_to(&events, comment.id).unwrap();
+        assert_eq!(reply.author.id, FALLBACK_MINI_ME.to_string());
     }
 }

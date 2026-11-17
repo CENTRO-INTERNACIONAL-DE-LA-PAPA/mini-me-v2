@@ -42,6 +42,7 @@ use crate::settings::{AiSettings, CustomEndpoint, DebugSettings, HomeSettings, S
 use crate::link::{ApiFormat, SummaryKind};
 use crate::sidecar::{LOG_FILE, Launch, SidecarLog, SidecarState, SidecarStatus, Supervisor, Timing};
 use crate::store::{EventSink, Project};
+use crate::suggestions;
 use crate::sync::locked;
 use crate::updates::{UpdateStatus, Updates};
 
@@ -1246,7 +1247,7 @@ pub async fn save_document(
     project_id: Uuid,
     asset_id: Uuid,
     text: String,
-    anchors: Vec<comments::Anchor>,
+    anchors: documents::Anchors,
 ) -> AppResult<()> {
     documents::save(&*state.project(project_id)?, asset_id, &text, &anchors)
 }
@@ -1406,24 +1407,28 @@ pub async fn delete_thread(
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub async fn list_suggestions(
+    state: State<'_, AppState>,
+    project_id: Uuid,
+    asset_id: Uuid,
+) -> AppResult<Vec<suggestions::Suggestion>> {
+    suggestions::list(&*state.project(project_id)?, asset_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn accept_suggestion(
     state: State<'_, AppState>,
     project_id: Uuid,
-    message_id: Uuid,
-    component_id: Uuid,
-) -> AppResult<comments::Accepted> {
-    comments::accept_suggestion(&*state.project(project_id)?, message_id, component_id)
+    suggestion_id: Uuid,
+) -> AppResult<suggestions::Accepted> {
+    suggestions::accept(&*state.project(project_id)?, suggestion_id)
 }
 
-/// Leaves the document as it is.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn answer_suggestion(
+pub async fn discard_suggestion(
     state: State<'_, AppState>,
     project_id: Uuid,
-    message_id: Uuid,
-    component_id: Uuid,
-    decision: comments::Decision,
+    suggestion_id: Uuid,
 ) -> AppResult<()> {
-    let project = state.project(project_id)?;
-    comments::answer_suggestion(&project, message_id, component_id, decision)
+    suggestions::discard(&*state.project(project_id)?, suggestion_id)
 }

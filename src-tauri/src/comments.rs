@@ -1,21 +1,17 @@
 //! Comment threads on a document's passages. A thread is a Conversation whose anchor and resolved
 //! state live in `comment_threads`; threads are listed only here, never as Conversations.
 
-use rusqlite::{Connection, OptionalExtension, params};
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use rusqlite::{Connection, params};
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::assets;
-use crate::conversations::{self, NewComponent};
-use crate::documents;
+use crate::conversations;
+use crate::documents::{self, Anchor, passage};
 use crate::error::{AppError, AppResult};
 use crate::link::RunDocument;
-use crate::protocol::{
-    AssetRef, Author, AuthorKind, Component, EventKind, Message, MessageStatus, TextComponentKind,
-    new_id,
-};
-use crate::store::{Project, ProjectState, parse_id, unreadable};
+use crate::protocol::AssetRef;
+use crate::store::{Project, ProjectState, parse_id};
 
 /// `start` and `end` are UTF-16 offsets in the document's source; `quote` is the passage's text
 /// when the thread was last anchored.
@@ -30,47 +26,6 @@ pub struct CommentThread {
     pub created_at: i64,
     /// Comments and replies together.
     pub comments: u32,
-    /// The newest suggestion still waiting for an answer.
-    pub pending: Option<PendingSuggestion>,
-    /// Where a Mini-Me opened it; none for a thread the user started.
-    pub opened_from: Option<OpenedFrom>,
-}
-
-/// The Conversation a Mini-Me opened a thread from, by suggesting an edit there.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct OpenedFrom {
-    pub conversation_id: Uuid,
-    /// None once the Conversation is deleted.
-    pub title: Option<String>,
-    /// The author of the thread's first message.
-    pub by: Author,
-}
-
-/// A suggestion waiting for the user's answer.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct PendingSuggestion {
-    pub message_id: Uuid,
-    pub component_id: Uuid,
-    pub author: Author,
-    pub text: String,
-}
-
-/// A thread's passage as the document view tracks it while the user edits.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
-pub struct Anchor {
-    pub thread_id: Uuid,
-    pub start: u32,
-    pub end: u32,
-}
-
-/// The text between UTF-16 offsets `start` and `end`; none when they do not mark a passage.
-pub fn passage(text: &str, start: u32, end: u32) -> Option<String> {
-    let units: Vec<u16> = text.encode_utf16().collect();
-    let (start, end) = (start as usize, end as usize);
-    if start >= end || end > units.len() {
-        return None;
-    }
-    String::from_utf16(&units[start..end]).ok()
 }
 
 /// Moves `asset_id`'s threads to `anchors` in its saved `text`, each quoting its new passage.
@@ -88,13 +43,7 @@ pub fn move_anchors(
         conn.execute(
             "UPDATE comment_threads SET passage_start = ?1, passage_end = ?2, quote = ?3 \
              WHERE conversation_id = ?4 AND asset_id = ?5",
-            params![
-                anchor.start,
-                anchor.end,
-                quote,
-                anchor.thread_id.to_string(),
-                asset_id.to_string()
-            ],
+            params![anchor.start, anchor.end, quote, anchor.id.to_string(), asset_id.to_string()],
         )?;
     }
     Ok(())
@@ -141,158 +90,6 @@ pub fn run_document(project: &Project, conversation_id: Uuid) -> AppResult<Optio
     Ok(Some(RunDocument { asset_id: document.id, name: document.name, passage }))
 }
 
-/// A `suggestion` component's stored data: the document, the passage as saved now (the base Accept
-/// merges from) and the suggested `text`. Fails with `not_in_thread` outside a thread.
-pub fn suggestion(project: &Project, conversation_id: Uuid, preview: &Value) -> AppResult<Value> {
-    let text = preview["text"]
-        .as_str()
-        .ok_or_else(|| AppError::new("invalid_component", "A suggestion needs its text."))?;
-    let document = run_document(project, conversation_id)?.ok_or_else(|| {
-        AppError::new("not_in_thread", "Edits can only be suggested in a comment thread.")
-    })?;
-    Ok(json!({ "document_id": document.asset_id, "base": document.passage, "text": text }))
-}
-
-/// What the user decided about a suggestion.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Decision {
-    Accepted,
-    Rejected,
-    Dismissed,
-}
-
-/// The document after an accepted suggestion: its text and its re-anchored threads.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Accepted {
-    pub text: String,
-    pub threads: Vec<CommentThread>,
-}
-
-/// Leaves the document unchanged; accepting goes through `accept_suggestion`.
-pub fn answer_suggestion(
-    project: &Project,
-    message_id: Uuid,
-    component_id: Uuid,
-    decision: Decision,
-) -> AppResult<()> {
-    let mut state = project.lock();
-    let (conversation, _) = pending_suggestion(&state, message_id, component_id)?;
-    record(&mut state, conversation, (message_id, component_id), decision)
-}
-
-/// Merges the suggestion into the passage as the user has edited it since, saves the document with
-/// its threads moved, and records it accepted. Changes nothing on `suggestion_conflict` (both
-/// change the same words) or `suggestion_detached` (the passage is gone).
-pub fn accept_suggestion(
-    project: &Project,
-    message_id: Uuid,
-    component_id: Uuid,
-) -> AppResult<Accepted> {
-    let (conversation, data, thread) = {
-        let state = project.lock();
-        let (conversation, data) = pending_suggestion(&state, message_id, component_id)?;
-        let thread = thread_of(&state, conversation)?
-            .ok_or_else(|| AppError::new("not_in_thread", "This suggestion has no thread."))?;
-        (conversation, data, thread)
-    };
-    let text = documents::read(project, thread.asset_id)?;
-    let ours = passage(&text, thread.start, thread.end)
-        .filter(|p| *p == thread.quote)
-        .ok_or_else(|| {
-            AppError::new("suggestion_detached", "The passage of this thread can't be found.")
-        })?;
-    let base = data["base"].as_str().unwrap_or_default();
-    let theirs = data["text"].as_str().unwrap_or_default();
-    let merged = merge(base, &ours, theirs).ok_or_else(|| {
-        AppError::new(
-            "suggestion_conflict",
-            "You've changed the same words since this was suggested. Ask again in the thread, or \
-             discard it.",
-        )
-    })?;
-
-    let units: Vec<u16> = text.encode_utf16().collect();
-    let (start, end) = (thread.start as usize, thread.end as usize);
-    let merged_units: Vec<u16> = merged.encode_utf16().collect();
-    let new_units = [&units[..start], &merged_units, &units[end..]].concat();
-    let new_text = String::from_utf16_lossy(&new_units);
-    // Positions after the passage shift by its change in length; those inside stop at its new end.
-    let new_end = start + merged_units.len();
-    let moved = |at: u32| -> u32 {
-        let at = at as usize;
-        let moved = if at <= start {
-            at
-        } else if at >= end {
-            at + new_end - end
-        } else {
-            at.min(new_end)
-        };
-        moved as u32
-    };
-    let anchors: Vec<Anchor> = list(project, thread.asset_id)?
-        .iter()
-        .map(|t| Anchor { thread_id: t.conversation_id, start: moved(t.start), end: moved(t.end) })
-        .collect();
-    documents::save(project, thread.asset_id, &new_text, &anchors)?;
-    record(&mut project.lock(), conversation, (message_id, component_id), Decision::Accepted)?;
-    Ok(Accepted { text: new_text, threads: list(project, thread.asset_id)? })
-}
-
-/// The thread's Conversation and the suggestion's data; fails unless it still awaits an answer.
-fn pending_suggestion(
-    state: &ProjectState,
-    message_id: Uuid,
-    component_id: Uuid,
-) -> AppResult<(Uuid, Value)> {
-    let (conversation, _) = state
-        .message_place(message_id)?
-        .ok_or_else(|| AppError::not_found("Message not found"))?;
-    let component = state
-        .conversation_component(conversation, component_id)?
-        .filter(|c| c.kind == "suggestion")
-        .ok_or_else(|| AppError::not_found("No such suggestion in this thread."))?;
-    if !component.answer.is_null() {
-        return Err(AppError::new("not_pending", "This suggestion has already been answered."));
-    }
-    Ok((conversation, component.preview))
-}
-
-fn record(
-    state: &mut ProjectState,
-    conversation: Uuid,
-    (message_id, component_id): (Uuid, Uuid),
-    decision: Decision,
-) -> AppResult<()> {
-    let answer = json!({ "decision": decision });
-    state.persist(conversation, EventKind::ComponentAnswered { message_id, component_id, answer })?;
-    Ok(())
-}
-
-/// Stands in for a newline while text is split one word per line for `diffy`'s line-based merge.
-const NEWLINE: char = '\u{E000}';
-
-/// `ours` with the change from `base` to `theirs` applied word by word; none when both change the
-/// same words.
-fn merge(base: &str, ours: &str, theirs: &str) -> Option<String> {
-    if ours == base {
-        return Some(theirs.to_string());
-    }
-    let merged = diffy::merge(&word_lines(base), &word_lines(ours), &word_lines(theirs)).ok()?;
-    Some(merged.replace('\n', "").replace(NEWLINE, "\n"))
-}
-
-/// `text` as one word per line, each word with the whitespace after it.
-fn word_lines(text: &str) -> String {
-    let escaped = text.replace('\n', &NEWLINE.to_string());
-    let mut lines = String::new();
-    for word in escaped.split_inclusive(|c: char| c.is_whitespace() || c == NEWLINE) {
-        lines.push_str(word);
-        lines.push('\n');
-    }
-    lines
-}
-
 /// Starts a thread on `start..end` of `asset_id`, which reads `quote`.
 pub fn create(
     project: &Project,
@@ -308,7 +105,7 @@ pub fn create(
     if !documents::is_document(&asset.name) {
         return Err(AppError::invalid_input(format!("\"{}\" is not a document.", asset.name)));
     }
-    let (conversation_id, created_at) = insert_thread(&state, asset_id, (start, end), quote, None)?;
+    let (conversation_id, created_at) = insert_thread(&state, asset_id, (start, end), quote)?;
     Ok(CommentThread {
         conversation_id,
         asset_id,
@@ -318,8 +115,6 @@ pub fn create(
         resolved: false,
         created_at,
         comments: 0,
-        pending: None,
-        opened_from: None,
     })
 }
 
@@ -329,210 +124,24 @@ fn insert_thread(
     asset_id: Uuid,
     (start, end): (u32, u32),
     quote: &str,
-    opened_from: Option<Uuid>,
 ) -> AppResult<(Uuid, i64)> {
     // One transaction, so a thread's Conversation never shows up as an ordinary Conversation.
     let tx = state.conn.unchecked_transaction()?;
     let conversation = conversations::insert(&tx)?;
     tx.execute(
         "INSERT INTO comment_threads (conversation_id, asset_id, passage_start, passage_end, \
-         quote, created_at, opened_from) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+         quote, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
             conversation.id.to_string(),
             asset_id.to_string(),
             start,
             end,
             quote,
-            conversation.created_at,
-            opened_from.map(|id| id.to_string())
+            conversation.created_at
         ],
     )?;
     tx.commit()?;
     Ok((conversation.id, conversation.created_at))
-}
-
-/// In bytes; the same limit as a suggestion in a thread.
-const MAX_EDIT_BYTES: usize = 64 * 1024;
-
-/// `find` is the exact text replaced in the saved document; `reason` is why.
-#[derive(Debug, Clone, Deserialize)]
-pub struct DocumentEdit {
-    pub find: String,
-    pub replace: String,
-    pub reason: String,
-}
-
-/// The Trait call that edits a document: its reply to the `answers` message, by `author` in
-/// `step_id`.
-pub struct EditingCall<'a> {
-    pub conversation_id: Uuid,
-    pub answers: Uuid,
-    pub reply: Uuid,
-    pub author: &'a Author,
-    pub step_id: Option<&'a str>,
-}
-
-/// What `edit_document` made: the reply's `document-edits` card and the threads it opened.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct EditedDocument {
-    pub component_id: Uuid,
-    pub threads: Vec<Uuid>,
-}
-
-/// Opens a suggestion thread per edit and adds a `document-edits` card to the reply, all or none.
-/// The answered message must reference or attach the document, whose file is only read.
-pub fn edit_document(
-    project: &Project,
-    call: &EditingCall,
-    asset_id: Uuid,
-    edits: &[DocumentEdit],
-) -> AppResult<EditedDocument> {
-    let name = {
-        let state = project.lock();
-        if thread_of(&state, call.conversation_id)?.is_some() {
-            return Err(AppError::new(
-                "in_thread",
-                "In a comment thread, suggest an edit to the thread's passage instead.",
-            ));
-        }
-        let (_, message) = state
-            .load_message_with(call.answers, false)?
-            .ok_or_else(|| AppError::not_found("Message not found"))?;
-        let referenced = message.attachments.iter().any(|a| a.id == asset_id)
-            || message
-                .text_components
-                .iter()
-                .any(|t| t.kind == TextComponentKind::Asset && t.id == asset_id);
-        match assets::find(&state, asset_id) {
-            Ok(asset) if referenced && documents::is_document(&asset.name) => asset.name,
-            _ => {
-                return Err(AppError::new(
-                    "document_not_referenced",
-                    "Only a document the message references with # or attaches can be edited.",
-                ));
-            }
-        }
-    };
-    let text = documents::read(project, asset_id)?;
-    let ranges = passages(&text, &name, edits)?;
-    let mut threads = Vec::with_capacity(edits.len());
-    for (edit, range) in edits.iter().zip(ranges) {
-        threads.push(open_suggestion(project, call, asset_id, range, edit)?);
-    }
-    let title = name.strip_suffix(".qmd").unwrap_or(&name).to_string();
-    let count = match edits.len() {
-        1 => "1 edit".to_string(),
-        n => format!("{n} edits"),
-    };
-    let preview = json!({ "asset_id": asset_id, "title": title, "threads": threads });
-    let card = NewComponent {
-        kind: "document-edits".into(),
-        version: 1,
-        preview,
-        text: format!("Suggested {count} to {title}"),
-        source_asset_id: None,
-    };
-    let component_id = conversations::add_core_component(project, call.reply, call.step_id, card)?;
-    Ok(EditedDocument { component_id, threads })
-}
-
-/// Each edit's `find` in `text` as a UTF-16 range, in order. Each must occur exactly once without
-/// overlapping another, and the errors name the edit.
-fn passages(text: &str, name: &str, edits: &[DocumentEdit]) -> AppResult<Vec<(u32, u32)>> {
-    if edits.is_empty() {
-        return Err(AppError::invalid_input("Give at least one edit."));
-    }
-    // Byte ranges, each with its edit's number for error messages.
-    let mut found = Vec::with_capacity(edits.len());
-    for (number, edit) in (1..).zip(edits) {
-        if edit.replace.len() > MAX_EDIT_BYTES {
-            return Err(AppError::invalid_input(format!(
-                "Edit {number}'s new text is larger than 64 KiB; split it into smaller edits."
-            )));
-        }
-        let quoted = beginning(&edit.find);
-        let at: Vec<usize> = match edit.find.is_empty() {
-            true => Vec::new(),
-            false => text.match_indices(edit.find.as_str()).map(|(at, _)| at).collect(),
-        };
-        match at.as_slice() {
-            [start] => found.push((*start, start + edit.find.len(), number)),
-            [] => {
-                return Err(AppError::new(
-                    "passage_not_found",
-                    format!(
-                        "Edit {number} quotes \"{quoted}\", which is not in {name}. Quote the \
-                         text exactly as read-a-file shows it."
-                    ),
-                ));
-            }
-            many => {
-                return Err(AppError::new(
-                    "passage_not_unique",
-                    format!(
-                        "Edit {number} quotes \"{quoted}\", which occurs {} times in {name}. \
-                         Quote more of the passage so it occurs once.",
-                        many.len()
-                    ),
-                ));
-            }
-        }
-    }
-    let mut sorted = found.clone();
-    sorted.sort();
-    if let Some(pair) = sorted.windows(2).find(|pair| pair[1].0 < pair[0].1) {
-        let (first, second) = (pair[0].2.min(pair[1].2), pair[0].2.max(pair[1].2));
-        return Err(AppError::new(
-            "edits_overlap",
-            format!("Edits {first} and {second} overlap; make them one edit."),
-        ));
-    }
-    let utf16 = |at: usize| text[..at].encode_utf16().count() as u32;
-    Ok(found.into_iter().map(|(start, end, _)| (utf16(start), utf16(end))).collect())
-}
-
-/// The first 40 characters of `text`, for naming an edit in an error.
-fn beginning(text: &str) -> String {
-    let mut chars = text.chars();
-    let start: String = chars.by_ref().take(40).collect();
-    if chars.next().is_some() { format!("{start}…") } else { start }
-}
-
-/// Opens a thread on `range` whose first message is the edit's reason, with the edit as a pending
-/// suggestion. Returns the thread's Conversation.
-fn open_suggestion(
-    project: &Project,
-    call: &EditingCall,
-    asset_id: Uuid,
-    range: (u32, u32),
-    edit: &DocumentEdit,
-) -> AppResult<Uuid> {
-    let mut state = project.lock();
-    let opened_from = Some(call.conversation_id);
-    let (thread, _) = insert_thread(&state, asset_id, range, &edit.find, opened_from)?;
-    let author = call.author.clone();
-    let message = Message::new(author, edit.reason.clone(), MessageStatus::Complete, None);
-    let message_id = message.id;
-    let shown = match edit.replace.trim().is_empty() {
-        true => "Remove this passage.".to_string(),
-        false => edit.replace.clone(),
-    };
-    let component = Component {
-        id: new_id(),
-        kind: "suggestion".to_string(),
-        version: 1,
-        preview: json!({ "document_id": asset_id, "base": edit.find, "text": edit.replace }),
-        text: shown,
-        source_asset_id: None,
-        answer: Value::Null,
-        step_index: None,
-    };
-    let events = vec![
-        EventKind::MessageCreated { message },
-        EventKind::ComponentAdded { message_id, component },
-    ];
-    state.persist_all(thread, events, |_| Ok(()))?;
-    Ok(thread)
 }
 
 /// Resolving hides the thread until "Show resolved".
@@ -547,7 +156,7 @@ pub fn set_resolved(project: &Project, conversation_id: Uuid, resolved: bool) ->
     Ok(())
 }
 
-/// Deletes the thread with its messages and suggestions in one transaction; files its replies saved
+/// Deletes the thread with its messages in one transaction; files its replies saved
 /// stay. A running reply must be stopped first, as `conversations::stop_reply` does.
 pub fn delete(project: &Project, conversation_id: Uuid) -> AppResult<()> {
     let state = project.lock();
@@ -585,19 +194,10 @@ pub fn list(project: &Project, asset_id: Uuid) -> AppResult<Vec<CommentThread>> 
 /// In the order of their passages.
 fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<Vec<CommentThread>> {
     let count = "(SELECT COUNT(*) FROM messages m WHERE m.conversation_id = t.conversation_id)";
-    let first = |column: &str| {
-        format!(
-            "(SELECT {column} FROM messages m WHERE m.conversation_id = t.conversation_id \
-             ORDER BY m.rowid LIMIT 1)"
-        )
-    };
     let mut stmt = state.conn.prepare(&format!(
-        "SELECT t.conversation_id, asset_id, passage_start, passage_end, quote, resolved, \
-         t.created_at, {count}, opened_from, c.title, {}, {} FROM comment_threads t \
-         LEFT JOIN conversations c ON c.id = t.opened_from WHERE {condition} \
-         ORDER BY passage_start, t.created_at",
-        first("author_kind"),
-        first("author_id"),
+        "SELECT conversation_id, asset_id, passage_start, passage_end, quote, resolved, \
+         created_at, {count} FROM comment_threads t WHERE {condition} \
+         ORDER BY passage_start, created_at"
     ))?;
     let rows = stmt.query_map(params![id.to_string()], |row| {
         Ok(ThreadRow {
@@ -609,23 +209,11 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
             resolved: row.get(5)?,
             created_at: row.get(6)?,
             comments: row.get(7)?,
-            opened_from: row.get(8)?,
-            opened_from_title: row.get(9)?,
-            first_author_kind: row.get(10)?,
-            first_author_id: row.get(11)?,
         })
     })?;
     let mut threads = Vec::new();
     for row in rows {
         let row = row?;
-        let opened_from = match (row.opened_from, row.first_author_kind, row.first_author_id) {
-            (Some(conversation), Some(kind), Some(id)) => Some(OpenedFrom {
-                conversation_id: parse_id(&conversation, "ID")?,
-                title: row.opened_from_title,
-                by: Author { kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("ID"))?, id },
-            }),
-            _ => None,
-        };
         threads.push(CommentThread {
             conversation_id: parse_id(&row.conversation_id, "ID")?,
             asset_id: parse_id(&row.asset_id, "ID")?,
@@ -635,17 +223,11 @@ fn threads_where(state: &ProjectState, condition: &str, id: Uuid) -> AppResult<V
             resolved: row.resolved,
             created_at: row.created_at,
             comments: row.comments,
-            pending: None,
-            opened_from,
         });
-    }
-    for thread in &mut threads {
-        thread.pending = pending(state, thread.conversation_id)?;
     }
     Ok(threads)
 }
 
-/// `first_author_*` is the author of the thread's first message.
 struct ThreadRow {
     conversation_id: String,
     asset_id: String,
@@ -655,45 +237,6 @@ struct ThreadRow {
     resolved: bool,
     created_at: i64,
     comments: u32,
-    opened_from: Option<String>,
-    opened_from_title: Option<String>,
-    first_author_kind: Option<String>,
-    first_author_id: Option<String>,
-}
-
-/// The newest suggestion in the thread still waiting for an answer.
-fn pending(state: &ProjectState, conversation_id: Uuid) -> AppResult<Option<PendingSuggestion>> {
-    let row = state
-        .conn
-        .query_row(
-            "SELECT c.id, c.message_id, c.preview, m.author_kind, m.author_id FROM components c \
-             JOIN messages m ON m.id = c.message_id WHERE m.conversation_id = ?1 \
-             AND c.kind = 'suggestion' AND c.answer IS NULL ORDER BY c.rowid DESC LIMIT 1",
-            params![conversation_id.to_string()],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, String>(4)?,
-                ))
-            },
-        )
-        .optional()?;
-    let Some((component_id, message_id, data, kind, author_id)) = row else {
-        return Ok(None);
-    };
-    let data: Value = serde_json::from_str(&data)?;
-    Ok(Some(PendingSuggestion {
-        message_id: parse_id(&message_id, "suggestion")?,
-        component_id: parse_id(&component_id, "suggestion")?,
-        author: Author {
-            kind: AuthorKind::parse(&kind).ok_or_else(|| unreadable("suggestion"))?,
-            id: author_id,
-        },
-        text: data["text"].as_str().unwrap_or_default().to_string(),
-    }))
 }
 
 #[cfg(test)]
@@ -720,7 +263,7 @@ pub mod test_support {
 mod tests {
     use super::*;
     use crate::projects::test_support::{temp_project, user};
-    use crate::protocol::TextComponent;
+    use crate::protocol::{Author, AuthorKind, new_id};
 
     #[test]
     fn a_thread_is_created_on_a_passage_of_a_document_and_listed_in_order() {
@@ -741,9 +284,10 @@ mod tests {
         let report = documents::create(&project, "Report", None, &user()).unwrap();
         let thread = create(&project, report.id, (0, 5), "Yield").unwrap();
         let text = "Last year, yield fell.";
-        let moved = Anchor { thread_id: thread.conversation_id, start: 11, end: 16 };
-        let outside = Anchor { thread_id: thread.conversation_id, start: 30, end: 40 };
-        documents::save(&project, report.id, text, &[moved, outside]).unwrap();
+        let moved = Anchor { id: thread.conversation_id, start: 11, end: 16 };
+        let outside = Anchor { id: thread.conversation_id, start: 30, end: 40 };
+        let anchors = documents::Anchors { threads: vec![moved, outside], suggestions: Vec::new() };
+        documents::save(&project, report.id, text, &anchors).unwrap();
         let saved = list(&project, report.id).unwrap().remove(0);
         assert_eq!((saved.start, saved.end, saved.quote.as_str()), (11, 16, "yield"));
         assert_eq!(passage("añ🥔b", 2, 4).as_deref(), Some("🥔"));
@@ -753,7 +297,8 @@ mod tests {
     fn a_run_in_a_thread_gets_its_document_and_passage() {
         let (_dir, project) = temp_project();
         let report = documents::create(&project, "Report", None, &user()).unwrap();
-        documents::save(&project, report.id, "Yield fell above 3,800 m.", &[]).unwrap();
+        documents::save(&project, report.id, "Yield fell above 3,800 m.", &Default::default())
+            .unwrap();
         let thread = create(&project, report.id, (11, 24), "above 3,800 m").unwrap();
         let document = run_document(&project, thread.conversation_id).unwrap().unwrap();
         assert_eq!(document.name, "Report.qmd");
@@ -769,132 +314,30 @@ mod tests {
         assert!(run_document(&project, conversation).unwrap().is_none());
     }
 
-    #[test]
-    fn a_suggestion_is_completed_with_its_document_and_base() {
-        let (_dir, project) = temp_project();
-        let report = documents::create(&project, "Report", None, &user()).unwrap();
-        documents::save(&project, report.id, "Yield fell above 3,800 m.", &[]).unwrap();
-        let thread = create(&project, report.id, (0, 10), "Yield fell").unwrap();
-        let data = json!({ "text": "Yields fell" });
-        let stored = suggestion(&project, thread.conversation_id, &data).unwrap();
-        assert_eq!(
-            stored,
-            json!({ "document_id": report.id, "base": "Yield fell", "text": "Yields fell" })
-        );
-
-        let conversation = conversations::create(&project).unwrap().id;
-        let refused = suggestion(&project, conversation, &json!({ "text": "x" })).unwrap_err();
-        assert_eq!(refused.code, "not_in_thread");
-    }
-
-    const SENTENCE: &str = "Yield fell above 3,800 m in both 2024 and 2025, mainly at Huancayo.";
-
-    /// A document reading `text`, a thread on `quote` and a reply suggesting `suggested`; returns
-    /// the document, the thread and the suggestion's `(message, component)`.
-    fn suggested(
-        project: &Project,
-        text: &str,
-        quote: &str,
-        suggested: &str,
-    ) -> (Uuid, CommentThread, (Uuid, Uuid)) {
+    /// A document, a thread on "Huancayo" with one comment, and Scribe's reply; returns the
+    /// document, the thread and the reply.
+    fn commented(project: &Project) -> (Uuid, CommentThread, Uuid) {
+        let text = "Yield fell above 3,800 m, mainly at Huancayo.";
         let document = documents::create(project, "Report", None, &user()).unwrap().id;
-        documents::save(project, document, text, &[]).unwrap();
-        let start = text[..text.find(quote).unwrap()].encode_utf16().count() as u32;
-        let end = start + quote.encode_utf16().count() as u32;
-        let thread = create(project, document, (start, end), quote).unwrap();
+        documents::save(project, document, text, &Default::default()).unwrap();
+        let thread = create(project, document, (36, 44), "Huancayo").unwrap();
         let input = conversations::SendMessageInput {
             content: "@Scribe shorten this".into(),
             attachments: Vec::new(),
             text_components: Vec::new(),
         };
-        let comment =
-            conversations::send_message(project, thread.conversation_id, input, new_id()).unwrap();
-        let scribe = Author { kind: AuthorKind::MiniMe, id: "scribe".into() };
         let conversation = thread.conversation_id;
+        let comment = conversations::send_message(project, conversation, input, new_id()).unwrap();
+        let scribe = Author { kind: AuthorKind::MiniMe, id: "scribe".into() };
         let reply = conversations::start_reply(project, conversation, comment.id, scribe).unwrap();
-        let data = suggestion(project, thread.conversation_id, &json!({ "text": suggested }));
-        let component = NewComponent {
-            kind: "suggestion".into(),
-            version: 1,
-            preview: data.unwrap(),
-            text: suggested.to_string(),
-            source_asset_id: None,
-        };
-        let component = conversations::add_component(project, reply, None, component).unwrap();
-        (document, thread, (reply, component))
-    }
-
-    /// Saves `text` as the user would, with the thread now on `start..end`.
-    fn edit(project: &Project, document: Uuid, thread: &CommentThread, text: &str, end: u32) {
-        let anchor = Anchor { thread_id: thread.conversation_id, start: thread.start, end };
-        documents::save(project, document, text, &[anchor]).unwrap();
-    }
-
-    fn decision(project: &Project, (message, component): (Uuid, Uuid)) -> Value {
-        let (conversation, _) = project.lock().message_place(message).unwrap().unwrap();
-        let state = project.lock();
-        state.conversation_component(conversation, component).unwrap().unwrap().answer
-    }
-
-    #[test]
-    fn accepting_an_untouched_passage_replaces_it_and_moves_the_threads_after_it() {
-        let (_dir, project) = temp_project();
-        let text = format!("{SENTENCE} Next steps.");
-        let shorter = "Yield fell above 3,800 m.";
-        let (document, _, answer) = suggested(&project, &text, SENTENCE, shorter);
-        let next = text.find("Next steps").unwrap() as u32;
-        create(&project, document, (next, next + 10), "Next steps").unwrap();
-        let accepted = accept_suggestion(&project, answer.0, answer.1).unwrap();
-        assert_eq!(accepted.text, "Yield fell above 3,800 m. Next steps.");
-        assert_eq!(documents::read(&project, document).unwrap(), accepted.text);
-        let anchors: Vec<(u32, u32, &str)> =
-            accepted.threads.iter().map(|t| (t.start, t.end, t.quote.as_str())).collect();
-        assert_eq!(anchors, [(0, 25, shorter), (26, 36, "Next steps")]);
-        assert_eq!(decision(&project, answer), json!({ "decision": "accepted" }));
-        let again = accept_suggestion(&project, answer.0, answer.1).unwrap_err();
-        assert_eq!(again.code, "not_pending");
-    }
-
-    #[test]
-    fn accepting_after_a_separate_edit_merges_both() {
-        let (_dir, project) = temp_project();
-        let shorter = "Yield fell above 3,800 m, mainly at Huancayo.";
-        let (document, thread, answer) = suggested(&project, SENTENCE, SENTENCE, shorter);
-        let edited = SENTENCE.replace("Huancayo.", "Huancayo and Junín.");
-        edit(&project, document, &thread, &edited, edited.encode_utf16().count() as u32);
-        let accepted = accept_suggestion(&project, answer.0, answer.1).unwrap();
-        assert_eq!(accepted.text, "Yield fell above 3,800 m, mainly at Huancayo and Junín.");
-    }
-
-    #[test]
-    fn overlapping_edits_conflict_and_change_nothing() {
-        let (_dir, project) = temp_project();
-        let shorter = "Yield fell above 3,800 m, mainly at Huancayo.";
-        let (document, thread, answer) = suggested(&project, SENTENCE, SENTENCE, shorter);
-        let edited = SENTENCE.replace("in both 2024 and 2025", "in 2024 only");
-        edit(&project, document, &thread, &edited, edited.encode_utf16().count() as u32);
-        let error = accept_suggestion(&project, answer.0, answer.1).unwrap_err();
-        assert_eq!(error.code, "suggestion_conflict");
-        assert_eq!(documents::read(&project, document).unwrap(), edited);
-        assert!(decision(&project, answer).is_null());
-
-        answer_suggestion(&project, answer.0, answer.1, Decision::Dismissed).unwrap();
-        assert_eq!(decision(&project, answer), json!({ "decision": "dismissed" }));
-    }
-
-    #[test]
-    fn a_detached_thread_cannot_accept() {
-        let (_dir, project) = temp_project();
-        let (document, _, answer) = suggested(&project, SENTENCE, "Huancayo", "Junín");
-        std::fs::write(assets::file_path(&project, document).unwrap(), "Rewritten.").unwrap();
-        let error = accept_suggestion(&project, answer.0, answer.1).unwrap_err();
-        assert_eq!(error.code, "suggestion_detached");
+        (document, thread, reply)
     }
 
     #[test]
     fn a_resolved_thread_can_be_reopened_and_a_deleted_one_leaves_no_rows() {
         let (_dir, project) = temp_project();
-        let (document, thread, (reply, _)) = suggested(&project, SENTENCE, "Huancayo", "Junín");
+        let (document, thread, reply) = commented(&project);
+        assert_eq!(list(&project, document).unwrap()[0].comments, 2);
         set_resolved(&project, thread.conversation_id, true).unwrap();
         assert!(list(&project, document).unwrap()[0].resolved);
         set_resolved(&project, thread.conversation_id, false).unwrap();
@@ -916,20 +359,6 @@ mod tests {
     }
 
     #[test]
-    fn a_listed_thread_shows_its_count_and_pending_suggestion() {
-        let (_dir, project) = temp_project();
-        let (document, _, answer) = suggested(&project, SENTENCE, "Huancayo", "Junín");
-        let thread = list(&project, document).unwrap().remove(0);
-        assert_eq!(thread.comments, 2);
-        assert_eq!(thread.opened_from, None);
-        let pending = thread.pending.unwrap();
-        assert_eq!((pending.component_id, pending.text.as_str()), (answer.1, "Junín"));
-
-        answer_suggestion(&project, answer.0, answer.1, Decision::Rejected).unwrap();
-        assert!(list(&project, document).unwrap()[0].pending.is_none());
-    }
-
-    #[test]
     fn only_a_passage_of_a_document_can_be_commented() {
         let (_dir, project) = temp_project();
         let csv = assets::import_bytes(&project, "trial.csv", "text/csv", b"a\n", &user()).unwrap();
@@ -937,122 +366,5 @@ mod tests {
         assert_eq!(error.code, "invalid_input");
         let report = documents::create(&project, "Report", None, &user()).unwrap();
         assert!(create(&project, report.id, (5, 5), "").is_err());
-    }
-
-    /// A Conversation whose message references `document` with `#`, and Scribe's reply; returns the
-    /// editing call's `(conversation, message, reply)`.
-    fn asked(project: &Project, document: Uuid) -> (Uuid, Uuid, Uuid) {
-        let conversation = conversations::create(project).unwrap().id;
-        let reference = TextComponent {
-            kind: TextComponentKind::Asset,
-            id: document,
-            label: "#Report".into(),
-            start: 8,
-            end: 15,
-        };
-        let input = conversations::SendMessageInput {
-            content: "tighten #Report".into(),
-            attachments: Vec::new(),
-            text_components: vec![reference],
-        };
-        let message = conversations::send_message(project, conversation, input, new_id()).unwrap();
-        let scribe = Author { kind: AuthorKind::MiniMe, id: "scribe".into() };
-        let reply = conversations::start_reply(project, conversation, message.id, scribe).unwrap();
-        (conversation, message.id, reply)
-    }
-
-    fn edit_of(find: &str, replace: &str) -> DocumentEdit {
-        DocumentEdit { find: find.into(), replace: replace.into(), reason: "Shorter.".into() }
-    }
-
-    const JUNIN: &str = "Junín was dry. Yield fell above 3,800 m in 2025. Huancayo too.";
-
-    #[test]
-    fn edits_open_threads_with_the_mini_mes_suggestions_and_a_card() {
-        let (_dir, project) = temp_project();
-        let document = documents::create(&project, "Report", None, &user()).unwrap().id;
-        documents::save(&project, document, JUNIN, &[]).unwrap();
-        let (conversation, answers, reply) = asked(&project, document);
-        let scribe = Author { kind: AuthorKind::MiniMe, id: "scribe".into() };
-        let call = EditingCall {
-            conversation_id: conversation,
-            answers,
-            reply,
-            author: &scribe,
-            step_id: None,
-        };
-        let edits = [edit_of("Huancayo too.", ""), edit_of("above 3,800 m", "above 3,800 m")];
-        let edited = edit_document(&project, &call, document, &edits).unwrap();
-
-        assert_eq!(documents::read(&project, document).unwrap(), JUNIN);
-        let threads = list(&project, document).unwrap();
-        assert_eq!(threads.len(), 2);
-        // "Junín" counts one UTF-16 unit per character, as CodeMirror does.
-        let above = &threads[0];
-        assert_eq!((above.start, above.quote.as_str()), (26, "above 3,800 m"));
-        let from = above.opened_from.clone().unwrap();
-        assert_eq!((from.conversation_id, from.by), (conversation, scribe.clone()));
-        assert!(from.title.is_some());
-        assert_eq!(threads[1].pending.as_ref().unwrap().text, "");
-
-        let state = project.lock();
-        let messages = state.conversation_messages(edited.threads[0]).unwrap();
-        let [first] = messages.as_slice() else { panic!("expected one message") };
-        assert_eq!((first.content.as_str(), &first.author), ("Shorter.", &scribe));
-        assert_eq!(first.components[0].text, "Remove this passage.");
-        let card = state.conversation_component(conversation, edited.component_id).unwrap();
-        let card = card.unwrap();
-        let shown = (card.kind.as_str(), card.text.as_str());
-        assert_eq!(shown, ("document-edits", "Suggested 2 edits to Report"));
-        assert_eq!(card.preview["threads"], json!(edited.threads));
-    }
-
-    #[test]
-    fn a_refused_edit_leaves_nothing_behind() {
-        let (_dir, project) = temp_project();
-        let document = documents::create(&project, "Report", None, &user()).unwrap().id;
-        documents::save(&project, document, JUNIN, &[]).unwrap();
-        let other = documents::create(&project, "Other", None, &user()).unwrap().id;
-        let (conversation, answers, reply) = asked(&project, document);
-        let scribe = Author { kind: AuthorKind::MiniMe, id: "scribe".into() };
-        let call = EditingCall {
-            conversation_id: conversation,
-            answers,
-            reply,
-            author: &scribe,
-            step_id: None,
-        };
-        let refused = |asset: Uuid, edits: &[DocumentEdit]| {
-            edit_document(&project, &call, asset, edits).unwrap_err().code
-        };
-        let large = "x".repeat(MAX_EDIT_BYTES + 1);
-        assert_eq!(refused(other, &[edit_of("x", "y")]), "document_not_referenced");
-        assert_eq!(refused(document, &[edit_of("Puno", "y")]), "passage_not_found");
-        // A valid first edit still opens nothing when a later one is refused.
-        let one_unclear = [edit_of("dry", "y"), edit_of("a", "b")];
-        assert_eq!(refused(document, &one_unclear), "passage_not_unique");
-        let overlapping = [edit_of("above 3,800 m", "y"), edit_of("3,800 m in", "z")];
-        assert_eq!(refused(document, &overlapping), "edits_overlap");
-        assert_eq!(refused(document, &[edit_of("Huancayo", &large)]), "invalid_input");
-        assert!(list(&project, document).unwrap().is_empty());
-        let state = project.lock();
-        let (_, message) = state.load_message_with(reply, false).unwrap().unwrap();
-        assert!(message.components.is_empty());
-    }
-
-    #[test]
-    fn a_document_cannot_be_edited_from_inside_a_thread() {
-        let (_dir, project) = temp_project();
-        let (document, thread, (reply, _)) = suggested(&project, SENTENCE, "Huancayo", "Junín");
-        let scribe = Author { kind: AuthorKind::MiniMe, id: "scribe".into() };
-        let call = EditingCall {
-            conversation_id: thread.conversation_id,
-            answers: reply,
-            reply,
-            author: &scribe,
-            step_id: None,
-        };
-        let error = edit_document(&project, &call, document, &[edit_of("Yield", "y")]);
-        assert_eq!(error.unwrap_err().code, "in_thread");
     }
 }

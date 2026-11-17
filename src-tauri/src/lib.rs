@@ -26,6 +26,7 @@ mod secrets;
 mod settings;
 mod sidecar;
 mod store;
+mod suggestions;
 mod sync;
 mod updates;
 mod user_library;
@@ -117,8 +118,9 @@ pub fn run() {
             ipc::list_threads,
             ipc::set_thread_resolved,
             ipc::delete_thread,
+            ipc::list_suggestions,
             ipc::accept_suggestion,
-            ipc::answer_suggestion,
+            ipc::discard_suggestion,
             ipc::draft_document,
             ipc::stop_draft,
             ipc::export_document_pdf,

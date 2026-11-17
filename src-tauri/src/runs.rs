@@ -31,6 +31,7 @@ use crate::protocol::{Author, AuthorKind, ErrorInfo, Message, new_id};
 use crate::secrets::{SecretSource, is_provider, provider_name};
 use crate::sidecar::SidecarLog;
 use crate::store::Project;
+use crate::suggestions;
 use crate::sync::locked;
 
 pub const ASSET_CHUNK_BYTES: u64 = 1024 * 1024;
@@ -264,9 +265,10 @@ struct ComponentAddParams {
 }
 
 #[derive(Deserialize)]
-struct DocumentEditParams {
+struct DocumentSuggestParams {
     asset_id: Uuid,
-    edits: Vec<comments::DocumentEdit>,
+    find: String,
+    text: String,
 }
 
 #[derive(Deserialize)]
@@ -1094,7 +1096,7 @@ impl Runs {
             "conversation.results" => self.conversation_results(&place),
             "component.read" => read_component(&place, parse_params(params)?),
             "component.add" => add_component(&place, parse_params(params)?),
-            "document.edit" => self.edit_document(&place, parse_params(params)?),
+            "document.suggest" => self.suggest(&place, parse_params(params)?),
             "reply.hand_off" => self.accept_hand_off(call_id, &place, parse_params(params)?),
             other => Err(AppError::new(
                 "unknown_method",
@@ -1163,18 +1165,13 @@ impl Runs {
         Ok(serde_json::to_value(found)?)
     }
 
-    fn edit_document(&self, place: &Place, p: DocumentEditParams) -> AppResult<Value> {
+    fn suggest(&self, place: &Place, p: DocumentSuggestParams) -> AppResult<Value> {
         self.document_allowed()?;
-        let call = comments::EditingCall {
-            conversation_id: place.conversation_id,
-            answers: place.answers,
-            reply: place.reply,
-            author: &place.author,
-            step_id: Some(place.step_id.as_str()),
-        };
-        let edited = comments::edit_document(&place.project, &call, p.asset_id, &p.edits)
-            .map_err(reply_ended)?;
-        Ok(serde_json::to_value(edited)?)
+        let id = suggestions::add(&place.project, p.asset_id, &place.author, &p.find, &p.text)?;
+        if !comments::is_thread(&place.project.lock(), place.conversation_id)? {
+            show_document(place, p.asset_id).map_err(reply_ended)?;
+        }
+        Ok(json!({ "suggestion_id": id }))
     }
 
     fn accept_hand_off(&self, call_id: Uuid, place: &Place, p: HandOffParams) -> AppResult<Value> {
@@ -1215,9 +1212,6 @@ impl Runs {
             return Err(hand_off_refused("A Mini-Me can't hand off to itself."));
         }
         let state = place.project.lock();
-        if comments::is_thread(&state, place.conversation_id)? {
-            return Err(hand_off_refused("A reply to a comment can't hand off."));
-        }
         let answers = state.load_message_with(place.answers, false)?;
         if answers.is_some_and(|(_, m)| m.author.kind == AuthorKind::MiniMe) {
             return Err(hand_off_refused("A reply that was handed off can't hand off again."));
@@ -1391,15 +1385,40 @@ fn read_component(place: &Place, p: ComponentReadParams) -> AppResult<Value> {
     components::read(&place.project.lock(), place.conversation_id, p.component_id)
 }
 
-fn add_component(place: &Place, p: ComponentAddParams) -> AppResult<Value> {
-    let preview = match p.kind.as_str() {
-        "suggestion" => comments::suggestion(&place.project, place.conversation_id, &p.preview)?,
-        _ => p.preview,
+/// Adds the document's `document` card to the reply, unless the reply already shows it.
+fn show_document(place: &Place, asset_id: Uuid) -> AppResult<()> {
+    let name = {
+        let state = place.project.lock();
+        let (_, reply) = state
+            .load_message_with(place.reply, true)?
+            .ok_or_else(|| AppError::not_found("Message not found"))?;
+        let shown = reply
+            .components
+            .iter()
+            .any(|c| c.kind == "document" && c.preview["asset_id"] == json!(asset_id));
+        if shown {
+            return Ok(());
+        }
+        assets::find(&state, asset_id)?.name
     };
+    let title = name.strip_suffix(crate::documents::EXTENSION).unwrap_or(&name).to_string();
+    let card = NewComponent {
+        kind: "document".into(),
+        version: 1,
+        text: format!("Document: {title}"),
+        preview: json!({ "asset_id": asset_id, "title": title }),
+        source_asset_id: None,
+    };
+    let step_id = Some(place.step_id.as_str());
+    conversations::add_core_component(&place.project, place.reply, step_id, card)?;
+    Ok(())
+}
+
+fn add_component(place: &Place, p: ComponentAddParams) -> AppResult<Value> {
     let component = NewComponent {
         kind: p.kind,
         version: p.version,
-        preview,
+        preview: p.preview,
         text: p.text,
         source_asset_id: p.source_asset_id,
     };
@@ -1924,7 +1943,7 @@ mod tests {
     }
 
     #[test]
-    fn a_reply_cannot_hand_off_to_itself_again_or_in_a_thread() {
+    fn a_reply_cannot_hand_off_to_itself_or_again_but_can_in_a_thread() {
         let f = quick();
         let refused = Some("hand_off_not_allowed");
         let mut own = spec("echo", json!({ "text": "hi" }));
@@ -1948,7 +1967,7 @@ mod tests {
         let run = spec("echo", json!({ "text": "check this" }));
         f.runs.start(Arc::clone(&f.project), thread, &comment, run, dummy_model()).unwrap();
         let call_id = f.step(f.sink.last_run(), STEP);
-        assert_eq!(error_code(hand_off(&f, call_id, FALLBACK_MINI_ME, None)).as_deref(), refused);
+        result(hand_off(&f, call_id, SCRIBE, None));
     }
 
     #[test]
@@ -1973,14 +1992,28 @@ mod tests {
     }
 
     #[test]
-    fn a_call_can_ask_to_edit_only_a_document_its_message_references() {
+    fn a_suggestion_shows_its_document_once_in_a_conversation_and_not_in_a_thread() {
         let f = quick();
-        let (call_id, _) = f.start_call("echo");
+        let (call_id, reply) = f.start_call("echo");
         let report = crate::documents::create(&f.project, "Report", None, &user()).unwrap();
-        let edit = json!({ "find": "Report", "replace": "Trial report", "reason": "Clearer." });
-        let params = json!({ "asset_id": report.id, "edits": [edit] });
-        let refused = f.runs.respond("r".into(), call_id, "document.edit", params);
-        assert_eq!(error_code(refused).as_deref(), Some("document_not_referenced"));
+        let text = "Yield fell above 3,800 m, mainly at Huancayo.";
+        crate::documents::save(&f.project, report.id, text, &Default::default()).unwrap();
+        let suggest = |call_id: Uuid, find: &str| {
+            let params = json!({ "asset_id": report.id, "find": find, "text": "x" });
+            result(f.runs.respond("r".into(), call_id, "document.suggest", params))
+        };
+        suggest(call_id, "Yield");
+        suggest(call_id, "Huancayo");
+        assert_eq!(crate::suggestions::list(&f.project, report.id).unwrap().len(), 2);
+        let cards: Vec<(String, String)> =
+            f.message(reply).components.into_iter().map(|c| (c.kind, c.text)).collect();
+        assert_eq!(cards, [("document".to_string(), "Document: Report".to_string())]);
+
+        let (call_id, reply) = f.start_call("echo");
+        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
+        into_thread(&f.project, conversation);
+        suggest(call_id, "above");
+        assert!(f.message(reply).components.is_empty());
     }
 
     #[test]
@@ -2041,7 +2074,7 @@ mod tests {
     fn components_a_trait_may_not_add_are_refused() {
         let f = quick();
         let (call_id, reply) = f.start_call("echo");
-        for kind in ["approval", "document-edits"] {
+        for kind in ["approval", "hand-off"] {
             let params = json!({ "kind": kind, "version": 1, "preview": {}, "text": "t" });
             assert_eq!(
                 error_code(add_component(&f, call_id, params)).as_deref(),

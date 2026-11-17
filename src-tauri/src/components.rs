@@ -13,7 +13,7 @@ use crate::store::ProjectState;
 pub const MAX_PREVIEW_BYTES: usize = 2 * 1024 * 1024;
 
 /// Kinds only the core creates, such as a paused Workflow's approval and a reply's hand-off.
-const CORE_KINDS: [&str; 3] = ["approval", "document-edits", "hand-off"];
+const CORE_KINDS: [&str; 2] = ["approval", "hand-off"];
 
 /// Refuses a component of a kind only the core creates (`component_not_allowed`), and one
 /// with an empty `text`, a `preview` larger than `MAX_PREVIEW_BYTES` or a source that is not an

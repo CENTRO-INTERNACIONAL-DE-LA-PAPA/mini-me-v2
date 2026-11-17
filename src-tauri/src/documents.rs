@@ -3,17 +3,18 @@
 //! tools see it like any other file; this module only creates, reads and rewrites them.
 
 use rusqlite::params;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::assets;
-use crate::comments::{self, Anchor};
+use crate::comments;
 use crate::error::{AppError, AppResult};
 use crate::library::SCRIBE;
 use crate::paths::write_atomic;
 use crate::projects;
 use crate::protocol::{AssetRef, Author, AuthorKind};
 use crate::store::Project;
+use crate::suggestions;
 
 pub const EXTENSION: &str = ".qmd";
 const MEDIA_TYPE: &str = "text/markdown";
@@ -73,14 +74,39 @@ pub fn open(project: &Project, id: Uuid) -> AppResult<OpenedDocument> {
     Ok(OpenedDocument { text, modified_at })
 }
 
+/// A thread's or suggestion's passage as the document view tracks it while the user edits.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+pub struct Anchor {
+    pub id: Uuid,
+    pub start: u32,
+    pub end: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct Anchors {
+    pub threads: Vec<Anchor>,
+    pub suggestions: Vec<Anchor>,
+}
+
+/// The text between UTF-16 offsets `start` and `end`; none when they do not mark a passage.
+pub fn passage(text: &str, start: u32, end: u32) -> Option<String> {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let (start, end) = (start as usize, end as usize);
+    if start >= end || end > units.len() {
+        return None;
+    }
+    String::from_utf16(&units[start..end]).ok()
+}
+
 pub fn read(project: &Project, id: Uuid) -> AppResult<String> {
     let path = document_path(project, id)?;
     String::from_utf8(std::fs::read(path)?)
         .map_err(|_| AppError::invalid_input("This document is not readable text."))
 }
 
-/// Replaces the document's text as `write` does and moves its comment threads to `anchors`.
-pub fn save(project: &Project, id: Uuid, text: &str, anchors: &[Anchor]) -> AppResult<()> {
+/// Replaces the document's text as `write` does and moves its threads and suggestions to
+/// `anchors`.
+pub fn save(project: &Project, id: Uuid, text: &str, anchors: &Anchors) -> AppResult<()> {
     write(project, id, text, None, anchors)
 }
 
@@ -91,7 +117,7 @@ fn write(
     id: Uuid,
     text: &str,
     added_by: Option<&Author>,
-    anchors: &[Anchor],
+    anchors: &Anchors,
 ) -> AppResult<()> {
     if text.len() > MAX_BYTES {
         return Err(AppError::invalid_input("A document can be at most 2 MiB."));
@@ -111,7 +137,8 @@ fn write(
             id.to_string()
         ],
     )?;
-    comments::move_anchors(&state.conn, id, text, anchors)
+    comments::move_anchors(&state.conn, id, text, &anchors.threads)?;
+    suggestions::move_anchors(&state.conn, id, text, &anchors.suggestions)
 }
 
 /// Writes `body` after `header`, the document's current text. A document that was only a YAML
@@ -124,7 +151,7 @@ pub fn save_draft(project: &Project, id: Uuid, header: &str, body: &str) -> AppR
     let scribe = Author { kind: AuthorKind::MiniMe, id: SCRIBE.to_string() };
     let added_by = only_header(header).then_some(&scribe);
     let text = format!("{}\n\n{body}\n", header.trim_end_matches('\n'));
-    write(project, id, &text, added_by, &[])
+    write(project, id, &text, added_by, &Anchors::default())
 }
 
 /// Whether `text` is a YAML header with nothing after it.
@@ -194,7 +221,7 @@ mod tests {
         let (_dir, project) = temp_project();
         let asset = create(&project, "Report", None, &user()).unwrap();
         let text = "---\ntitle: Report\n---\n\n# Summary\n";
-        save(&project, asset.id, text, &[]).unwrap();
+        save(&project, asset.id, text, &Anchors::default()).unwrap();
         assert_eq!(read(&project, asset.id).unwrap(), text);
         let size = assets::find(&project.lock(), asset.id).unwrap().size_bytes;
         assert_eq!(size, text.len() as i64);
@@ -203,8 +230,9 @@ mod tests {
     #[test]
     fn only_documents_are_saved() {
         let (_dir, project) = temp_project();
-        let csv = assets::import_bytes(&project, "field-trial.csv", "text/csv", b"a,b\n", &user()).unwrap();
-        let error = save(&project, csv.id, "# Not a table", &[]).unwrap_err();
+        let csv = assets::import_bytes(&project, "field-trial.csv", "text/csv", b"a,b\n", &user())
+            .unwrap();
+        let error = save(&project, csv.id, "# Not a table", &Anchors::default()).unwrap_err();
         assert_eq!(error.code, "invalid_input");
         let path = assets::file_path(&project, csv.id).unwrap();
         assert_eq!(std::fs::read(path).unwrap(), b"a,b\n");
@@ -239,7 +267,7 @@ mod tests {
         let pdf = store_pdf(&project, drafted.id, &drafted.name, b"%PDF-1.7", &user()).unwrap();
         assert_eq!(added_by(pdf.id), scribe);
         // Drafting after text the user wrote keeps the document theirs.
-        save(&project, notes.id, "---\ntitle: Notes\n---\n\nMine.\n", &[]).unwrap();
+        save(&project, notes.id, "---\ntitle: Notes\n---\n\nMine.\n", &Anchors::default()).unwrap();
         let text = read(&project, notes.id).unwrap();
         save_draft(&project, notes.id, &text, "# More").unwrap();
         assert_eq!(added_by(notes.id), Some(user()));
@@ -261,7 +289,7 @@ mod tests {
         let path = assets::file_path(&project, asset.id).unwrap();
         // A directory where the temporary file would go makes the write fail.
         std::fs::create_dir(path.with_extension("qmd.tmp")).unwrap();
-        assert!(save(&project, asset.id, "# New", &[]).is_err());
+        assert!(save(&project, asset.id, "# New", &Anchors::default()).is_err());
         assert_eq!(read(&project, asset.id).unwrap(), "---\ntitle: \"Report\"\n---\n\n");
     }
 }
