@@ -20,27 +20,37 @@ import {
   RefreshCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { api, errorCode, errorMessage } from "../../api";
+import { api, errorMessage } from "../../api";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { recheckQuarto, useQuarto } from "../../hooks/useQuarto";
 import { formatRelative } from "../../lib/format";
-import type { AssetRef, CommentThread, Uuid } from "../../protocol/types";
+import type { AssetRef, CommentThread, Suggestion, Uuid } from "../../protocol/types";
 import { EditorHeader } from "../library/LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MainSheet } from "../shell/Sheet";
 import {
+  placeSuggestions,
   placeThreads,
   savedAnchors,
-  setPlacements,
+  setSuggestionPlacements,
+  setThreadPlacements,
+  suggestionPlacements,
   threadPlacements,
   type Placement,
 } from "./anchors";
 import { CommentsSheet, threadsInOrder } from "./CommentsSheet";
-import { setHighlighted, threadAt, threadHighlights, type Suggested } from "./highlights";
+import {
+  setHighlighted,
+  suggestionAt,
+  threadAt,
+  threadHighlights,
+  type Suggested,
+} from "./highlights";
 import { headerField } from "./qmd";
 import { documentsBlocked } from "./quarto";
 import { QuartoNotice } from "./QuartoNotice";
 import { blockPrefix, wrapSelection } from "./sourceEdits";
+import { SuggestionPopover, type PopoverAnchor } from "./SuggestionPopover";
 
 /** How long typing must pause before a document is saved. */
 const SAVE_DELAY_MS = 1000;
@@ -57,9 +67,6 @@ interface Props {
   back: string;
   /** Set for a document just created to be drafted from this Conversation. */
   draftFrom?: Uuid;
-  /** A reply's suggested edits, the threads they opened: set to open with the Comments sheet
-   * showing them, with Accept all and Discard all. */
-  edits?: Uuid[];
   onClose: () => void;
 }
 
@@ -96,7 +103,6 @@ export function DocumentView({
   assetId,
   back,
   draftFrom,
-  edits,
   onClose,
 }: Props) {
   const [text, setText] = useState("");
@@ -111,9 +117,14 @@ export function DocumentView({
   const [pages, setPages] = useState<string[]>([]);
   const [rendering, setRendering] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [showComments, setShowComments] = useState(Boolean(edits));
+  const [showComments, setShowComments] = useState(false);
   const [threads, setThreads] = useState<CommentThread[]>([]);
   const [placements, setPlacementsShown] = useState<ReadonlyMap<Uuid, Placement>>(new Map());
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestionsPlaced, setSuggestionsPlaced] = useState<ReadonlyMap<Uuid, Placement>>(
+    new Map(),
+  );
+  const [chosen, setChosen] = useState<{ id: Uuid; anchor: PopoverAnchor } | null>(null);
   const [selected, setSelected] = useState<Uuid | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
   const miniMes = useMiniMes();
@@ -156,14 +167,23 @@ export function DocumentView({
   const saveRef = useRef(save);
   saveRef.current = save;
 
-  /** Shows `next` as the source without saving it, with the threads' `placements` if given. */
-  const replace = (next: string, placements?: Map<Uuid, Placement>) => {
+  /** Shows `next` as the source without saving it, with the threads' and suggestions'
+   * placements if given. */
+  const replace = (
+    next: string,
+    placed?: { threads: Map<Uuid, Placement>; suggestions: Map<Uuid, Placement> },
+  ) => {
     const editor = view.current;
     if (!editor) return;
     loading.current = true;
     editor.dispatch({
       changes: { from: 0, to: editor.state.doc.length, insert: next },
-      effects: placements ? setPlacements.of(placements) : [],
+      effects: placed
+        ? [
+            setThreadPlacements.of(placed.threads),
+            setSuggestionPlacements.of(placed.suggestions),
+          ]
+        : [],
     });
     loading.current = false;
     setText(next);
@@ -211,11 +231,20 @@ export function DocumentView({
           theme,
           editable.current.of(EditorView.editable.of(false)),
           threadPlacements,
+          suggestionPlacements,
           threadHighlights,
           EditorView.domEventHandlers({
-            // A bubble opens its thread instead of moving the cursor.
+            // A bubble opens its thread, and a suggested text its answers, instead of moving
+            // the cursor.
             mousedown: (event) => {
-              const bubble = (event.target as Element).closest<HTMLElement>(".cm-comment-bubble");
+              const target = event.target as Element;
+              const suggested = target.closest<HTMLElement>(".cm-suggested");
+              if (suggested?.dataset.suggestion) {
+                const rect = suggested.getBoundingClientRect();
+                setChosen({ id: suggested.dataset.suggestion, anchor: at(rect) });
+                return true;
+              }
+              const bubble = target.closest<HTMLElement>(".cm-comment-bubble");
               if (!bubble?.dataset.thread) return false;
               setSelected(bubble.dataset.thread);
               setShowComments(true);
@@ -225,11 +254,21 @@ export function DocumentView({
           EditorView.updateListener.of((update) => {
             const placed = update.state.field(threadPlacements);
             if (placed !== update.startState.field(threadPlacements)) setPlacementsShown(placed);
+            const suggested = update.state.field(suggestionPlacements);
+            if (suggested !== update.startState.field(suggestionPlacements)) {
+              setSuggestionsPlaced(suggested);
+            }
             if (update.selectionSet) {
               setHasSelection(!update.state.selection.main.empty);
               const clicked = update.transactions.some((t) => t.isUserEvent("select.pointer"));
-              const at = update.state.selection.main.head;
-              const thread = clicked ? threadAt(update.state, at) : null;
+              const head = update.state.selection.main.head;
+              const suggestion = clicked ? suggestionAt(update.state, head) : null;
+              const coords = suggestion ? update.view.coordsAtPos(head) : null;
+              if (suggestion && coords) {
+                const rect = new DOMRect(coords.left, coords.top, 0, coords.bottom - coords.top);
+                setChosen({ id: suggestion, anchor: at(rect) });
+              }
+              const thread = clicked && !suggestion ? threadAt(update.state, head) : null;
               if (thread) {
                 setSelected(thread);
                 setShowComments(true);
@@ -257,10 +296,14 @@ export function DocumentView({
     const load = async () => {
       const { text: source, modified_at } = await api.readDocument(projectId, assetId);
       const found = await api.listThreads(projectId, assetId);
+      const waiting = await api.listSuggestions(projectId, assetId);
       if (!active) return;
-      replace(source);
+      replace(source, {
+        threads: placeThreads(source, found),
+        suggestions: placeSuggestions(source, waiting),
+      });
       setThreads(found);
-      view.current?.dispatch({ effects: setPlacements.of(placeThreads(source, found)) });
+      setSuggestions(waiting);
       if (modified_at !== null) setEditedAt(modified_at);
       loaded.current = true;
       setEditable(!blockedRef.current);
@@ -311,22 +354,21 @@ export function DocumentView({
     };
   }, [projectId, assetId, draftFrom, render]);
 
-  // The source shows the open threads with their numbers and pending suggestions, and the
-  // selected one's passage highlighted.
+  // The source shows the open threads with their numbers, the selected one's passage
+  // highlighted, and the waiting suggestions.
   useEffect(() => {
     const open = threadsInOrder(threads, placements, false);
     const visible = new Set(open.map((t) => t.conversation_id));
     const numbers = new Map(open.map((t, index) => [t.conversation_id, index + 1]));
-    const suggestions = new Map<Uuid, Suggested>();
-    for (const { conversation_id, pending } of open) {
-      if (!pending) continue;
-      const colors = miniMes.find((m) => m.id === pending.author.id)?.colors;
-      suggestions.set(conversation_id, { text: pending.text, colors });
+    const suggested = new Map<Uuid, Suggested>();
+    for (const { id, text, author } of suggestions) {
+      const colors = miniMes.find((m) => m.id === author.id)?.colors;
+      suggested.set(id, { text, colors });
     }
     view.current?.dispatch({
-      effects: setHighlighted.of({ visible, selected, numbers, suggestions }),
+      effects: setHighlighted.of({ visible, selected, numbers, suggestions: suggested }),
     });
-  }, [threads, placements, selected, miniMes]);
+  }, [threads, placements, suggestions, selected, miniMes]);
 
   // A thread left before its first comment was never used, so it goes.
   const previous = useRef<Uuid | null>(null);
@@ -338,7 +380,7 @@ export function DocumentView({
   }, [selected]);
 
   const place = (next: Map<Uuid, Placement>) =>
-    view.current?.dispatch({ effects: setPlacements.of(next) });
+    view.current?.dispatch({ effects: setThreadPlacements.of(next) });
 
   async function comment() {
     const editor = view.current;
@@ -375,48 +417,40 @@ export function DocumentView({
     }
   }
 
-  /** Accepts the suggestion `componentId` of `messageId` into the saved document, shows the
-   * merged text with every thread moved to fit, and resolves the thread `id`. */
-  async function accept(id: Uuid, messageId: Uuid, componentId: Uuid) {
+  /** Accepts a suggestion into the saved document and shows the merged text with every thread
+   * and suggestion moved to fit; rejects with why it could not. */
+  async function accept(id: Uuid) {
     // Saved first, so the merge starts from the text the user sees.
     if (!(await save())) throw new Error("The document could not be saved.");
-    const accepted = await api.acceptSuggestion(projectId, messageId, componentId);
-    replace(accepted.text, placeThreads(accepted.text, accepted.threads));
+    const accepted = await api.acceptSuggestion(projectId, id);
+    replace(accepted.text, {
+      threads: placeThreads(accepted.text, accepted.threads),
+      suggestions: placeSuggestions(accepted.text, accepted.suggestions),
+    });
     setThreads(accepted.threads);
-    await resolve(id, true);
+    setSuggestions(accepted.suggestions);
   }
 
-  /** The threads among `ids` whose suggestion still waits. */
-  const waiting = (ids: Uuid[]) =>
-    threads.filter((t) => t.pending && ids.includes(t.conversation_id));
-
-  /** Accepts each waiting suggestion among `ids` in turn, as `accept` does; returns the threads
-   * left waiting (edit conflicts or passage lost). Any other failure stops it. */
-  async function acceptAll(ids: Uuid[]): Promise<Uuid[]> {
-    const left: Uuid[] = [];
-    for (const thread of waiting(ids)) {
-      const { message_id, component_id } = thread.pending!;
-      try {
-        await accept(thread.conversation_id, message_id, component_id);
-      } catch (e) {
-        const code = errorCode(e);
-        if (code !== "suggestion_conflict" && code !== "suggestion_detached") throw e;
-        left.push(thread.conversation_id);
-      }
-    }
-    return left;
+  async function discard(id: Uuid) {
+    await api.discardSuggestion(projectId, id);
+    setSuggestions((current) => current.filter((s) => s.id !== id));
   }
 
-  /** Discards the waiting suggestion of each thread among `ids`, leaving the document as it
-   * is and the threads open. */
-  async function discardAll(ids: Uuid[]) {
+  /** Reads the waiting suggestions again. Those already shown keep the place they followed
+   * through the user's edits; new ones are placed in the text as it is now. */
+  async function refreshSuggestions() {
     try {
-      for (const thread of waiting(ids)) {
-        const { message_id, component_id } = thread.pending!;
-        await api.answerSuggestion(projectId, message_id, component_id, "rejected");
+      const waiting = await api.listSuggestions(projectId, assetId);
+      const editor = view.current;
+      if (!editor) return;
+      const placed = placeSuggestions(editor.state.doc.toString(), waiting);
+      for (const [id, placement] of editor.state.field(suggestionPlacements)) {
+        if (placement && placed.has(id)) placed.set(id, placement);
       }
-    } finally {
-      await refreshThreads();
+      editor.dispatch({ effects: setSuggestionPlacements.of(placed) });
+      setSuggestions(waiting);
+    } catch (e) {
+      setError(errorMessage(e));
     }
   }
 
@@ -479,6 +513,11 @@ export function DocumentView({
     change(editor);
     editor.focus();
   };
+
+  const authorName = (suggestion: Suggestion) =>
+    miniMes.find((m) => m.id === suggestion.author.id)?.name ?? "a Mini-Me";
+  const detached = suggestions.filter((s) => suggestionsPlaced.get(s.id) === null);
+  const shown = suggestions.find((s) => s.id === chosen?.id);
 
   const title = headerField(text, "title") || "Untitled document";
   const subtitle = editedAt !== null ? `Edited ${formatRelative(editedAt)}` : undefined;
@@ -618,6 +657,23 @@ export function DocumentView({
                   </Button>
                 </div>
               )}
+              {detached.map((suggestion) => (
+                <button
+                  key={suggestion.id}
+                  type="button"
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setChosen({ id: suggestion.id, anchor: at(rect) });
+                  }}
+                  className={cn(
+                    "mx-6 mt-4 truncate rounded-card bg-card px-4 py-2.5 text-left text-ui",
+                    "text-muted-foreground hover:bg-accent focus-visible:outline-2",
+                    "focus-visible:outline-ring",
+                  )}
+                >
+                  A suggestion by {authorName(suggestion)} lost its passage: “{suggestion.text}”
+                </button>
+              ))}
               <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
                 {/* The source as a page, like the preview's: clicking anywhere on it, even below
                     short text, puts the cursor in the editor. */}
@@ -644,19 +700,33 @@ export function DocumentView({
           open={selected}
           onOpen={(id) => (id ? selectThread(id) : setSelected(null))}
           onClose={hideComments}
-          onActivity={() => void refreshThreads()}
+          onActivity={() => {
+            void refreshThreads();
+            void refreshSuggestions();
+          }}
           onResolve={(id, resolved) => void resolve(id, resolved)}
           // Cleared after the delete, so the thread is no longer there to be left empty.
           onDelete={(id) => void remove(id).then(() => setSelected(null))}
-          onAccept={accept}
-          edits={edits}
-          onAcceptAll={acceptAll}
-          onDiscardAll={discardAll}
+        />
+      )}
+      {chosen && shown && (
+        <SuggestionPopover
+          key={shown.id}
+          anchor={chosen.anchor}
+          author={authorName(shown)}
+          text={shown.text}
+          detached={suggestionsPlaced.get(shown.id) === null}
+          onAccept={() => accept(shown.id)}
+          onDiscard={() => discard(shown.id)}
+          onClose={() => setChosen(null)}
         />
       )}
     </>
   );
 }
+
+/** A popover anchor fixed at `rect`, so it stays put when the source redraws what was clicked. */
+const at = (rect: DOMRect): PopoverAnchor => ({ getBoundingClientRect: () => rect });
 
 /** The preview's pages, each an SVG image drawn on a white page with the sheet's outline. */
 function PreviewPages({ pages }: { pages: string[] }) {

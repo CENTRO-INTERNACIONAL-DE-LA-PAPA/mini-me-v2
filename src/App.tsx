@@ -338,7 +338,6 @@ function Main({
               assetId,
               from: view,
               draftFrom: how === "draft" ? view.id : undefined,
-              edits: typeof how === "object" ? how.edits : undefined,
             })
           }
         />
@@ -357,7 +356,6 @@ function Main({
           projectId={project.id}
           assetId={view.assetId}
           draftFrom={view.draftFrom}
-          edits={view.edits}
           back={back}
           onClose={() => onNavigate(from)}
         />

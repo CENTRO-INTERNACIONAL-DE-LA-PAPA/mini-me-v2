@@ -133,31 +133,30 @@ their passages as you edit. One whose passage can no longer be found, for exampl
 file was changed in another editor, is listed under **Detached**. Comments are kept in the
 Project, not in the `.qmd` file.
 
-A comment is a note unless it @-mentions a Mini-Me. A mentioned Mini-Me runs its whole Workflow,
-as it would for a message, with the passage, the document's name and the thread's earlier
-comments, and answers in the thread. Mini-Mes whose Traits can suggest edits, such as Assistant
-or Scribe, may suggest new text for the passage: the source shows the passage struck through
-with the suggestion after it, and the reply offers:
+Every comment gets a reply, as a message in a Conversation does: from the Mini-Me you
+@-mention, or else the one Mini-Me picks, or else Assistant. The Mini-Me answers in the thread
+with the passage, the document's name and the thread's earlier comments, and can hand the
+comment to another Mini-Me as it would in a Conversation.
 
-- **Accept and resolve**: puts the suggestion in the document and resolves the thread. If you
-  have edited the passage since, your edits are kept and combined with the suggestion; when
-  both changed the same words, nothing is applied, and you can discard it or ask again.
+**Resolve** moves a thread to Resolved and **Reopen** brings it back. **Delete** removes the
+thread and its comments.
+
+### Suggestions
+
+A Mini-Me asked to change a document, in a comment or in a Conversation ("@Scribe tighten the
+methods in #Trial report"), suggests its changes; the document itself is unchanged until you
+accept them. In the source, each suggested passage is struck through with the new text after
+it, in the Mini-Me's colour. Click either to see:
+
+- **Accept**: puts the suggestion in the document. If you have edited the passage since, your
+  edits are kept and combined with the suggestion; when both changed the same words, nothing is
+  applied, and you can discard it or ask again.
 - **Discard**: leaves the document as it is.
 
-For another version, @-mention the Mini-Me again in the thread and say what to change.
-
-**Resolve** moves a thread to Resolved, setting aside a suggestion still waiting, and
-**Reopen** brings it back. **Delete** removes the thread and its comments.
-
-### Editing a document from a Conversation
-
-Reference a document with `#` or attach it, and ask a Mini-Me whose Traits can edit documents,
-such as Assistant or Scribe, to change it ("@Scribe tighten the methods in #Trial report").
-The Mini-Me suggests its edits; the document itself is unchanged until you accept them. Each
-edit opens a thread on the passage it changes, saying "Opened by Scribe from Trial design"
-with the Conversation's name as a link back, and holding the Mini-Me's reason and its
-suggestion, which you accept or discard as above. The reply shows a card for the document with
-how many suggested edits still wait; **Open** shows the document with its Comments.
+A new suggestion on a passage that already has one replaces it. A suggestion whose passage can
+no longer be found is listed above the source and can only be discarded. A reply in a
+Conversation that suggested changes shows a card for the document; **Open** shows it with its
+suggestions.
 
 ## Follow-ups
 

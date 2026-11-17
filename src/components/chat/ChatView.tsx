@@ -29,9 +29,8 @@ interface Props {
   onActivity: () => void;
   onRename: (title: string) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
-  /** Opens a document: to be drafted from this Conversation, with the Comments sheet showing a
-   * reply's suggested edits (the threads they opened), or as it is. */
-  onOpenDocument: (assetId: Uuid, how?: "draft" | { edits: Uuid[] }) => void;
+  /** Opens a document: to be drafted from this Conversation, or as it is. */
+  onOpenDocument: (assetId: Uuid, how?: "draft") => void;
 }
 
 export function ChatView({
@@ -83,8 +82,7 @@ export function ChatView({
   const openDocumentRef = useRef(onOpenDocument);
   openDocumentRef.current = onOpenDocument;
   const openDocument = useCallback(
-    (assetId: Uuid, edits?: Uuid[]) =>
-      openDocumentRef.current(assetId, edits ? { edits } : undefined),
+    (assetId: Uuid) => openDocumentRef.current(assetId),
     [],
   );
   const [draggingFiles, setDraggingFiles] = useState(false);

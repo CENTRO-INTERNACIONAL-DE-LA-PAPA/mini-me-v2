@@ -6,7 +6,7 @@ import type {
   AcceptedSuggestion,
   AiSettings,
   CustomEndpoint,
-  Anchor,
+  Anchors,
   CommentThread,
   AssetRef,
   Dataset,
@@ -40,7 +40,7 @@ import type {
   SavedDefinition,
   SendMessageInput,
   SidecarStatus,
-  SuggestionDecision,
+  Suggestion,
   TraitDraft,
   UpdateStatus,
   UserProfile,
@@ -139,9 +139,13 @@ export const api = {
     invoke<AssetRef>("create_document", { project_id, title }),
   readDocument: (project_id: Uuid, asset_id: Uuid) =>
     invoke<OpenedDocument>("read_document", { project_id, asset_id }),
-  /** Saves the document's text, and moves its comment threads to `anchors`. */
-  saveDocument: (project_id: Uuid, asset_id: Uuid, text: string, anchors: Anchor[] = []) =>
-    invoke<void>("save_document", { project_id, asset_id, text, anchors }),
+  /** Saves the document's text, and moves its threads and suggestions to `anchors`. */
+  saveDocument: (
+    project_id: Uuid,
+    asset_id: Uuid,
+    text: string,
+    anchors: Anchors = { threads: [], suggestions: [] },
+  ) => invoke<void>("save_document", { project_id, asset_id, text, anchors }),
   /** Starts a comment thread on `start..end` of a document's source, which reads `quote`. Its
    * comments go through `sendMessage` on the thread's `conversation_id`. */
   createThread: (project_id: Uuid, asset_id: Uuid, start: number, end: number, quote: string) =>
@@ -153,16 +157,16 @@ export const api = {
   /** Stops the thread's running reply, if any, then deletes the thread. */
   deleteThread: (project_id: Uuid, thread_id: Uuid) =>
     invoke<void>("delete_thread", { project_id, thread_id }),
+  /** The document's waiting suggestions. */
+  listSuggestions: (project_id: Uuid, asset_id: Uuid) =>
+    invoke<Suggestion[]>("list_suggestions", { project_id, asset_id }),
   /** Applies a suggestion to the saved document; fails with `suggestion_conflict` when the
-   * user's edits and the suggestion change the same words. */
-  acceptSuggestion: (project_id: Uuid, message_id: Uuid, component_id: Uuid) =>
-    invoke<AcceptedSuggestion>("accept_suggestion", { project_id, message_id, component_id }),
-  answerSuggestion: (
-    project_id: Uuid,
-    message_id: Uuid,
-    component_id: Uuid,
-    decision: Exclude<SuggestionDecision, "accepted">,
-  ) => invoke<void>("answer_suggestion", { project_id, message_id, component_id, decision }),
+   * user's edits and the suggestion change the same words, or `suggestion_detached` when its
+   * passage is gone. */
+  acceptSuggestion: (project_id: Uuid, suggestion_id: Uuid) =>
+    invoke<AcceptedSuggestion>("accept_suggestion", { project_id, suggestion_id }),
+  discardSuggestion: (project_id: Uuid, suggestion_id: Uuid) =>
+    invoke<void>("discard_suggestion", { project_id, suggestion_id }),
   /** Drafts the new document `asset_id` from a Conversation, calling `onEvent` as text arrives.
    * Resolves once the draft has ended and is saved; rejects with why it stopped early. */
   draftDocument: (

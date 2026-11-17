@@ -36,9 +36,9 @@ of the four changes is in `docs/plan-components-tools-routing.md`.
 These were settled with the user while planning the change.
 
 ### A `suggestions` table (Rust core)
-Migration 14 adds `suggestions (id, asset_id, passage_start, passage_end, base, text,
+Migration 14 adds `suggestions (id, asset_id, passage_start, passage_end, quote, base, text,
 author_kind, author_id, state, created_at)`, where `state` is `waiting`, `accepted`, `discarded`
-or `replaced`. It also drops `comment_threads.opened_from`. A new `suggestions.rs` owns the
+or `replaced`; a document's suggestions are deleted with it (`ON DELETE CASCADE`). It also drops `comment_threads.opened_from`. A new `suggestions.rs` owns the
 table and its functions:
 - `add`: checks, then the overlap rule;
 - `list(asset)`: waiting suggestions only;
@@ -60,8 +60,9 @@ table and its functions:
 ### Anchors are shared code (UI, Rust core)
 - **UI:** `anchors.ts` generalizes its placement field to any anchored item `{ id, start, end,
   quote }`. Threads and suggestions each get their own field instance and `place*` call.
-- **Saving:** `save_document` sends `{ threads, suggestions }` anchors. The core moves both in
-  the same transaction as the file write.
+- **Saving:** `save_document` sends `{ threads, suggestions }` anchors, each `{ id, start, end }`
+  (`documents::Anchor`). A suggestion's `quote` is its passage as last saved, as a thread's is.
+  The core moves both in the same transaction as the file write.
 - **Accept:** `accept` shifts thread and suggestion anchors as `accept_suggestion` shifts
   threads today.
 
@@ -102,3 +103,15 @@ table and its functions:
   each answer; there is no polling.
 - Clicking a suggestion opens a small popover beside it with Accept and Discard, the conflict
   message, or Discard alone when detached.
+
+## Open questions
+
+- **Where a detached suggestion is discarded.** A suggestion whose passage is lost has no place
+  in the source to click. Options: (a) a row above the source for each one, opening the popover
+  with Discard only (built this way); (b) discard detached suggestions automatically when the
+  document opens; (c) list them in the Comments sheet. Recommendation: (a), the smallest change
+  that keeps the spec's "offers only Discard".
+- **Clicking a struck passage that also has a comment thread.** The suggestion's popover opens;
+  the thread still opens from its number badge. Recommendation: keep.
+- **The `document` card's title** is the file name without `.qmd`, while Scribe's own card uses
+  the YAML title. Recommendation: keep; the file name is what Files shows.

@@ -237,7 +237,8 @@ For "@Researcher drought in Andean landraces":
    Typesafe's Jev chooses a Mini-Me; when Jev's confidence is below the threshold in
    Settings or Jev cannot be asked, Assistant answers (`FALLBACK_MINI_ME` in `library.rs`).
    Jev also judges whether the message needs earlier context and whether the Mini-Me reacts
-   with an emoji (`routing.rs` in the core, `routing.py` in the sidecar).
+   with an emoji (`routing.rs` in the core, `routing.py` in the sidecar). A comment in a thread
+   is routed the same way, without the question of which file it means.
 3. **Start.** The core creates an empty streaming reply and sends `run.start` with the
    Mini-Me's Workflow, the Traits it uses, the model, the message and its context
    (`runs.rs`). A run needs a model if any of its adapters declares providers or if it has
@@ -290,8 +291,8 @@ kinds (`paper-sources`, `theories`, `dataset-results`) only by the adapter that 
 through `show_results`. A component's `preview` is only what the UI shows; its data lives in
 its source file (`source_asset_id`), which a Trait reads with `read_file`. Results that are not
 the user's data, such as papers or a profile table, are saved as hidden files: Traits and Jev
-see them, the user does not. The core adds `approval`, `hand-off` and `document-edits` itself
-and refuses them from any Trait.
+see them, the user does not. The core adds `approval` and `hand-off` itself and refuses them
+from any Trait.
 
 ### A kind is one file
 
@@ -445,16 +446,15 @@ Every tool acts through `ctx`, so the core's checks and Project-folder confineme
 | `save_file` | saves a file and attaches it to the reply, or saves it hidden | as text files (CSV, TSV, TXT, Markdown, JSON) up to 2 MiB, never hidden |
 | `show_table` | adds a `table` from a file, or from a DataFrame or given rows saved as a file first | yes |
 | `write_document` | saves a Quarto (`.qmd`) document, attaches it and adds a `document` card; needs Quarto | yes, up to 2 MiB |
+| `suggest` | suggests replacing one passage of a Project's document (`document.suggest`), leaving the file unchanged; outside a thread the core adds the document's `document` card once per reply | yes, up to 64 KiB of new text |
 | `show_chart` | adds Plot's `chart` | no |
 
 - `tools/__init__.py` names the tools; `files.py`, `tables.py`, `components.py` and
   `documents.py` hold them; `model.py` holds the forms offered to models (name, description, JSON Schema).
   `ToolError` (`base.py`) is a `TraitError`: uncaught in an adapter it ends the call with
   its code, and the `prompt` adapter returns its message to the model instead.
-- Fixed adapters declare the tools they use (`Adapter.uses_tools`); a test checks they are
-  known tools.
-- The `prompt` adapter offers every model tool (`bind_tools`), with `suggest_edit` only in a
-  comment thread and `edit_document` only outside one, and loops: the model calls tools, gets their results and continues, for at
+- The `prompt` adapter offers every model tool (`bind_tools`), and loops: the model calls
+  tools, gets their results and continues, for at
   most 8 rounds, then answers. A model that cannot call tools fails with
   `tools_unsupported`.
 
