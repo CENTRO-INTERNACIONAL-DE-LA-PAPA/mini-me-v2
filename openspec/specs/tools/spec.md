@@ -239,67 +239,44 @@ body SHALL be at most 2 MiB; a tool result SHALL give the new Asset's ID.
 - **THEN** the document is saved under a name without `:` or `/`, and keeps the title in its
   header
 
-### Requirement: Suggesting an edit
-The suggest-an-edit tool (`suggest_edit`, with a form for models) SHALL take the replacement
-`text` for the passage of the comment thread the call answers, at most 64 KiB, and add a
-`suggestion` component to the reply. The Rust core SHALL complete the component with the
-document and the passage's text as it is when the suggestion is made. Outside a comment thread
-the tool SHALL fail with `not_in_thread`. A tool result SHALL give the new component's ID. The
-tool SHALL NOT change the document; only the user's Accept does.
+### Requirement: Suggesting a change
+The suggest tool (`suggest`, with a form for models) SHALL take a document's Asset ID, the
+passage to replace (`find`) and the new text (`text`, empty to remove the passage). The core
+SHALL add a waiting suggestion by the Mini-Me whose reply made the call, from a Conversation or a
+comment thread, on any document of the Project, and the tool SHALL return its ID. The document's
+file SHALL NOT change.
 
-#### Scenario: Scribe suggests a shorter passage
-- **WHEN** Scribe, answering "@Scribe make this shorter", calls suggest-an-edit with "Yield fell
-  above 3,800 m."
-- **THEN** a suggestion with that text, based on the passage as it read then, is added to
-  Scribe's reply, and the document is unchanged
+#### Scenario: From the chat
+- **WHEN** Scribe, answering "make the methods in Trial report shorter", calls suggest on
+  "Trial report.qmd" with a sentence that occurs once
+- **THEN** a waiting suggestion by Scribe is added on that sentence, and the file is unchanged
 
-#### Scenario: Outside a thread
-- **WHEN** a Trait call in a Conversation calls suggest-an-edit
-- **THEN** the call fails with `not_in_thread` and no component is added
+#### Scenario: From a thread
+- **WHEN** Scribe, answering "too long" in a thread, calls suggest on the thread's sentence
+- **THEN** a waiting suggestion by Scribe is added on that sentence, as from the chat
 
-### Requirement: Editing a document
-The edit-a-document tool (`edit_document`, with a form for models) SHALL take a document's Asset
-ID and a list of edits, each with the exact text it replaces (`find`), the new text (`replace`,
-at most 64 KiB) and a short `reason`. It SHALL open one comment thread per edit, as the comment
-threads describe, and add one `document-edits` component to the reply. It SHALL only read the
-saved document and write to the Project's database; the document's file SHALL NOT change. Inside
-a comment thread the tool SHALL fail with `in_thread`.
-
-#### Scenario: Scribe edits a referenced document
-- **WHEN** Scribe, answering "tighten the methods in #Trial report", calls edit-a-document on
-  "Trial report.qmd" with two edits whose quotes each occur once
-- **THEN** two threads open on the quoted passages, a `document-edits` card for "Trial report"
-  is added to Scribe's reply, and the file is unchanged
+### Requirement: Checks on a suggestion
+The tool SHALL send the request `document.suggest`, params `{ asset_id, find, text }`, whose
+result is `{ suggestion_id }`. The core SHALL refuse it, adding nothing, with `not_a_document`
+unless the Asset is a `.qmd` document of the Project; with `passage_not_found` or
+`passage_not_unique` unless `find` occurs exactly once in the saved document; and with
+`invalid_input` when `find` is empty or `text` is larger than 64 KiB. The document SHALL be read
+through the Project-folder confinement check.
 
 #### Scenario: A quote that occurs twice
-- **WHEN** one edit's `find` is "Huancayo", which occurs three times
-- **THEN** the call fails with `passage_not_unique` naming that edit, and no thread or card is
-  added
+- **WHEN** a call suggests a change to "Huancayo", which occurs three times
+- **THEN** the call fails with `passage_not_unique`, and nothing is added
 
-#### Scenario: A document the message does not reference
-- **WHEN** Scribe calls edit-a-document on a document the message neither references nor
-  attaches
-- **THEN** the call fails with `document_not_referenced`
+#### Scenario: Not a document
+- **WHEN** a call suggests a change to `field-trial.csv`
+- **THEN** the call fails with `not_a_document`
 
-### Requirement: Checks on a document edit
-The tool SHALL send the edits to the Rust core with the `document.edit` request,
-`{ asset_id, edits: [{ find, replace, reason }] }`, whose result is `{ component_id, threads }`.
-The core SHALL fail the request, changing nothing, with `document_not_referenced` unless the
-document is a `.qmd` Asset of the Project that the message being answered `#`-references or
-attaches; with `passage_not_found` or `passage_not_unique` naming the edit unless its `find`
-occurs exactly once in the saved document; and with `edits_overlap` when two edits overlap.
+### Requirement: Events of a suggestion
+Adding a suggestion SHALL be stored in the Project's database without an event. A reply in a
+Conversation that adds a suggestion SHALL get a `component.added` with the document's `document`
+card, unless the reply already shows that document's card. A reply in a comment thread SHALL get
+no card.
 
-#### Scenario: Overlapping edits
-- **WHEN** two edits quote "above 3,800 m" and "3,800 m in both"
-- **THEN** the call fails with `edits_overlap`, and no thread or card is added
-
-### Requirement: Events of a document edit
-A successful `document.edit` SHALL add, in each new thread's Conversation, `message.created`
-with the Mini-Me's message (its reason as `content`, status complete) and `component.added`
-with its `suggestion`; and in the reply's Conversation, `component.added` with the
-`document-edits` component. No other protocol event SHALL change.
-
-#### Scenario: What the UI receives
-- **WHEN** Scribe's call edits a document with two edits
-- **THEN** each new thread's Conversation gets one `message.created` and one `component.added`,
-  and Scribe's reply gets one `component.added` for the `document-edits` card
+#### Scenario: Two suggestions from one reply
+- **WHEN** Scribe's reply in "Trial design" suggests two changes to "Trial report.qmd"
+- **THEN** the reply shows one "Trial report" card

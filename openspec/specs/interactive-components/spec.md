@@ -11,17 +11,16 @@ the UI shows them below a reply's text.
 ### Requirement: Kinds of Interactive Components
 Each Interactive Component kind SHALL be hand-coded in the UI, with a kebab-case `kind` name
 and a renderer for each of its versions (positive integers). Component previews SHALL come only
-from a Trait's adapter, through show-a-table, Plot's show-a-chart or the provider adapter that
-owns the kind, or, for the `approval`, `document-edits` and `hand-off` kinds, from the Rust
-core; the Rust core SHALL complete a `suggestion`'s preview with the passage it is based on.
-Adding a kind SHALL NOT need a change to the event protocol, the link protocol or the Project
-database.
+from a Trait's adapter, through show-a-table, Plot's show-a-chart, write-a-document or the
+provider adapter that owns the kind, or, for the `approval`, `hand-off` and `document` kinds,
+from the Rust core, which adds a `document` card for a reply that made suggestions. Adding a
+kind SHALL NOT need a change to the event protocol, the link protocol or the Project database.
 
 #### Scenario: Kinds in this version
 - **WHEN** the app starts
 - **THEN** the UI renders `paper-sources` version 1, `theories` version 1, `table`
-  version 1, `approval` version 1, `chart` version 1, `document` version 1, `suggestion`
-  version 1, `document-edits` version 1, `hand-off` version 1 and `dataset-results` version 1
+  version 1, `approval` version 1, `chart` version 1, `document` version 1, `hand-off`
+  version 1 and `dataset-results` version 1
 
 #### Scenario: Every listed kind is rendered
 - **WHEN** the app is built
@@ -32,8 +31,8 @@ database.
 - **THEN** the request fails with `component_not_allowed`
 
 #### Scenario: No Trait adds document edits
-- **WHEN** a Trait call sends `component.add` with kind `document-edits`
-- **THEN** the request fails with `component_not_allowed`
+- **WHEN** a Trait's model wants to change a document
+- **THEN** it calls the suggest tool; no component kind holds edits
 
 #### Scenario: No Trait adds a hand-off
 - **WHEN** a Trait call sends `component.add` with kind `hand-off`
@@ -322,7 +321,7 @@ Conversation is opened again.
 
 ### Requirement: Checks on an added component
 The core SHALL reject `component.add` from a Trait call with:
-- `component_not_allowed` when the kind is `approval` or `document-edits`, which only the core
+- `component_not_allowed` when the kind is `approval` or `hand-off`, which only the core
   creates;
 - `invalid_component` when `text` is empty, `preview` serialized is larger than 2 MiB, or
   `source_asset_id` is not an Asset of the call's Project.
@@ -375,37 +374,6 @@ document view. A card whose document no longer exists SHALL say it was removed.
 - **WHEN** the card's `.qmd` Asset has been removed
 - **THEN** the card says the document was removed and offers no Open
 
-### Requirement: Suggestion component
-A `suggestion` component (version 1) SHALL hold `{ document_id, base, text }`: the document, the
-passage text the suggestion is based on, and the suggested text. In a thread's messages it SHALL
-show the suggested text with "Accept and resolve" and Discard while it waits, as the comment
-threads describe, and once answered its decision: accepted, discarded or dismissed. Its `text`
-for history SHALL be the suggested text.
-
-#### Scenario: Answered suggestion
-- **WHEN** a suggestion has been accepted
-- **THEN** it shows the suggested text, marked as accepted, without buttons or Mini-Me colour
-
-### Requirement: Document edits component
-A `document-edits` component (version 1) SHALL hold `{ asset_id, title, threads }`: the edited
-document, its title, and the comment threads the edits opened. Its card SHALL show the title,
-how many of its suggestions still wait, and Open, which opens the document with the Comments
-sheet showing. A suggestion SHALL count as answered once accepted, discarded or dismissed, or
-once its thread is deleted. A card whose document no longer exists SHALL say it was removed.
-
-#### Scenario: Counting down
-- **WHEN** Scribe sent three edits to "Trial report" and the user has accepted one
-- **THEN** the card in Scribe's reply reads "2 of 3 suggested edits waiting", and once all
-  three are answered, "All 3 suggested edits answered"
-
-#### Scenario: Opening the edits
-- **WHEN** the user clicks Open on the card
-- **THEN** "Trial report" opens with the Comments sheet listing its threads
-
-#### Scenario: In history
-- **WHEN** a later message's history includes Scribe's reply
-- **THEN** the card appears as "Suggested 3 edits to Trial report"
-
 ### Requirement: Hand-off component
 A `hand-off` version 1 component SHALL have the preview `{ mini_me_id, request, file }`, where
 `file` is `{ asset_id, name }` or `null`. It SHALL show the Mini-Me's pill, the request, and
@@ -423,8 +391,7 @@ A component's `preview` SHALL be only what the UI shows, kept so the reply shows
 component after its source file changes. Every `table` and `chart` component, and every
 `paper-sources`, `theories` and `dataset-results` component, SHALL have a `source_asset_id`,
 except when its source file could not be saved (larger than 32 MiB); the full data SHALL be
-read from that file. Components the core creates, and `document` and `suggestion` components,
-SHALL have none.
+read from that file. Components the core creates, and `document` components, SHALL have none.
 
 #### Scenario: File edited after the reply
 - **WHEN** Curator showed 80 rows of `field-trial-cleaned.csv` and the user later adds rows to
