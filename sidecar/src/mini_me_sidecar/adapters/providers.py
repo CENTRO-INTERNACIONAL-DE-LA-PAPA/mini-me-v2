@@ -15,9 +15,13 @@ PROVIDER_NAMES = {
     "anthropic": "Anthropic",
     "google": "Google",
     "openrouter": "OpenRouter",
+    "custom": "Custom",
 }
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
+
+# Both SDKs refuse to send a request without a key; servers without auth ignore this one.
+NO_KEY = "not-needed"
 
 HTTP_STATUS = re.compile(r"\b([45]\d\d)\b")
 
@@ -54,29 +58,40 @@ def chat_model(model: Model, key: str) -> Any:
     sidecar starts quickly and an unused provider's package never loads."""
     callbacks = debug.callbacks(model)
     match model.provider:
-        case "openai" | "openrouter":
-            from langchain_openai import ChatOpenAI
-
-            base_url = OPENROUTER_URL if model.provider == "openrouter" else None
-            return ChatOpenAI(
-                model=model.model, api_key=key, base_url=base_url, callbacks=callbacks
-            )
+        case "openai":
+            return openai_chat(model, key, None, callbacks)
+        case "openrouter":
+            return openai_chat(model, key, OPENROUTER_URL, callbacks)
         case "anthropic":
-            from langchain_anthropic import ChatAnthropic
-
-            return ChatAnthropic(
-                model=model.model,
-                api_key=key,
-                max_tokens=ANTHROPIC_MAX_TOKENS,
-                callbacks=callbacks,
-            )
+            return anthropic_chat(model, key, None, callbacks)
         case "google":
             from langchain_google_genai import ChatGoogleGenerativeAI
 
             return ChatGoogleGenerativeAI(
                 model=model.model, google_api_key=key, callbacks=callbacks
             )
+        case "custom":
+            chat = anthropic_chat if model.api_format == "anthropic" else openai_chat
+            return chat(model, key or NO_KEY, model.endpoint, callbacks)
     raise TraitError("provider_unavailable", f"Unknown provider {model.provider!r}.")
+
+
+def openai_chat(model: Model, key: str, base_url: str | None, callbacks: Any) -> Any:
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(model=model.model, api_key=key, base_url=base_url, callbacks=callbacks)
+
+
+def anthropic_chat(model: Model, key: str, base_url: str | None, callbacks: Any) -> Any:
+    from langchain_anthropic import ChatAnthropic
+
+    return ChatAnthropic(
+        model=model.model,
+        api_key=key,
+        base_url=base_url,
+        max_tokens=ANTHROPIC_MAX_TOKENS,
+        callbacks=callbacks,
+    )
 
 
 async def structured_answer(chat: Any, schema: type[BaseModel], turns: list[Any]) -> Any:
@@ -166,6 +181,12 @@ def provider_error(error: Exception, model: Model) -> TraitError:
             "provider_rate_limit",
             f"{name} is limiting requests or the account is out of credit. "
             "Try again later or check your account.",
+        )
+    if status is None and model.provider == "custom":
+        return TraitError(
+            "provider_unavailable",
+            f"Could not reach the Custom endpoint {model.endpoint}. Check that the server is "
+            "running and the endpoint in Settings is right.",
         )
     if status is None:
         return TraitError(

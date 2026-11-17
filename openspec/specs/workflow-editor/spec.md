@@ -22,14 +22,13 @@ limit. Connectors SHALL join Steps in the order they run.
   (*Wonder*).
 
 ### Requirement: Nodes show what their Step does
-A Trait Step's node SHALL show its Trait's name and a meta line naming how many tools the
-Trait lists, or none. An approval's node SHALL show its prompt. A marker or loop pill SHALL
-show the Step's label. Without a label, a condition shows its question, a parallel split "In
-parallel", and a loop its limit.
+A Trait Step's node SHALL show its Trait's name. An approval's node SHALL show its prompt. A
+marker or loop pill SHALL show the Step's label. Without a label, a condition shows its question,
+a parallel split "In parallel", and a loop its limit.
 
 #### Scenario: Trait node
-- **WHEN** a Workflow runs *Assist*, which lists `save_file` and `show_table`
-- **THEN** its node reads "Assist" with the meta line "2 tools"
+- **WHEN** a Workflow runs *Assist*
+- **THEN** its node reads "Assist", with no count of tools
 
 ### Requirement: Steps are placed automatically
 The canvas SHALL place every Step itself from the Workflow's order and nesting. Saving SHALL
@@ -79,7 +78,7 @@ its window.
 ### Requirement: The inspector edits a Trait Step
 Selecting a Trait Step SHALL show in the inspector:
 - its Trait, which the user can change;
-- the Trait's description and its tools in plain words;
+- the Trait's description;
 - how many Mini-Mes use the Trait, with a link to its Trait editor;
 - an "Ask before running" toggle;
 - Remove step.

@@ -2,7 +2,8 @@ import type { Edge, Node } from "@xyflow/react";
 import type { WorkflowStep } from "../../protocol/types";
 import type { ListPath, PathPart, Slot } from "./workflowEdit";
 
-const NODE = { width: 220, height: 56 };
+const TRAIT_NODE = { width: 180, height: 40 };
+const APPROVAL_NODE = { width: 220, height: 56 };
 const PILL = { width: 180, height: 32 };
 export const EMPTY_SLOT = { width: 160, height: 40 };
 const JOIN = 8;
@@ -51,8 +52,9 @@ function measureList(list: WorkflowStep[]): Size {
 function measureStep(step: WorkflowStep): Size {
   switch (step.type) {
     case "trait":
+      return TRAIT_NODE;
     case "approval":
-      return NODE;
+      return APPROVAL_NODE;
     case "condition":
     case "parallel": {
       const branches = step.branches.map((b) => measureList(b.steps));
@@ -125,7 +127,7 @@ class Builder {
     switch (step.type) {
       case "trait":
       case "approval":
-        this.node(step.id, step.type, cx, top, NODE, { step });
+        this.node(step.id, step.type, cx, top, size, { step });
         return { entry: step.id, exit: step.id };
       case "condition":
       case "parallel": {

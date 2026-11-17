@@ -47,3 +47,17 @@ def test_other_failures_keep_their_status_message():
 )
 def test_no_message_carries_provider_text(text):
     assert "sk-secret123" not in str(provider_error(StatusError(400, text), MODEL))
+
+
+def test_custom_errors_name_custom_and_an_unreachable_endpoint():
+    custom = Model(
+        provider="custom", model="m", endpoint="http://localhost:1234/v1", api_format="openai"
+    )
+    unreachable = provider_error(Exception("Connection error."), custom)
+    assert unreachable.code == "provider_unavailable"
+    assert "http://localhost:1234/v1" in str(unreachable)
+    rejected = provider_error(StatusError(401, "bad key"), custom)
+    assert (rejected.code, str(rejected)) == (
+        "provider_auth",
+        "Custom rejected the API key. Replace it in Settings.",
+    )

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MessageView } from "../../protocol/eventStore";
 import type { Author, AssetRef, Component, TextComponent } from "../../protocol/types";
-import { componentNames } from "../interactive/component-names";
 import { outline } from "./outline";
 
 const CURATOR = "curator-id";
@@ -13,7 +12,7 @@ function message(
   parts: {
     attachments?: AssetRef[];
     text_components?: Array<Pick<TextComponent, "kind" | "id" | "label">>;
-    components?: Array<Pick<Component, "id" | "kind" | "data">>;
+    components?: Array<Pick<Component, "id" | "kind" | "preview">>;
   } = {},
 ): MessageView {
   return {
@@ -36,14 +35,21 @@ describe("outline", () => {
         text_components: [{ kind: "mini_me", id: CURATOR, label: "@Curator" }],
       }),
       message("reply", curator, {
-        components: [{ id: "table-id", kind: "table", data: { source: "field-trial-cleaned.csv" } }],
+        components: [
+          { id: "table-id", kind: "table", preview: { source: "field-trial-cleaned.csv" } },
+          { id: "chart-id", kind: "chart", preview: { title: "Yield by variety" } },
+          { id: "plain-id", kind: "chart", preview: {} },
+          { id: "papers-id", kind: "paper-sources", preview: { title: "Papers" } },
+        ],
       }),
     ];
-    const result = outline(messages, componentNames(messages));
+    const result = outline(messages);
     expect(result.miniMes).toEqual([{ id: CURATOR, label: "Curator", messageIds: ["ask", "reply"] }]);
     expect(result.files).toEqual([{ id: TRIAL.id, label: "field-trial.csv", messageIds: ["ask"] }]);
     expect(result.components).toEqual([
-      { id: "table-id", label: "field-trial-cleaned", messageIds: ["reply"] },
+      { id: "table-id", label: "field-trial-cleaned.csv", messageIds: ["reply"] },
+      { id: "chart-id", label: "Yield by variety", messageIds: ["reply"] },
+      { id: "plain-id", label: "Chart", messageIds: ["reply"] },
     ]);
   });
 
@@ -54,7 +60,7 @@ describe("outline", () => {
       message("two", user, { text_components: [reference] }),
       message("three", user, { text_components: [reference, reference] }),
     ];
-    expect(outline(messages, componentNames(messages)).files).toEqual([
+    expect(outline(messages).files).toEqual([
       { id: TRIAL.id, label: "field-trial.csv", messageIds: ["one", "two", "three"] },
     ]);
   });

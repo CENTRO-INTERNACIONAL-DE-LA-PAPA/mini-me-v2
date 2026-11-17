@@ -56,13 +56,21 @@ secret of the run's `model.provider`.
 ### Requirement: Missing secrets
 When the OS keychain holds no API key for the requested provider, `secret.get` SHALL fail
 with code `secret_unavailable`, and the reply SHALL fail with that code and a message naming
-the provider and pointing to Settings.
+the provider and pointing to Settings. The one exception is `custom`: with no Custom key saved,
+`secret.get` SHALL succeed with an empty `value`, and the call SHALL be sent with a fixed
+placeholder key, `not-needed`, that servers without auth ignore.
 
 #### Scenario: No secret source
 - **WHEN** the provider is OpenAI, no OpenAI key is saved, and the user asks Scribe for a
   summary
 - **THEN** the reply fails with code `secret_unavailable` and says to add an OpenAI API key in
   Settings
+
+#### Scenario: Custom endpoint without a key
+- **WHEN** the provider is Custom, no Custom key is saved, and the user asks Scribe for a
+  summary
+- **THEN** `secret.get` answers `{ value: "" }`, and the request goes to the endpoint with
+  the placeholder key `not-needed`
 
 ### Requirement: Secrets stay in memory
 Neither process SHALL write a secret to a file, to environment variables, to a Project
@@ -88,22 +96,23 @@ secret with `[redacted]`. Error messages SHALL NOT contain a secret.
 ### Requirement: API keys in the OS keychain
 The Rust core SHALL store each provider's API key in the OS keychain (Windows Credential
 Manager, macOS Keychain) under the running app's identifier as the service
-(`org.cipotato.mini-me`, or `org.cipotato.mini-me.dev` for Mini-Me Dev) and the provider ID
-as the account. Keys SHALL be read from the keychain for each `secret.get` and not cached.
+(`org.cipotato.mini-me`, or `org.cipotato.mini-me.canary` for Mini-Me Canary) and the provider
+ID as the account. Keys SHALL be read from the keychain for each `secret.get` and not cached.
 
 #### Scenario: Key survives a restart
 - **WHEN** the user saves an Anthropic key and restarts Mini-Me
 - **THEN** Scribe can use Anthropic without the key being entered again
 
 #### Scenario: Keys per app
-- **WHEN** the user has saved an Anthropic key in Mini-Me and opens Mini-Me Dev
-- **THEN** Mini-Me Dev shows no Anthropic key until one is saved in it
+- **WHEN** the user has saved an Anthropic key in Mini-Me and opens Mini-Me Canary
+- **THEN** Mini-Me Canary shows no Anthropic key until one is saved in it
 
 ### Requirement: Managing keys in Settings
 Settings SHALL show, for each AI provider, for Typesafe and for CIP Dataverse, whether a key is
 saved, and let
 the user save a new key, replace it or remove it. The UI SHALL never receive a saved key back
-from the core; keys flow only from the UI to the core.
+from the core; keys flow only from the UI to the core. The Custom row SHALL say that its key is
+needed only if the endpoint asks for one.
 
 #### Scenario: Saved key is not shown
 - **WHEN** an OpenAI key is saved and the user opens Settings
@@ -122,3 +131,8 @@ from the core; keys flow only from the UI to the core.
 - **WHEN** the user saves a CIP Dataverse token in Settings → Accounts
 - **THEN** it is stored in the OS keychain under the account `dataverse`, and is never released
   to a Trait call
+
+#### Scenario: Custom key
+- **WHEN** the user saves a Custom key
+- **THEN** it is stored in the OS keychain under the account `custom`, and Custom calls send it
+  to the endpoint

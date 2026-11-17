@@ -10,7 +10,7 @@ use crate::assets;
 use crate::comments;
 use crate::components;
 use crate::error::{AppError, AppResult};
-use crate::link::RunMiniMe;
+use crate::link::{RunFile, RunMiniMe};
 use crate::protocol::{
     AssetRef, Author, AuthorKind, Component, ErrorInfo, EventKind, Message, MessageStatus,
     TextComponent, TextComponentKind, new_id, now_ms,
@@ -111,7 +111,6 @@ pub fn delete(project: &Project, conversation_id: Uuid) -> AppResult<()> {
         "DELETE FROM debug_records WHERE conversation_id = ?1".to_string(),
         "DELETE FROM messages WHERE conversation_id = ?1".to_string(),
         "DELETE FROM events WHERE conversation_id = ?1".to_string(),
-        "UPDATE comment_threads SET opened_from = NULL WHERE opened_from = ?1".to_string(),
         "DELETE FROM comment_threads WHERE conversation_id = ?1".to_string(),
         "DELETE FROM conversations WHERE id = ?1".to_string(),
     ];
@@ -192,7 +191,6 @@ pub fn list(project: &Project) -> AppResult<Vec<ConversationSummary>> {
 
 fn validate_text_components(
     state: &ProjectState,
-    conversation_id: Uuid,
     content: &str,
     components: &[TextComponent],
 ) -> AppResult<()> {
@@ -213,23 +211,7 @@ fn validate_text_components(
             // Mini-Mes are not Project data; `routing::send` checks mentions against the
             // library before the message gets here.
             TextComponentKind::MiniMe => {}
-            TextComponentKind::Component => check_reference(state, conversation_id, component)?,
         }
-    }
-    Ok(())
-}
-
-/// A `$` reference must point to a `table` or `chart` of the same Conversation.
-fn check_reference(
-    state: &ProjectState,
-    conversation_id: Uuid,
-    reference: &TextComponent,
-) -> AppResult<()> {
-    let component = state.conversation_component(conversation_id, reference.id)?.ok_or_else(|| {
-        AppError::not_found("A $ reference points to no table or chart in this Conversation.")
-    })?;
-    if !matches!(component.kind.as_str(), "table" | "chart") {
-        return Err(AppError::invalid_input("A $ reference must point to a table or a chart."));
     }
     Ok(())
 }
@@ -258,7 +240,7 @@ pub fn send_message(
         .iter()
         .map(|id| assets::find(&state, *id))
         .collect::<AppResult<Vec<_>>>()?;
-    validate_text_components(&state, conversation_id, &input.content, &input.text_components)?;
+    validate_text_components(&state, &input.content, &input.text_components)?;
 
     let author = Author { kind: AuthorKind::User, id: user_id.to_string() };
     let message = Message {
@@ -342,8 +324,9 @@ pub fn append_step_completed(
 pub struct NewComponent {
     pub kind: String,
     pub version: u32,
-    pub data: serde_json::Value,
+    pub preview: serde_json::Value,
     pub text: String,
+    pub source_asset_id: Option<Uuid>,
 }
 
 /// Returns the new ID; the component records the latest run of `step_id`, the Step that added it.
@@ -353,7 +336,14 @@ pub fn add_component(
     step_id: Option<&str>,
     component: NewComponent,
 ) -> AppResult<Uuid> {
-    components::check(&component.kind, &component.data, &component.text)?;
+    let NewComponent {
+        kind,
+        preview,
+        text,
+        source_asset_id,
+        ..
+    } = &component;
+    components::check(&project.lock(), kind, (preview, text), *source_asset_id)?;
     add_core_component(project, message_id, step_id, component)
 }
 
@@ -362,7 +352,13 @@ pub fn add_core_component(
     project: &Project,
     message_id: Uuid,
     step_id: Option<&str>,
-    NewComponent { kind, version, data, text }: NewComponent,
+    NewComponent {
+        kind,
+        version,
+        preview,
+        text,
+        source_asset_id,
+    }: NewComponent,
 ) -> AppResult<Uuid> {
     let mut state = project.lock();
     let conversation = streaming_reply(&state, message_id)?;
@@ -374,8 +370,9 @@ pub fn add_core_component(
         id: new_id(),
         kind,
         version,
-        data,
+        preview,
         text,
+        source_asset_id,
         answer: serde_json::Value::Null,
         step_index,
     };
@@ -384,20 +381,25 @@ pub fn add_core_component(
     Ok(id)
 }
 
-/// Stores a Trait's file as a generated Asset and attaches it; removed if the reply ends first.
+/// Stores a Trait's file as a generated Asset and attaches it unless `hidden`; removed if the
+/// reply ends first.
 pub fn attach_generated(
     project: &Project,
     message_id: Uuid,
     author: &Author,
     (name, media_type, bytes): (&str, &str, &[u8]),
+    hidden: bool,
 ) -> AppResult<AssetRef> {
     streaming_reply(&project.lock(), message_id)?;
-    let asset = assets::write_generated(project, name, media_type, bytes, author)?;
+    let asset = assets::write_generated(project, name, media_type, bytes, author, hidden)?;
     let attached = {
         let mut state = project.lock();
         streaming_reply(&state, message_id).and_then(|conversation| {
+            if hidden {
+                return Ok(());
+            }
             let event = EventKind::AttachmentAdded { message_id, asset: asset.clone() };
-            state.persist(conversation, event)
+            state.persist(conversation, event).map(|_| ())
         })
     };
     if let Err(err) = attached {
@@ -501,8 +503,9 @@ pub fn pause_reply(
         id: paused.component_id,
         kind: "approval".to_string(),
         version: 1,
-        data: serde_json::json!({ "step_id": paused.step_id, "prompt": prompt }),
+        preview: serde_json::json!({ "step_id": paused.step_id, "prompt": prompt }),
         text: prompt.to_string(),
+        source_asset_id: None,
         answer: serde_json::Value::Null,
         step_index: None,
     };
@@ -617,16 +620,25 @@ pub fn answer_approval(
 
 /// Attached and referenced file names, without duplicates.
 pub fn file_names(message: &Message) -> Vec<String> {
-    let mut names: Vec<String> = message.attachments.iter().map(|a| a.name.clone()).collect();
+    message_files(message).into_iter().map(|f| f.name).collect()
+}
+
+/// The files a message attaches, then those it references, each once.
+pub fn message_files(message: &Message) -> Vec<RunFile> {
+    let mut files: Vec<RunFile> = message
+        .attachments
+        .iter()
+        .map(|a| RunFile { asset_id: a.id, name: a.name.clone() })
+        .collect();
     for component in &message.text_components {
         if component.kind == TextComponentKind::Asset {
             let name = component.label.trim_start_matches('#').to_string();
-            if !names.contains(&name) {
-                names.push(name);
+            if !files.iter().any(|f| f.name == name) {
+                files.push(RunFile { asset_id: component.id, name });
             }
         }
     }
-    names
+    files
 }
 
 /// A reply the app writes itself, complete from the start.
@@ -906,51 +918,6 @@ mod tests {
                 .code,
             "invalid_input"
         );
-    }
-
-    /// One reply holding a `table`, a `chart` and `theories`; returns their IDs.
-    fn conversation_with_components(project: &Project) -> (Uuid, [Uuid; 3]) {
-        let conversation = create(project).unwrap().id;
-        let question = send_message(project, conversation, text("profile"), new_id()).unwrap();
-        let reply = start_reply(project, conversation, question.id, echo()).unwrap();
-        let ids = ["table", "chart", "theories"].map(|kind| {
-            let data = serde_json::json!({});
-            let component = NewComponent { kind: kind.into(), version: 1, data, text: "t".into() };
-            add_component(project, reply, None, component).unwrap()
-        });
-        complete_reply(project, reply).unwrap();
-        (conversation, ids)
-    }
-
-    fn reference(id: Uuid) -> SendMessageInput {
-        let mut input = text("plot $t");
-        input.text_components.push(TextComponent {
-            kind: TextComponentKind::Component,
-            id,
-            label: "$t".to_string(),
-            start: 5,
-            end: 7,
-        });
-        input
-    }
-
-    #[test]
-    fn references_must_point_to_a_table_or_chart_of_the_conversation() {
-        let (_dir, project) = temp_project();
-        let (conversation, [table, chart, theories]) = conversation_with_components(&project);
-        let send = |input| send_message(&project, conversation, input, new_id());
-
-        send(reference(table)).unwrap();
-        send(reference(chart)).unwrap();
-
-        let stored = project.lock().events_after(conversation, 0).unwrap().len();
-        assert_eq!(send(reference(theories)).unwrap_err().code, "invalid_input");
-        assert_eq!(send(reference(new_id())).unwrap_err().code, "not_found");
-        assert_eq!(project.lock().events_after(conversation, 0).unwrap().len(), stored);
-
-        let other = create(&project).unwrap().id;
-        let err = send_message(&project, other, reference(table), new_id()).unwrap_err();
-        assert_eq!(err.code, "not_found");
     }
 
     #[test]

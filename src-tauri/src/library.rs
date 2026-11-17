@@ -10,29 +10,7 @@ pub const FALLBACK_MINI_ME: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8
 /// Scribe, who drafts reports from a Conversation.
 pub const SCRIBE: Uuid = Uuid::from_u128(0x5f0c8a2e_6d1b_4b7e_9a43_2c8e1f0d7b01);
 
-/// Every tool a Trait may list; the sidecar's `tools` package knows the same names.
-pub const TOOLS: [&str; 13] = [
-    "read_file",
-    "read_table",
-    "read_component",
-    "hand_off",
-    "save_file",
-    "write_document",
-    "suggest_edit",
-    "edit_document",
-    "show_table",
-    "show_chart",
-    "show_papers",
-    "show_theories",
-    "show_datasets",
-];
-
-/// The tools a prompt-based Trait may list: those with a form for models. The read tools and
-/// hand-off are offered to every prompt-based Trait, so it does not list them.
-pub const MODEL_TOOLS: [&str; 5] =
-    ["save_file", "show_table", "write_document", "suggest_edit", "edit_document"];
-
-/// Offers a Trait's tools to its AI model; the only adapter user-made Traits run on.
+/// Offers every model tool to the Trait's AI model; the only adapter user-made Traits run on.
 pub const PROMPT_ADAPTER: &str = "prompt";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -45,9 +23,6 @@ pub struct TraitDef {
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
     pub instructions: Option<String>,
-    /// Tools its adapter's code uses; for a prompt-based Trait, those offered besides read tools.
-    #[serde(default)]
-    pub tools: Vec<String>,
 }
 
 /// Which heading the `@` list shows a Mini-Me under.
@@ -233,7 +208,6 @@ pub struct TraitSummary {
     pub name: String,
     pub description: String,
     pub instructions: Option<String>,
-    pub tools: Vec<String>,
     pub built_in: bool,
     /// Whether it runs on the prompt adapter, the only kind a duplicate can be made of.
     pub prompt_based: bool,
@@ -303,7 +277,6 @@ impl Library {
                 name: t.name.clone(),
                 description: t.description.clone(),
                 instructions: t.instructions.clone(),
-                tools: t.tools.clone(),
                 built_in: self.is_built_in(t.id),
                 prompt_based: t.adapter == PROMPT_ADAPTER,
                 used_by: self
@@ -343,16 +316,6 @@ impl Library {
                 }
                 if t.instructions.as_deref().is_none_or(|i| i.trim().is_empty()) {
                     problems.push(format!("Trait {} has no instructions", t.name));
-                }
-            }
-            for tool in &t.tools {
-                if !TOOLS.contains(&tool.as_str()) {
-                    problems.push(format!("Trait {} lists the unknown tool {tool:?}", t.name));
-                } else if t.adapter == PROMPT_ADAPTER && !MODEL_TOOLS.contains(&tool.as_str()) {
-                    problems.push(format!(
-                        "Trait {} runs on the prompt adapter and cannot list {tool:?}",
-                        t.name
-                    ));
                 }
             }
         }
@@ -466,16 +429,6 @@ mod tests {
     }
 
     #[test]
-    fn unknown_tools_and_non_model_tools_on_prompt_traits_are_reported() {
-        let mut library = Library::builtin();
-        let assist = library.traits.iter_mut().find(|t| t.name == "Assist").unwrap();
-        assist.tools = vec!["show_chart".into(), "teleport".into()];
-        let problems = library.problems();
-        assert!(problems.iter().any(|p| p.contains("cannot list \"show_chart\"")));
-        assert!(problems.iter().any(|p| p.contains("unknown tool \"teleport\"")));
-    }
-
-    #[test]
     fn summaries_mark_built_ins_and_list_the_users_of_a_trait() {
         let library = Library::builtin();
         let skeptic = library.summaries().into_iter().find(|m| m.name == "Skeptic").unwrap();
@@ -521,7 +474,6 @@ mod tests {
             color: "oklch(0.8 0 0)".into(),
             adapter: PROMPT_ADAPTER.into(),
             instructions: Some("Translate the message.".into()),
-            tools: vec![],
         }
     }
 

@@ -2,16 +2,12 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { ChevronDownIcon, ChevronLeftIcon, ChevronUpIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { api, errorMessage } from "../../api";
+import { useEffect, useRef, useState } from "react";
 import { count, formatClock } from "../../lib/format";
-import type { CommentThread, Component, Message, Uuid } from "../../protocol/types";
+import type { CommentThread, Uuid } from "../../protocol/types";
 import { Composer } from "../chat/Composer";
 import { MessageItem } from "../chat/MessageItem";
 import { useConversation } from "../chat/useConversation";
-import { componentNames } from "../interactive/component-names";
-import { editsLabel } from "../interactive/document-edits";
-import { ThreadSuggestionsProvider } from "../interactive/suggestion";
 import { ItemMenu } from "../shell/ItemMenu";
 import { ToolSheet } from "../shell/Sheet";
 import type { Placement } from "./anchors";
@@ -33,15 +29,6 @@ interface Props {
   onActivity: () => void;
   onResolve: (id: Uuid, resolved: boolean) => void;
   onDelete: (id: Uuid) => void;
-  /** Accepts a thread's suggestion into the document and resolves the thread; rejects with
-   * why it could not. */
-  onAccept: (id: Uuid, messageId: Uuid, componentId: Uuid) => Promise<void>;
-  /** A reply's suggested edits, the threads they opened, which the list offers to accept or
-   * discard at once. */
-  edits?: Uuid[];
-  /** Accepts the waiting suggestions of the threads given; resolves to those left waiting. */
-  onAcceptAll: (ids: Uuid[]) => Promise<Uuid[]>;
-  onDiscardAll: (ids: Uuid[]) => Promise<void>;
 }
 
 /** The document's comment threads beside it, as a tool sheet: a list under Open and Resolved
@@ -57,10 +44,6 @@ export function CommentsSheet({
   onActivity,
   onResolve,
   onDelete,
-  onAccept,
-  edits,
-  onAcceptAll,
-  onDiscardAll,
 }: Props) {
   const [tab, setTab] = useState<Tab>("open");
   const lists: Record<Tab, CommentThread[]> = {
@@ -95,9 +78,6 @@ export function CommentsSheet({
           onActivity={onActivity}
           onResolve={(resolved) => onResolve(thread.conversation_id, resolved)}
           onDelete={() => onDelete(thread.conversation_id)}
-          onAccept={(messageId, componentId) =>
-            onAccept(thread.conversation_id, messageId, componentId)
-          }
         />
       </ToolSheet>
     );
@@ -107,14 +87,6 @@ export function CommentsSheet({
   const detachedFrom = shown.findIndex((t) => from(t) === undefined);
   return (
     <ToolSheet title="Comments" onClose={onClose}>
-      {edits && (
-        <EditsBar
-          threads={threads.filter((t) => edits.includes(t.conversation_id))}
-          onAcceptAll={() => onAcceptAll(edits)}
-          onDiscardAll={() => onDiscardAll(edits)}
-          onOpen={onOpen}
-        />
-      )}
       <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="mb-4">
         <TabsList aria-label="Comments">
           <TabsTrigger value="open">
@@ -166,79 +138,6 @@ export function CommentsSheet({
   );
 }
 
-/** How many of a reply's suggested edits, the `threads` they opened, still wait, with Accept all
- * and Discard all while any do, and the edits Accept all left waiting. */
-function EditsBar({
-  threads,
-  onAcceptAll,
-  onDiscardAll,
-  onOpen,
-}: {
-  threads: CommentThread[];
-  onAcceptAll: () => Promise<Uuid[]>;
-  onDiscardAll: () => Promise<void>;
-  onOpen: (id: Uuid) => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [left, setLeft] = useState<Uuid[]>([]);
-  const [failure, setFailure] = useState<string | null>(null);
-  if (threads.length === 0) return null;
-  const waiting = threads.filter((t) => t.pending);
-  const notApplied = waiting.filter((t) => left.includes(t.conversation_id));
-
-  async function run(action: () => Promise<void>) {
-    setBusy(true);
-    setFailure(null);
-    try {
-      await action();
-    } catch (e) {
-      setFailure(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="mb-4 grid gap-2 rounded-xl border border-card-edge bg-card px-4 py-3">
-      <span className="text-meta text-muted-foreground">
-        {editsLabel(waiting.length, threads.length)}
-      </span>
-      {notApplied.length > 0 && (
-        <div className="grid grid-cols-1 gap-1">
-          <p className="text-meta text-destructive">
-            Not applied (you changed the same words, or the passage is gone):
-          </p>
-          {notApplied.map((t) => (
-            <button
-              key={t.conversation_id}
-              type="button"
-              onClick={() => onOpen(t.conversation_id)}
-              className="truncate text-left text-ui hover:underline"
-            >
-              “{t.quote}”
-            </button>
-          ))}
-        </div>
-      )}
-      {failure && <p className="text-meta text-destructive">{failure}</p>}
-      {waiting.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() => void run(async () => setLeft(await onAcceptAll()))}
-          >
-            Accept all
-          </Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run(onDiscardAll)}>
-            Discard all
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** The threads that are `resolved` or not, in the order of their passages in the source, with
  * the detached ones last. Their positions are the numbers the source shows by each passage. */
 export function threadsInOrder(
@@ -266,7 +165,7 @@ function NumberBadge({ number }: { number: number }) {
   );
 }
 
-/** One thread in full: where it is, its messages and suggestions, a reply field and navigation. */
+/** One thread in full: where it is, its messages, a reply field and navigation. */
 function ThreadView({
   projectId,
   thread,
@@ -280,7 +179,6 @@ function ThreadView({
   onActivity,
   onResolve,
   onDelete,
-  onAccept,
 }: {
   projectId: Uuid;
   thread: CommentThread;
@@ -294,38 +192,17 @@ function ThreadView({
   onActivity: () => void;
   onResolve: (resolved: boolean) => void;
   onDelete: () => void;
-  onAccept: (messageId: Uuid, componentId: Uuid) => Promise<void>;
 }) {
   const { state, error } = useConversation(projectId, thread.conversation_id);
-  const names = useMemo(() => componentNames(state.messages), [state.messages]);
-  const newestFirst = useMemo(() => [...names.values()].reverse(), [names]);
   const replying = state.messages.some((m) => m.status === "streaming" || m.status === "paused");
-  const [failure, setFailure] = useState<string | null>(null);
-  const pending = newestPending(state.messages);
 
-  // The list's counts and the source's suggestion marks follow new messages, finished replies,
-  // and suggestions as they arrive and are answered.
+  // The list's counts and the source's suggestions follow new messages and finished replies.
   const activity = useRef(onActivity);
   activity.current = onActivity;
-  const changes = state.messages
-    .map((m) => m.status + m.components.map((c) => (c.answer == null ? "?" : "!")).join(""))
-    .join();
+  const changes = state.messages.map((m) => m.status).join();
   useEffect(() => {
     if (state.messages.length > 0) activity.current();
   }, [changes]);
-
-  /** Resolves the thread, dismissing a suggestion still waiting in it. */
-  async function resolve() {
-    try {
-      if (pending) {
-        const { message, component } = pending;
-        await api.answerSuggestion(projectId, message.id, component.id, "dismissed");
-      }
-      onResolve(true);
-    } catch (e) {
-      setFailure(errorMessage(e));
-    }
-  }
 
   // `grid-cols-1` keeps the columns at the sheet's width, so a long passage truncates instead
   // of widening the sheet.
@@ -368,7 +245,7 @@ function ThreadView({
               thread.resolved
                 ? [{ label: "Reopen", onSelect: () => onResolve(false) }]
                 : !detached && state.messages.length > 0
-                  ? [{ label: "Resolve", onSelect: resolve }]
+                  ? [{ label: "Resolve", onSelect: () => onResolve(true) }]
                   : []
             }
             remove={{
@@ -386,15 +263,13 @@ function ThreadView({
         {detached && <p className="text-meta text-muted-foreground">Passage not found</p>}
       </div>
       {state.messages.length > 0 && (
-        <ThreadSuggestionsProvider value={{ accept: onAccept, detached }}>
-          <div className="grid grid-cols-1 gap-3">
-            {state.messages.map((message) => (
-              <MessageItem key={message.id} projectId={projectId} message={message} compact />
-            ))}
-          </div>
-        </ThreadSuggestionsProvider>
+        <div className="grid grid-cols-1 gap-3">
+          {state.messages.map((message) => (
+            <MessageItem key={message.id} projectId={projectId} message={message} compact />
+          ))}
+        </div>
       )}
-      {(error || failure) && <p className="text-meta text-destructive">{error ?? failure}</p>}
+      {error && <p className="text-meta text-destructive">{error}</p>}
       {!detached && !thread.resolved && (
         <div className="sticky bottom-0 bg-background pt-1">
           <Composer
@@ -402,7 +277,6 @@ function ThreadView({
             conversationId={thread.conversation_id}
             replying={replying}
             choosing={false}
-            components={newestFirst}
             onSent={() => {}}
             thread
           />
@@ -410,17 +284,4 @@ function ThreadView({
       )}
     </div>
   );
-}
-
-/** The newest suggestion in `messages` still waiting for an answer, with its message. */
-function newestPending(messages: Message[]) {
-  let newest: { message: Message; component: Component } | undefined;
-  for (const message of messages) {
-    for (const component of message.components) {
-      if (component.kind === "suggestion" && component.answer == null) {
-        newest = { message, component };
-      }
-    }
-  }
-  return newest;
 }

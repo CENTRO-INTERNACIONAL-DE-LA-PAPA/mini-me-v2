@@ -287,22 +287,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "reaches CIP Dataverse over the network"]
-    fn searching_listing_and_downloading_from_cip_dataverse() {
-        let search =
-            Search { query: "late blight".into(), from_year: Some(2020), to_year: None, start: 0 };
-        let page = super::search(&search).unwrap();
-        assert!(page.total > 0 && !page.datasets.is_empty());
-        let dataset = page.datasets.iter().find(|d| d.files > 0).unwrap();
-        let listed = files(&dataset.id).unwrap();
-        let file = listed.iter().filter(|f| !f.restricted).min_by_key(|f| f.size_bytes).unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        let to = dir.path().join("file");
-        download(file.id, &to).unwrap();
-        assert!(std::fs::metadata(&to).unwrap().len() > 0);
-    }
-
-    #[test]
     fn a_refused_request_asks_for_access_and_others_say_dataverse_is_unavailable() {
         assert!(check_status(200).is_ok());
         assert_eq!(check_status(403).unwrap_err().code, "dataverse_needs_access");

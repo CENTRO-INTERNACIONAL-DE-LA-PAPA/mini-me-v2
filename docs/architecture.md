@@ -2,9 +2,9 @@
 
 A guide for developers: the three processes, how a message becomes a reply, and where to
 add Traits, adapters and Interactive Components. The terms (Project, Conversation, Mini-Me,
-Trait, Workflow, Step, Interactive Component, Text Component, Asset) are defined in the
-README's [Core concepts](../README.md#core-concepts) and in `openspec/config.yaml`. The
-behaviour each part must have is specified in `openspec/specs/`.
+Trait, Workflow, Step, Interactive Component, Text Component, Asset) are defined in
+[`openspec/config.yaml`](../openspec/config.yaml). The behaviour each part must have is specified
+in `openspec/specs/`.
 
 ## The three processes
 
@@ -25,9 +25,9 @@ behaviour each part must have is specified in `openspec/specs/`.
 - **The sidecar** is a pinned Python environment. In development the core starts it from
   `sidecar/` with `uv run`; release builds bundle a standalone Python with it
   (`npm run bundle-sidecar`).
-- **Development builds** (`npm run tauri:dev`) use `src-tauri/tauri.dev.conf.json`, which
-  titles the window "Mini-Me (Dev)" and uses the icons in `src-tauri/icons/dev/`, so a dev
-  build is easy to tell from an installed one.
+- **Development builds** (`npm run tauri:dev`) use `src-tauri/tauri.canary.conf.json`, which
+  makes them Mini-Me Canary: a separate app with its own identifier, name, icons
+  (`src-tauri/icons/canary/`) and data, so development never touches an installed Mini-Me.
 
 ## Everything is an event
 
@@ -66,7 +66,7 @@ now (`library.rs`).
 
 ```json
 { "id": "…7a04", "name": "Find Papers", "description": "…", "color": "oklch(0.55 0.1 230)",
-  "adapter": "asta-paper-finder", "instructions": null, "tools": ["show_papers"] }
+  "adapter": "asta-paper-finder", "instructions": null, "tools": ["save_file"] }
 
 { "id": "…7b04", "name": "Researcher", "description": "Finds research papers on a topic…",
   "colors": { "tint": "#FFE1D8", "solid": "#FF5A36", "ink": "#B3300F" }, "group": "literature",
@@ -78,11 +78,8 @@ now (`library.rs`).
   the `prompt` adapter and differ only in their instructions.
 - **Placeholder Traits** (*Document*, *Code*, *Predict*…) describe planned capabilities.
   They run on `echo` with no instructions until they are built, and no Mini-Me may use one.
-- A Trait's **`tools`** lists what it can read, save and show; see [Tools](#tools). A
-  Trait on a fixed adapter lists the tools that adapter's code uses; a prompt-based Trait
-  lists the tools its model is offered besides `read_file` and `read_component`, which
-  every prompt-based Trait gets. The library refuses unknown tool names, and prompt-based
-  Traits listing a tool models cannot use.
+- A Trait lists no tools; see [Tools](#tools). A prompt-based Trait's model is offered
+  every tool that has a form for models, and a fixed adapter uses the tools its code calls.
 - A **Mini-Me** has one Workflow, a list of Steps, each with an `id` unique within the
   Workflow. Most Workflows are a single Trait Step; see [Workflows](#workflows) for the
   others.
@@ -187,9 +184,9 @@ class FindPapers(Adapter):
 | Adapter | Runs | What it does |
 |---|---|---|
 | `echo` | placeholder Traits, tests | streams the input back word by word |
-| `prompt` | *Summarize*, *Assist*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment* | the Trait's instructions, the Conversation's earlier messages, earlier Step outputs, the message and a list of the Conversation's files and components (IDs, no content), sent to the model chosen in Settings with the read tools and the Trait's tools; the model calls tools for up to 8 rounds before it answers |
-| `asta-paper-finder` | *Find Papers* | Ai2's Paper Finder; replies with a `paper-sources` component |
-| `asta-theorizer` | *Theorize* | Ai2's Theorizer; replies with a `theories` component and attaches `theory-store.json` |
+| `prompt` | *Summarize*, *Assist*, *Scout*, *Refute*, *Plan*, *Wonder*, *Experiment* | the Trait's instructions, the Conversation's earlier messages, earlier Step outputs, the message and a list of the Conversation's files and components (IDs, no content), sent to the model chosen in Settings with every model tool; the model calls tools for up to 8 rounds before it answers |
+| `asta-paper-finder` | *Find Papers* | Ai2's Paper Finder; saves the papers as the hidden `papers.json` and replies with a `paper-sources` component |
+| `asta-theorizer` | *Theorize* | Ai2's Theorizer; saves its result as the hidden `theory-store.json` and replies with a `theories` component |
 | `data-profile` | *Profile Data* | describes the referenced tables with pandas, without a model |
 | `data-validate` | *Validate Data* | runs default checks and checks the model chooses, with pointblank |
 | `data-clean` | *Clean Data* | applies cleaning actions the model chooses and saves the result as a new Asset |
@@ -217,18 +214,19 @@ directly.
 | `await ctx.read_asset(id)` | the bytes of a Project file the message references | `core.request` `asset.read` |
 | `await ctx.history()` | the Conversation's earlier messages, within a 50,000-character budget | `core.request` `conversation.history` |
 | `await ctx.results()` | the Conversation's files and Interactive Components, newest first | `core.request` `conversation.results` |
-| `await ctx.read_component(id)` | one component of the Conversation with its full data | `core.request` `component.read` |
+| `await ctx.read_component(id)` | one component of the Conversation: its kind, text and source file, without its preview | `core.request` `component.read` |
 | `await ctx.secret(provider)` | an API key or the Ai2 token, for a declared provider only | `core.request` `secret.get` |
-| `await ctx.component(kind, version, data, text)` | adds an Interactive Component below the reply's text | `core.request` `component.add` |
-| `await ctx.write_asset(name, media_type, data)` | saves a file in the Project and attaches it to the reply | `core.request` `asset.write` |
+| `await ctx.component(kind, version, preview, text, source_asset_id)` | adds an Interactive Component below the reply's text | `core.request` `component.add` |
+| `await ctx.write_asset(name, media_type, data, hidden)` | saves a file in the Project and attaches it to the reply, unless hidden | `core.request` `asset.write` |
 
 Frames are one-way. Requests are answered with a result or an error code, which reaches the
 adapter as `CoreRequestError`, so an adapter can react to a refusal.
 
-`ctx` also carries the call's Trait (`ctx.trait.instructions`, `ctx.trait.tools`), the message being answered
+`ctx` also carries the call's Trait (`ctx.trait.instructions`), the message being answered
 (`ctx.message`, with its attachments and Text Components), the answering Mini-Me's name,
-routing's guess at whether the message needs earlier context (`ctx.needs_context`), and the
-outputs of the run's earlier Steps (`ctx.steps`, as `{ step_id, name, output }`).
+routing's guess at whether the message needs earlier context (`ctx.needs_context`), routing's
+picks of the file and the table or chart the message means (`ctx.file`, `ctx.picked_component`)
+and of the tools likely to help (`ctx.tools`), and the outputs of the run's earlier Steps (`ctx.steps`, as `{ step_id, name, output }`).
 
 ## A message, from send to reply
 
@@ -237,10 +235,14 @@ For "@Researcher drought in Andean landraces":
 1. **Send.** The UI calls `send_message`; the core checks the message's references and stores
    it (`conversations.rs`).
 2. **Route.** With an `@` mention, the first mentioned Mini-Me answers. Without one,
-   Typesafe's Jev chooses a Mini-Me; when Jev's confidence is below the threshold in
-   Settings or Jev cannot be asked, Assistant answers (`FALLBACK_MINI_ME` in `library.rs`).
-   Jev also judges whether the message needs earlier context and whether the Mini-Me reacts
-   with an emoji (`routing.rs` in the core, `routing.py` in the sidecar).
+   Typesafe's Jev chooses a Mini-Me, reading each by its name, description and Traits; when
+   Jev's confidence is below the threshold in Settings or Jev cannot be asked, Assistant
+   answers (`FALLBACK_MINI_ME` in `library.rs`). Jev also judges whether the message needs
+   earlier context, whether the Mini-Me reacts with an emoji, which file and which table or
+   chart the message means, which four tools are likely to help, and which other Mini-Me should
+   handle what the answering one doesn't cover; the model's request marks these picks as hints
+   (`routing.rs` in the core, `routing.py` in the sidecar). A comment in a thread is routed the
+   same way, without the file, table or chart and tools questions.
 3. **Start.** The core creates an empty streaming reply and sends `run.start` with the
    Mini-Me's Workflow, the Traits it uses, the model, the message and its context
    (`runs.rs`). A run needs a model if any of its adapters declares providers or if it has
@@ -253,6 +255,13 @@ For "@Researcher drought in Andean landraces":
    that sent them, and the core checks them against that Step's Trait.
 6. **End.** The sidecar sends `run.done` and the core stores `message.completed`. Stop sends
    `run.cancel`; a run that ignores it is treated as cancelled after five seconds.
+7. **Hand off.** A reply hands off at most once: its model calls the hand-off tool
+   (`reply.hand_off`), or, for a Mini-Me without a prompt-based Trait, the core hands off to
+   the Mini-Me Jev recommended. Each model call is told which Traits its Workflow still runs
+   after it, so it doesn't hand off their work. When the reply completes, `Runs` passes the
+   hand-off to `Routing`, which asks Jev about the hand-off's request as about a message
+   (without the Mini-Me and reaction questions) and starts the other Mini-Me's reply, which
+   may hand off in turn.
 
 Runs execute concurrently; every frame carries its `run_id`, and the core ignores frames
 for a run that has ended. `step.completed` ends its call, so a later request from that call
@@ -287,12 +296,14 @@ gets `call_not_active`.
 ## Interactive Components
 
 An Interactive Component is a rich element below a reply's text, such as source cards,
-theories or a table. Each kind is hand-coded in the UI and added by its show tool
-(`show_table`, `show_chart`, `show_papers`, `show_theories`, and `write_document` for
-`document`), so a Trait can add a kind only
-when it lists that tool, component data always comes from code we wrote, and it never
-contains UI code. The one exception is `approval`, which the core adds itself when a run
-pauses and refuses from any Trait.
+theories or a table. Each kind is hand-coded in the UI. Tables and charts are added by their
+show tools (`show_table`, `show_chart`), `document` by `write_document`, and the provider
+kinds (`paper-sources`, `theories`, `dataset-results`) only by the adapter that owns each one,
+through `show_results`. A component's `preview` is only what the UI shows; its data lives in
+its source file (`source_asset_id`), which a Trait reads with `read_file`. Results that are not
+the user's data, such as papers or a profile table, are saved as hidden files: Traits and Jev
+see them, the user does not. The core adds `approval` and `hand-off` itself and refuses them
+from any Trait.
 
 ### A kind is one file
 
@@ -313,7 +324,8 @@ src/components/interactive/
 ```
 
 - A kind's file exports `renderers`, a React component for each version, and the
-  TypeScript types of each version's data. Renderers get `{ data }`, plus `answer`,
+  TypeScript types of each version's preview. Renderers get `{ preview }`, plus
+  `sourceAssetId`, `answer`,
   `projectId`, `messageId`, `componentId` and `replyStatus` for kinds the user answers,
   such as `approval`, and `color`, the solid colour of the Mini-Me that wrote the reply, for
   kinds that draw in it, such as `chart`; the others ignore them. The spec in
@@ -324,32 +336,31 @@ src/components/interactive/
 - A test (`catalogue.test.ts`) reads `builtin.json` and checks that every kind a Trait's
   show tools add has a renderer.
 
-To add a kind: write its file, add it to `catalogue.ts`, add its show tool to
-`tools/components.py` and its name to `TOOL_NAMES` (`tools/__init__.py`), `TOOLS`
-(`library.rs`) and `SHOW_TOOL_KINDS` (`catalogue.test.ts`), then list the tool on the Trait
-that uses it and call it from that Trait's adapter. Nothing changes in the protocol or the
-database.
+To add a provider kind: write its file, add it to `catalogue.ts`, and show it from its
+adapter with `show_results`. Nothing changes in the protocol or the database.
 
 ### Adding one to a reply
 
-1. The adapter calls the kind's show tool, such as `await show_papers(ctx, data, text)`,
-   once its data is complete; the tool sends `component.add`. Components are not updated
+1. The adapter saves the component's source file, then calls `component.add` through a
+   show tool or `show_results` once its preview is complete. Components are not updated
    after they are added.
-2. The core checks that the reply is still streaming, that the kind is not `approval`, that
-   `data` is at most 2 MiB and that `text` is not empty. It does not check the shape of
-   `data`: that is a contract between the adapter and the renderer.
+2. The core checks that the reply is still streaming, that the kind is not one only the core
+   adds, that `preview` is at most 2 MiB, that `text` is not empty and that the source file is
+   an Asset of the Project. It does not check the shape of `preview`: that is a contract
+   between the adapter and the renderer.
 3. **Refused:** the core answers `component_not_allowed` or `invalid_component` and stores
    nothing; the show tool fails with that code. The Asta adapters and Plot then write `text`
    into the reply.
 4. **Accepted:** the core stores `component.added` with `{ message_id, component: { id,
-   kind, version, data, text } }` and a row in the `components` table, and answers with the
-   component's UUIDv7 ID.
+   kind, version, preview, text, source_asset_id } }` and a row in the `components` table,
+   and answers with the component's UUIDv7 ID.
 5. The UI shows the components below the reply's text, in order. `InteractiveComponent`
    shows `text` instead when the kind or version has no renderer, or when the renderer fails.
 
-`text` is a plain-text version of the component. It also goes into conversation history, so
-a Mini-Me that reads earlier messages can refer to a component ("summarize the third
-paper"), and it is what an app version without the kind shows.
+`text` is a plain-text version of the component, which read-a-component returns and an app
+version without the kind shows. Conversation history gives each component one line instead,
+`[<kind> "<title>" from <source file>, id <id>]`, so a Mini-Me can find the component a
+message describes ("summarize the third paper") and read it by ID.
 
 ### Changing a kind
 
@@ -441,21 +452,20 @@ Every tool acts through `ctx`, so the core's checks and Project-folder confineme
 | Tool | Does | Offered to models |
 |---|---|---|
 | `read_file` | reads a Conversation file: a table's rows (500 at a time) or text (100,000 characters at a time) | always, to prompt-based Traits |
-| `read_component` | reads a Conversation component: a table's rows, or another kind's data | always, to prompt-based Traits |
+| `read_component` | reads a Conversation component: its kind, text and source file's ID | always, to prompt-based Traits |
 | `read_table` | reads a table file into a DataFrame (data Traits) | no |
-| `save_file` | saves a file and attaches it to the reply | as text files (CSV, TSV, TXT, Markdown, JSON) up to 2 MiB |
-| `show_table` | adds a `table`, from a DataFrame, from given rows or from a file | yes |
+| `save_file` | saves a file and attaches it to the reply, or saves it hidden | as text files (CSV, TSV, TXT, Markdown, JSON) up to 2 MiB, never hidden |
+| `show_table` | adds a `table` from a file, or from a DataFrame or given rows saved as a file first | yes |
 | `write_document` | saves a Quarto (`.qmd`) document, attaches it and adds a `document` card; needs Quarto | yes, up to 2 MiB |
-| `show_chart`, `show_papers`, `show_theories` | add a `chart`, `paper-sources` or `theories` | no |
+| `suggest` | suggests replacing one passage of a Project's document (`document.suggest`), leaving the file unchanged; outside a thread the core adds the document's `document` card once per reply | yes, up to 64 KiB of new text |
+| `show_chart` | adds Plot's `chart` | no |
 
 - `tools/__init__.py` names the tools; `files.py`, `tables.py`, `components.py` and
   `documents.py` hold them; `model.py` holds the forms offered to models (name, description, JSON Schema).
   `ToolError` (`base.py`) is a `TraitError`: uncaught in an adapter it ends the call with
   its code, and the `prompt` adapter returns its message to the model instead.
-- Fixed adapters declare the tools they use (`Adapter.uses_tools`); a test checks their
-  Traits list the same ones in `builtin.json`.
-- The `prompt` adapter offers `read_file`, `read_component` and the Trait's listed tools
-  (`bind_tools`) and loops: the model calls tools, gets their results and continues, for at
+- The `prompt` adapter offers every model tool (`bind_tools`), and loops: the model calls
+  tools, gets their results and continues, for at
   most 8 rounds, then answers. A model that cannot call tools fails with
   `tools_unsupported`.
 
@@ -473,7 +483,8 @@ Every tool acts through `ctx`, so the core's checks and Project-folder confineme
   `paused_runs` the replies waiting for an approval, and `debug_records` the developer
   debug records.
 - **Jev:** "Show Jev's answers" and "Show what Jev was asked" in Settings → Developer store a
-  `jev` debug record for each routed message, shown in "[DEBUG] Jev" under it. Records are kept
+  `jev` debug record for each routed message, shown in "[DEBUG] Jev" under it; a hand-off's
+  record is kept on the reply that handed off. Records are kept
   apart from the events and read only when the block is opened; "Debug data" clears the open
   Project's.
 - **Replies:** "Show what the AI read", "Show model call details" and "Show tool calls" in

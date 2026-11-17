@@ -6,6 +6,9 @@ const QUESTION_WORDS: Record<string, string> = {
   reaction: "React with an emoji?",
   needs_context: "Needs earlier messages?",
   file: "Which file?",
+  component: "Which table or chart?",
+  tools: "Likely tools?",
+  next_mini_me: "Who continues?",
 };
 
 export function questionWords(question: string): string {

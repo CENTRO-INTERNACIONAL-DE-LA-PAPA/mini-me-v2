@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { count, formatRelative } from "./format";
+import { appLabel, count, formatRelative } from "./format";
 
 describe("formatRelative", () => {
   const now = new Date(2026, 9, 21, 15, 0).getTime();
@@ -23,5 +23,13 @@ describe("count", () => {
     expect(count(1, "file")).toBe("1 file");
     expect(count(0, "file")).toBe("0 files");
     expect(count(2, "person", "people")).toBe("2 people");
+  });
+});
+
+describe("appLabel", () => {
+  it("names a build like its release and a run from source as local", () => {
+    expect(appLabel("Mini-Me", "0.6.0")).toBe("Mini-Me 0.6.0");
+    expect(appLabel("Mini-Me Canary", "0.7.1-canary.2")).toBe("Mini-Me 0.7.1-canary.2");
+    expect(appLabel("Mini-Me Canary", "0.7.0")).toBe("Mini-Me Canary (local)");
   });
 });

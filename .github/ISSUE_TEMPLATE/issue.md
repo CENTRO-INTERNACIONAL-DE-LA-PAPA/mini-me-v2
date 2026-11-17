@@ -9,7 +9,7 @@ labels: []
 One or two sentences: what is wrong, or what is wanted.
 
 ## Context
-Why it matters, and links to the Roadmap row, OpenSpec change or related issues.
+Why it matters, and links to the OpenSpec change or related issues.
 
 ## Steps to reproduce
 (Bugs only.)

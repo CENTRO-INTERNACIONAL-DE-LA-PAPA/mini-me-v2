@@ -7,7 +7,7 @@ import { isDocument } from "../files/files";
 import { MiniMePill } from "../minime/MiniMePill";
 import type { Renderers, RendererProps } from "./catalogue";
 
-/** `hand-off` version 1 data, as the core adds it when a reply hands off. */
+/** `hand-off` version 1 preview, as the core adds it when a reply hands off. */
 interface HandOffData {
   mini_me_id?: string;
   request?: string;
@@ -48,8 +48,8 @@ export function HandOffCard({
   );
 }
 
-function HandOffV1({ data, projectId }: RendererProps) {
-  const { mini_me_id: miniMeId, request, file } = (data ?? {}) as HandOffData;
+function HandOffV1({ preview, projectId }: RendererProps) {
+  const { mini_me_id: miniMeId, request, file } = (preview ?? {}) as HandOffData;
   const miniMe = useMiniMes().find((m) => m.id === miniMeId);
   const open = useOpenFile(projectId);
   const assetId = file?.asset_id;

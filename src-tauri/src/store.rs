@@ -10,11 +10,14 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::Value;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
+use crate::history::ComponentLabel;
+use crate::routing::ShownComponent;
 use crate::paths::ProjectPaths;
 use crate::sync::locked;
 use crate::protocol::{
@@ -365,16 +368,16 @@ impl ProjectState {
         Ok(messages)
     }
 
-    /// By message, in the order added; `data` is `null` unless `with_data` is set.
+    /// By message, in the order added; `preview` is `null` unless `with_preview` is set.
     fn components_in(
         &self,
         scope: Scope,
-        with_data: bool,
+        with_preview: bool,
     ) -> AppResult<HashMap<Uuid, Vec<Component>>> {
         let mut stmt = self.conn.prepare(&format!(
             "SELECT c.message_id, {} FROM components c \
              JOIN messages m ON m.id = c.message_id WHERE {} ORDER BY c.rowid",
-            component_columns(with_data),
+            component_columns(with_preview),
             scope.condition(),
         ))?;
         let rows = stmt.query_map(params![scope.id()], |row| {
@@ -449,33 +452,60 @@ impl ProjectState {
         raw.map(ComponentRow::into_component).transpose()
     }
 
-    /// `(kind, title)` of tables and charts by source Asset ID, newest first; reads no other data.
-    pub fn file_components(
+    /// Each component's title and source file name, for its line in the history; reads no other
+    /// part of its preview.
+    pub fn component_labels(
         &self,
         conversation_id: Uuid,
-    ) -> AppResult<HashMap<Uuid, Vec<(String, Option<String>)>>> {
+    ) -> AppResult<HashMap<Uuid, ComponentLabel>> {
         let mut stmt = self.conn.prepare(
-            "SELECT json_extract(c.data, '$.source_id'), c.kind, json_extract(c.data, '$.title') \
+            "SELECT c.id, json_extract(c.preview, '$.title'), a.name \
              FROM components c JOIN messages m ON m.id = c.message_id \
-             WHERE m.conversation_id = ?1 AND c.kind IN ('table', 'chart') \
-             AND json_type(c.data, '$.source_id') = 'text' ORDER BY c.rowid DESC",
+             LEFT JOIN assets a ON a.id = c.source_asset_id WHERE m.conversation_id = ?1",
         )?;
         let rows = stmt.query_map(params![conversation_id.to_string()], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(1)?,
                 row.get::<_, Option<String>>(2)?,
             ))
         })?;
-        let mut shown: HashMap<Uuid, Vec<(String, Option<String>)>> = HashMap::new();
+        let mut labels = HashMap::new();
         for row in rows {
-            let (source_id, kind, title) = row?;
-            // A `source_id` that is not an Asset ID names no file to offer.
-            if let Ok(asset_id) = Uuid::parse_str(&source_id) {
-                shown.entry(asset_id).or_default().push((kind, title));
-            }
+            let (id, title, source) = row?;
+            let title = title.filter(|t| !t.trim().is_empty());
+            labels.insert(
+                parse_id(&id, "component")?,
+                ComponentLabel { title, source },
+            );
         }
-        Ok(shown)
+        Ok(labels)
+    }
+
+    /// The Conversation's tables and charts, newest first; reads no other part of their preview.
+    pub fn shown_components(&self, conversation_id: Uuid) -> AppResult<Vec<ShownComponent>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.kind, json_extract(c.preview, '$.title'), a.id, a.name \
+             FROM components c JOIN messages m ON m.id = c.message_id \
+             JOIN assets a ON a.id = c.source_asset_id \
+             WHERE m.conversation_id = ?1 AND c.kind IN ('table', 'chart') ORDER BY c.rowid DESC",
+        )?;
+        let rows = stmt.query_map(params![conversation_id.to_string()], |row| {
+            let uuid = |column: usize| {
+                let text: String = row.get(column)?;
+                Uuid::parse_str(&text).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(column, Type::Text, Box::new(e))
+                })
+            };
+            Ok(ShownComponent {
+                id: uuid(0)?,
+                kind: row.get(1)?,
+                title: row.get(2)?,
+                source_id: uuid(3)?,
+                source_name: row.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     /// Replaces the message's only debug record of `kind`.
@@ -731,20 +761,21 @@ struct MessageRow {
     text_components: String,
 }
 
-/// `data` reads as `null` unless `with_data` is set.
-fn component_columns(with_data: bool) -> String {
-    let data = if with_data { "c.data" } else { "'null'" };
-    format!("c.id, c.kind, c.version, {data}, c.text, c.answer, c.step_index")
+/// `preview` reads as `null` unless `with_preview` is set.
+fn component_columns(with_preview: bool) -> String {
+    let preview = if with_preview { "c.preview" } else { "'null'" };
+    format!("c.id, c.kind, c.version, {preview}, c.text, c.answer, c.step_index, c.source_asset_id")
 }
 
 struct ComponentRow {
     id: String,
     kind: String,
     version: u32,
-    data: String,
+    preview: String,
     text: String,
     answer: Option<String>,
     step_index: Option<u32>,
+    source_asset_id: Option<String>,
 }
 
 impl ComponentRow {
@@ -754,10 +785,11 @@ impl ComponentRow {
             id: row.get(first)?,
             kind: row.get(first + 1)?,
             version: row.get(first + 2)?,
-            data: row.get(first + 3)?,
+            preview: row.get(first + 3)?,
             text: row.get(first + 4)?,
             answer: row.get(first + 5)?,
             step_index: row.get(first + 6)?,
+            source_asset_id: row.get(first + 7)?,
         })
     }
 
@@ -766,8 +798,13 @@ impl ComponentRow {
             id: parse_id(&self.id, "component")?,
             kind: self.kind,
             version: self.version,
-            data: serde_json::from_str(&self.data)?,
+            preview: serde_json::from_str(&self.preview)?,
             text: self.text,
+            source_asset_id: self
+                .source_asset_id
+                .as_deref()
+                .map(|id| parse_id(id, "component"))
+                .transpose()?,
             answer: self.answer.map(|a| serde_json::from_str(&a)).transpose()?.unwrap_or_default(),
             step_index: self.step_index,
         })
@@ -885,17 +922,18 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
         EventKind::ComponentAdded { message_id, component } => {
             tx.execute(
                 "INSERT INTO components \
-                 (id, message_id, kind, version, data, text, step_index, created_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                 (id, message_id, kind, version, preview, text, step_index, created_at, \
+                 source_asset_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     component.id.to_string(),
                     message_id.to_string(),
                     component.kind,
                     component.version,
-                    serde_json::to_string(&component.data)?,
+                    serde_json::to_string(&component.preview)?,
                     component.text,
                     component.step_index,
-                    event.ts
+                    event.ts,
+                    component.source_asset_id.map(|id| id.to_string())
                 ],
             )?;
         }
@@ -1163,8 +1201,9 @@ mod tests {
             id: new_id(),
             kind: kind.into(),
             version: 1,
-            data: serde_json::json!({ "papers": [] }),
+            preview: serde_json::json!({ "papers": [] }),
             text: text.into(),
+            source_asset_id: None,
             answer: serde_json::Value::Null,
             step_index: None,
         };
@@ -1186,7 +1225,10 @@ mod tests {
 
         let history = project.lock().conversation_messages(conversation).unwrap();
         let in_history = &history.iter().find(|m| m.id == reply).unwrap().components[0];
-        assert_eq!((in_history.text.as_str(), &in_history.data), ("first", &serde_json::Value::Null));
+        assert_eq!(
+            (in_history.text.as_str(), &in_history.preview),
+            ("first", &serde_json::Value::Null)
+        );
         let (_, question) = project.lock().load_message(question.id).unwrap().unwrap();
         assert!(question.components.is_empty());
 
@@ -1253,7 +1295,8 @@ mod tests {
             id: new_id(),
             kind: "approval".into(),
             version: 1,
-            data: serde_json::json!({ "step_id": "ask", "prompt": "Go on?" }),
+            preview: serde_json::json!({ "step_id": "ask", "prompt": "Go on?" }),
+            source_asset_id: None,
             text: "Go on?".into(),
             answer: serde_json::Value::Null,
             step_index: None,

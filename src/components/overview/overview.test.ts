@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Overview, OverviewOutput } from "../../protocol/types";
+import type { Overview } from "../../protocol/types";
 import { findNamed, headerLine, summaryLine, summaryParts } from "./overview";
 
 const now = new Date(2026, 9, 21, 15, 0).getTime();
@@ -47,13 +47,12 @@ describe("summaryParts", () => {
 
 describe("findNamed", () => {
   const file = { id: "f1", name: "trial.csv", media_type: "text/csv", size_bytes: 1 };
-  const chart = { kind: "chart", id: "c1", title: "Yield by variety" } as OverviewOutput;
 
-  it("finds a file, then a table or chart, by the name references give it, or nothing", () => {
-    expect(findNamed("trial.csv", [file], [chart])).toEqual({ file });
-    expect(findNamed("$Yield-by-variety", [file], [chart])).toEqual({ component: chart });
-    expect(findNamed("yield by variety", [file], [chart])).toEqual({ component: chart });
-    expect(findNamed("old.csv", [file], [chart])).toBeUndefined();
+  it("finds a file by its name, loosely, or nothing", () => {
+    expect(findNamed("trial.csv", [file])).toEqual(file);
+    expect(findNamed("#Trial.csv", [file])).toEqual(file);
+    expect(findNamed("old.csv", [file])).toBeUndefined();
+    expect(findNamed("Yield by variety", [file])).toBeUndefined();
   });
 });
 

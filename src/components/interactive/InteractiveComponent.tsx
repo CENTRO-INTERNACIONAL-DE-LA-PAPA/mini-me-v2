@@ -52,7 +52,8 @@ export function InteractiveComponent({
   return (
     <RenderBoundary text={component.text}>
       <Renderer
-        data={component.data}
+        preview={component.preview}
+        sourceAssetId={component.source_asset_id}
         answer={component.answer}
         projectId={projectId}
         messageId={messageId}

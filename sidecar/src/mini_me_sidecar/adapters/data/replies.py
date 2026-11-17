@@ -36,7 +36,7 @@ from mini_me_sidecar.context import CallContext, TraitError
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import show_chart
 from mini_me_sidecar.tools.files import MAX_FILE_BYTES, save_file
-from mini_me_sidecar.tools.tables import read_reference, read_table, show_frame
+from mini_me_sidecar.tools.tables import read_table, show_frame
 
 
 async def profile(ctx: CallContext, text: str) -> None:
@@ -45,7 +45,9 @@ async def profile(ctx: CallContext, text: str) -> None:
         ctx.progress(f"Profiling {table.name}")
         columns = await WORKERS.run(ctx, profile_frame, table.frame)
         ctx.write(_sheet_note(table) + summary(table.name, table.frame) + "\n\n")
-        await show_frame(ctx, columns, f"Columns of {table.name}")
+        await show_frame(
+            ctx, columns, f"Columns of {table.name}", results_name=f"{table.stem}-profile.csv"
+        )
 
 
 async def validate(ctx: CallContext, text: str) -> None:
@@ -64,7 +66,12 @@ async def validate(ctx: CallContext, text: str) -> None:
             + (f"{failed} failed." if failed else "all passed.")
             + "\n\n"
         )
-        await show_frame(ctx, results_frame(results), f"Checks on {table.name}")
+        await show_frame(
+            ctx,
+            results_frame(results),
+            f"Checks on {table.name}",
+            results_name=f"{table.stem}-checks.csv",
+        )
         await save_file(ctx, f"{table.stem}-validation.html", "text/html", report.encode())
     _write_ignored(ctx, [(describe_entry(c), _why(c, tables)) for c in ignored])
 
@@ -84,7 +91,9 @@ async def clean(ctx: CallContext, text: str) -> None:
         if entry.note:
             ctx.write(f"- {entry.action}: {entry.note}\n")
     source = await _save(ctx, table, cleaned, "cleaned")
-    await show_frame(ctx, log_frame(log), "Cleaning actions")
+    await show_frame(
+        ctx, log_frame(log), "Cleaning actions", results_name=f"{table.stem}-cleaning-log.csv"
+    )
     await show_frame(ctx, cleaned, f"Cleaned {table.name}", source)
 
 
@@ -146,7 +155,7 @@ async def plot(ctx: CallContext, text: str) -> None:
         ctx.progress(f"Drawing {chart.title or chart.type}")
         result = await WORKERS.run(ctx, build_chart, table.frame, chart, types)
         if table.source_id:
-            result.data.update(source=table.name, source_id=table.source_id)
+            result.data.update(source=table.name)
         notes = "; ".join(result.notes)
         ctx.write(f"- {result.data['title']}" + (f": {notes}" if notes else "") + "\n")
         results.append(result)
@@ -157,7 +166,7 @@ async def plot(ctx: CallContext, text: str) -> None:
             ctx.write(chart_text(result.data) + "\n\n")
             continue
         try:
-            await show_chart(ctx, result.data, chart_text(result.data))
+            await show_chart(ctx, result.data, chart_text(result.data), table.source_id)
         except ToolError:
             ctx.write(chart_text(result.data) + "\n\n")
     _write_ignored(ctx, ignored, "Not drawn")
@@ -173,12 +182,7 @@ async def read_tables(ctx: CallContext, text: str, fallback: bool = True) -> lis
             source, note = found
             ctx.write(note + "\n\n")
             sources = [source]
-    tables = [
-        await read_reference(ctx, source.reference)
-        if source.reference is not None
-        else await read_table(ctx, str(source.asset_id), source.name, text)
-        for source in sources
-    ]
+    tables = [await read_table(ctx, source.asset_id, source.name, text) for source in sources]
     if not tables:
         raise TraitError("no_table", NO_TABLE)
     return tables

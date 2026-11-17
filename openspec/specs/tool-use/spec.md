@@ -10,10 +10,10 @@ results and continues before writing its answer.
 ### Requirement: Prompt Traits know the Conversation's results
 Every call of a prompt-based Trait SHALL tell the model the name and ID of each Asset and
 the kind, author and ID of each Interactive Component of the Conversation, newest first, at
-most 50 of each, marking the current message's files and the reply's picked file, which it
-SHALL describe as the file the user probably means. It SHALL also tell the model each `$`
-reference of the current message: its label, its component's kind and its component's ID.
-It SHALL NOT include their content; the model reads content with the read tools.
+most 50 of each, marking the current message's files, the
+reply's picked file, which it SHALL describe as the file the user probably means, and the
+reply's picked component, which it SHALL describe as the component the user probably means. It
+SHALL NOT include their content; the model reads content with the read tools.
 
 #### Scenario: Referenced file
 - **WHEN** the user sends "@Scribe summarize #notes.txt"
@@ -30,32 +30,37 @@ It SHALL NOT include their content; the model reads content with the read tools.
 - **WHEN** the user sends "@Assistant what is in the third row of the last table?" without
   a reference
 - **THEN** the first request lists the newest `table` component with its ID, and the model
-  reads it and answers from its rows
+  reads it, then its source file, and answers from its rows
 
 #### Scenario: Referenced chart
-- **WHEN** the user sends "@Scribe explain $Yield-by-variety"
-- **THEN** the first request names that reference as a chart with its component's ID,
-  without its data, and the model reads the chart with read-a-component before explaining
+- **WHEN** the user sends "@Scribe explain the yield by variety chart"
+- **THEN** the first request lists the chart component with its ID, without its data, and the
+  model reads the chart with read-a-component before explaining
+
+#### Scenario: Picked component
+- **WHEN** the user sends "@Plotter make that chart a bar chart" and Jev picks the chart
+  "Yield by variety"
+- **THEN** the first request lists that chart marked as the component the user probably
+  means, without its data
 
 ### Requirement: Tools offered to the model
-A prompt-based Trait's model SHALL be offered read-a-file, read-a-component and hand-off on
-every call, plus the tools its Trait definition lists. A prompt-based Trait SHALL list only
-tools that have a form for models: save-a-file, show-a-table, write-a-document, suggest-an-edit
-and edit-a-document. Suggest-an-edit SHALL be offered only to a call answering a comment thread,
-and edit-a-document only to a call outside one.
+A prompt-based Trait's model SHALL be offered, on every call, every tool that has a form for
+models: read-a-file, read-a-component, hand-off, save-a-file, show-a-table, write-a-document and
+suggest. The tools offered SHALL NOT depend on the Trait, nor on whether the call answers a
+comment thread.
 
 #### Scenario: Assistant's tools
 - **WHEN** Assistant answers in a Conversation
 - **THEN** its model is offered read-a-file, read-a-component, hand-off, save-a-file,
-  show-a-table, write-a-document and edit-a-document
+  show-a-table, write-a-document and suggest
 
 #### Scenario: Assistant in a comment thread
 - **WHEN** Assistant answers "@Assistant is this clear?" in a comment thread
-- **THEN** its model is also offered suggest-an-edit, and not edit-a-document
+- **THEN** its model is offered the same tools
 
 #### Scenario: Scout's tools
-- **WHEN** Explorer answers with *Scout*, which lists no tools
-- **THEN** its model is offered read-a-file, read-a-component and hand-off
+- **WHEN** Explorer answers with *Scout*
+- **THEN** its model is offered the same tools as Assistant's
 
 ### Requirement: Answering in tool rounds
 In each round the model either asks for one or more tool calls, which run in the order
@@ -110,3 +115,16 @@ no further round or tool once the reply is stopped.
 #### Scenario: Stopped mid-way
 - **WHEN** the user stops the reply while the model is in its second round
 - **THEN** no further tool is called, and no later file is saved
+### Requirement: Likely tools in the request
+When a call's `context.tools` is not empty, a prompt-based Trait's model request SHALL name
+those tools as likely useful, in their order. The model SHALL still be offered every tool, and
+an empty `context.tools` SHALL add nothing to the request.
+
+#### Scenario: Hint
+- **WHEN** a call's `context.tools` is `["show_table", "save_file"]`
+- **THEN** its first request says show_table and save_file are likely useful, and the model is
+  offered every tool
+
+#### Scenario: No hint
+- **WHEN** a call's `context.tools` is empty
+- **THEN** its first request names no likely tools

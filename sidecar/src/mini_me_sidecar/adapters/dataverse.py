@@ -14,7 +14,7 @@ from mini_me_sidecar.adapters.base import (
 )
 from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, ask_structured
 from mini_me_sidecar.context import CallContext, TraitError
-from mini_me_sidecar.tools.components import show_datasets
+from mini_me_sidecar.tools.components import show_results
 
 
 class DataverseSearch(BaseModel):
@@ -72,7 +72,6 @@ async def _write_search(ctx: CallContext, text: str) -> DataverseSearch:
 
 
 class SearchDataverse(Adapter):
-    uses_tools = ("show_datasets",)
     info = AdapterInfo(
         id="cip-dataverse",
         description="Searches CIP's Dataverse for datasets, which the user can download.",
@@ -92,4 +91,10 @@ class SearchDataverse(Adapter):
             return
         ctx.write(f"Found {total:,} {'dataset' if total == 1 else 'datasets'}.")
         data = {**search, "total": total, "datasets": datasets}
-        await component_or_text(ctx, show_datasets, data, datasets_text(datasets), "dataverse")
+        text = datasets_text(datasets)
+        await component_or_text(
+            ctx,
+            lambda: show_results(ctx, "dataset-results", "datasets.json", data, data, text),
+            text,
+            "dataverse",
+        )

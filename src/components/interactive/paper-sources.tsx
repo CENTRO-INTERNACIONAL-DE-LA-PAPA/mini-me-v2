@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { Renderers } from "./catalogue";
 import { openLink, webUrl } from "./links";
 
-/** A paper in `paper-sources` version 1 data, `{ papers }`, as *Find Papers* builds it. */
+/** A paper in `paper-sources` version 1 preview, `{ papers }`, as *Find Papers* builds it. */
 interface Paper {
   title: string;
   authors?: string[];
@@ -48,8 +48,8 @@ function SourceCard({ paper }: { paper: Paper }) {
   );
 }
 
-function PaperSources({ data }: { data: unknown }) {
-  const { papers } = data as { papers: Paper[] };
+function PaperSources({ preview }: { preview: unknown }) {
+  const { papers } = preview as { papers: Paper[] };
   const [all, setAll] = useState(false);
   const shown = all ? papers : papers.slice(0, SHOWN_SOURCES);
   return (

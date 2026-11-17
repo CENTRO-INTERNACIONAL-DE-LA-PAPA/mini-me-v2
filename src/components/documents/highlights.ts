@@ -1,10 +1,10 @@
 import { StateEffect, StateField, type EditorState, type Range } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
 import type { MiniMeColors, Uuid } from "../../protocol/types";
-import { threadPlacements } from "./anchors";
+import { suggestionPlacements, threadPlacements } from "./anchors";
 
 /** Which threads the source shows (the open ones), which one is selected, each one's number in
- * the document, and the suggestions waiting in them. */
+ * the document, and the waiting suggestions by ID. */
 interface Highlighted {
   visible: ReadonlySet<Uuid>;
   selected: Uuid | null;
@@ -12,7 +12,7 @@ interface Highlighted {
   suggestions: ReadonlyMap<Uuid, Suggested>;
 }
 
-/** A pending suggestion's text, in the colours of the Mini-Me that suggested it. */
+/** A waiting suggestion's text, in the colours of the Mini-Me that suggested it. */
 export interface Suggested {
   text: string;
   colors?: MiniMeColors;
@@ -64,15 +64,19 @@ class NumberBadge extends WidgetType {
   }
 }
 
-/** A pending suggestion's text right after the passage it would replace, underlined in its
- * Mini-Me's colour. */
+/** A waiting suggestion's text right after the passage it would replace, underlined in its
+ * Mini-Me's colour. `data-suggestion` lets a click on it offer Accept and Discard. */
 class SuggestedText extends WidgetType {
-  constructor(readonly suggested: Suggested) {
+  constructor(
+    readonly id: Uuid,
+    readonly suggested: Suggested,
+  ) {
     super();
   }
 
   eq(other: SuggestedText) {
     return (
+      other.id === this.id &&
       other.suggested.text === this.suggested.text &&
       other.suggested.colors?.solid === this.suggested.colors?.solid
     );
@@ -81,6 +85,7 @@ class SuggestedText extends WidgetType {
   toDOM() {
     const text = document.createElement("span");
     text.className = "cm-suggested";
+    text.dataset.suggestion = this.id;
     text.textContent = this.suggested.text;
     const { colors } = this.suggested;
     if (colors) {
@@ -89,6 +94,10 @@ class SuggestedText extends WidgetType {
     }
     return text;
   }
+
+  ignoreEvent() {
+    return false;
+  }
 }
 
 function decorations(state: EditorState): DecorationSet {
@@ -96,22 +105,25 @@ function decorations(state: EditorState): DecorationSet {
   const marks: Range<Decoration>[] = [];
   for (const [id, placement] of state.field(threadPlacements)) {
     if (!placement || !visible.has(id)) continue;
-    const suggested = suggestions.get(id);
     const classes = ["cm-comment"];
     if (id === selected) classes.push("cm-comment-selected");
-    if (suggested) classes.push("cm-comment-replaced");
     marks.push(Decoration.mark({ class: classes.join(" ") }).range(placement.from, placement.to));
-    if (suggested) {
-      const widget = new SuggestedText(suggested);
-      marks.push(Decoration.widget({ widget, side: 1 }).range(placement.to));
-    }
     const badge = new NumberBadge(id, numbers.get(id) ?? 0);
     marks.push(Decoration.widget({ widget: badge, side: 2 }).range(placement.to));
+  }
+  for (const [id, placement] of state.field(suggestionPlacements)) {
+    const suggested = suggestions.get(id);
+    if (!placement || !suggested) continue;
+    const replaced = Decoration.mark({ class: "cm-suggestion-replaced" });
+    marks.push(replaced.range(placement.from, placement.to));
+    const widget = new SuggestedText(id, suggested);
+    marks.push(Decoration.widget({ widget, side: 1 }).range(placement.to));
   }
   return Decoration.set(marks, true);
 }
 
-/** The threads' passages and number badges in the source, following their placements. */
+/** The threads' passages and number badges, and the waiting suggestions, in the source,
+ * following their placements. */
 export const threadHighlights = [
   highlighted,
   StateField.define<DecorationSet>({
@@ -119,7 +131,10 @@ export const threadHighlights = [
     update: (marks, transaction) =>
       transaction.docChanged ||
       transaction.startState.field(highlighted) !== transaction.state.field(highlighted) ||
-      transaction.startState.field(threadPlacements) !== transaction.state.field(threadPlacements)
+      transaction.startState.field(threadPlacements) !==
+        transaction.state.field(threadPlacements) ||
+      transaction.startState.field(suggestionPlacements) !==
+        transaction.state.field(suggestionPlacements)
         ? decorations(transaction.state)
         : marks,
     provide: (field) => EditorView.decorations.from(field),
@@ -127,8 +142,9 @@ export const threadHighlights = [
   EditorView.theme({
     ".cm-comment": { borderBottom: "1px solid var(--border-strong)" },
     ".cm-comment-selected": { backgroundColor: "var(--accent)" },
-    ".cm-comment-replaced": { textDecoration: "line-through" },
+    ".cm-suggestion-replaced": { textDecoration: "line-through", cursor: "pointer" },
     ".cm-suggested": {
+      cursor: "pointer",
       marginLeft: "4px",
       textDecoration: "underline",
       textDecorationThickness: "2px",
@@ -161,6 +177,15 @@ export function threadAt(state: EditorState, at: number): Uuid | null {
   const { visible } = state.field(highlighted);
   for (const [id, placement] of state.field(threadPlacements)) {
     if (placement && visible.has(id) && placement.from <= at && at <= placement.to) return id;
+  }
+  return null;
+}
+
+/** The shown suggestion whose passage holds the position `at`, if any. */
+export function suggestionAt(state: EditorState, at: number): Uuid | null {
+  const { suggestions } = state.field(highlighted);
+  for (const [id, placement] of state.field(suggestionPlacements)) {
+    if (placement && suggestions.has(id) && placement.from <= at && at <= placement.to) return id;
   }
   return null;
 }

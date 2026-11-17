@@ -1,5 +1,5 @@
 """A data Trait's tables: CSV, TSV and Excel Assets a message tags with `#` or attaches, parsed
-with pandas, and the tables it references with `$`."""
+with pandas."""
 
 import csv
 import io
@@ -51,15 +51,14 @@ class Table:
 
 @dataclass(frozen=True)
 class TableSource:
-    """A table file (`asset_id`, `name`) or a `$` reference (`reference`, its Text Component)."""
+    """A table file of the message."""
 
-    asset_id: str | None = None
-    name: str = ""
-    reference: dict[str, Any] | None = None
+    asset_id: str
+    name: str
 
 
 def table_sources(message: dict[str, Any]) -> list[TableSource]:
-    """`#` table files and `$` tables in message order, then attached tables; each file once."""
+    """`#` table files in message order, then attached tables; each file once."""
     sources: list[TableSource] = []
     seen: set[str] = set()
 
@@ -72,8 +71,6 @@ def table_sources(message: dict[str, Any]) -> list[TableSource]:
     for component in references:
         if component.get("kind") == "asset":
             add_file(str(component.get("id")), str(component.get("label", "")).removeprefix("#"))
-        elif component.get("kind") == "component":
-            sources.append(TableSource(reference=component))
     for attachment in message.get("attachments") or []:
         add_file(str(attachment.get("id")), str(attachment.get("name", "")))
     return sources
@@ -83,14 +80,14 @@ def fallback_source(
     picked: dict[str, Any] | None, assets: list[dict[str, Any]]
 ) -> tuple[TableSource, str] | None:
     """For a message naming no table: routing's `picked` file if a table, else the newest table
-    in `assets`, with a note saying which; None when neither has one."""
+    in `assets` the user can see, with a note saying which; None when neither has one."""
     if picked and str(picked.get("name", "")).lower().endswith(TABLE_EXTENSIONS):
         name = str(picked["name"])
         source = TableSource(asset_id=str(picked.get("asset_id")), name=name)
         return source, f"Used `{name}`, the file your message seems to mean."
     for asset in assets:
         name = str(asset.get("name", ""))
-        if name.lower().endswith(TABLE_EXTENSIONS):
+        if name.lower().endswith(TABLE_EXTENSIONS) and not asset.get("hidden"):
             source = TableSource(asset_id=str(asset.get("id")), name=name)
             return source, f"Used `{name}`, the newest table in this Conversation."
     return None

@@ -4,13 +4,12 @@ import { cn } from "@/lib/utils";
 import { api, errorMessage } from "../../api";
 import { announceFilesChanged } from "../../hooks/useFilesChanged";
 import { ItemMenu, type MenuAction } from "../shell/ItemMenu";
-import type { Renderers } from "./catalogue";
-import { ReferenceButton } from "./component-references";
+import type { RendererProps, Renderers } from "./catalogue";
 import { FeatureButton } from "./featuring";
 
 type Cell = string | number | boolean | null;
 
-/** `table` version 1 data, as the data Traits build it. */
+/** `table` version 1 preview, as the preview Traits build it. */
 interface TableData {
   columns: { name: string; type: "number" | "text" | "date" | "boolean" }[];
   rows: Cell[][];
@@ -18,7 +17,6 @@ interface TableData {
   /** Set when `rows` is a preview of a larger table, held whole in the Asset `source`. */
   total_rows?: number;
   source?: string;
-  source_id?: string;
 }
 
 const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 });
@@ -80,15 +78,12 @@ function nextSorting(current: Sorting | null, column: number, numeric: boolean):
 }
 
 export function TableView({
-  data,
+  preview,
+  sourceAssetId,
   componentId,
   projectId,
-}: {
-  data: unknown;
-  componentId?: string;
-  projectId?: string;
-}) {
-  const { columns, rows, title, total_rows, source, source_id } = data as TableData;
+}: Pick<RendererProps, "preview" | "sourceAssetId" | "componentId" | "projectId">) {
+  const { columns, rows, title, total_rows, source } = preview as TableData;
   /** What the last action did, or why it failed, shown in the header for a moment. */
   const [notice, setNotice] = useState<string | null>(null);
   const [sorting, setSorting] = useState<Sorting | null>(null);
@@ -125,9 +120,9 @@ export function TableView({
   }
 
   async function openSource() {
-    if (!projectId || !source_id) return;
+    if (!projectId || !sourceAssetId) return;
     try {
-      await api.openAsset(projectId, source_id);
+      await api.openAsset(projectId, sourceAssetId);
     } catch (e) {
       tell(errorMessage(e));
     }
@@ -145,7 +140,6 @@ export function TableView({
             {notice}
           </span>
         )}
-        <ReferenceButton componentId={componentId} />
         <FeatureButton componentId={componentId} />
         <ItemMenu name={title ?? "this table"} actions={actions} />
       </header>
@@ -208,7 +202,7 @@ export function TableView({
           {source && (
             <>
               ; the full table is in{" "}
-              {projectId && source_id ? (
+              {projectId && sourceAssetId ? (
                 <button
                   type="button"
                   onClick={openSource}
@@ -229,7 +223,12 @@ export function TableView({
 }
 
 export const renderers: Renderers = {
-  1: ({ data, componentId, projectId }) => (
-    <TableView data={data} componentId={componentId} projectId={projectId} />
+  1: ({ preview, sourceAssetId, componentId, projectId }) => (
+    <TableView
+      preview={preview}
+      sourceAssetId={sourceAssetId}
+      componentId={componentId}
+      projectId={projectId}
+    />
   ),
 };

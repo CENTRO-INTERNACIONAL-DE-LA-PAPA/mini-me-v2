@@ -4,17 +4,17 @@ import * as approval from "./approval";
 import * as chart from "./chart";
 import * as datasetResults from "./dataset-results";
 import * as document from "./document";
-import * as documentEdits from "./document-edits";
 import * as handOff from "./hand-off";
 import * as paperSources from "./paper-sources";
-import * as suggestion from "./suggestion";
 import * as table from "./table";
 import * as theories from "./theories";
 
-/** What a renderer gets. Any field of `data` may be missing; only kinds that take an answer
+/** What a renderer gets. Any field of `preview` may be missing; only kinds that take an answer
  * use the IDs and `replyStatus`. */
 export interface RendererProps {
-  data: unknown;
+  preview: unknown;
+  /** The Asset holding the component's data. */
+  sourceAssetId?: string | null;
   /** The user's answer; null until answered. */
   answer?: unknown;
   projectId?: string;
@@ -39,8 +39,6 @@ const catalogue = new Map<string, Renderers>([
   ["approval", approval.renderers],
   ["chart", chart.renderers],
   ["document", document.renderers],
-  ["document-edits", documentEdits.renderers],
-  ["suggestion", suggestion.renderers],
   ["hand-off", handOff.renderers],
   ["dataset-results", datasetResults.renderers],
 ]);

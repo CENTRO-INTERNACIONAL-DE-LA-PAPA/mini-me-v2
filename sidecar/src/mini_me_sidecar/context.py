@@ -22,6 +22,7 @@ class ResultAsset(TypedDict):
     size_bytes: int
     message_id: str
     current: bool
+    hidden: bool
 
 
 class ResultComponent(TypedDict):
@@ -30,7 +31,6 @@ class ResultComponent(TypedDict):
     version: int
     message_id: str
     author: str
-    current: bool
 
 
 class Results(TypedDict):
@@ -74,8 +74,6 @@ class TraitDefinition:
     id: str
     name: str
     instructions: str | None
-    # Tools the Trait may use; a prompt-based Trait's model gets these besides the read tools.
-    tools: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -84,6 +82,19 @@ class Model:
 
     provider: str
     model: str
+    # Set only for the `custom` provider.
+    endpoint: str | None = None
+    api_format: str | None = None
+
+    @classmethod
+    def from_frame(cls, raw: dict[str, Any]) -> "Model":
+        endpoint, api_format = raw.get("endpoint"), raw.get("api_format")
+        return cls(
+            provider=str(raw.get("provider", "")),
+            model=str(raw.get("model", "")),
+            endpoint=str(endpoint) if endpoint else None,
+            api_format=str(api_format) if api_format else None,
+        )
 
 
 class CallContext:
@@ -109,12 +120,9 @@ class CallContext:
             id=str(trait.get("id", "")),
             name=str(trait.get("name", "")),
             instructions=trait.get("instructions"),
-            tools=tuple(str(t) for t in trait.get("tools") or ()),
         )
         self.model = (
-            Model(provider=str(model.get("provider", "")), model=str(model.get("model", "")))
-            if isinstance(model, dict)
-            else None
+            Model.from_frame(model) if isinstance(model, dict) else None
         )
         self.project_id: str | None = context.get("project_id")
         self.conversation_id: str | None = context.get("conversation_id")
@@ -123,8 +131,16 @@ class CallContext:
         self.needs_context: bool | None = context.get("needs_context")
         # Routing's pick of the file an untagged message means, `{ asset_id, name }`, or None.
         self.file: dict[str, Any] | None = context.get("file")
-        # Every Mini-Me of the library, `{ id, name, description }`, for hand-offs.
+        # Routing's pick of the table or chart the message means, `{ component_id }`, or None.
+        self.picked_component: dict[str, Any] | None = context.get("component")
+        # The tool names routing judged most likely to help, most likely first.
+        self.tools: list[str] = context.get("tools") or []
+        # Every Mini-Me of the library, `{ id, name, description, traits }`, for hand-offs.
         self.mini_mes: list[dict[str, Any]] = context.get("mini_mes") or []
+        # The Mini-Me routing recommends handing off to, `{ mini_me_id }`, or None.
+        self.hand_off: dict[str, Any] | None = context.get("hand_off")
+        # Names of the Traits the run's Workflow can still run after this call.
+        self.later_traits: list[str] = context.get("later_traits") or []
         # For a call answering a comment: the thread's document, `{ asset_id, name, passage }`.
         self.document: dict[str, Any] | None = context.get("document")
         # The Mini-Me writing this reply, to tell its own earlier replies from others'.
@@ -209,31 +225,38 @@ class CallContext:
         return self._results
 
     async def read_component(self, component_id: str) -> dict[str, Any]:
-        """`{ kind, version, data, text }`; raises `CoreRequestError` `not_found` for another ID."""
+        """`{ kind, version, text, source_asset_id }`; raises `CoreRequestError` `not_found` for
+        another ID."""
         return await self._requests.send(
             self.call_id, "component.read", {"component_id": component_id}
         )
 
-    async def component(self, kind: str, version: int, data: Any, text: str) -> str:
-        """Adds an Interactive Component below the reply and returns its ID; `data` must match
-        `src/components/interactive/<kind>.tsx` at `version`, and `text` is its plain-text form.
-        Raises `CoreRequestError` `component_not_allowed` (`approval`) or `invalid_component`."""
+    async def component(
+        self, kind: str, version: int, preview: Any, text: str, source_asset_id: str | None
+    ) -> str:
+        """Adds an Interactive Component below the reply and returns its ID; `preview` must match
+        `src/components/interactive/<kind>.tsx` at `version`, `text` is its plain-text form, and
+        `source_asset_id` the Asset holding its data. Raises `CoreRequestError`
+        `component_not_allowed` (`approval`) or `invalid_component`."""
         result = await self._requests.send(
             self.call_id,
             "component.add",
-            {"kind": kind, "version": version, "data": data, "text": text},
+            {
+                "kind": kind,
+                "version": version,
+                "preview": preview,
+                "text": text,
+                "source_asset_id": source_asset_id,
+            },
         )
         self._results = None
         return str(result["component_id"])
 
-    async def edit_document(
-        self, asset_id: str, edits: list[dict[str, str]]
-    ) -> dict[str, Any]:
-        """Opens a comment thread per `{ find, replace, reason }` and a card below the reply,
-        leaving the document as is; returns `{ component_id, threads }`. Raises
-        `CoreRequestError` when refused, changing nothing."""
+    async def suggest(self, asset_id: str, find: str, text: str) -> dict[str, Any]:
+        """Adds a waiting suggestion on the passage `find`, leaving the document as is; returns
+        `{ suggestion_id }`. Raises `CoreRequestError` when refused, changing nothing."""
         result = await self._requests.send(
-            self.call_id, "document.edit", {"asset_id": asset_id, "edits": edits}
+            self.call_id, "document.suggest", {"asset_id": asset_id, "find": find, "text": text}
         )
         self._results = None
         return result
@@ -247,13 +270,20 @@ class CallContext:
             {"mini_me_id": mini_me_id, "request": request, "asset_id": asset_id},
         )
 
-    async def write_asset(self, name: str, media_type: str, data: bytes) -> dict[str, Any]:
+    async def write_asset(
+        self, name: str, media_type: str, data: bytes, hidden: bool = False
+    ) -> dict[str, Any]:
         """Saves `data` (at most 32 MiB) in the Project as the file `name`, attaches it to the
-        reply, and returns the Asset `{ id, name, media_type, size_bytes }`."""
+        reply unless `hidden`, and returns the Asset `{ id, name, media_type, size_bytes }`."""
         result = await self._requests.send(
             self.call_id,
             "asset.write",
-            {"name": name, "media_type": media_type, "data": base64.b64encode(data).decode()},
+            {
+                "name": name,
+                "media_type": media_type,
+                "data": base64.b64encode(data).decode(),
+                "hidden": hidden,
+            },
         )
         self._results = None
         return result["asset"]

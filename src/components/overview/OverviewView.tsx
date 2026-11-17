@@ -149,16 +149,14 @@ export function OverviewView({
             {overview.summary ? (
               <p className="text-body whitespace-pre-line text-document-ink">
                 {summaryParts(overview.summary).map((part, index) => {
-                  const found = part.named && findNamed(part.text, files, overview.outputs);
+                  const file = part.named ? findNamed(part.text, files) : undefined;
                   return (
                     <SummaryPart
                       key={index}
                       text={part.text}
-                      file={found && "file" in found ? found.file : undefined}
-                      component={found && "component" in found ? found.component : undefined}
+                      file={file}
                       miniMes={miniMes}
                       onOpenFile={openFile}
-                      onOpenConversation={onOpenConversation}
                     />
                   );
                 })}
@@ -297,35 +295,26 @@ function OutputRow({
   );
 }
 
-/** A piece of the summary: the same `#` or `$` chip as in messages for a name of a file, table
- * or chart of the Project, else plain text, such as a name of one deleted since. */
+/** A piece of the summary: the same `#` chip as in messages for a name of a file of the
+ * Project, else plain text, such as a name of one deleted since. */
 function SummaryPart({
   text,
   file,
-  component,
   miniMes,
   onOpenFile,
-  onOpenConversation,
 }: {
   text: string;
   file?: AssetRef;
-  component?: OverviewOutput;
   miniMes: MiniMe[];
   onOpenFile: (id: string, name: string) => void;
-  onOpenConversation: (conversationId: string, messageId: string) => void;
 }) {
-  const target = file ?? component;
-  if (!target) return <>{text}</>;
-  const label = `${file ? "#" : "$"}${text.replace(/^[#$]/, "")}`;
+  if (!file) return <>{text}</>;
+  const label = `#${text.replace(/^#/, "")}`;
   return (
     <TextComponentChip
-      component={{ kind: file ? "asset" : "component", id: target.id, label, start: 0, end: 0 }}
+      component={{ kind: "asset", id: file.id, label, start: 0, end: 0 }}
       miniMes={miniMes}
-      onOpenAsset={file && (() => onOpenFile(file.id, file.name))}
-      onOpenComponent={
-        component && (() => onOpenConversation(component.conversation_id, component.message_id))
-      }
-      componentKind={component?.kind === "chart" ? "chart" : "table"}
+      onOpenAsset={() => onOpenFile(file.id, file.name)}
     >
       {label}
     </TextComponentChip>

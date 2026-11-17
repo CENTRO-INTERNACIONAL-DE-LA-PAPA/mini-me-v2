@@ -1,5 +1,6 @@
-"""Asks Typesafe's Jev which Mini-Me answers, how it reacts, whether earlier context is needed
-and which file is meant. Each `route.start` gets exactly one `route.done` or `route.error`."""
+"""Asks Typesafe's Jev which Mini-Me answers, how it reacts, whether earlier context is needed,
+which file and component are meant, which tools are likely useful and which Mini-Me should
+continue. Each `route.start` gets exactly one `route.done` or `route.error`."""
 
 import sys
 import traceback
@@ -58,7 +59,10 @@ class Router:
             key = await self._requests.send(route_id, "secret.get", {"provider": "typesafe"})
             state = frame.get("state") or {}
             questions = _questions(
-                frame.get("ask") or [], frame.get("mini_mes") or [], frame.get("files") or []
+                frame.get("ask") or [],
+                frame.get("mini_mes") or [],
+                frame.get("files") or [],
+                frame.get("components") or [],
             )
             asked = _asked(state, questions)
             answers = await self._ask(key["value"], state, questions)
@@ -108,14 +112,15 @@ def _asked(state: dict[str, Any], questions: dict[str, Choice]) -> dict[str, Any
 
 
 def _questions(
-    ask: list[str], mini_mes: list[dict[str, Any]], files: list[dict[str, Any]]
+    ask: list[str],
+    mini_mes: list[dict[str, Any]],
+    files: list[dict[str, Any]],
+    components: list[dict[str, Any]],
 ) -> dict[str, Any]:
     available = {
         "mini_me": lambda: Choice(
             instructions="Which assistant should answer the user's message?",
-            criteria={
-                str(m.get("id")): f"{m.get('name')}: {m.get('description')}" for m in mini_mes
-            },
+            criteria=_mini_me_criteria(mini_mes),
         ),
         "reaction": lambda: Choice(
             instructions="Should the assistant react to the user's message with an emoji?",
@@ -134,17 +139,65 @@ def _questions(
                 "none": "The message is not about one of these files",
             },
         ),
+        "component": lambda: Choice(
+            instructions="Which of the conversation's tables and charts does the user's "
+            "message mean?",
+            criteria={
+                **{
+                    str(c.get("id")): f"{_component_label(c)} from {c.get('file')}"
+                    for c in components
+                },
+                "none": "The message is not about one of these tables or charts",
+            },
+        ),
+        "tools": lambda: Choice(
+            instructions="Which tool would most help the assistant answer the user's message?",
+            criteria={**_tool_criteria(), "none": "No tool is needed to answer"},
+        ),
+        "next_mini_me": lambda: Choice(
+            instructions="If the user's message asks for more than one thing, which assistant "
+            "should handle what is asked after the first thing?",
+            criteria={
+                **_mini_me_criteria(mini_mes),
+                "none": "The message asks for one thing only",
+            },
+        ),
     }
     return {name: available[name]() for name in ask if name in available}
 
 
+def _mini_me_criteria(mini_mes: list[dict[str, Any]]) -> dict[str, str]:
+    return {str(m.get("id")): mini_me_text(m) for m in mini_mes}
+
+
+def mini_me_text(mini_me: dict[str, Any]) -> str:
+    """A Mini-Me as Jev and the hand-off list read it, e.g. "Researcher: Finds papers. Traits:
+    Find Papers, Summarize"."""
+    criterion = f"{mini_me.get('name')}: {str(mini_me.get('description')).rstrip('. ')}"
+    traits = mini_me.get("traits") or []
+    if not traits:
+        return criterion
+    return f"{criterion}. Traits: {', '.join(traits)}"
+
+
+def _component_label(component: dict[str, Any]) -> str:
+    """A table or chart as "chart 'Yield by variety'", or its kind alone without a title."""
+    title = component.get("title")
+    kind = str(component.get("kind"))
+    return f"{kind} '{title}'" if title else kind
+
+
+def _tool_criteria() -> dict[str, str]:
+    """Each model tool but hand-off, by the description its model reads."""
+    # Imported here: the tools load pandas, which the sidecar starts without.
+    from mini_me_sidecar.tools.model import MODEL_TOOLS
+
+    return {name: t.description for name, t in MODEL_TOOLS.items() if name != "hand_off"}
+
+
 def _file_criterion(file: dict[str, Any]) -> str:
     """A `file` option, e.g. "The file trial.csv. Used by components: chart 'Yield', table 'T'"."""
-    used = []
-    for component in file.get("components") or []:
-        title = component.get("title")
-        kind = str(component.get("kind"))
-        used.append(f"{kind} '{title}'" if title else kind)
+    used = [_component_label(c) for c in file.get("components") or []]
     criterion = f"The file {file.get('name')}"
     if not used:
         return criterion

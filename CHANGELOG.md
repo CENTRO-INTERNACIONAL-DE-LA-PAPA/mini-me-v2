@@ -1,18 +1,18 @@
-# Mini-Me 0.7.0
+# Mini-Me 0.8.0
 
 ## New
 
-- Accept or discard all of a reply's suggested edits to a document at once.
-- Mini-Me tells you when a reply finishes while you are looking at another Conversation or another app.
-- Each Project's card on Home shows its latest activity, the Mini-Mes that worked in it and the start of its summary.
-- Copy a table to paste it into a spreadsheet, save it to Files as CSV, or open the file it came from.
+- Use your own AI server, such as LM Studio, Ollama or vLLM: choose Custom in Settings → Models & keys and type its address.
+- Mini-Mes come alive: they blink, breathe, look toward your pointer, hop when clicked and bounce while they work on a reply. They stay still if your system is set to reduce motion.
 
 ## Improved
 
-- The Jobs panel is gone from Conversations: Home and the sidebar already show what is running.
-- Mini-Me is faster to work on behind the scenes: its code and tests were tidied up, with no change to how it works.
-
-## Fixed
-
-- After an update installs, Mini-Me opens the new version.
-- Mini-Mes in the Brown, Teal, Blue and Pink colour families, or with a custom colour, show their colour on their cards again.
+- Mini-Mes suggest changes to a document the same way from a comment or a Conversation: each suggestion shows in the document's source, where you accept or discard it. Every comment now gets a reply, as a message does.
+- Mini-Mes are chosen better, since Jev now sees each Mini-Me's Traits, and they understand which table or chart you mean when you say "that chart".
+- Requests that need several Mini-Mes are passed along: a Mini-Me hands off the part it doesn't cover, even one without a model, such as Researcher, and the next Mini-Me can hand off again.
+- Every Mini-Me can use every tool: Traits no longer list the tools they may use, so there is nothing to tick when you build one.
+- Mini-Mes answer follow-up questions about earlier tables, charts, papers and datasets from their full data. To point at one, describe it in your message; `$` references and the reference button are gone.
+- A table a Mini-Me shows is also saved as a CSV file in Files, so you can open it in Excel or point a Mini-Me at it later.
+- Files stay tidy: the papers, theories, data profiles and dataset results Mini-Mes keep for themselves no longer show in Files, the `#` list or a reply's attachments.
+- A file you edit in another app, such as Excel, now shows its new size in Mini-Me.
+- The Workflow editor shows each Trait as a smaller node with just its name, in the Mini-Me's colour.

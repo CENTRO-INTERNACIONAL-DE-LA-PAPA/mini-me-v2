@@ -1,9 +1,9 @@
 # document-comments Specification
 
 ## Purpose
-Defines comment threads on the passages of a document: notes, Mini-Mes answering @-mentions in
-them, suggested edits and how they are accepted, rejected, merged and asked again, and the
-comments panel of the document view.
+Defines comment threads on the passages of a document: how a comment is answered by a Mini-Me
+the way a chat message is, how threads are resolved and deleted, and the comments panel of the
+document view.
 
 ## Requirements
 
@@ -68,12 +68,12 @@ The thread view SHALL replace the list in the Comments sheet, with "All comments
 "N of M open" with buttons for the previous and next thread, the thread's number and where its
 passage is ("Hypothesis, bullet 3") with a "…" menu beside them holding Resolve (Reopen once
 resolved) and Delete, its comments and replies, and for an open thread a one-line field to
-comment with the @ list of Mini-Mes. The field SHALL start empty, so a comment is a note unless
-the user @-mentions a Mini-Me.
+comment with the @ list of Mini-Mes. The field SHALL start empty; every comment gets a reply.
 
 #### Scenario: Replying after Scribe
 - **WHEN** Scribe has replied in a thread and the user sends "make it shorter still"
-- **THEN** the comment is a note, and Scribe is asked only if the user @-mentions it
+- **THEN** a Mini-Me answers the comment in the thread, picked as for any comment without an
+  @-mention
 
 ### Requirement: Passages and number badges in the source
 An open thread's passage SHALL show a faint underline and, right after it, a badge with the
@@ -83,27 +83,6 @@ view of that thread, which highlights its passage.
 #### Scenario: From the source to the thread
 - **WHEN** the user clicks the badge showing 2 after "above 3,800 m"
 - **THEN** the Comments sheet shows the thread view of the thread on it
-
-### Requirement: Notes and @-mentions
-A comment without an @-mention SHALL be a note and SHALL start no Mini-Me. A comment that
-@-mentions a Mini-Me SHALL run that Mini-Me's Workflow, as a reply in a Conversation runs; its
-text SHALL stream into a reply in the thread, shown with the Mini-Me's name, avatar and colour.
-When a comment mentions several Mini-Mes, the first SHALL answer. While a reply in a thread is
-running or waiting for an approval, the thread SHALL take no other comment, and SHALL offer
-Stop.
-
-#### Scenario: A note
-- **WHEN** the user comments "Check the 2024 plots too"
-- **THEN** the comment is added and no Mini-Me answers
-
-#### Scenario: Asking Scribe
-- **WHEN** the user comments "@Scribe make this shorter"
-- **THEN** Scribe's Workflow runs and its reply appears in the thread as it is written
-
-#### Scenario: An approval in a thread
-- **WHEN** a mentioned Mini-Me's Workflow reaches an approval
-- **THEN** the approval is shown in the thread, and the run continues once the user answers it
-  there
 
 ### Requirement: What a Mini-Me answering a comment receives
 A Mini-Me answering a comment SHALL receive the comment's text without its mentions as its
@@ -117,55 +96,11 @@ read-a-file tool during the run. Nothing outside the Project SHALL be read.
 - **THEN** Scribe's model is given the paragraph and the document's name, and can read the
   whole document with read-a-file
 
-### Requirement: Suggested edits
-A Mini-Me answering a comment SHALL be able to suggest replacement text for the thread's
-passage with the suggest-an-edit tool. While a suggestion waits, the source SHALL show the
-passage struck through with the suggested text after it, underlined in the Mini-Me's colour, and
-the Mini-Me's message in the thread view SHALL show it with "Accept and resolve" and Discard.
-Once answered, its text SHALL look like any other text, and the thread's messages SHALL show it
-with its decision. To get another version, the user SHALL @-mention the Mini-Me in the thread.
-
-#### Scenario: A pending suggestion
-- **WHEN** Scribe suggests "Yield fell above 3,800 m."
-- **THEN** the source shows the passage struck through and "Yield fell above 3,800 m." after it in
-  Scribe's colour, and Scribe's reply in the thread shows the suggestion with its two buttons
-
-#### Scenario: Discarding
-- **WHEN** the user clicks Discard
-- **THEN** the source is unchanged, the marks disappear, and the suggestion shows as discarded
-
-### Requirement: Accepting a suggestion
-"Accept and resolve" SHALL save the document with the suggestion applied, record the suggestion
-as accepted, and resolve the thread. A suggestion SHALL keep the passage text it was based on.
-When the passage is still that text, accepting SHALL replace it with the suggested text. When
-the user has edited the passage since, accepting SHALL combine the Mini-Me's change with the
-user's edits when they change different parts of the passage.
-
-#### Scenario: Accepting after a separate edit
-- **WHEN** Scribe suggested removing "in both 2024 and 2025" from "Yield fell above 3,800 m in
-  both 2024 and 2025, mainly at Huancayo.", the user has since added "and Junín" after
-  "Huancayo", and the user clicks "Accept and resolve"
-- **THEN** the passage reads "Yield fell above 3,800 m, mainly at Huancayo and Junín." and the
-  thread is resolved
-
-### Requirement: Conflicting suggestions
-When the user's edits and a suggestion change the same part of the passage, accepting SHALL NOT
-apply the suggestion or resolve the thread: the suggestion SHALL say it conflicts with the
-user's edits, that the Mini-Me can be asked again in the thread, and keep Discard. The user's
-text SHALL never be overwritten by a suggestion. A detached thread's suggestions SHALL offer
-only Discard.
-
-#### Scenario: Overlapping edits
-- **WHEN** the user has rewritten "in both 2024 and 2025" since Scribe suggested removing it,
-  and clicks "Accept and resolve"
-- **THEN** the passage keeps the user's text, the thread stays open, and the suggestion says it
-  conflicts and offers Discard
-
 ### Requirement: Resolving and deleting threads
-Resolve SHALL dismiss the thread's pending suggestion and resolve it, which moves it to the
-Resolved tab and hides its underline and badge; Reopen SHALL bring it back.
-Deleting a thread SHALL ask once for confirmation and then remove the thread, its comments, its
-replies and their suggestions; files its replies saved SHALL stay in the Project.
+Resolve SHALL resolve the thread, which moves it to the Resolved tab and hides its underline and
+badge; Reopen SHALL bring it back. Resolving SHALL NOT change any suggestion. Deleting a thread
+SHALL ask once for confirmation and then remove the thread, its comments and its replies;
+suggestions and files its replies made SHALL stay in the Project.
 
 #### Scenario: Resolve and reopen
 - **WHEN** the user clicks Resolve, picks the Resolved tab, opens the thread and clicks Reopen
@@ -173,49 +108,37 @@ replies and their suggestions; files its replies saved SHALL stay in the Project
 
 #### Scenario: Delete
 - **WHEN** the user deletes a thread and confirms
-- **THEN** it is gone from the Comments sheet and from the Project's database, and the `.qmd` file is
-  unchanged
+- **THEN** it is gone from the Comments sheet and from the Project's database, the `.qmd` file is
+  unchanged, and a suggestion a reply in it made still waits in the source
 
-### Requirement: Comment events
+### Requirement: Every comment gets a reply
+Each comment SHALL be answered by a Mini-Me, as a message in a Conversation is: the first
+@-mentioned Mini-Me, else the Mini-Me Jev picks for the comment, else Assistant. The reply SHALL
+run that Mini-Me's Workflow and stream into the thread, shown with the Mini-Me's name, avatar
+and colour. While a reply in a thread is running or waiting for an approval, the thread SHALL
+take no other comment, and SHALL offer Stop.
+
+#### Scenario: A comment without a mention
+- **WHEN** the user comments "too long" on a sentence
+- **THEN** the Mini-Me Jev picks answers in the thread, or Assistant when Jev cannot be asked
+
+#### Scenario: Asking Scribe
+- **WHEN** the user comments "@Scribe make this shorter"
+- **THEN** Scribe's Workflow runs and its reply appears in the thread as it is written
+
+#### Scenario: An approval in a thread
+- **WHEN** the answering Mini-Me's Workflow reaches an approval
+- **THEN** the approval is shown in the thread, and the run continues once the user answers it
+  there
+
+### Requirement: Thread events
 Comments and replies in a thread SHALL be messages with the same events as messages in a
 Conversation (`message.created`, `message.delta`, `message.completed`, `message.failed`,
 `message.cancelled`, `component.added`, `component.answered` and the others), in the thread's
-own sequence. A suggestion SHALL be a `component.added` with kind `suggestion`, and its answer a
-`component.answered` with payload `{ message_id, component_id, answer: { decision } }`, where
-`decision` is `accepted`, `rejected` or `dismissed`. Creating, resolving, reopening and
-deleting a thread, and moving its anchor, SHALL be stored in the Project's database without
-events.
+own sequence. Creating, resolving, reopening and deleting a thread, and moving its anchor, SHALL
+be stored in the Project's database without events.
 
-#### Scenario: Suggestion answered
-- **WHEN** the user accepts a suggestion
-- **THEN** the thread's events end with `component.answered` with `{ "decision": "accepted" }`
-
-### Requirement: Threads opened from a Conversation
-Each edit a Mini-Me sends with the edit-a-document tool SHALL open a comment thread on the
-passage it quotes, stored and shown like any other thread. Its first message SHALL be the
-Mini-Me's, holding the edit's reason as its text and the edit as a pending `suggestion` based on
-the quoted text. The thread SHALL remember the Conversation it was opened from. The Mini-Me
-SHALL NOT run in the thread until the user @-mentions it there.
-
-#### Scenario: Two edits from a Conversation
-- **WHEN** Scribe, asked in "Trial design" to tighten "#Trial report", sends two edits
-- **THEN** "Trial report.qmd" has two new open threads, each starting with Scribe's reason and
-  its pending suggestion, and the `.qmd` file is unchanged
-
-#### Scenario: Asking again in such a thread
-- **WHEN** the user comments "@Scribe keep the second sentence" in one of those threads
-- **THEN** Scribe answers in the thread like in any other thread
-
-### Requirement: Answering a reply's edits at once
-Opening the document from a reply's suggested-edits card SHALL show, above the Comments sheet's
-list, how many of that reply's edits still wait, with Accept all and Discard all while any do.
-Accept all SHALL accept each waiting suggestion of that reply as "Accept and resolve" does,
-continuing past one that conflicts with the user's edits or whose passage is lost, and then name
-the ones left waiting. Discard all SHALL discard each waiting suggestion of that reply, leaving
-the document and the threads open.
-
-#### Scenario: Accepting all with one conflict
-- **WHEN** Scribe's reply suggested three edits, the user has rewritten the passage of the
-  second, and the user clicks Accept all
-- **THEN** the first and third are applied and their threads resolved, and the second stays
-  waiting and is named under "Not applied"
+#### Scenario: A reply in a thread
+- **WHEN** Scribe answers a comment
+- **THEN** the thread's events hold Scribe's `message.created`, its deltas and
+  `message.completed`

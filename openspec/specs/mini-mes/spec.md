@@ -14,14 +14,10 @@ The Rust core SHALL hold a shared Trait library. Each Trait definition SHALL hav
 - a `color`: one bright fill on which a black line glyph stays legible, as DESIGN.md
   describes for Trait icons;
 - the `adapter` that runs it;
-- its `instructions` (text, or none for adapters that take none);
-- its `tools`: the tools it may use, possibly empty. A Trait whose adapter runs fixed code
-  lists the tools that code uses; a prompt-based Trait lists the tools its model is offered
-  besides the read tools, which every prompt-based Trait gets.
+- its `instructions` (text, or none for adapters that take none).
 
-What a Trait can read, save or show comes only from its tools; a definition lists no
-Interactive Component kinds. The library SHALL refuse to load with a tool name it does not
-know, or with a prompt-based Trait listing a tool that has no form for models.
+A definition lists no tools and no Interactive Component kinds: a prompt-based Trait's model is
+offered every tool, and an adapter that runs fixed code uses the tools its code calls.
 
 The library holds built-in Traits, which are read-only, and user-made Traits, which the user
 creates, edits and deletes as the Library editors describe. The built-in Traits are
@@ -40,12 +36,7 @@ placeholder Traits.
 
 #### Scenario: Components of the built-in Traits
 - **WHEN** the app starts
-- **THEN** *Assist* lists `save_file`, `show_table`, `write_document`, `suggest_edit` and
-  `edit_document`; *Summarize* `write_document`, `suggest_edit` and `edit_document`;
-  *Find Papers* `show_papers`; *Theorize* `show_theories` and `save_file`; *Profile Data*
-  `read_table` and `show_table`; *Validate Data*, *Clean Data* and *Join Data* `read_table`,
-  `show_table` and `save_file`; *Plot* `read_table` and `show_chart`; and every other Trait
-  lists none
+- **THEN** no built-in Trait definition holds a list of tools or component kinds
 
 #### Scenario: User-made Traits join the library
 - **WHEN** the app starts and `library.json` holds a valid Trait *Translate*

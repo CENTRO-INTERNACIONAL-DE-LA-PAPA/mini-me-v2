@@ -41,19 +41,19 @@ pub fn matching<'a>(features: &'a [Feature], key: &str) -> Option<&'a Feature> {
 }
 
 /// The flags that are on, in list order. In Mini-Me a flag is on once its key was entered
-/// (`unlocked`); in Mini-Me Dev it is on until it is turned off (`locked`). IDs of flags not in
+/// (`unlocked`); in Mini-Me Canary it is on until it is turned off (`locked`). IDs of flags not in
 /// `features` are ignored.
 pub fn active<'a>(
     features: &'a [Feature],
     unlocked: &[String],
     locked: &[String],
-    is_dev_app: bool,
+    is_canary: bool,
 ) -> Vec<&'a Feature> {
     let is_listed = |ids: &[String], id: &str| ids.iter().any(|listed| listed == id);
     features
         .iter()
         .filter(|feature| {
-            if is_dev_app {
+            if is_canary {
                 !is_listed(locked, feature.id)
             } else {
                 is_listed(unlocked, feature.id)

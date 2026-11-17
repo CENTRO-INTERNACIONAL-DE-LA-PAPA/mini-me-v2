@@ -45,16 +45,15 @@ def test_only_tables_are_read_references_first():
 
 
 def test_referenced_tables_and_files_are_read_in_message_order():
-    reference = {"kind": "component", "id": "t", "label": "$plots", "start": 12}
     message = {
         "attachments": [{"id": "h", "name": "harvest.csv"}],
         "text_components": [
             {"kind": "asset", "id": "h", "label": "#harvest.csv", "start": 40},
-            reference,
+            {"kind": "asset", "id": "p", "label": "#plots.csv", "start": 12},
         ],
     }
     assert table_sources(message) == [
-        TableSource(reference=reference),
+        TableSource("p", "plots.csv"),
         TableSource("h", "harvest.csv"),
     ]
     assert table_sources({"content": "join them"}) == []
@@ -86,6 +85,9 @@ def test_fallback_reads_the_picked_table_then_the_newest_table():
     assert source == TableSource(asset_id="a2", name="harvest.csv")
     assert "newest table" in note
     assert fallback_source(None, [{"id": "a3", "name": "notes.txt"}]) is None
+    profile = {"id": "a4", "name": "harvest-profile.csv", "hidden": True}
+    source, _ = fallback_source(None, [profile, *assets])
+    assert source == TableSource(asset_id="a2", name="harvest.csv")
 
 
 class OneFileContext:

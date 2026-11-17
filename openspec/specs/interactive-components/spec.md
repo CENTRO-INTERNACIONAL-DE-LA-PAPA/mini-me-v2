@@ -10,29 +10,29 @@ the UI shows them below a reply's text.
 
 ### Requirement: Kinds of Interactive Components
 Each Interactive Component kind SHALL be hand-coded in the UI, with a kebab-case `kind` name
-and a renderer for each of its versions (positive integers). Component data SHALL come only
-from a Trait's adapter through the kind's show tool, or, for the `approval`, `document-edits`
-and `hand-off` kinds, from the Rust core; the Rust core SHALL complete a `suggestion`'s data
-with the passage it is based on. Adding a kind SHALL NOT need a change to the event protocol,
-the link protocol or the Project database.
+and a renderer for each of its versions (positive integers). Component previews SHALL come only
+from a Trait's adapter, through show-a-table, Plot's show-a-chart, write-a-document or the
+provider adapter that owns the kind, or, for the `approval`, `hand-off` and `document` kinds,
+from the Rust core, which adds a `document` card for a reply that made suggestions. Adding a
+kind SHALL NOT need a change to the event protocol, the link protocol or the Project database.
 
 #### Scenario: Kinds in this version
 - **WHEN** the app starts
 - **THEN** the UI renders `paper-sources` version 1, `theories` version 1, `table`
-  version 1, `approval` version 1, `chart` version 1, `document` version 1, `suggestion`
-  version 1, `document-edits` version 1, `hand-off` version 1 and `dataset-results` version 1
+  version 1, `approval` version 1, `chart` version 1, `document` version 1, `hand-off`
+  version 1 and `dataset-results` version 1
 
 #### Scenario: Every listed kind is rendered
 - **WHEN** the app is built
-- **THEN** every kind that a show tool adds has a renderer for version 1
+- **THEN** every kind that a Trait's adapter adds has a renderer for version 1
 
 #### Scenario: No Trait adds an approval
 - **WHEN** a Trait call sends `component.add` with kind `approval`
 - **THEN** the request fails with `component_not_allowed`
 
 #### Scenario: No Trait adds document edits
-- **WHEN** a Trait call sends `component.add` with kind `document-edits`
-- **THEN** the request fails with `component_not_allowed`
+- **WHEN** a Trait's model wants to change a document
+- **THEN** it calls the suggest tool; no component kind holds edits
 
 #### Scenario: No Trait adds a hand-off
 - **WHEN** a Trait call sends `component.add` with kind `hand-off`
@@ -40,12 +40,15 @@ the link protocol or the Project database.
 
 ### Requirement: Adding a component to a reply
 During a call, the sidecar SHALL be able to send `core.request` with method `component.add`
-and params `{ kind, version, data, text }`. `data` is a JSON value, and `text` is a
-non-empty plain-text alternative. If the reply is still streaming, the core SHALL give the
-component a new UUIDv7, persist it, and answer `{ component_id }`.
+and params `{ kind, version, preview, text, source_asset_id }`. `preview` is a JSON value
+holding what the UI shows, `text` is a non-empty plain-text alternative, and
+`source_asset_id` is the ID of the Asset holding the component's data, or `null`. If the
+reply is still streaming, the core SHALL give the component a new UUIDv7, persist it, and
+answer `{ component_id }`.
 
 #### Scenario: Paper list added
-- **WHEN** a Find Papers call adds a valid `paper-sources` component
+- **WHEN** a Find Papers call adds a valid `paper-sources` component with the ID of its hidden
+  papers file as `source_asset_id`
 - **THEN** the core answers with a new `component_id`, and the reply shows the component
   below its text
 
@@ -55,11 +58,11 @@ component a new UUIDv7, persist it, and answer `{ component_id }`.
 
 ### Requirement: Component event
 A component SHALL be persisted as the event `component.added`, payload `{ message_id,
-component: { id, kind, version, data, text, step_index? } }`. It SHALL apply only to a
-streaming reply, and a message's components SHALL keep the order of their events.
-`step_index` SHALL be the position, counted from 0, in the reply's started Steps of the Step
-run whose Trait call added the component. It SHALL be absent for a component that no Trait
-Step added.
+component: { id, kind, version, preview, text, source_asset_id, step_index? } }`. It SHALL
+apply only to a streaming reply, and a message's components SHALL keep the order of their
+events. `step_index` SHALL be the position, counted from 0, in the reply's started Steps of the
+Step run whose Trait call added the component. It SHALL be absent for a component that no
+Trait Step added.
 
 #### Scenario: Replay
 - **WHEN** a Conversation is replayed from sequence 1
@@ -119,9 +122,9 @@ SHALL show the component's `text` instead, and SHALL keep showing the rest of th
 - **THEN** that component's place shows its `text`
 
 ### Requirement: Paper sources component
-The data of `paper-sources` version 1 SHALL be `{ papers }`. Each paper has `title`, and optionally
-`authors` (names), `year`, `venue`, `url` and `reason`. The UI SHALL show the first five
-papers as cards with title, first authors, year and reason. If there are more papers, a
+The preview of `paper-sources` version 1 SHALL be `{ papers }`. Each paper has `title`, and
+optionally `authors` (names), `year`, `venue`, `url` and `reason`. The UI SHALL show the first
+five papers as cards with title, first authors, year and reason. If there are more papers, a
 "Show all sources" button SHALL reveal the rest. A card with a `url` SHALL open it in the
 default browser when clicked.
 
@@ -138,8 +141,8 @@ default browser when clicked.
 - **THEN** its card is shown without a link and nothing is opened
 
 ### Requirement: Theories component
-The data of `theories` version 1 SHALL be `{ theories, references }`. Each theory has a `name`, an
-optional `description` and `statements`. Each statement has its `text` and `evidence`
+The preview of `theories` version 1 SHALL be `{ theories, references }`. Each theory has a
+`name`, an optional `description` and `statements`. Each statement has its `text` and `evidence`
 items, each with `text` and `refs`. Names, descriptions and statement texts are each
 `{ plain, technical }`. A `ref` is the 1-based number of an entry in `references`, which
 holds `title`, `year` and `url`.
@@ -158,12 +161,12 @@ whose `technical` text is missing SHALL show its plain text in both.
 - **THEN** only that theory shows its technical name, description and statements
 
 ### Requirement: Table component
-The data of `table` version 1 SHALL be `{ columns, rows }` and optionally `title`,
-`total_rows`, `source`, `source_id` and `sheet`. Each column has a `name` and a `type`
-(`number`, `text`, `date` or `boolean`). Each row is a list with one value per column; a
-value may be `null`. A table shown from a file SHALL name it in `source`, whether or not it
-is a preview, with its Asset ID in `source_id` and, for Excel, the sheet in `sheet`. The UI
-SHALL draw a table with a header row, numbers right-aligned in tabular figures, empty cells
+The preview of `table` version 1 SHALL be `{ columns, rows }` and optionally `title`,
+`total_rows`, `source` and `sheet`. Each column has a `name` and a `type` (`number`, `text`,
+`date` or `boolean`). Each row is a list with one value per column; a value may be `null`. A
+table shown from a file SHALL name that file in `source` and record it as the component's
+`source_asset_id`, whether or not it is a preview, and, for Excel, the sheet in `sheet`. The
+UI SHALL draw a table with a header row, numbers right-aligned in tabular figures, empty cells
 for `null`, a scrollable body, and sorting by clicking a column header.
 
 #### Scenario: Sorting
@@ -176,19 +179,19 @@ for `null`, a scrollable body, and sorting by clicking a column header.
 
 #### Scenario: Table shown from a file
 - **WHEN** a Trait shows a preview of the sheet 2025 of `harvest.xlsx`
-- **THEN** the component's data has `source` `harvest.xlsx`, its Asset ID as `source_id`,
-  and `sheet` `2025`
+- **THEN** the component's preview has `source` `harvest.xlsx` and `sheet` `2025`, and its
+  `source_asset_id` is the ID of `harvest.xlsx`
 
 #### Scenario: Whole small file
 - **WHEN** a Trait shows all 80 rows of `field-trial-cleaned.csv`
-- **THEN** the component's data has `source` `field-trial-cleaned.csv` and its `source_id`,
-  and the UI shows no "Showing n of m rows" line
+- **THEN** the component's preview has `source` `field-trial-cleaned.csv`, its
+  `source_asset_id` is that file's ID, and the UI shows no "Showing n of m rows" line
 
 ### Requirement: Table previews
 When a `table` component's `total_rows` is larger than its number of rows, it is a preview
-and `source` names the Asset holding the full table. The UI SHALL then say "Showing n of m
-rows" and name the source Asset; when the component has `source_id` and belongs to a Project,
-clicking the name SHALL open that Asset in the system's default app.
+and its source file holds the full table. The UI SHALL then say "Showing n of m rows" and name
+the source file; when the component has a `source_asset_id` that is not hidden and belongs to
+a Project, clicking the name SHALL open that file in the system's default app.
 
 #### Scenario: Preview of a large table
 - **WHEN** a component holds 500 rows with `total_rows` 12,340 and `source`
@@ -218,7 +221,7 @@ what happened ("Copied", "Saved as <name>") or why it failed.
   header says "Saved as Yield by variety.csv"
 
 ### Requirement: Approval component
-The data of `approval` version 1 SHALL be `{ step_id, prompt }`, and its `text` the prompt.
+The preview of `approval` version 1 SHALL be `{ step_id, prompt }`, and its `text` the prompt.
 The UI SHALL show the component below its reply only while it has no answer and its reply is
 `paused`, with the prompt, Approve and Reject. An answered approval, and one whose reply ended
 before an answer, SHALL NOT be shown below the reply; the component and its answer SHALL stay
@@ -249,7 +252,7 @@ component's `answer`, and a component SHALL be answered at most once.
   the user chose
 
 ### Requirement: Chart component
-The data of `chart` version 1 SHALL be `{ title, views }`, with one or more views. Each view
+The preview of `chart` version 1 SHALL be `{ title, views }`, with one or more views. Each view
 has a `type` (`histogram`, `bar`, `line`, `scatter`, `box` or `heatmap`), the columns it
 uses with their names and types, and the values its type needs. A view with series lists
 them in order. A line or scatter view that was sampled carries `sample: { shown, total }`.
@@ -318,19 +321,24 @@ Conversation is opened again.
 
 ### Requirement: Checks on an added component
 The core SHALL reject `component.add` from a Trait call with:
-- `component_not_allowed` when the kind is `approval` or `document-edits`, which only the core
+- `component_not_allowed` when the kind is `approval` or `hand-off`, which only the core
   creates;
-- `invalid_component` when `text` is empty or `data` serialized is larger than 2 MiB.
+- `invalid_component` when `text` is empty, `preview` serialized is larger than 2 MiB, or
+  `source_asset_id` is not an Asset of the call's Project.
 
 The core SHALL NOT check the kind against the Trait. A rejected component SHALL NOT be
 persisted, and the call SHALL continue.
 
 #### Scenario: Any kind from a Trait
 - **WHEN** a Find Papers call adds a `theories` component
-- **THEN** the core accepts it; which kinds a Trait shows is up to its adapter's tools
+- **THEN** the core accepts it; which kinds a Trait shows is up to its adapter
 
 #### Scenario: Empty text
 - **WHEN** a Find Papers call adds `paper-sources` with an empty `text`
+- **THEN** the request fails with `invalid_component`, and nothing is persisted
+
+#### Scenario: Unknown source file
+- **WHEN** a call adds a `table` whose `source_asset_id` is not an Asset of its Project
 - **THEN** the request fails with `invalid_component`, and nothing is persisted
 
 ### Requirement: Featuring a component on the Overview
@@ -366,39 +374,8 @@ document view. A card whose document no longer exists SHALL say it was removed.
 - **WHEN** the card's `.qmd` Asset has been removed
 - **THEN** the card says the document was removed and offers no Open
 
-### Requirement: Suggestion component
-A `suggestion` component (version 1) SHALL hold `{ document_id, base, text }`: the document, the
-passage text the suggestion is based on, and the suggested text. In a thread's messages it SHALL
-show the suggested text with "Accept and resolve" and Discard while it waits, as the comment
-threads describe, and once answered its decision: accepted, discarded or dismissed. Its `text`
-for history SHALL be the suggested text.
-
-#### Scenario: Answered suggestion
-- **WHEN** a suggestion has been accepted
-- **THEN** it shows the suggested text, marked as accepted, without buttons or Mini-Me colour
-
-### Requirement: Document edits component
-A `document-edits` component (version 1) SHALL hold `{ asset_id, title, threads }`: the edited
-document, its title, and the comment threads the edits opened. Its card SHALL show the title,
-how many of its suggestions still wait, and Open, which opens the document with the Comments
-sheet showing. A suggestion SHALL count as answered once accepted, discarded or dismissed, or
-once its thread is deleted. A card whose document no longer exists SHALL say it was removed.
-
-#### Scenario: Counting down
-- **WHEN** Scribe sent three edits to "Trial report" and the user has accepted one
-- **THEN** the card in Scribe's reply reads "2 of 3 suggested edits waiting", and once all
-  three are answered, "All 3 suggested edits answered"
-
-#### Scenario: Opening the edits
-- **WHEN** the user clicks Open on the card
-- **THEN** "Trial report" opens with the Comments sheet listing its threads
-
-#### Scenario: In history
-- **WHEN** a later message's history includes Scribe's reply
-- **THEN** the card appears as "Suggested 3 edits to Trial report"
-
 ### Requirement: Hand-off component
-A `hand-off` version 1 component SHALL have data `{ mini_me_id, request, file }`, where
+A `hand-off` version 1 component SHALL have the preview `{ mini_me_id, request, file }`, where
 `file` is `{ asset_id, name }` or `null`. It SHALL show the Mini-Me's pill, the request, and
 the file as a reference chip that opens it. Its `text` SHALL read "Handed to <Mini-Me>:
 <request>".
@@ -408,3 +385,16 @@ the file as a reference chip that opens it. Its `text` SHALL read "Handed to <Mi
   `field-trial.csv`
 - **THEN** the reply shows a card with Profiler's pill, "profile this table" and a
   `field-trial.csv` chip
+
+### Requirement: A component's data lives in its source file
+A component's `preview` SHALL be only what the UI shows, kept so the reply shows the same
+component after its source file changes. Every `table` and `chart` component, and every
+`paper-sources`, `theories` and `dataset-results` component, SHALL have a `source_asset_id`,
+except when its source file could not be saved (larger than 32 MiB); the full data SHALL be
+read from that file. Components the core creates, and `document` components, SHALL have none.
+
+#### Scenario: File edited after the reply
+- **WHEN** Curator showed 80 rows of `field-trial-cleaned.csv` and the user later adds rows to
+  the file in Excel
+- **THEN** Curator's reply still shows the 80 rows, and a Trait that reads the table's source
+  file gets the edited rows

@@ -24,9 +24,9 @@ SUMMARY_RULE = (
     "holds the Project's Conversations, newest first. Write 2 or 3 short sentences, at most 60 "
     "words in all: first the main findings so far, then what is still open or waiting for the "
     "user. Give results, not a history: do not retell the Conversations or say which Mini-Me "
-    "did what. Plain prose only, with no title, list or formatting, except that each file, "
-    "table or chart you name goes in square brackets followed by (), with its name exactly as "
-    "the Conversations write it, such as [field-trial.csv](). Use only what the Conversations "
+    "did what. Plain prose only, with no title, list or formatting, except that each file "
+    "you name goes in square brackets followed by (), with its name exactly as the "
+    "Conversations write it, such as [field-trial.csv](). Use only what the Conversations "
     "say, never invent results, numbers or references, and write in the language of the "
     "Conversations."
 )
@@ -91,8 +91,7 @@ class Summarizer:
         self._tasks.start(frame, self._summarize)
 
     async def _summarize(self, summary_id: str, frame: dict[str, Any]) -> None:
-        raw = frame.get("model") or {}
-        model = Model(provider=str(raw.get("provider", "")), model=str(raw.get("model", "")))
+        model = Model.from_frame(frame.get("model") or {})
         kind = frame.get("kind") if frame.get("kind") in ("title", "test") else "overview"
         try:
             text = await self._write(summary_id, model, str(frame.get("material") or ""), kind)

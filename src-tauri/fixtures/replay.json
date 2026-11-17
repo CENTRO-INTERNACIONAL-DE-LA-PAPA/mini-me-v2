@@ -221,11 +221,12 @@
           "id": "0199d0b0-0000-7000-8000-000000000301",
           "kind": "approval",
           "version": 1,
-          "data": {
+          "preview": {
             "step_id": "ask",
             "prompt": "Go on?"
           },
           "text": "Go on?",
+          "source_asset_id": null,
           "answer": null
         }
       }
@@ -317,7 +318,7 @@
           "id": "0199d0b0-0000-7000-8000-000000000302",
           "kind": "table",
           "version": 1,
-          "data": {
+          "preview": {
             "columns": [
               {
                 "name": "plot",
@@ -331,6 +332,7 @@
             ]
           },
           "text": "plot\np1",
+          "source_asset_id": null,
           "answer": null
         }
       }
@@ -683,11 +685,12 @@
             "id": "0199d0b0-0000-7000-8000-000000000301",
             "kind": "approval",
             "version": 1,
-            "data": {
+            "preview": {
               "step_id": "ask",
               "prompt": "Go on?"
             },
             "text": "Go on?",
+            "source_asset_id": null,
             "answer": {
               "approved": true
             }
@@ -696,7 +699,7 @@
             "id": "0199d0b0-0000-7000-8000-000000000302",
             "kind": "table",
             "version": 1,
-            "data": {
+            "preview": {
               "columns": [
                 {
                   "name": "plot",
@@ -710,6 +713,7 @@
               ]
             },
             "text": "plot\np1",
+            "source_asset_id": null,
             "answer": null
           }
         ],

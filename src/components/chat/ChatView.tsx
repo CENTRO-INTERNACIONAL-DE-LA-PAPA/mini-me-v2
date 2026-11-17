@@ -14,9 +14,6 @@ import { MainSheet, SheetHeader, ToolSwitch, type ToolOption } from "../shell/Sh
 import { FeaturingProvider } from "../interactive/featuring";
 import { OpenDocumentProvider } from "../documents/openDocument";
 import { ReportPanel } from "../documents/ReportPanel";
-import { componentNames } from "../interactive/component-names";
-import { ComponentReferencesProvider } from "../interactive/component-references";
-import type { ReferenceTarget } from "../../protocol/references";
 import { OutlinePanel, StepsPanel, type Panel } from "./SidePanels";
 import { outline } from "./outline";
 import { useConversation } from "./useConversation";
@@ -32,9 +29,8 @@ interface Props {
   onActivity: () => void;
   onRename: (title: string) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
-  /** Opens a document: to be drafted from this Conversation, with the Comments sheet showing a
-   * reply's suggested edits (the threads they opened), or as it is. */
-  onOpenDocument: (assetId: Uuid, how?: "draft" | { edits: Uuid[] }) => void;
+  /** Opens a document: to be drafted from this Conversation, or as it is. */
+  onOpenDocument: (assetId: Uuid, how?: "draft") => void;
 }
 
 export function ChatView({
@@ -80,20 +76,13 @@ export function ChatView({
   const replying = state.messages.some((m) => m.status === "streaming" || m.status === "paused");
 
   const composer = useRef<ComposerHandle>(null);
-  const names = useMemo(() => componentNames(state.messages), [state.messages]);
-  const used = useMemo(() => outline(state.messages, names), [state.messages, names]);
-  const newestFirst = useMemo(() => [...names.values()].reverse(), [names]);
-  const appendReference = useCallback(
-    (target: ReferenceTarget) => composer.current?.appendReference(target),
-    [],
-  );
+  const used = useMemo(() => outline(state.messages), [state.messages]);
   // Stable across renders, so the memoized messages that read it do not re-render with every
   // streamed event.
   const openDocumentRef = useRef(onOpenDocument);
   openDocumentRef.current = onOpenDocument;
   const openDocument = useCallback(
-    (assetId: Uuid, edits?: Uuid[]) =>
-      openDocumentRef.current(assetId, edits ? { edits } : undefined),
+    (assetId: Uuid) => openDocumentRef.current(assetId),
     [],
   );
   const [draggingFiles, setDraggingFiles] = useState(false);
@@ -172,7 +161,6 @@ export function ChatView({
     <FeaturingProvider projectId={projectId}>
       <ExistingFilesProvider projectId={projectId} refreshKey={filesKey}>
       <OpenDocumentProvider open={openDocument}>
-        <ComponentReferencesProvider names={names} append={appendReference}>
           <div className="flex min-h-0 min-w-0 flex-1 gap-3">
             <MainSheet>
               {draggingFiles && (
@@ -257,7 +245,6 @@ export function ChatView({
               <Composer
                 ref={composer}
                 narrow={panel !== null}
-                components={newestFirst}
                 projectId={projectId}
                 conversationId={conversationId}
                 replying={replying}
@@ -296,7 +283,6 @@ export function ChatView({
             )}
             {stepsOf && <StepsPanel message={stepsOf} onClose={() => setPanel(null)} />}
           </div>
-        </ComponentReferencesProvider>
       </OpenDocumentProvider>
       </ExistingFilesProvider>
     </FeaturingProvider>

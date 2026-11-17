@@ -118,7 +118,7 @@ fn copy_in(
     let size_bytes = std::fs::copy(source, &destination)? as i64;
     let media_type = media_type_of(&name);
     let asset = AssetRef { id, name, media_type, size_bytes };
-    register(project, asset, (kind, author), &rel_path, origin).inspect_err(|_| {
+    register(project, asset, (kind, author), &rel_path, origin, false).inspect_err(|_| {
         let _ = remove_files(project, id);
     })
 }
@@ -183,15 +183,23 @@ pub fn check_name(name: &str) -> AppResult<()> {
 }
 
 /// Stores a file the app made, such as a Trait's output, as a `generated` Asset. An empty
-/// `media_type` is guessed from the name.
+/// `media_type` is guessed from the name. A `hidden` Asset is never listed to the user.
 pub fn write_generated(
     project: &Project,
     name: &str,
     media_type: &str,
     bytes: &[u8],
     author: &Author,
+    hidden: bool,
 ) -> AppResult<AssetRef> {
-    store(project, name, media_type, bytes, (AssetSource::Generated, author))
+    store(
+        project,
+        name,
+        media_type,
+        bytes,
+        (AssetSource::Generated, author),
+        hidden,
+    )
 }
 
 /// Stores bytes the user pasted or started, such as a blank document, as an `upload` Asset.
@@ -202,7 +210,14 @@ pub fn import_bytes(
     bytes: &[u8],
     user: &Author,
 ) -> AppResult<AssetRef> {
-    store(project, name, media_type, bytes, (AssetSource::Upload, user))
+    store(
+        project,
+        name,
+        media_type,
+        bytes,
+        (AssetSource::Upload, user),
+        false,
+    )
 }
 
 /// The title made safe plus `.csv`, or `Table.csv` without one. A title that is a table file's name
@@ -246,6 +261,7 @@ fn store(
     media_type: &str,
     bytes: &[u8],
     (source, author): (AssetSource, &Author),
+    hidden: bool,
 ) -> AppResult<AssetRef> {
     check_name(name)?;
     let id = new_id();
@@ -261,7 +277,7 @@ fn store(
         media_type.trim().to_string()
     };
     let asset = AssetRef { id, name: name.to_string(), media_type, size_bytes: bytes.len() as i64 };
-    register(project, asset, (source, author), &rel_path, None).inspect_err(|_| {
+    register(project, asset, (source, author), &rel_path, None, hidden).inspect_err(|_| {
         let _ = remove_files(project, id);
     })
 }
@@ -382,11 +398,13 @@ fn register(
     (source, author): (AssetSource, &Author),
     rel_path: &str,
     origin: Option<&AssetOrigin>,
+    hidden: bool,
 ) -> AppResult<AssetRef> {
     let origin = origin.map(serde_json::to_string).transpose()?;
     project.lock().conn.execute(
         "INSERT INTO assets (id, name, media_type, size_bytes, source, rel_path, created_at, \
-         added_by_kind, added_by_id, origin) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+         added_by_kind, added_by_id, origin, hidden) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
             asset.id.to_string(),
             asset.name,
@@ -397,7 +415,8 @@ fn register(
             now_ms(),
             author.kind.as_str(),
             author.id,
-            origin
+            origin,
+            hidden
         ],
     )?;
     Ok(asset)
@@ -405,29 +424,36 @@ fn register(
 
 /// Fails with `not_found` if the Asset is not in this Project.
 pub fn find(state: &ProjectState, id: Uuid) -> AppResult<AssetRef> {
+    find_with_hidden(state, id).map(|(asset, _)| asset)
+}
+
+/// The Asset and whether it is hidden; fails with `not_found` if it is not in this Project.
+pub fn find_with_hidden(state: &ProjectState, id: Uuid) -> AppResult<(AssetRef, bool)> {
     state
         .conn
         .query_row(
-            "SELECT name, media_type, size_bytes FROM assets WHERE id = ?1",
+            "SELECT name, media_type, size_bytes, hidden FROM assets WHERE id = ?1",
             params![id.to_string()],
             |row| {
-                Ok(AssetRef {
+                let asset = AssetRef {
                     id,
                     name: row.get(0)?,
                     media_type: row.get(1)?,
                     size_bytes: row.get(2)?,
-                })
+                };
+                Ok((asset, row.get(3)?))
             },
         )
         .optional()?
         .ok_or_else(|| AppError::not_found("That file is not part of this Project."))
 }
 
-/// Assets whose name contains `query` (case-insensitive), newest first.
+/// Assets the user can see whose name contains `query` (case-insensitive), newest first.
 pub fn list(project: &Project, query: Option<&str>) -> AppResult<Vec<AssetRef>> {
     let state = project.lock();
     let mut stmt = state.conn.prepare(
-        "SELECT id, name, media_type, size_bytes FROM assets ORDER BY created_at DESC",
+        "SELECT id, name, media_type, size_bytes FROM assets WHERE hidden = 0 \
+         ORDER BY created_at DESC",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok((
@@ -478,7 +504,8 @@ pub struct ConversationRef {
     pub title: String,
 }
 
-/// Every Asset of the Project, newest first, with who added it and where it is used.
+/// Every Asset of the Project the user can see, newest first, with who added it and where it is
+/// used.
 pub fn project_files(project: &Project) -> AppResult<Vec<FileEntry>> {
     let state = project.lock();
     let mut entries = file_entries(project, &state)?;
@@ -499,11 +526,12 @@ struct AssetRow {
     origin: Option<String>,
 }
 
-/// Every Asset, newest first, with `used_in` left empty.
+/// Every Asset the user can see, newest first, with `used_in` left empty.
 fn file_entries(project: &Project, state: &ProjectState) -> AppResult<Vec<FileEntry>> {
     let mut stmt = state.conn.prepare(
         "SELECT id, name, media_type, size_bytes, source, created_at, rel_path, \
-         added_by_kind, added_by_id, origin FROM assets ORDER BY created_at DESC",
+         added_by_kind, added_by_id, origin FROM assets WHERE hidden = 0 \
+         ORDER BY created_at DESC",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(AssetRow {
@@ -522,19 +550,27 @@ fn file_entries(project: &Project, state: &ProjectState) -> AppResult<Vec<FileEn
     let mut entries = Vec::new();
     for row in rows {
         let row = row?;
-        let modified_at = project
+        let id = parse_id(&row.id, "ID")?;
+        let metadata = project
             .paths
             .resolve(&row.rel_path)
             .ok()
-            .and_then(|path| std::fs::metadata(path).ok()?.modified().ok())
+            .and_then(|path| std::fs::metadata(path).ok());
+        let modified_at = metadata
+            .as_ref()
+            .and_then(|m| m.modified().ok())
             .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|since| since.as_millis() as i64);
+        let size_bytes = match metadata {
+            Some(metadata) => keep_size(state, id, metadata.len() as i64)?,
+            None => row.size_bytes,
+        };
         entries.push(FileEntry {
             asset: AssetRef {
-                id: parse_id(&row.id, "ID")?,
+                id,
                 name: row.name,
                 media_type: row.media_type,
-                size_bytes: row.size_bytes,
+                size_bytes,
             },
             source: AssetSource::parse(&row.source).ok_or_else(|| unreadable("Asset"))?,
             origin: row.origin.and_then(|o| serde_json::from_str(&o).ok()),
@@ -545,6 +581,15 @@ fn file_entries(project: &Project, state: &ProjectState) -> AppResult<Vec<FileEn
         });
     }
     Ok(entries)
+}
+
+/// Stores `size_bytes` as the Asset's size, since its file can change outside the app; returns it.
+pub fn keep_size(state: &ProjectState, id: Uuid, size_bytes: i64) -> AppResult<i64> {
+    state.conn.execute(
+        "UPDATE assets SET size_bytes = ?1 WHERE id = ?2 AND size_bytes != ?1",
+        params![size_bytes, id.to_string()],
+    )?;
+    Ok(size_bytes)
 }
 
 fn add_used_in(state: &ProjectState, entries: &mut [FileEntry]) -> AppResult<()> {
@@ -710,8 +755,15 @@ mod tests {
         assert_eq!(find(&project.lock(), imported.id).unwrap(), imported);
         assert_eq!(source_of(imported.id), "upload");
 
-        let generated =
-            write_generated(&project, "theory-store.json", "application/json", b"{}", &user()).unwrap();
+        let generated = write_generated(
+            &project,
+            "theory-store.json",
+            "application/json",
+            b"{}",
+            &user(),
+            false,
+        )
+        .unwrap();
         let stored = file_path(&project, generated.id).unwrap();
         let expected = format!("assets/{}/theory-store.json", generated.id);
         assert_eq!(stored, project.paths.root().join(expected));
@@ -739,13 +791,55 @@ mod tests {
         let first = import(&project, &first_dir.join("data.csv"), &user()).unwrap();
         let second = import(&project, &second_dir.join("data.csv"), &user()).unwrap();
         assert_ne!(first.id, second.id);
-        assert_eq!((read(first.id), read(second.id)), ("first".into(), "second".into()));
+        assert_eq!(
+            (read(first.id), read(second.id)),
+            ("first".into(), "second".into())
+        );
 
-        let first = write_generated(&project, "theory-store.json", "", b"first", &user()).unwrap();
-        let second = write_generated(&project, "theory-store.json", "", b"second", &user()).unwrap();
+        let first =
+            write_generated(&project, "theory-store.json", "", b"first", &user(), false).unwrap();
+        let second =
+            write_generated(&project, "theory-store.json", "", b"second", &user(), false).unwrap();
         assert_ne!(first.id, second.id);
         assert_eq!(first.media_type, "application/json");
-        assert_eq!((read(first.id), read(second.id)), ("first".into(), "second".into()));
+        assert_eq!(
+            (read(first.id), read(second.id)),
+            ("first".into(), "second".into())
+        );
+    }
+
+    #[test]
+    fn hidden_assets_are_left_out_of_what_the_user_sees() {
+        let (_dir, project) = temp_project();
+        let shown = write_generated(&project, "trial.csv", "", b"a", &user(), false).unwrap();
+        let hidden = write_generated(&project, "papers.json", "", b"[]", &user(), true).unwrap();
+
+        let listed: Vec<Uuid> = list(&project, None)
+            .unwrap()
+            .into_iter()
+            .map(|a| a.id)
+            .collect();
+        let files: Vec<Uuid> = project_files(&project)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.asset.id)
+            .collect();
+        assert_eq!((listed, files), (vec![shown.id], vec![shown.id]));
+        assert_eq!(
+            find(&project.lock(), hidden.id).unwrap().name,
+            "papers.json"
+        );
+    }
+
+    #[test]
+    fn a_file_edited_outside_the_app_is_listed_with_its_new_size() {
+        let (_dir, project) = temp_project();
+        let asset = write_generated(&project, "trial.csv", "", b"a\n1\n", &user(), false).unwrap();
+        std::fs::write(file_path(&project, asset.id).unwrap(), b"a\n1\n2\n3\n").unwrap();
+
+        let entry = project_files(&project).unwrap().remove(0);
+        assert_eq!(entry.asset.size_bytes, 8);
+        assert_eq!(find(&project.lock(), asset.id).unwrap().size_bytes, 8);
     }
 
     #[test]
@@ -779,7 +873,8 @@ mod tests {
             "nul.txt", "Com1.json", "con .txt", &long,
         ];
         for name in names {
-            let err = write_generated(&project, name, "text/plain", b"x", &user()).unwrap_err();
+            let err =
+                write_generated(&project, name, "text/plain", b"x", &user(), false).unwrap_err();
             assert_eq!(err.code, "invalid_input", "{name}");
         }
         assert_eq!(assets_folder_entries(&project), 0);
@@ -799,7 +894,7 @@ mod tests {
         let source = dir.path().join("field-trial.csv");
         std::fs::write(&source, "plot,yield\n1,20\n").unwrap();
         let trial = import(&project, &source, &user()).unwrap();
-        let unused = write_generated(&project, "notes.md", "", b"# Notes", &user()).unwrap();
+        let unused = write_generated(&project, "notes.md", "", b"# Notes", &user(), false).unwrap();
         let first = conversations::create(&project).unwrap().id;
         let second = conversations::create(&project).unwrap().id;
         let user = new_id();

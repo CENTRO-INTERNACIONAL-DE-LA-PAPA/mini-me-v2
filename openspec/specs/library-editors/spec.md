@@ -64,28 +64,25 @@ n from 2 that makes the name unused. The copy SHALL exist only after the user sa
 
 ### Requirement: User-made Traits are prompt-based
 A user-made Trait SHALL run on the `prompt` adapter. Its editor SHALL let the user set the
-name, the description, the instructions (required, non-empty) and which of the model tools
-`save_file`, `show_table`, `write_document`, `suggest_edit` and `edit_document` the Trait may
-use. The read tools SHALL be offered to it as to every prompt-based Trait, without being listed.
+name, the description and the instructions (required, non-empty). The editor SHALL offer no
+choice of tools: every tool is offered to it as to every prompt-based Trait.
 
 #### Scenario: New Trait
-- **WHEN** the user creates a Trait named "Translate" with instructions and `save_file`
-  ticked, then saves
-- **THEN** the library holds *Translate* with adapter `prompt` and tools `["save_file"]`
+- **WHEN** the user creates a Trait named "Translate" with instructions, then saves
+- **THEN** the library holds *Translate* with adapter `prompt` and no list of tools
 
 #### Scenario: Empty instructions
 - **WHEN** the user tries to save a Trait without instructions
 - **THEN** the save is refused and the editor says the instructions are missing
 
 #### Scenario: A Trait that suggests edits
-- **WHEN** the user ticks "Suggest edits" for *Translate* and saves
-- **THEN** *Translate* lists `suggest_edit`, and a Mini-Me running it can suggest edits when
-  @-mentioned in a comment thread
+- **WHEN** a Mini-Me running *Translate* is @-mentioned in a comment thread
+- **THEN** its model can suggest an edit to the thread's passage, with no setting in the
+  editor
 
 #### Scenario: A Trait that edits documents
-- **WHEN** the user ticks "Edit documents" for *Translate* and saves
-- **THEN** *Translate* lists `edit_document`, and a Mini-Me running it can suggest edits to a
-  document referenced in a Conversation
+- **WHEN** a Mini-Me running *Translate* answers a message that references a document
+- **THEN** its model can suggest edits to that document, with no setting in the editor
 
 ### Requirement: Editing a Trait affects every Mini-Me that uses it
 Saving a user-made Trait SHALL change it for every Mini-Me whose Workflow references it. The
@@ -192,9 +189,9 @@ confinement holds.
   file
 
 ### Requirement: Saves are checked
-The Rust core SHALL check every save with the library's rules (tools, Workflow rules, names,
-IDs) against the built-in and user-made definitions together. It SHALL refuse a save that
-breaks a rule, and return each problem for the editor to show. It SHALL refuse to save or
+The Rust core SHALL check every save with the library's rules (Workflow rules, names, IDs,
+instructions) against the built-in and user-made definitions together. It SHALL refuse a save
+that breaks a rule, and return each problem for the editor to show. It SHALL refuse to save or
 delete a built-in definition.
 
 #### Scenario: Unknown Trait in a save
@@ -209,8 +206,8 @@ with the remaining definitions and show the skipped entries and their problems i
 view. Saves SHALL keep skipped entries in the file unchanged.
 
 #### Scenario: One broken Trait
-- **WHEN** `library.json` holds a Trait listing the tool `show_chart` on the prompt
-  adapter, and a Mini-Me that runs it
+- **WHEN** `library.json` holds a Trait with empty instructions on the prompt adapter, and a
+  Mini-Me that runs it
 - **THEN** the app starts, both entries are missing from the `@` list, and the Library view
   names them with the reason
 

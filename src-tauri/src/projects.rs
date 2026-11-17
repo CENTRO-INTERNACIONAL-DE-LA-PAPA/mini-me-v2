@@ -17,8 +17,8 @@ use crate::quarto;
 use crate::store::Project;
 
 pub const DATA_FOLDER_NAME: &str = "Mini-Me Data";
-/// Mini-Me Dev's Projects folder, kept apart from Mini-Me's.
-const DEV_DATA_FOLDER_NAME: &str = "Mini-Me Data (Dev)";
+/// Mini-Me Canary's Projects folder, kept apart from Mini-Me's.
+const CANARY_DATA_FOLDER_NAME: &str = "Mini-Me Data (Canary)";
 const MAX_NAME_CHARS: usize = 100;
 /// How long a read-only read waits while the Project's own connection is writing.
 const READ_BUSY_TIMEOUT: Duration = Duration::from_millis(500);
@@ -36,15 +36,15 @@ pub struct ProjectSummary {
     pub folder: PathBuf,
 }
 
-/// Mini-Me Dev is the development app, kept apart from Mini-Me.
-pub fn is_mini_me_dev(identifier: &str) -> bool {
-    identifier.ends_with(".dev")
+/// Mini-Me Canary is the app that development and beta testing run as, kept apart from Mini-Me.
+pub fn is_canary(identifier: &str) -> bool {
+    identifier.ends_with(".canary")
 }
 
 /// The Projects folder's name for the app with this identifier.
 pub fn data_folder_name(identifier: &str) -> &'static str {
-    if is_mini_me_dev(identifier) {
-        DEV_DATA_FOLDER_NAME
+    if is_canary(identifier) {
+        CANARY_DATA_FOLDER_NAME
     } else {
         DATA_FOLDER_NAME
     }
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn mini_me_dev_keeps_its_projects_in_its_own_folder() {
         assert_eq!(data_folder_name("org.cipotato.mini-me"), "Mini-Me Data");
-        assert_eq!(data_folder_name("org.cipotato.mini-me.dev"), "Mini-Me Data (Dev)");
+        assert_eq!(data_folder_name("org.cipotato.mini-me.canary"), "Mini-Me Data (Canary)");
     }
 
     #[test]

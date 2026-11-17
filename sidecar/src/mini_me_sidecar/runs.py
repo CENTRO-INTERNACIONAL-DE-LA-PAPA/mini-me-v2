@@ -16,7 +16,7 @@ from mini_me_sidecar.link import Link, log
 from mini_me_sidecar.workflow import state as saved_state
 from mini_me_sidecar.workflow.decide import decide
 from mini_me_sidecar.workflow.graph import compile_workflow, workflow_output
-from mini_me_sidecar.workflow.model import Step, parse_steps
+from mini_me_sidecar.workflow.model import Step, later_traits, parse_steps
 
 # How long Trait calls get to return after `run.cancel`; the core gives up after five seconds.
 CANCEL_GRACE_S = 2.0
@@ -87,13 +87,15 @@ class Run:
         adapter = self._adapters[str(definition["adapter"])]
         call_id = str(uuid.uuid4())
         self.send({"type": "step.started", "step_id": step.id, "call_id": call_id})
+        names = self.trait_names()
+        later = [names[t] for t in later_traits(self.steps, step.id) if t in names]
         start = {
             "trait": definition,
             "model": self.model if adapter.info.providers else None,
-            "context": {"steps": earlier},
+            "context": {"steps": earlier, "later_traits": later},
         }
         ctx = self._call(call_id, start, stream)
-        step_name = step.name(self.trait_names())
+        step_name = step.name(names)
         try:
             with recording(self.debug, self.send_debug, step_name, str(definition.get("name"))):
                 await adapter.run(ctx, dict(self.input))

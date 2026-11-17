@@ -1,9 +1,35 @@
 # Using Mini-Me
 
-How to ask Mini-Mes for help and what to expect from them. Setting up an AI provider and
-the Ai2 and Typesafe accounts is described in the README's
-[Getting started](../README.md#getting-started), and what each service receives in
-[What leaves your computer](../README.md#what-leaves-your-computer).
+How to set Mini-Me up, ask Mini-Mes for help and what to expect from them. Where your work is
+stored and which services Mini-Me talks to is described in the README's
+[How it works](../README.md#how-it-works).
+
+## Setting up
+
+You bring your own API key, and every AI call goes straight from your computer to the
+provider you choose, billed to your account there. Typesafe is billed to your Typesafe
+account the same way; Asta's documentation lists no charges for Paper Finder or the
+Theorizer. Mini-Me always asks before an action that would cost extra.
+
+1. Open **Settings** with the gear at the bottom of the sidebar.
+2. On **Models & keys**, click **Add key** next to your provider (OpenAI, Anthropic, Google,
+   OpenRouter or Custom), paste the key and click **Save**. The row then shows **Connected**; the
+   key is never shown again. Use **Edit** to replace or remove it.
+3. Under **AI model**, choose the provider and type the model ID exactly as the provider
+   lists it, then click **Save**.
+
+   To use your own server, such as LM Studio, Ollama or vLLM, choose **Custom**. Under
+   **Custom endpoint**, choose the API it speaks and type its address, for example
+   `http://localhost:1234/v1` for an OpenAI-compatible server or `http://localhost:8080` for
+   an Anthropic-compatible one (without `/v1`). Add a Custom key only if your server asks for
+   one. Your messages and files go to that server, so use one you trust; Settings warns you
+   when the address is on another computer and does not use `https`.
+4. On **Accounts**, under **Choosing a Mini-Me**, add your [Typesafe](https://typesafe.ai)
+   key the same way. Without it, Mini-Me cannot choose for you and you mention a Mini-Me
+   yourself.
+5. Under **Ai2**, click **Sign in** and confirm the code shown in Mini-Me on the Ai2 page
+   that opens in your browser. The row then reads **Signed in as** your email; the sign-in
+   is renewed automatically, and **Sign out** removes it. Researcher and Theorist need it.
 
 ## A Project's Overview
 
@@ -107,31 +133,30 @@ their passages as you edit. One whose passage can no longer be found, for exampl
 file was changed in another editor, is listed under **Detached**. Comments are kept in the
 Project, not in the `.qmd` file.
 
-A comment is a note unless it @-mentions a Mini-Me. A mentioned Mini-Me runs its whole Workflow,
-as it would for a message, with the passage, the document's name and the thread's earlier
-comments, and answers in the thread. Mini-Mes whose Traits can suggest edits, such as Assistant
-or Scribe, may suggest new text for the passage: the source shows the passage struck through
-with the suggestion after it, and the reply offers:
+Every comment gets a reply, as a message in a Conversation does: from the Mini-Me you
+@-mention, or else the one Mini-Me picks, or else Assistant. The Mini-Me answers in the thread
+with the passage, the document's name and the thread's earlier comments, and can hand the
+comment to another Mini-Me as it would in a Conversation.
 
-- **Accept and resolve**: puts the suggestion in the document and resolves the thread. If you
-  have edited the passage since, your edits are kept and combined with the suggestion; when
-  both changed the same words, nothing is applied, and you can discard it or ask again.
+**Resolve** moves a thread to Resolved and **Reopen** brings it back. **Delete** removes the
+thread and its comments.
+
+### Suggestions
+
+A Mini-Me asked to change a document, in a comment or in a Conversation ("@Scribe tighten the
+methods in #Trial report"), suggests its changes; the document itself is unchanged until you
+accept them. In the source, each suggested passage is struck through with the new text after
+it, in the Mini-Me's colour. Click either to see:
+
+- **Accept**: puts the suggestion in the document. If you have edited the passage since, your
+  edits are kept and combined with the suggestion; when both changed the same words, nothing is
+  applied, and you can discard it or ask again.
 - **Discard**: leaves the document as it is.
 
-For another version, @-mention the Mini-Me again in the thread and say what to change.
-
-**Resolve** moves a thread to Resolved, setting aside a suggestion still waiting, and
-**Reopen** brings it back. **Delete** removes the thread and its comments.
-
-### Editing a document from a Conversation
-
-Reference a document with `#` or attach it, and ask a Mini-Me whose Traits can edit documents,
-such as Assistant or Scribe, to change it ("@Scribe tighten the methods in #Trial report").
-The Mini-Me suggests its edits; the document itself is unchanged until you accept them. Each
-edit opens a thread on the passage it changes, saying "Opened by Scribe from Trial design"
-with the Conversation's name as a link back, and holding the Mini-Me's reason and its
-suggestion, which you accept or discard as above. The reply shows a card for the document with
-how many suggested edits still wait; **Open** shows the document with its Comments.
+A new suggestion on a passage that already has one replaces it. A suggestion whose passage can
+no longer be found is listed above the source and can only be discarded. A reply in a
+Conversation that suggested changes shows a card for the document; **Open** shows it with its
+suggestions.
 
 ## Follow-ups
 

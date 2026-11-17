@@ -1,6 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ComponentReferencesProvider } from "./component-references";
 import { TableView, sortRows, tableText } from "./table";
 
 const data = {
@@ -27,29 +26,22 @@ describe("table version 1", () => {
   });
 
   it("right-aligns numbers and leaves missing cells empty", () => {
-    const html = renderToStaticMarkup(<TableView data={data} />);
+    const html = renderToStaticMarkup(<TableView preview={data} />);
     expect(html).toContain('text-right">1,200.5</td>');
     expect(html).toContain('text-right"></td>');
   });
 
-  it("says when it shows a preview of a larger table", () => {
+  it("says when it shows a preview of a larger table, opening its source file in a Project", () => {
     const preview = { ...data, total_rows: 12340, source: "trial-cleaned.csv" };
-    const html = renderToStaticMarkup(<TableView data={preview} />);
+    const html = renderToStaticMarkup(<TableView preview={preview} />);
     expect(html).toContain("Showing 3 of 12,340 rows");
     expect(html).toContain("trial-cleaned.csv");
-    expect(renderToStaticMarkup(<TableView data={data} />)).not.toContain("Showing");
-  });
-
-  it("has a reference button inside a Conversation only", () => {
-    const names = new Map([["t1", { id: "t1", name: "trial", kind: "table" as const }]]);
-    const html = renderToStaticMarkup(
-      <ComponentReferencesProvider names={names} append={() => {}}>
-        <TableView data={data} componentId="t1" />
-      </ComponentReferencesProvider>,
+    expect(html).not.toContain("<button type=\"button\" class=\"cursor-pointer");
+    const linked = renderToStaticMarkup(
+      <TableView preview={preview} sourceAssetId="a1" projectId="p1" />,
     );
-    expect(html).toContain('aria-label="Add $trial to the message"');
-    const outside = renderToStaticMarkup(<TableView data={data} componentId="t1" />);
-    expect(outside).not.toContain("Add $trial");
+    expect(linked).toContain(">trial-cleaned.csv</button>");
+    expect(renderToStaticMarkup(<TableView preview={data} />)).not.toContain("Showing");
   });
 });
 
