@@ -13,7 +13,7 @@ The plan is built as five OpenSpec changes, in order:
 3. **Suggestions and comments**: one suggestion tool, and comments that work like the chat
    (done).
 4. **Jev hints**: Trait names in Jev's Mini-Me options, and Jev's component and tools hints
-   (planned in `openspec/changes/jev-hints/`).
+   (done).
 5. **Hand-off chains**: `next_mini_me`, hand-offs made by the run engine, the Traits a call
    comes before, and chains (not planned yet).
 
