@@ -16,13 +16,13 @@ export function formatSize(bytes: number): string {
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
 }
 
-/** The running app as Settings shows it: Mini-Me by its version, Mini-Me Canary by the commit it
- * was built from, or "(local)" when it was run from the source tree. */
-export function appLabel(name: string, version: string, commit?: string): string {
-  if (!name.endsWith("Canary")) {
-    return `${name} ${version}`;
+/** The running app as Settings shows it: a release or canary build as "Mini-Me <version>", the
+ * name of its GitHub release, and Mini-Me Canary run from the source tree as "(local)". */
+export function appLabel(name: string, version: string): string {
+  if (name.endsWith("Canary") && !version.includes("-canary.")) {
+    return `${name} (local)`;
   }
-  return `${name} ${commit || "(local)"}`;
+  return `Mini-Me ${version}`;
 }
 
 const startOfDay = (time: number) => new Date(time).setHours(0, 0, 0, 0);

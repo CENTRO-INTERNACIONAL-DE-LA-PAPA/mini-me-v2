@@ -1,9 +1,11 @@
 # Runs when dev receives a change to the app, or by hand. Builds Mini-Me Canary for Windows, macOS
 # and Linux from that commit and, once every platform built, publishes it as the pre-release
-# "Mini-Me Canary <commit>", tagged canary-<commit>. The pre-release tagged `canary` holds only
-# latest.json, the update feed installed copies of Mini-Me Canary read. A commit that already has
-# a tag does nothing. This file follows release.yml job by job: a change to the pinned actions,
-# Linux packages or bundles is made in both.
+# "Mini-Me <version>-canary.<n>", tagged v<version>-canary.<n>: <version> is the one in
+# package.json, which names the next release, and <n> counts that version's builds. The
+# pre-release tagged `canary` holds only latest.json, the update feed installed copies of Mini-Me
+# Canary read. A commit that already has a build does nothing, and a version already released
+# fails until the version on dev is bumped. This file follows release.yml job by job: a change to
+# the pinned actions, Linux packages or bundles is made in both.
 name: Canary
 
 on:
@@ -25,11 +27,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create.outputs.release_id }}
-      commit: ${{ steps.create.outputs.commit }}
+      version: ${{ steps.create.outputs.version }}
+      tag: ${{ steps.create.outputs.tag }}
     steps:
       # The tag is only a name on the draft: GitHub creates it, at this commit, when the draft is
-      # published, so a failed build leaves none. Drafts left by cancelled or failed runs never
-      # became builds, and are deleted. With no release ID, nothing is built.
+      # published, so only published builds have tags and a failed build uses no number. Drafts
+      # left by cancelled or failed runs never became builds, and are deleted. With no release
+      # ID, nothing is built.
       - id: create
         env:
           GH_TOKEN: ${{ github.token }}
@@ -38,24 +42,36 @@ jobs:
             echo "Canary builds are made from dev, not from $GITHUB_REF." >&2
             exit 1
           fi
-          commit="${GITHUB_SHA::7}"
-          tag="canary-$commit"
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
-            echo "$tag already exists, so this change to dev builds nothing."
+          repo="repos/$GITHUB_REPOSITORY"
+          version=$(gh api -H "Accept: application/vnd.github.raw" \
+            "$repo/contents/package.json?ref=$GITHUB_SHA" | jq -r .version)
+          if gh api "$repo/git/ref/tags/v$version" > /dev/null 2>&1; then
+            echo "$version is released; bump the version on dev to build Mini-Me Canary." >&2
+            exit 1
+          fi
+          built=$(gh api --paginate "$repo/git/matching-refs/tags/v" --jq \
+            ".[] | select((.ref | contains(\"-canary.\")) and .object.sha == \"$GITHUB_SHA\") | .ref")
+          if [ -n "$built" ]; then
+            echo "${built#refs/tags/} was built from this commit, so this change to dev builds nothing."
             exit 0
           fi
-          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
-            --jq '.[] | select(.draft and (.tag_name | startswith("canary-"))) | .id' |
+          prefix="v$version-canary."
+          last=$(gh api --paginate "$repo/git/matching-refs/tags/$prefix" --jq '.[].ref' |
+            sed "s|^refs/tags/$prefix||" | grep -E '^[0-9]+$' | sort -n | tail -n 1)
+          tag="$prefix$((${last:-0} + 1))"
+          gh api "$repo/releases" --paginate \
+            --jq '.[] | select(.draft and (.tag_name | startswith("v")) and (.tag_name | contains("-canary."))) | .id' |
             while read -r stale; do
-              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$stale"
+              gh api -X DELETE "$repo/releases/$stale"
             done
-          id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+          id=$(gh api -X POST "$repo/releases" \
             -f tag_name="$tag" -f target_commitish="$GITHUB_SHA" \
-            -f name="Mini-Me Canary $commit" -f body="Built from $GITHUB_SHA." \
+            -f name="Mini-Me ${tag#v}" -f body="Built from $GITHUB_SHA." \
             -F draft=true -F prerelease=true --jq .id)
           test -n "$id"
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   build:
     needs: draft
@@ -64,6 +80,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # MSI installers reject a version with a pre-release part, such as 0.7.1-canary.1.
           - runner: windows-latest
             bundles: nsis
           - runner: macos-latest # Apple silicon
@@ -89,16 +106,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev patchelf
       - run: npm ci
-      # The updater installs only a version above the running one, and a commit hash has no order,
-      # so each build also carries the run number. It is set here and never committed.
-      - run: npm version "0.0.${{ github.run_number }}" --no-git-tag-version
+      # The updater installs only a version above the running one, which the counter in
+      # <version>-canary.<n> gives. It is set here and never committed.
+      - run: npm version "${{ needs.draft.outputs.version }}" --no-git-tag-version
       - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Settings → About shows it as the build's name.
-          VITE_COMMIT: ${{ needs.draft.outputs.commit }}
         with:
           releaseId: ${{ needs.draft.outputs.release_id }}
           uploadUpdaterJson: true
@@ -120,7 +135,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_ID: ${{ needs.draft.outputs.release_id }}
-          TAG: canary-${{ needs.draft.outputs.commit }}
+          TAG: ${{ needs.draft.outputs.tag }}
         run: |
           gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
             -F draft=false -F prerelease=true -f make_latest=false

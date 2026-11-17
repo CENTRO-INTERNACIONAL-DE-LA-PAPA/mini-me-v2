@@ -87,18 +87,23 @@ every pull request into `dev` or `main`.
 
 Every push to `dev` that changes more than Markdown files, `docs/` or `openspec/` builds Mini-Me
 Canary for Windows, macOS and Linux ([`canary.yml`](../.github/workflows/canary.yml)). Once every
-platform built, the build is published as a pre-release named and tagged after its commit:
-"Mini-Me Canary a1b2c3d", `canary-a1b2c3d`. Installed copies of Mini-Me Canary update to it at
-their next check; Mini-Me never sees it. Nothing has to be done by hand.
+platform built, the build is published as a pre-release named after the version in
+`package.json` and a counter: "Mini-Me 0.8.1-canary.2", tagged `v0.8.1-canary.2`, the second
+build leading to 0.8.1. Its notes name the commit. Installed copies of Mini-Me Canary update to
+it at their next check, and Settings → About shows its name; Mini-Me never sees it.
 
+- **The version on `dev`** names the next release and is bumped by hand (`npm run
+  sync-version`). The counter starts again at 1 after a bump. While the version on `dev` is
+  already released, canary builds fail and say to bump it.
+- **The counter** is one above the highest published build of that version. A build that was
+  stopped or failed was never published, so its number is used again. It also orders the builds:
+  `0.8.1-canary.10` comes after `0.8.1-canary.9` and before `0.8.2-canary.1`.
 - **By hand:** Actions → Canary → Run workflow builds the newest commit of `dev`. A commit that
   already has a build is not built again.
 - **The feed:** the pre-release tagged `canary` holds only `latest.json`, which installed copies
   read to find the newest build. Each build replaces it. Do not delete that pre-release.
-- **The hidden version:** the updater installs only a version above the running one, and a commit
-  hash has no order, so each build is also given the version `0.0.<run number>`, which shows in
-  the installers' file names. The run number belongs to `canary.yml`: renaming that file starts
-  it again from 1, and installed copies would stop updating.
+- **Windows** canary builds make only the NSIS installer: MSI rejects versions such as
+  `0.8.1-canary.2`.
 - **Failures** are handled as for a release, below.
 
 `canary.yml` and `release.yml` have the same jobs and steps in the same order. A change to the

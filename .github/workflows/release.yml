@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The tag is only a name on the draft: GitHub creates it, at this commit, when the draft is
       # published, so a failed build leaves none. Drafts left by cancelled or failed runs never
-      # became releases, and are deleted. The notes are CHANGELOG.md without its first line, which
+      # became releases, and are deleted; canary drafts belong to canary.yml. The notes are CHANGELOG.md without its first line, which
       # is the title GitHub already shows. With no release ID, nothing is built.
       - id: create
         env:
@@ -46,7 +46,7 @@ jobs:
           fi
           node scripts/check-version.mjs "$tag"
           gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
-            --jq '.[] | select(.draft and (.tag_name | startswith("v"))) | .id' |
+            --jq '.[] | select(.draft and (.tag_name | startswith("v")) and (.tag_name | contains("-canary.") | not)) | .id' |
             while read -r stale; do
               gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$stale"
             done

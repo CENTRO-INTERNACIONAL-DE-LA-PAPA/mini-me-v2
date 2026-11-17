@@ -27,10 +27,9 @@ describe("count", () => {
 });
 
 describe("appLabel", () => {
-  it("names Mini-Me by version and Mini-Me Canary by commit", () => {
+  it("names a build like its release and a run from source as local", () => {
     expect(appLabel("Mini-Me", "0.6.0")).toBe("Mini-Me 0.6.0");
-    expect(appLabel("Mini-Me", "0.6.0", "a1b2c3d")).toBe("Mini-Me 0.6.0");
-    expect(appLabel("Mini-Me Canary", "0.0.42", "a1b2c3d")).toBe("Mini-Me Canary a1b2c3d");
+    expect(appLabel("Mini-Me Canary", "0.7.1-canary.2")).toBe("Mini-Me 0.7.1-canary.2");
     expect(appLabel("Mini-Me Canary", "0.7.0")).toBe("Mini-Me Canary (local)");
   });
 });
