@@ -1,5 +1,4 @@
-"""Writes Quarto Markdown (`.qmd`) documents and suggests edits to them, in a thread or from a
-Conversation."""
+"""Writes Quarto Markdown (`.qmd`) documents and suggests changes to them."""
 
 import json
 import re
@@ -51,31 +50,12 @@ async def write_document(ctx: CallContext, title: str, body: str) -> dict[str, A
     return saved
 
 
-async def suggest_edit(ctx: CallContext, text: str) -> dict[str, Any]:
-    """Suggests `text` for the thread's passage, to accept or reject; returns `{ component_id }`."""
-    if ctx.document is None:
-        raise ToolError("Edits can only be suggested in a comment thread.", "not_in_thread")
+async def suggest(ctx: CallContext, document_id: str, find: str, text: str) -> dict[str, Any]:
+    """Suggests replacing the passage `find` of a document with `text`, to accept or discard in the
+    document; returns `{ suggestion_id }`."""
     if len(text.encode("utf-8")) > MAX_SUGGESTION_BYTES:
         raise ToolError("A suggestion can be at most 64 KiB; suggest a shorter passage.")
-    shown = text if text.strip() else "Remove this passage."
-    component_id = await add_component(ctx, "suggestion", {"text": text}, shown, None)
-    return {"component_id": component_id}
-
-
-async def edit_document(
-    ctx: CallContext, document_id: str, edits: list[dict[str, Any]]
-) -> dict[str, Any]:
-    """Suggests `edits`, each `{ find, replace, reason }`, to accept or reject in the document
-    view; returns `{ component_id, threads }`."""
-    if ctx.document is not None:
-        raise ToolError("In a comment thread, suggest an edit to its passage instead.", "in_thread")
-    cleaned = []
-    for number, edit in enumerate(edits, start=1):
-        find, replace, reason = (str(edit.get(key, "")) for key in ("find", "replace", "reason"))
-        if len(replace.encode("utf-8")) > MAX_SUGGESTION_BYTES:
-            raise ToolError(f"Edit {number}'s new text is larger than 64 KiB; split it up.")
-        cleaned.append({"find": find, "replace": replace, "reason": reason})
     try:
-        return await ctx.edit_document(document_id, cleaned)
+        return await ctx.suggest(document_id, find, text)
     except CoreRequestError as error:
-        raise ToolError(f"No edit was suggested: {error}", error.code) from None
+        raise ToolError(f"Nothing was suggested: {error}", error.code) from None

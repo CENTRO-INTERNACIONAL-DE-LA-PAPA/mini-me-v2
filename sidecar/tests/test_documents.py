@@ -2,13 +2,13 @@ import asyncio
 
 import pytest
 
+from mini_me_sidecar.context import CoreRequestError
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.documents import (
     MAX_SUGGESTION_BYTES,
     document_text,
-    edit_document,
     file_name,
-    suggest_edit,
+    suggest,
     write_document,
 )
 
@@ -20,7 +20,7 @@ class Call:
         self.document = document
         self.written: list[tuple[str, str, bytes]] = []
         self.components: list[tuple[str, int, dict, str]] = []
-        self.edits: list[tuple[str, list[dict]]] = []
+        self.suggested: list[tuple[str, str, str]] = []
 
     def progress(self, label: str) -> None:
         pass
@@ -33,9 +33,11 @@ class Call:
         self.components.append((kind, version, preview, text))
         return "component-1"
 
-    async def edit_document(self, asset_id: str, edits: list[dict]) -> dict:
-        self.edits.append((asset_id, edits))
-        return {"component_id": "component-1", "threads": ["thread-1"]}
+    async def suggest(self, asset_id: str, find: str, text: str) -> dict:
+        if find == "Huancayo":
+            raise CoreRequestError("passage_not_unique", "Huancayo occurs 3 times.")
+        self.suggested.append((asset_id, find, text))
+        return {"suggestion_id": "suggestion-1"}
 
 
 def test_a_document_has_a_quoted_title_in_its_header():
@@ -80,32 +82,15 @@ def test_a_document_over_2_mib_is_refused():
     assert call.written == []
 
 
-def test_a_suggestion_is_added_only_in_a_thread_and_within_its_limit():
-    thread = Call({"asset_id": "d1", "name": "Report.qmd", "passage": "Yield fell."})
-    result = asyncio.run(suggest_edit(thread, "Yield fell sharply."))
-    assert result == {"component_id": "component-1"}
-    suggested = ("suggestion", 1, {"text": "Yield fell sharply."}, "Yield fell sharply.")
-    assert thread.components == [suggested]
-
-    with pytest.raises(ToolError) as refused:
-        asyncio.run(suggest_edit(Call(), "Yield fell sharply."))
-    assert refused.value.code == "not_in_thread"
-    with pytest.raises(ToolError):
-        asyncio.run(suggest_edit(thread, "x" * (MAX_SUGGESTION_BYTES + 1)))
-
-
-def test_edits_go_to_the_core_only_outside_a_thread_and_within_their_limit():
+def test_a_suggestion_goes_to_the_core_within_its_limit_and_reports_a_refusal():
     call = Call()
-    edit = {"find": "Yield fell.", "replace": "Yield fell sharply.", "reason": "Clearer."}
-    result = asyncio.run(edit_document(call, "d1", [edit]))
-    assert result == {"component_id": "component-1", "threads": ["thread-1"]}
-    assert call.edits == [("d1", [edit])]
+    result = asyncio.run(suggest(call, "d1", "Yield fell.", "Yield fell sharply."))
+    assert result == {"suggestion_id": "suggestion-1"}
+    assert call.suggested == [("d1", "Yield fell.", "Yield fell sharply.")]
 
-    thread = Call({"asset_id": "d1", "name": "Report.qmd", "passage": "Yield fell."})
-    with pytest.raises(ToolError) as refused:
-        asyncio.run(edit_document(thread, "d1", [edit]))
-    assert refused.value.code == "in_thread"
-    large = {**edit, "replace": "x" * (MAX_SUGGESTION_BYTES + 1)}
     with pytest.raises(ToolError):
-        asyncio.run(edit_document(call, "d1", [edit, large]))
-    assert len(call.edits) == 1
+        asyncio.run(suggest(call, "d1", "Yield fell.", "x" * (MAX_SUGGESTION_BYTES + 1)))
+    with pytest.raises(ToolError) as refused:
+        asyncio.run(suggest(call, "d1", "Huancayo", "Junín"))
+    assert refused.value.code == "passage_not_unique"
+    assert len(call.suggested) == 1

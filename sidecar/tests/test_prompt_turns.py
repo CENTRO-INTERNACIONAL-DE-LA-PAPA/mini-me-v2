@@ -3,7 +3,6 @@ from mini_me_sidecar.adapters.prompt import (
     REPLY_RULE,
     RESEARCH_CONTEXT,
     _material,
-    _offered,
     _merged,
     _system_prompt,
     _turns,
@@ -52,12 +51,6 @@ def test_the_conversations_files_and_components_are_listed_without_content():
     assert _material("hello", {"assets": [], "components": []}) == "hello"
     picked = _material("summarize the trial", results, None, {"asset_id": "a2"})
     assert "- trial.csv (ID: a2) — probably the file the user means" in picked
-
-
-def test_every_model_tool_is_offered_with_the_edit_tool_of_the_place():
-    others = ["read_file", "read_component", "hand_off", "save_file", "show_table"]
-    assert _offered(in_thread=False) == [*others, "write_document", "edit_document"]
-    assert _offered(in_thread=True) == [*others, "write_document", "suggest_edit"]
 
 
 def test_a_comment_comes_after_the_passage_it_is_about():

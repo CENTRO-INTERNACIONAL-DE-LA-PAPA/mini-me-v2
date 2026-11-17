@@ -244,14 +244,11 @@ class CallContext:
         self._results = None
         return str(result["component_id"])
 
-    async def edit_document(
-        self, asset_id: str, edits: list[dict[str, str]]
-    ) -> dict[str, Any]:
-        """Opens a comment thread per `{ find, replace, reason }` and a card below the reply,
-        leaving the document as is; returns `{ component_id, threads }`. Raises
-        `CoreRequestError` when refused, changing nothing."""
+    async def suggest(self, asset_id: str, find: str, text: str) -> dict[str, Any]:
+        """Adds a waiting suggestion on the passage `find`, leaving the document as is; returns
+        `{ suggestion_id }`. Raises `CoreRequestError` when refused, changing nothing."""
         result = await self._requests.send(
-            self.call_id, "document.edit", {"asset_id": asset_id, "edits": edits}
+            self.call_id, "document.suggest", {"asset_id": asset_id, "find": find, "text": text}
         )
         self._results = None
         return result
