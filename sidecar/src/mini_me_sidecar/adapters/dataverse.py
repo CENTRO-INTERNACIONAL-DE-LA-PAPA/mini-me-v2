@@ -72,7 +72,6 @@ async def _write_search(ctx: CallContext, text: str) -> DataverseSearch:
 
 
 class SearchDataverse(Adapter):
-    uses_tools = ("save_file",)
     info = AdapterInfo(
         id="cip-dataverse",
         description="Searches CIP's Dataverse for datasets, which the user can download.",

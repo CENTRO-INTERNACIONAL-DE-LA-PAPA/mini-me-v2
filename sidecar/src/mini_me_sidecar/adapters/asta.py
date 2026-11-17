@@ -36,7 +36,6 @@ STATE_LABELS = {"submitted": "Queued at Ai2", "working": "Working"}
 
 
 class FindPapers(Adapter):
-    uses_tools = ("save_file",)
     info = AdapterInfo(
         id="asta-paper-finder",
         description="Finds papers on a topic with Ai2's Paper Finder.",
@@ -87,7 +86,6 @@ class FindPapers(Adapter):
 
 
 class Theorize(Adapter):
-    uses_tools = ("save_file",)
     info = AdapterInfo(
         id="asta-theorizer",
         description="Builds theories from the literature with Ai2's Theorizer.",

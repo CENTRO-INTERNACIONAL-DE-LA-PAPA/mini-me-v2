@@ -40,8 +40,6 @@ class AdapterInfo:
 
 class Adapter(ABC):
     info: ClassVar[AdapterInfo]
-    # Tools the adapter's own code uses; one that offers tools to a model reads each Trait's.
-    uses_tools: ClassVar[tuple[str, ...]] = ()
 
     @abstractmethod
     async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:

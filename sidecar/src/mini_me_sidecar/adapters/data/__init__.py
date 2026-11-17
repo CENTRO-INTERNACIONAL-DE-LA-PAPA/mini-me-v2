@@ -8,7 +8,6 @@ from mini_me_sidecar.context import CallContext
 
 
 class ProfileData(Adapter):
-    uses_tools = ("read_table", "show_table", "save_file")
     info = AdapterInfo(
         id="data-profile",
         description="Describes tables with pandas, without an AI model.",
@@ -23,7 +22,6 @@ class ProfileData(Adapter):
 
 
 class ValidateData(Adapter):
-    uses_tools = ("read_table", "show_table", "save_file")
     info = AdapterInfo(
         id="data-validate",
         description="Runs default and chosen data checks with pointblank.",
@@ -39,7 +37,6 @@ class ValidateData(Adapter):
 
 
 class CleanData(Adapter):
-    uses_tools = ("read_table", "show_table", "save_file")
     info = AdapterInfo(
         id="data-clean",
         description="Applies chosen cleaning actions with pandas and saves a new file.",
@@ -55,7 +52,6 @@ class CleanData(Adapter):
 
 
 class JoinData(Adapter):
-    uses_tools = ("read_table", "show_table", "save_file")
     info = AdapterInfo(
         id="data-join",
         description="Joins two tables on key columns with pandas.",
@@ -71,7 +67,6 @@ class JoinData(Adapter):
 
 
 class PlotData(Adapter):
-    uses_tools = ("read_table", "show_chart")
     info = AdapterInfo(
         id="data-plot",
         description="Draws charts of a table, with values computed by pandas.",
