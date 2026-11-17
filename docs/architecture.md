@@ -224,8 +224,9 @@ adapter as `CoreRequestError`, so an adapter can react to a refusal.
 
 `ctx` also carries the call's Trait (`ctx.trait.instructions`), the message being answered
 (`ctx.message`, with its attachments and Text Components), the answering Mini-Me's name,
-routing's guess at whether the message needs earlier context (`ctx.needs_context`), and the
-outputs of the run's earlier Steps (`ctx.steps`, as `{ step_id, name, output }`).
+routing's guess at whether the message needs earlier context (`ctx.needs_context`), routing's
+picks of the file and the table or chart the message means (`ctx.file`, `ctx.picked_component`)
+and of the tools likely to help (`ctx.tools`), and the outputs of the run's earlier Steps (`ctx.steps`, as `{ step_id, name, output }`).
 
 ## A message, from send to reply
 
@@ -234,11 +235,13 @@ For "@Researcher drought in Andean landraces":
 1. **Send.** The UI calls `send_message`; the core checks the message's references and stores
    it (`conversations.rs`).
 2. **Route.** With an `@` mention, the first mentioned Mini-Me answers. Without one,
-   Typesafe's Jev chooses a Mini-Me; when Jev's confidence is below the threshold in
-   Settings or Jev cannot be asked, Assistant answers (`FALLBACK_MINI_ME` in `library.rs`).
-   Jev also judges whether the message needs earlier context and whether the Mini-Me reacts
-   with an emoji (`routing.rs` in the core, `routing.py` in the sidecar). A comment in a thread
-   is routed the same way, without the question of which file it means.
+   Typesafe's Jev chooses a Mini-Me, reading each by its name, description and Traits; when
+   Jev's confidence is below the threshold in Settings or Jev cannot be asked, Assistant
+   answers (`FALLBACK_MINI_ME` in `library.rs`). Jev also judges whether the message needs
+   earlier context, whether the Mini-Me reacts with an emoji, which file and which table or
+   chart the message means, and which four tools are likely to help; the model's request marks
+   these picks as hints (`routing.rs` in the core, `routing.py` in the sidecar). A comment in a
+   thread is routed the same way, without the file, table or chart and tools questions.
 3. **Start.** The core creates an empty streaming reply and sends `run.start` with the
    Mini-Me's Workflow, the Traits it uses, the model, the message and its context
    (`runs.rs`). A run needs a model if any of its adapters declares providers or if it has

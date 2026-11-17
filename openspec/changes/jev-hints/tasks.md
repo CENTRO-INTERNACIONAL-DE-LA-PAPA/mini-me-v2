@@ -25,9 +25,9 @@
 
 ## 3. UI
 
-- [ ] 3.1 Add plain words for `component` and `tools` in `jevDebug.ts`. Verify:
+- [x] 3.1 Add plain words for `component` and `tools` in `jevDebug.ts`. Verify:
   `npx tsc --noEmit` is clean and `npm test` passes.
-- [ ] 3.2 In the app, with "Show what Jev was asked" on:
+- [x] 3.2 In the app, with "Show what Jev was asked" on:
   - draw a chart, then send "make that chart a bar chart" without a mention, and check the
     `[DEBUG] Jev` block shows the component and tools questions and the Mini-Me options with
     Trait names;
@@ -38,7 +38,7 @@
 
 ## 4. Docs
 
-- [ ] 4.1 Update `docs/architecture.md` where it describes Jev's questions, and add the
+- [x] 4.1 Update `docs/architecture.md` where it describes Jev's questions, and add the
   change's line to `CHANGELOG.md`. Verify: the text matches the specs.
 
 ## Workflow follow-up

@@ -106,7 +106,7 @@ class Prompt(Adapter):
             ctx.document,
             ctx.file,
             ctx.mini_mes,
-            component=ctx.component,
+            component=ctx.picked_component,
             tools=ctx.tools,
         )
         earlier = await _earlier_turns(ctx) if ctx.needs_context is not False else []

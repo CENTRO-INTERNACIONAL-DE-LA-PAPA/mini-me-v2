@@ -8,5 +8,6 @@
 ## Improved
 
 - Mini-Mes suggest changes to a document the same way from a comment or a Conversation: each suggestion shows in the document's source, where you accept or discard it. Every comment now gets a reply, as a message does.
+- Mini-Mes are chosen better, since Jev now sees each Mini-Me's Traits, and they understand which table or chart you mean when you say "that chart".
 - Every Mini-Me can use every tool: Traits no longer list the tools they may use, so there is nothing to tick when you build one.
 - Mini-Mes answer follow-up questions about earlier tables, charts, papers and datasets from their full data. To point at one, describe it in your message; `$` references and the reference button are gone.
