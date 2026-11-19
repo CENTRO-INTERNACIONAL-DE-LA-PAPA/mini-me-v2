@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use serde::Serialize;
 
@@ -26,6 +26,7 @@ pub const RESTART_DELAYS: [Duration; 4] = [
 pub const STABLE_AFTER: Duration = Duration::from_secs(60);
 
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
+const SOURCE_POLL: Duration = Duration::from_secs(1);
 const LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 
 /// The sidecar log's file name in the app's log directory.
@@ -338,6 +339,7 @@ impl FrameSink for ChildSink {
 
 enum Outcome {
     Shutdown,
+    Reloaded,
     Failed(String),
     Incompatible(String),
 }
@@ -347,6 +349,7 @@ type StatusSink = Sink<SidecarStatus>;
 #[derive(Default)]
 struct Control {
     restart_requested: bool,
+    reload_requested: bool,
     shutting_down: bool,
     child: Option<Arc<Mutex<Child>>>,
     sink: Option<Arc<ChildSink>>,
@@ -383,10 +386,14 @@ impl Supervisor {
         })
     }
 
-    /// Starts supervising on a background thread.
+    /// Starts supervising on a background thread; in development, also reloads on source changes.
     pub fn spawn(self: &Arc<Self>) {
         let this = Arc::clone(self);
         std::thread::spawn(move || this.run());
+        if let Launch::Dev { project_dir } = &self.launch {
+            let (this, sources) = (Arc::clone(self), project_dir.join("src"));
+            std::thread::spawn(move || this.watch_sources(&sources));
+        }
     }
 
     pub fn status(&self) -> SidecarStatus {
@@ -404,6 +411,18 @@ impl Supervisor {
         if matches!(state, SidecarState::Stopped | SidecarState::Incompatible) {
             self.control().restart_requested = true;
             self.wake.notify_all();
+        }
+    }
+
+    /// Asks the ready sidecar to exit so it starts again, not counted as a failure.
+    pub fn reload(&self) {
+        let sink = {
+            let mut control = self.control();
+            control.reload_requested = true;
+            control.sink.clone()
+        };
+        if let Some(sink) = sink {
+            sink.send(&CoreFrame::Shutdown {});
         }
     }
 
@@ -472,6 +491,39 @@ impl Supervisor {
         false
     }
 
+    /// Reloads a ready sidecar once idle, or restarts a stopped one, after a source file changes.
+    fn watch_sources(&self, dir: &Path) {
+        let mut seen = newest_source(dir);
+        let mut stale = false;
+        while !self.control().shutting_down {
+            std::thread::sleep(SOURCE_POLL);
+            let newest = newest_source(dir);
+            if newest > seen {
+                seen = newest;
+                if !stale {
+                    self.log.line("sidecar sources changed; reloading once idle");
+                }
+                stale = true;
+            }
+            if !stale {
+                continue;
+            }
+            match self.status().state {
+                SidecarState::Ready => {
+                    if self.calls.detach_if_idle() {
+                        stale = false;
+                        self.reload();
+                    }
+                }
+                SidecarState::Stopped | SidecarState::Incompatible => {
+                    stale = false;
+                    self.restart();
+                }
+                SidecarState::Starting | SidecarState::Restarting => {}
+            }
+        }
+    }
+
     fn run(self: Arc<Self>) {
         let mut backoff = Backoff::default();
         let mut state = SidecarState::Starting;
@@ -488,12 +540,14 @@ impl Supervisor {
                 let mut control = self.control();
                 control.child = None;
                 control.sink = None;
+                control.reload_requested = false;
                 if control.shutting_down {
                     return;
                 }
             }
             match outcome {
                 Outcome::Shutdown => return,
+                Outcome::Reloaded => state = SidecarState::Restarting,
                 Outcome::Incompatible(detail) => {
                     self.log.line(&detail);
                     self.set_status(SidecarStatus::new(SidecarState::Incompatible, Some(&detail)));
@@ -633,9 +687,14 @@ impl Supervisor {
                     None => self.log.line(&format!("ignoring unreadable line: {line}")),
                 },
                 Ok(Incoming::Closed) | Err(RecvTimeoutError::Disconnected) => {
-                    if self.control().shutting_down {
+                    let control = self.control();
+                    if control.shutting_down {
                         return Outcome::Shutdown;
                     }
+                    if control.reload_requested {
+                        return Outcome::Reloaded;
+                    }
+                    drop(control);
                     return Outcome::Failed(format!("the process stopped ({})", exit(child)));
                 }
                 Err(RecvTimeoutError::Timeout) => {
@@ -658,6 +717,26 @@ impl Supervisor {
             }
         }
     }
+}
+
+/// The newest modification time of the `.py` files anywhere under `dir`.
+fn newest_source(dir: &Path) -> Option<SystemTime> {
+    let mut newest = None;
+    let mut dirs = vec![dir.to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "py") {
+                newest = newest.max(entry.metadata().and_then(|m| m.modified()).ok());
+            }
+        }
+    }
+    newest
 }
 
 /// Forwards stdout lines to `tx`, then `Closed`; invalid UTF-8 is decoded lossily for the log.
