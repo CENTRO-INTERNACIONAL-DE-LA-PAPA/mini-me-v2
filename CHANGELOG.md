@@ -3,6 +3,7 @@
 ## New
 
 - Each Trait has its own icon, and you choose one for your own Traits by clicking the icon in the Trait editor.
+- More ways to draw a Mini-Me: new bodies, eyes, mouths and accessories, with eyes and mouth picked separately.
 
 ## Fixed
 

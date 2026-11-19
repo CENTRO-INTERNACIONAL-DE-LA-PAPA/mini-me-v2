@@ -67,8 +67,9 @@ Each Mini-Me SHALL have:
 - an `id` (UUID, stable across installations);
 - a `name` and a `description`;
 - colours `tint`, `solid` and `ink`;
-- an avatar: a `base`, a `face` and optionally an `accessory`, each the id of one of the UI's
-  avatar part files;
+- an avatar: one part per avatar layer, by layer name: a `base`, `eyes` and a `mouth`, and
+  optionally an `accessory` and a `held` item, each the id of one of the UI's avatar part
+  files for that layer;
 - a `group`, one of `thinking`, `literature` and `data`, which the `@` list shows it under;
 - exactly one Workflow, a list of Steps as Workflows define them.
 
@@ -94,6 +95,25 @@ editors describe. The list of Mini-Mes the UI gets SHALL say for each whether it
 - **WHEN** the user has saved "Field Translator"
 - **THEN** the UI's list of Mini-Mes includes it after the built-in ones, marked as not
   built-in
+
+### Requirement: Avatars are drawn from layers
+The UI SHALL draw an avatar by stacking its parts in layer order: Base, Eyes, Mouth, Accessory,
+Held item. Each part SHALL be an SVG file in its layer's folder, used as exported: its body
+and freckle placeholder colours SHALL take the Mini-Me's `solid` and `ink`. A layer without
+parts SHALL NOT be offered, and an unknown part id SHALL draw nothing for its layer.
+
+#### Scenario: Built-in Mini-Mes look as before
+- **WHEN** the app shows Scribe
+- **THEN** Scribe has the long base, round open eyes, no visible mouth and a bow tie, in
+  Scribe's colours
+
+#### Scenario: A new part
+- **WHEN** a developer adds an exported SVG to the accessories folder
+- **THEN** the next build offers it as an accessory, coloured and animated like the others
+
+#### Scenario: Held item without parts
+- **WHEN** the Held item folder is empty
+- **THEN** no Held item is offered when picking a Mini-Me's avatar
 
 ### Requirement: Predefined Mini-Mes
 Mini-Me SHALL ship with sixteen Mini-Mes:

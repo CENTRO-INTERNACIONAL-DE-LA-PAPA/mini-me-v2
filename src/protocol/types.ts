@@ -367,12 +367,8 @@ export interface MiniMeColors {
 /** Which heading the `@` list shows a Mini-Me under. */
 export type MiniMeGroup = "thinking" | "literature" | "data";
 
-/** The avatar parts a Mini-Me is drawn with, by the ids of the avatar part files. */
-export interface MiniMeAvatar {
-  base: string;
-  face: string;
-  accessory?: string;
-}
+/** The part a Mini-Me's avatar draws for each layer, by layer name and part file id. */
+export type MiniMeAvatar = Record<string, string>;
 
 /** A Mini-Me as the UI lists and shows it. */
 export interface MiniMe {

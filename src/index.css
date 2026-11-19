@@ -297,20 +297,12 @@
     .avatar.avatar-working .avatar-breathe {
         animation: avatar-work 800ms ease-in-out infinite;
     }
-    /* Looking toward the pointer (src/components/avatar/look.ts): the eyes lean farthest, the
-       mouth less and the accessory least, so the head seems to turn. Inside the face's svg a px is
-       one of its 28 viewBox units. `translate` leaves `transform` free for the blink. */
-    .avatar:not(.avatar-small) .avatar-head :is(svg > *, img) {
+    /* Looking toward the pointer (src/components/avatar/look.ts): each layer leans by its own
+       --layer-lean from src/components/avatar/layers.ts, so the head seems to turn. */
+    .avatar:not(.avatar-small) [data-layer] {
         transition: translate 150ms ease-out;
-    }
-    .avatar:not(.avatar-small) .avatar-head .eye {
-        translate: calc(var(--look-x, 0) * 1.6px) calc(var(--look-y, 0) * 1.6px);
-    }
-    .avatar:not(.avatar-small) .avatar-head svg > :not(.eye) {
-        translate: calc(var(--look-x, 0) * 1px) calc(var(--look-y, 0) * 1px);
-    }
-    .avatar:not(.avatar-small) .avatar-head img {
-        translate: calc(var(--look-x, 0) * 2%) calc(var(--look-y, 0) * 2%);
+        translate: calc(var(--look-x, 0) * var(--layer-lean, 0%))
+            calc(var(--look-y, 0) * var(--layer-lean, 0%));
     }
 }
 

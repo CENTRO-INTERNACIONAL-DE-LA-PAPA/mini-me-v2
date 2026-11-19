@@ -2,6 +2,8 @@
 //! built-in ones are embedded from `library/builtin.json`, and user-made ones are added by
 //! `user_library`.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -44,15 +46,9 @@ pub struct MiniMeColors {
     pub ink: String,
 }
 
-/// The parts a Mini-Me's avatar is drawn from, named by the UI's avatar part files. The body
-/// takes the Mini-Me's `solid` colour and the freckles its `ink`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MiniMeAvatar {
-    pub base: String,
-    pub face: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub accessory: Option<String>,
-}
+/// The part a Mini-Me's avatar draws for each layer, by layer name; the UI owns the layers and
+/// the part files. The body takes the Mini-Me's `solid` colour and the freckles its `ink`.
+pub type MiniMeAvatar = BTreeMap<String, String>;
 
 /// A node in a Workflow: a Trait Step or a control Step. In JSON a Step without `type` is a
 /// Trait Step.
