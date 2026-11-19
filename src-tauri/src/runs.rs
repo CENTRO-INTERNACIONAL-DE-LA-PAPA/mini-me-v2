@@ -1518,6 +1518,7 @@ pub mod test_support {
             name: "Test".to_string(),
             description: String::new(),
             color: String::new(),
+            icon: None,
             adapter: adapter.to_string(),
             instructions: None,
         };

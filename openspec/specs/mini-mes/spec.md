@@ -13,6 +13,7 @@ The Rust core SHALL hold a shared Trait library. Each Trait definition SHALL hav
 - a `name` (imperative verb in Title Case) and a `description`;
 - a `color`: one bright fill on which a black line glyph stays legible, as DESIGN.md
   describes for Trait icons;
+- optionally an `icon`: the name of one of the UI's Trait icons;
 - the `adapter` that runs it;
 - its `instructions` (text, or none for adapters that take none).
 
@@ -42,6 +43,24 @@ placeholder Traits.
 - **WHEN** the app starts and `library.json` holds a valid Trait *Translate*
 - **THEN** the library contains *Translate* next to the built-in Traits, marked as
   user-made
+
+### Requirement: A Trait is shown by its icon
+Every built-in Trait SHALL carry an icon. Wherever the UI shows a Trait (the Library's Traits
+list, a Mini-Me's Traits, the Trait editor's header and the Workflow editor's Trait Steps) it
+SHALL show the Trait's icon as a plain line icon in ink, never on a filled or tinted tile. A
+Trait without an icon, or whose icon the UI does not know, SHALL show the puzzle piece.
+
+#### Scenario: Built-in Traits differ
+- **WHEN** the user opens the Library's Traits section
+- **THEN** *Summarize* and *Plot* each show their own icon, and neither shows the puzzle piece
+
+#### Scenario: Trait Step
+- **WHEN** a Workflow runs *Plot*
+- **THEN** its node shows *Plot*'s icon
+
+#### Scenario: Unknown icon
+- **WHEN** `library.json` holds a Trait whose icon is not one the UI knows
+- **THEN** the Trait is listed and shows the puzzle piece
 
 ### Requirement: Mini-Me definitions
 Each Mini-Me SHALL have:
