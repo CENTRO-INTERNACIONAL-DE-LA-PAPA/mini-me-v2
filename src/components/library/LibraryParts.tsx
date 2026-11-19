@@ -4,10 +4,11 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon, PuzzleIcon } from "lucide-react";
+import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import type { MiniMe } from "../../protocol/types";
 import { count } from "../../lib/format";
+import { traitIcon } from "../../lib/traitIcons";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 
@@ -160,9 +161,10 @@ export function List({ children }: { children: ReactNode }) {
   return <ul className="divide-y divide-border">{children}</ul>;
 }
 
-/** A Trait's mark, the same puzzle piece a Trait Step shows. */
-export function TraitIcon() {
-  return <PuzzleIcon aria-hidden className="size-5 shrink-0 text-ink-2" strokeWidth={1.6} />;
+/** A Trait's mark, the same icon its Trait Steps show. */
+export function TraitIcon({ icon }: { icon: string | null }) {
+  const Icon = traitIcon(icon);
+  return <Icon aria-hidden className="size-5 shrink-0 text-ink-2" strokeWidth={1.6} />;
 }
 
 /** One Mini-Me or Trait in a list, opening its editor. */

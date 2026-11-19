@@ -167,7 +167,7 @@ export function MiniMeEditor({
                 {used.map((t) => (
                   <Row
                     key={t.id}
-                    icon={<TraitIcon />}
+                    icon={<TraitIcon icon={t.icon} />}
                     name={t.name}
                     description={t.description}
                     details={<OriginBadge builtIn={t.built_in} />}

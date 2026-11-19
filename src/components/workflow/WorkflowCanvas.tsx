@@ -32,6 +32,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { traitIcon } from "../../lib/traitIcons";
 import type { MiniMe, TraitSummary, WorkflowStep } from "../../protocol/types";
 import { surfaceStyle } from "../minime/miniMeColors";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
@@ -341,7 +342,7 @@ function TraitNode({ data }: NodeProps<LayoutNode>) {
   return (
     <StepCard
       step={step}
-      icon={PuzzleIcon}
+      icon={traitIcon(t?.icon ?? null)}
       name={t?.name ?? "Unknown Trait"}
     />
   );

@@ -84,6 +84,29 @@ choice of tools: every tool is offered to it as to every prompt-based Trait.
 - **WHEN** a Mini-Me running *Translate* answers a message that references a document
 - **THEN** its model can suggest edits to that document, with no setting in the editor
 
+### Requirement: Picking a Trait's icon
+In the editor of a user-made Trait, the icon in the header SHALL open a grid of the UI's Trait
+icons; picking one SHALL set the Trait's icon, which is saved with the Trait. A new Trait SHALL
+start without an icon, and the grid SHALL offer the puzzle piece to remove it. The editor of a
+built-in Trait SHALL show its icon without offering the grid. A copy made with Duplicate SHALL
+start with the original's icon.
+
+#### Scenario: Picking an icon
+- **WHEN** the user opens *Translate*, picks an icon from the grid and saves
+- **THEN** *Translate* shows that icon in the Library, and still does after the app restarts
+
+#### Scenario: Back to the puzzle piece
+- **WHEN** the user picks the puzzle piece in *Translate*'s grid and saves
+- **THEN** *Translate* has no icon and shows the puzzle piece
+
+#### Scenario: Built-in Trait
+- **WHEN** the user opens *Plan*
+- **THEN** its icon is shown and clicking it opens no grid
+
+#### Scenario: Duplicated Trait
+- **WHEN** the user duplicates *Plan* and saves
+- **THEN** "Plan Copy" shows *Plan*'s icon
+
 ### Requirement: Editing a Trait affects every Mini-Me that uses it
 Saving a user-made Trait SHALL change it for every Mini-Me whose Workflow references it. The
 Trait editor SHALL list the Mini-Mes that use the Trait.
