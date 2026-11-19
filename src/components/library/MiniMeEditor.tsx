@@ -4,14 +4,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { DicesIcon } from "lucide-react";
 import { useState } from "react";
 import { api } from "../../api";
 import { MINI_ME_GROUPS } from "../../protocol/references";
 import type { MiniMeDefinition, MiniMeGroup, WorkflowStep } from "../../protocol/types";
 import { Avatar } from "../avatar/Avatar";
 import { ColorPicker } from "../avatar/ColorPicker";
-import { COLOR_FAMILIES, hueOf, miniMeColors } from "../avatar/palette";
+import { COLOR_FAMILIES, hueOf, miniMeColors, randomFamily } from "../avatar/palette";
 import { PartTabs } from "../avatar/PartGrid";
+import { randomAvatar } from "../avatar/parts";
 import { NIL_ID } from "./library";
 import {
   DeleteButton,
@@ -76,7 +78,7 @@ export function MiniMeEditor({
     },
   });
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useState("workflow");
+  const [tab, setTab] = useState("appearance");
 
   if (!library || !draft) {
     return problems ? (
@@ -116,11 +118,11 @@ export function MiniMeEditor({
           back="Mini-Mes"
           tabs={
             <TabsList aria-label="Editor">
+              <TabsTrigger value="appearance">Appearance</TabsTrigger>
               <TabsTrigger value="workflow">Workflow</TabsTrigger>
               <TabsTrigger value="traits">
                 Traits <span className="tabular-nums">{used.length}</span>
               </TabsTrigger>
-              <TabsTrigger value="appearance">Appearance</TabsTrigger>
             </TabsList>
           }
           actions={
@@ -256,6 +258,15 @@ function Appearance({
               <Card className="items-center p-4">
                 <Avatar avatar={draft.avatar} color={draft.colors} size={150} />
               </Card>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  onChange({ avatar: randomAvatar(), colors: miniMeColors(randomFamily()) })
+                }
+              >
+                <DicesIcon />
+                Random
+              </Button>
               <ColorPicker
                 value={{ hue: hue ?? yellow.hue, solid: draft.colors.solid, ink: draft.colors.ink }}
                 onChange={(color) => onChange({ colors: miniMeColors(color) })}

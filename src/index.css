@@ -235,6 +235,8 @@
 @layer base {
     * {
         @apply border-border outline-ring;
+        /* Acts only on elements that scroll: content keeps its place when a scrollbar appears. */
+        scrollbar-gutter: stable;
     }
     html {
         @apply font-sans;
