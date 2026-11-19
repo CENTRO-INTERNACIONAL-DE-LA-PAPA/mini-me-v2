@@ -25,6 +25,10 @@ CANCEL_GRACE_S = 2.0
 THREAD = "run"
 
 
+class RunCancelled(Exception):
+    """Ends a cancelled run's Step; LangGraph reports a node's own `CancelledError` as a failure."""
+
+
 class Run:
     """One Mini-Me run, and how its Steps reach adapters, the model and the core."""
 
@@ -80,7 +84,7 @@ class Run:
         ctx.ended = True
         self._calls.discard(ctx)
         if self.cancelled:
-            raise asyncio.CancelledError
+            raise RunCancelled
 
     async def trait(self, step: Step, earlier: list[dict[str, Any]], stream: bool) -> str:
         definition = self.traits[str(step.trait)]
@@ -187,7 +191,7 @@ class Runs:
     async def _run(self, run: Run) -> None:
         try:
             await run.execute()
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, RunCancelled):
             outcome: dict[str, str] = {"kind": "cancelled"}
         except TraitError as error:
             outcome = {"kind": "error", "code": error.code, "message": str(error)}
