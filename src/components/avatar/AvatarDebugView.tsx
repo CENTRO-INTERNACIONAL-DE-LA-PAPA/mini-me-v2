@@ -4,15 +4,13 @@ import { useState } from "react";
 import type { MiniMeAvatar } from "../../protocol/types";
 import { Avatar } from "./Avatar";
 import { ColorPicker } from "./ColorPicker";
-import { COLOR_FAMILIES, type HueColor } from "./palette";
-import { LAYERS } from "./parts";
+import { randomFamily, type HueColor } from "./palette";
+import { randomAvatar } from "./parts";
 import { PartTabs } from "./PartGrid";
 
 interface Props {
   onClose: () => void;
 }
-
-const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 
 
 /** A development-only page for trying combinations of avatar parts and colours. */
@@ -25,16 +23,9 @@ export function AvatarDebugView({ onClose }: Props) {
   const [color, setColor] = useState<HueColor | null>(null);
   const shown = { avatar, color };
 
-  // Optional layers are left empty a quarter of the time.
   const randomize = () => {
-    setAvatar(
-      Object.fromEntries(
-        LAYERS.filter((l) => l.parts.length > 0 && (l.required || Math.random() >= 0.25)).map(
-          (l) => [l.name, pick(l.parts).id],
-        ),
-      ),
-    );
-    setColor(pick(COLOR_FAMILIES));
+    setAvatar(randomAvatar());
+    setColor(randomFamily());
   };
 
   return (

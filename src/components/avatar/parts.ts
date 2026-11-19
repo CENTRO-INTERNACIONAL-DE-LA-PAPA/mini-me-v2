@@ -56,6 +56,16 @@ export const LAYERS: AvatarLayer[] = LAYER_DEFINITIONS.map(({ files, ...layer })
 export const partMarkup = (layer: AvatarLayer, id: string | undefined) =>
   layer.parts.find((p) => p.id === id)?.markup ?? null;
 
+/** A random part for each layer with parts; optional layers are left empty a quarter of the
+ * time. */
+export const randomAvatar = (): MiniMeAvatar =>
+  Object.fromEntries(
+    LAYERS.filter((l) => l.parts.length > 0 && (l.required || Math.random() >= 0.25)).map((l) => [
+      l.name,
+      l.parts[Math.floor(Math.random() * l.parts.length)].id,
+    ]),
+  );
+
 /** `avatar` with `layer` drawing part `id`, or nothing when `id` is null. */
 export function withPart(avatar: MiniMeAvatar, layer: string, id: string | null): MiniMeAvatar {
   const { [layer]: _, ...rest } = avatar;
