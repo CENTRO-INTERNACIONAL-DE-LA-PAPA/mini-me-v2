@@ -1,23 +1,25 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { PuzzleIcon } from "lucide-react";
 import { api } from "../../api";
 import type { MiniMe, TraitDraft, TraitSummary } from "../../protocol/types";
+import { traitIcon } from "../../lib/traitIcons";
 import { NIL_ID } from "./library";
 import { DeleteButton, EditorHeader, EditorPage, Field } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { SheetSection } from "../shell/Sheet";
 import type { View } from "../shell/view";
+import { TraitIconPicker } from "./TraitIconPicker";
 import { useDefinitionDraft } from "./useDefinitionDraft";
 
-const EMPTY: TraitDraft = { id: NIL_ID, name: "", description: "", instructions: "" };
+const EMPTY: TraitDraft = { id: NIL_ID, name: "", description: "", icon: null, instructions: "" };
 
 const draftOf = (t: TraitSummary): TraitDraft => ({
   id: t.id,
   name: t.name,
   description: t.description,
+  icon: t.icon,
   instructions: t.instructions ?? "",
 });
 
@@ -67,6 +69,7 @@ export function TraitEditor({
   const readOnly = builtIn || !!library.unreadable;
   const users = (saved?.used_by ?? []).map((m) => library.mini_mes.find((x) => x.id === m));
   const update = (change: Partial<TraitDraft>) => setDraft({ ...draft, ...change });
+  const HeaderIcon = traitIcon(draft.icon);
 
   const actions = builtIn ? (
     promptBased && (
@@ -89,7 +92,13 @@ export function TraitEditor({
     <div className="flex flex-col">
       <EditorHeader
         title={draft.name || "New Trait"}
-        icon={<PuzzleIcon className="size-6" />}
+        icon={
+          readOnly ? (
+            <HeaderIcon className="size-6" />
+          ) : (
+            <TraitIconPicker icon={draft.icon} onPick={(icon) => update({ icon })} />
+          )
+        }
         subtitle={builtIn ? "Built-in Trait" : saved ? "Your Trait" : "Not saved yet"}
         back="Traits"
         actions={actions}

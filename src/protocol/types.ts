@@ -409,6 +409,7 @@ export interface TraitSummary {
   id: Uuid;
   name: string;
   description: string;
+  icon: string | null;
   instructions: string | null;
   built_in: boolean;
   /** Whether it runs on its instructions; only such Traits can be duplicated. */
@@ -422,6 +423,7 @@ export interface TraitDraft {
   id: Uuid;
   name: string;
   description: string;
+  icon: string | null;
   instructions: string;
 }
 

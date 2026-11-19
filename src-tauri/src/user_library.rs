@@ -44,6 +44,7 @@ pub struct TraitDraft {
     pub id: Uuid,
     pub name: String,
     pub description: String,
+    pub icon: Option<String>,
     pub instructions: String,
 }
 
@@ -110,6 +111,7 @@ impl LibraryStore {
             name: draft.name.trim().to_string(),
             description: draft.description.trim().to_string(),
             color: TRAIT_COLOR.to_string(),
+            icon: draft.icon,
             adapter: PROMPT_ADAPTER.to_string(),
             instructions: Some(draft.instructions),
         };
@@ -301,6 +303,7 @@ mod tests {
             id: Uuid::nil(),
             name: name.into(),
             description: "Translates text.".into(),
+            icon: None,
             instructions: "Translate the message.".into(),
         }
     }
@@ -363,6 +366,7 @@ mod tests {
             name: "Chart".into(),
             description: "Draws.".into(),
             color: TRAIT_COLOR.into(),
+            icon: None,
             adapter: "prompt".into(),
             instructions: Some(" ".into()),
         })

@@ -20,6 +20,9 @@ pub struct TraitDef {
     pub name: String,
     pub description: String,
     pub color: String,
+    /// The name of one of the UI's Trait icons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
     pub instructions: Option<String>,
@@ -207,6 +210,7 @@ pub struct TraitSummary {
     pub id: Uuid,
     pub name: String,
     pub description: String,
+    pub icon: Option<String>,
     pub instructions: Option<String>,
     pub built_in: bool,
     /// Whether it runs on the prompt adapter, the only kind a duplicate can be made of.
@@ -276,6 +280,7 @@ impl Library {
                 id: t.id,
                 name: t.name.clone(),
                 description: t.description.clone(),
+                icon: t.icon.clone(),
                 instructions: t.instructions.clone(),
                 built_in: self.is_built_in(t.id),
                 prompt_based: t.adapter == PROMPT_ADAPTER,
@@ -472,6 +477,7 @@ mod tests {
             name: name.into(),
             description: "Translates text.".into(),
             color: "oklch(0.8 0 0)".into(),
+            icon: None,
             adapter: PROMPT_ADAPTER.into(),
             instructions: Some("Translate the message.".into()),
         }
