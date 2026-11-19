@@ -424,6 +424,19 @@ impl Runs {
         }
     }
 
+    /// Drops the sidecar when nothing is in flight, so no call starts before it restarts.
+    pub fn detach_if_idle(&self) -> bool {
+        let mut inner = self.lock();
+        let idle = inner.runs.is_empty()
+            && inner.routes.is_empty()
+            && inner.summaries.is_empty()
+            && inner.drafts.is_empty();
+        if idle {
+            inner.sink = None;
+        }
+        idle
+    }
+
     fn sink(&self) -> AppResult<Arc<dyn FrameSink>> {
         self.lock().sink.clone().ok_or_else(|| {
             AppError::new("sidecar_unavailable", "Mini-Me's runtime is not ready yet.")
@@ -1912,6 +1925,21 @@ mod tests {
             }
         }
         let message = f.project.lock().load_message(first).unwrap().unwrap().1;
+        let err = f
+            .runs
+            .start(Arc::clone(&f.project), f.conversation, &message, spec("echo", json!({})), None)
+            .unwrap_err();
+        assert_eq!(err.code, "sidecar_unavailable");
+    }
+
+    #[test]
+    fn detaches_only_when_nothing_is_in_flight() {
+        let f = quick();
+        let (run_id, _) = f.start("echo");
+        assert!(!f.runs.detach_if_idle());
+        f.runs.handle(SidecarFrame::RunDone { run_id });
+        assert!(f.runs.detach_if_idle());
+        let message = f.send(f.conversation, "late blight spreads");
         let err = f
             .runs
             .start(Arc::clone(&f.project), f.conversation, &message, spec("echo", json!({})), None)
