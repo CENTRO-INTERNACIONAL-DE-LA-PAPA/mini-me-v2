@@ -3,7 +3,10 @@ import { Avatar } from "../avatar/Avatar";
 
 // An unknown Mini-Me, such as the author of a reply from a Mini-Me that no longer exists, is
 // drawn as a plain potato in the neutral "off" colours.
-const UNKNOWN = { base: "classic", face: "neutral", color: { solid: "#d0cfc9", ink: "#8a8a8a" } };
+const UNKNOWN = {
+  avatar: { base: "classic", eyes: "normal", mouth: "neutral" },
+  color: { solid: "#d0cfc9", ink: "#8a8a8a" },
+};
 
 /** A Mini-Me's avatar in its own colours, or a neutral one when the Mini-Me is unknown. */
 export function MiniMeAvatar({
@@ -20,9 +23,7 @@ export function MiniMeAvatar({
 }) {
   return miniMe ? (
     <Avatar
-      base={miniMe.avatar.base}
-      face={miniMe.avatar.face}
-      accessory={miniMe.avatar.accessory}
+      avatar={miniMe.avatar}
       color={miniMe.colors}
       size={size}
       working={working}

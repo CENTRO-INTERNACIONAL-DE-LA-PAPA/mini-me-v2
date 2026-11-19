@@ -214,7 +214,7 @@ White, 1px `--border`, radius 12, no shadow. Items radius 7; the highlighted ite
 Lucide, outlined, stroke 1.4, 15–18px. Colour `--muted-foreground` (inactive), `--ink-2` (default) or ink (active). No filled variants.
 
 ### Mini-Me avatars (solid style)
-A flat potato in the Mini-Me's **solid** colour. No outline, no background disc. Features are near-black; freckles use the Mini-Me's **ink**. Built from base, face and accessory parts plus a colour family. Never redraw avatars by hand.
+A flat potato in the Mini-Me's **solid** colour. No outline, no background disc. Features are near-black; freckles use the Mini-Me's **ink**. Built from one part per layer (base, eyes, mouth, and optionally an accessory and a held item) plus a colour family. Never redraw avatars by hand.
 
 Sizes: 16 (inline chip), 18–22 (stacks, Workflow start and end, rows), 24 (name tags), 28 (reply header), 40 (prominent rows), 48 (editor header), 56 (library card). Stacks overlap by about a third.
 

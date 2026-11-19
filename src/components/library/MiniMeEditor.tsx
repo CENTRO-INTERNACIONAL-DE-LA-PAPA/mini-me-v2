@@ -38,7 +38,7 @@ const EMPTY: MiniMeDefinition = {
   name: "",
   description: "",
   colors: miniMeColors(yellow),
-  avatar: { base: "classic", face: "cheerful" },
+  avatar: { base: "classic", eyes: "normal", mouth: "smile" },
   group: "thinking",
   built_in: false,
   workflow: { steps: [] },
@@ -111,7 +111,7 @@ export function MiniMeEditor({
       <MainSheet>
         <EditorHeader
           title={draft.name || "New Mini-Me"}
-          icon={<Avatar {...draft.avatar} color={draft.colors} size={48} />}
+          icon={<Avatar avatar={draft.avatar} color={draft.colors} size={48} />}
           subtitle={draft.description}
           back="Mini-Mes"
           tabs={
@@ -254,7 +254,7 @@ function Appearance({
           <div className="grid grid-cols-[200px_1fr] items-start gap-8">
             <div className="grid gap-5">
               <Card className="items-center p-4">
-                <Avatar {...draft.avatar} color={draft.colors} size={150} />
+                <Avatar avatar={draft.avatar} color={draft.colors} size={150} />
               </Card>
               <ColorPicker
                 value={{ hue: hue ?? yellow.hue, solid: draft.colors.solid, ink: draft.colors.ink }}
@@ -262,11 +262,9 @@ function Appearance({
               />
             </div>
             <PartTabs
-              style={draft.avatar}
+              avatar={draft.avatar}
               color={draft.colors}
-              onChange={({ base, face, accessory }) =>
-                onChange({ avatar: { base, face, ...(accessory ? { accessory } : {}) } })
-              }
+              onChange={(avatar) => onChange({ avatar })}
             />
           </div>
         </Field>
