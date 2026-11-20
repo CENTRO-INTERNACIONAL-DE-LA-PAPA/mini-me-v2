@@ -1,3 +1,4 @@
+import { ComponentCard } from "./ComponentCard";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { api, errorMessage } from "../../api";
@@ -42,7 +43,7 @@ function Approval({ preview, answer, projectId, messageId, componentId, replySta
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-card-edge bg-card px-4 py-3">
+    <ComponentCard className="gap-3">
       <p className="text-ui text-foreground">{prompt}</p>
       <div className="flex gap-2">
         <Button onClick={() => respond(true)} disabled={sending}>
@@ -53,7 +54,7 @@ function Approval({ preview, answer, projectId, messageId, componentId, replySta
         </Button>
       </div>
       {error && <ErrorText>{error}</ErrorText>}
-    </div>
+    </ComponentCard>
   );
 }
 

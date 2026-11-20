@@ -1,3 +1,4 @@
+import { ListRow } from "../shell/ListRow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -68,7 +69,8 @@ export function EditorHeader({
       {problems && (
         <Card
           render={<ul />}
-          className="max-h-32 gap-1 overflow-y-auto rounded-xl px-4 py-3 text-meta text-destructive"
+          size="sm"
+          className="max-h-32 gap-1 overflow-y-auto text-meta text-destructive"
         >
           {problems.split("\n").map((problem) => (
             <li key={problem}>{problem}</li>
@@ -124,19 +126,18 @@ export function Row({
 }) {
   return (
     <li>
-      <button
-        type="button"
-        className="flex w-full items-center gap-3.5 rounded-xl px-2 py-3 text-left transition-colors duration-150 ease-out outline-none hover:bg-accent focus-visible:bg-accent"
-        onClick={onOpen}
-      >
-        {icon}
-        <span className="grid min-w-0 flex-1 gap-0.5">
-          <span className="text-ui font-medium">{name}</span>
-          <span className="truncate text-meta text-muted-foreground">{description}</span>
-        </span>
-        {details}
-        <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-chev" />
-      </button>
+      <ListRow
+        leading={icon}
+        name={name}
+        meta={description}
+        trailing={
+          <>
+            {details}
+            <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-chev" />
+          </>
+        }
+        onOpen={onOpen}
+      />
     </li>
   );
 }

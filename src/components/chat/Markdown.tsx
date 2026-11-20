@@ -1,4 +1,5 @@
-import { createElement, memo, useMemo, type ReactNode } from "react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { createElement, memo, useMemo, type ComponentType, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -76,7 +77,7 @@ function link(href: string | undefined, children: ReactNode) {
 }
 
 /** An element override that sets `className` and drops react-markdown's syntax tree `node`. */
-const styled = (tag: string, className: string) =>
+const styled = (tag: string | ComponentType<{ className?: string }>, className: string) =>
   function Styled({ node: _node, ...props }: { node?: unknown }) {
     return createElement(tag, { ...props, className });
   };
@@ -104,13 +105,17 @@ const ELEMENTS: Components = {
       "first:mt-0 [&_code]:bg-transparent [&_code]:p-0",
   ),
   table: ({ node: _node, ...props }) => (
-    <div className="mt-2 overflow-x-auto rounded-xl border border-card-edge bg-card first:mt-0">
-      <table className="w-full border-collapse text-ui tabular-nums" {...props} />
-    </div>
+    <Table
+      containerClassName="mt-2 rounded-xl border border-card-edge bg-card first:mt-0"
+      className="tabular-nums"
+      {...props}
+    />
   ),
-  thead: styled("thead", "bg-muted"),
-  th: styled("th", "px-3 py-2 text-left text-meta font-normal text-muted-foreground"),
-  td: styled("td", "border-t border-border px-3 py-2"),
+  thead: styled(TableHeader, "bg-muted"),
+  tbody: styled(TableBody, ""),
+  tr: styled(TableRow, "hover:bg-transparent"),
+  th: styled(TableHead, ""),
+  td: styled(TableCell, "whitespace-normal"),
   img: ({ src, alt }) => link(typeof src === "string" ? src : undefined, alt || src || "image"),
 };
 

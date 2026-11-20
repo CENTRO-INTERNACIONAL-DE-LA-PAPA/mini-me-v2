@@ -176,7 +176,7 @@ function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: bo
               key={m?.id ?? i}
               miniMe={m}
               render={<li />}
-              className="flex items-center gap-3 rounded-xl px-3.5 py-3"
+              className="flex items-center gap-3 px-4 py-3"
             >
               <MiniMeAvatar miniMe={m} size={32} />
               <span className="grid min-w-0">

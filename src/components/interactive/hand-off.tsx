@@ -1,3 +1,4 @@
+import { ComponentCard } from "./ComponentCard";
 import { ArrowRightIcon } from "lucide-react";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import type { MiniMe } from "../../protocol/types";
@@ -29,7 +30,7 @@ export function HandOffCard({
   onOpenFile?: () => void;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-card-edge bg-card px-4 py-3">
+    <ComponentCard className="flex-row items-start gap-3">
       <ArrowRightIcon aria-hidden className="mt-0.5 size-4.5 shrink-0 text-mm-ink" />
       <span className="grid min-w-0 flex-1 gap-1">
         <span className="text-meta text-muted-foreground">
@@ -44,7 +45,7 @@ export function HandOffCard({
           </span>
         )}
       </span>
-    </div>
+    </ComponentCard>
   );
 }
 

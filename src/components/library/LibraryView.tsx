@@ -274,7 +274,7 @@ function rank(group: string): number {
 function Problems({ library }: { library: Library }) {
   if (!library.unreadable && library.skipped.length === 0) return null;
   return (
-    <Card render={<section />} className="gap-0 px-5 py-4 text-meta">
+    <Card render={<section />} className="gap-0 text-meta">
       {library.unreadable ? (
         <p className="text-destructive">
           Your Mini-Mes and Traits could not be read, so they can't be changed until

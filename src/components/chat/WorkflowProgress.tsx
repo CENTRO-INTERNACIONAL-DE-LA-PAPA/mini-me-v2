@@ -1,3 +1,4 @@
+import { ComponentCard } from "../interactive/ComponentCard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CheckIcon } from "lucide-react";
@@ -105,7 +106,7 @@ export function WorkflowProgress({
   const added = open === null ? [] : (byStep.get(open) ?? []);
 
   return (
-    <div className="rounded-xl border border-card-edge bg-card px-4 py-3">
+    <ComponentCard className="gap-0">
       <div className="flex items-start gap-3">
         <ol
           aria-label="Workflow progress"
@@ -173,7 +174,7 @@ export function WorkflowProgress({
           />
         </div>
       )}
-    </div>
+    </ComponentCard>
   );
 }
 

@@ -124,7 +124,7 @@ function ProjectCard({
   return (
     <Card
       render={<button type="button" onClick={onOpen} />}
-      className="h-full w-full cursor-pointer justify-between gap-7 p-5 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring"
+      className="h-full w-full cursor-pointer justify-between gap-7 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring"
     >
       <span className="flex items-center justify-between gap-3">
         <span className="flex gap-0">
@@ -229,7 +229,7 @@ function NeedsYou({
                 key={approval.message_id}
                 miniMe={miniMe}
                 render={<li />}
-                className="flex items-center gap-3.5 px-4.5 py-4"
+                className="flex items-center gap-3 px-4 py-3"
               >
                 <MiniMeAvatar miniMe={miniMe} size={40} />
                 <div className="grid min-w-0 flex-1 gap-1">

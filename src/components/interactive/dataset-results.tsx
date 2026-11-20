@@ -1,3 +1,4 @@
+import { ResultCard } from "./ResultCard";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,7 +13,7 @@ import { ReferenceChip } from "../chat/ReferenceChip";
 import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import type { Renderers, RendererProps } from "./catalogue";
-import { openLink, webUrl } from "./links";
+import { webUrl } from "./links";
 import { ErrorText } from "../shell/ErrorText";
 
 /** `dataset-results` version 1 preview from *Search CIP Dataverse*; `datasets` is the first page. */
@@ -147,25 +148,12 @@ function DatasetCard({ dataset, projectId }: { dataset: Dataset; projectId?: str
   const url = webUrl(dataset.url);
   const Chevron = open ? ChevronDownIcon : ChevronRightIcon;
   return (
-    <article className="flex flex-col gap-1 rounded-xl border border-card-edge bg-card px-4 py-3">
-      {url ? (
-        <button
-          type="button"
-          title={url}
-          className="line-clamp-2 cursor-pointer text-left text-ui font-semibold text-foreground hover:underline"
-          onClick={() => openLink(url)}
-        >
-          {dataset.title}
-        </button>
-      ) : (
-        <span className="line-clamp-2 text-ui font-semibold text-foreground">{dataset.title}</span>
-      )}
-      {datasetByline(dataset) && (
-        <span className="text-meta text-muted-foreground">{datasetByline(dataset)}</span>
-      )}
-      {dataset.description && (
-        <span className="line-clamp-3 text-meta text-ink-2">{dataset.description}</span>
-      )}
+    <ResultCard
+      title={dataset.title}
+      url={url}
+      byline={datasetByline(dataset)}
+      description={dataset.description}
+    >
       {projectId && dataset.files > 0 && (
         <Button
           variant="ghost"
@@ -178,7 +166,7 @@ function DatasetCard({ dataset, projectId }: { dataset: Dataset; projectId?: str
         </Button>
       )}
       {projectId && open && <DatasetFiles projectId={projectId} dataset={dataset} />}
-    </article>
+    </ResultCard>
   );
 }
 

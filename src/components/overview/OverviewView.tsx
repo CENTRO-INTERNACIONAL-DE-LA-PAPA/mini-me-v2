@@ -1,3 +1,4 @@
+import { ListRow } from "../shell/ListRow";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -146,7 +147,7 @@ export function OverviewView({
     >
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-start gap-4 max-lg:grid-cols-1">
         <div className="flex flex-col gap-4">
-          <Card aria-label="Summary" className="gap-2.5 px-5.5 py-5">
+          <Card aria-label="Summary" className="gap-2.5">
             <h2 className="font-serif text-heading text-foreground">Where things stand</h2>
             {overview.summary ? (
               <p className="text-body whitespace-pre-line text-document-ink">
@@ -284,19 +285,12 @@ function OutputRow({
 }) {
   const { icon: Icon } = kindOf(output.kind);
   return (
-    <Button
-      variant="ghost"
-      onClick={onOpen}
-      className="h-auto w-full justify-start gap-2.5 rounded-xl px-1.5 py-2 text-left font-normal text-foreground"
-    >
-      <FileMark miniMe={miniMe} icon={Icon} />
-      <span className="grid min-w-0 flex-1">
-        <span className="truncate text-ui">{output.title}</span>
-        <span className="truncate text-meta text-muted-foreground">
-          From {output.conversation_title}
-        </span>
-      </span>
-    </Button>
+    <ListRow
+      leading={<FileMark miniMe={miniMe} icon={Icon} />}
+      name={output.title}
+      meta={`From ${output.conversation_title}`}
+      onOpen={onOpen}
+    />
   );
 }
 

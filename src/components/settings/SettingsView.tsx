@@ -1,3 +1,4 @@
+import { ListRow } from "../shell/ListRow";
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
@@ -262,7 +263,7 @@ function SwitchRow({
 /** An account or key's card, outlined on white so the well-filled controls inside stand out. */
 function AccountCard({ render, children }: { render?: ReactElement; children: ReactNode }) {
   return (
-    <Card render={render} className="gap-0 rounded-xl border border-border bg-card px-4 py-3.5">
+    <Card render={render} variant="outline" size="sm" className="gap-0">
       {children}
     </Card>
   );
@@ -401,18 +402,19 @@ function FeatureFlagsSection() {
           <h4 className="mt-5 mb-2 text-meta font-medium text-muted-foreground">Active</h4>
           <AccountCard render={<ul />}>
             {flags.map((flag) => (
-              <li
-                key={flag.id}
-                className="flex items-center gap-3 border-b border-border py-3 first:pt-0 last:border-b-0 last:pb-0"
-              >
-                <span className="grid flex-1 gap-0.5">
-                  <span className="font-medium">{flag.name}</span>
-                  <span className="text-meta text-muted-foreground">{flag.description}</span>
-                </span>
-                <StatusLabel on>On</StatusLabel>
-                <Button variant="outline" onClick={() => void turnOff(flag.id)}>
-                  Turn off
-                </Button>
+              <li key={flag.id} className="border-b border-border last:border-b-0">
+                <ListRow
+                  name={flag.name}
+                  meta={flag.description}
+                  trailing={
+                    <>
+                      <StatusLabel on>On</StatusLabel>
+                      <Button variant="outline" onClick={() => void turnOff(flag.id)}>
+                        Turn off
+                      </Button>
+                    </>
+                  }
+                />
               </li>
             ))}
           </AccountCard>
@@ -970,30 +972,33 @@ function Ai2Row() {
   const signedIn = status?.state === "signed_in";
   return (
     <AccountCard>
-      <div className="flex items-center gap-3">
-        <span className="grid flex-1 gap-0.5">
-          <span className="font-medium">Ai2 account</span>
-          <span className="text-meta text-muted-foreground">
-            {signedIn
-              ? `Signed in as ${status.email ?? "your Ai2 account"}`
-              : status?.state === "pending"
-                ? "Waiting for you to confirm the code in your browser"
-                : "Sign in to use Researcher and Theorist"}
-          </span>
-        </span>
-        <StatusLabel on={signedIn}>{signedIn ? "Signed in" : "Not signed in"}</StatusLabel>
-        {signedIn ? (
-          <Button variant="outline" onClick={() => run(api.ai2SignOut)}>
-            Sign out
-          </Button>
-        ) : (
-          status?.state !== "pending" && (
-            <Button variant="outline" onClick={() => run(api.ai2StartSignIn)}>
-              Sign in
-            </Button>
-          )
-        )}
-      </div>
+      <ListRow
+        className="py-0"
+        name="Ai2 account"
+        meta={
+          signedIn
+            ? `Signed in as ${status.email ?? "your Ai2 account"}`
+            : status?.state === "pending"
+              ? "Waiting for you to confirm the code in your browser"
+              : "Sign in to use Researcher and Theorist"
+        }
+        trailing={
+          <>
+            <StatusLabel on={signedIn}>{signedIn ? "Signed in" : "Not signed in"}</StatusLabel>
+            {signedIn ? (
+              <Button variant="outline" onClick={() => run(api.ai2SignOut)}>
+                Sign out
+              </Button>
+            ) : (
+              status?.state !== "pending" && (
+                <Button variant="outline" onClick={() => run(api.ai2StartSignIn)}>
+                  Sign in
+                </Button>
+              )
+            )}
+          </>
+        }
+      />
       {status?.state === "pending" && (
         <div className="mt-3 grid gap-1 border-t border-border pt-3">
           <p>
@@ -1235,26 +1240,29 @@ function KeyRow({
 
   return (
     <AccountCard render={<li />}>
-      <div className="flex items-center gap-3.5">
-        <span
-          aria-hidden
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted font-serif text-name font-medium"
-        >
-          {name[0]}
-        </span>
-        <span className="grid flex-1 gap-0.5">
-          <span className="font-medium">{name}</span>
-          <span className="text-meta text-muted-foreground">
-            {saved ? "Key saved in your system's keychain" : hint}
+      <ListRow
+        className="py-0"
+        leading={
+          <span
+            aria-hidden
+            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted font-serif text-name font-medium"
+          >
+            {name[0]}
           </span>
-        </span>
-        <StatusLabel on={saved}>{saved ? "Connected" : "Not connected"}</StatusLabel>
-        <Button variant="outline" aria-expanded={editing} onClick={() => setEditing(!editing)}>
-          {saved ? "Edit" : "Add key"}
-        </Button>
-      </div>
+        }
+        name={name}
+        meta={saved ? "Key saved in your system's keychain" : hint}
+        trailing={
+          <>
+            <StatusLabel on={saved}>{saved ? "Connected" : "Not connected"}</StatusLabel>
+            <Button variant="outline" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+              {saved ? "Edit" : "Add key"}
+            </Button>
+          </>
+        }
+      />
       {editing && (
-        <form className="mt-3 flex gap-2 pl-12.5" onSubmit={save}>
+        <form className="mt-3 flex gap-2 pl-12" onSubmit={save}>
           <Input
             aria-label={`${name} key`}
             type="password"
@@ -1274,7 +1282,7 @@ function KeyRow({
           )}
         </form>
       )}
-      {error && <ErrorText className="mt-2 pl-12.5">{error}</ErrorText>}
+      {error && <ErrorText className="mt-2 pl-12">{error}</ErrorText>}
     </AccountCard>
   );
 }

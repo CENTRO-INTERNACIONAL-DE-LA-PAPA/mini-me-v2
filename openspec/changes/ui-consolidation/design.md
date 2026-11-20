@@ -86,15 +86,8 @@ All decisions below were settled with the user.
     headings, with a ⌄ for the Project menu; with no Project open, a dashed "No project open"
     card takes its place. Settings is a row under the status lines, led by the user's initials,
     or the Settings icon without a name.
-
-## Open questions
-
-1. **Result cards: what opens the result.** A paper source opens when its whole card is
-   clicked; a dataset opens from its title link only. `ResultCard` needs one rule.
-   - (a) The title is the link in both; the card itself is not clickable.
-   - (b) The whole card is the button in both.
-   - **Recommendation: (a).** A dataset card holds other controls, and a button cannot
-     contain buttons.
+15. **Search results open from their title.** `ResultCard` makes the title the link and leaves
+    the card itself inert, since a dataset card holds other buttons.
 
 ## Risks / Trade-offs
 

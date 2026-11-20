@@ -1,3 +1,4 @@
+import { ComponentCard } from "./ComponentCard";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -119,7 +120,7 @@ function Theories({ preview }: { preview: unknown }) {
   const { theories, references } = preview as TheoriesData;
   const prefix = `ref-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
   return (
-    <div className="overflow-hidden rounded-xl border border-card-edge bg-card">
+    <ComponentCard className="gap-0 p-0">
       {theories.map((theory, index) => (
         <TheorySection key={index} theory={theory} number={index + 1} prefix={prefix} />
       ))}
@@ -150,7 +151,7 @@ function Theories({ preview }: { preview: unknown }) {
           </ol>
         </section>
       )}
-    </div>
+    </ComponentCard>
   );
 }
 

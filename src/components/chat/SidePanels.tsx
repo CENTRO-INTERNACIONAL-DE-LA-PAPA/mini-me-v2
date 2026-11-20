@@ -1,3 +1,4 @@
+import { ListRow } from "../shell/ListRow";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 import { useState, type ReactNode } from "react";
@@ -90,28 +91,28 @@ export function OutlinePanel({ outline, onClose }: { outline: Outline; onClose: 
               const name = miniMe?.name ?? entry.label;
               return (
                 <li key={entry.id} className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => jump(entry)}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-                  >
-                    {miniMe ? (
-                      <MiniMeAvatar miniMe={miniMe} size={22} />
-                    ) : (
-                      <span aria-hidden className="w-5.5 shrink-0 text-center text-muted-foreground">
-                        {group.sign}
+                  <ListRow
+                    title={name}
+                    leading={
+                      miniMe ? (
+                        <MiniMeAvatar miniMe={miniMe} size={22} />
+                      ) : (
+                        <span aria-hidden className="w-5.5 shrink-0 text-center text-muted-foreground">
+                          {group.sign}
+                        </span>
+                      )
+                    }
+                    name={name}
+                    trailing={
+                      <span
+                        aria-label={`in ${entry.messageIds.length} messages`}
+                        className="shrink-0 text-meta text-muted-foreground tabular-nums"
+                      >
+                        {entry.messageIds.length}
                       </span>
-                    )}
-                    <span title={name} className="min-w-0 flex-1 truncate">
-                      {name}
-                    </span>
-                    <span
-                      aria-label={`in ${entry.messageIds.length} messages`}
-                      className="ml-auto shrink-0 text-right text-meta text-muted-foreground tabular-nums"
-                    >
-                      {entry.messageIds.length}
-                    </span>
-                  </button>
+                    }
+                    onOpen={() => jump(entry)}
+                  />
                 </li>
               );
             })}

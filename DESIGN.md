@@ -159,9 +159,12 @@ Sheet padding: `pl-8`, `pt-6`–`pt-7`. Tool sheets: `pt-5.5 pr-4.5 pl-6`. Spaci
 Always build from shadcn/ui components. Add a missing one from shadcn/ui rather than writing it from scratch, and change its styling wherever it differs from this guide.
 
 ### Cards
-- **Neutral card:** `--muted` fill, 1px `--border`, `rounded-2xl`. For things that belong to no Mini-Me.
-- **White card:** a white fill with an outline, for rows that hold well-filled buttons or inputs, so they don't sink into the fill. Related items share one white card, divided by hairlines, rather than a card each.
+- **Neutral card:** `Card`, `--muted` fill, `rounded-2xl`. For things that belong to no Mini-Me.
+- **White card:** `Card variant="outline"`, a white fill with an outline, for rows that hold well-filled buttons or inputs, so they don't sink into the fill. Related items share one white card, divided by hairlines, rather than a card each.
 - **Mini-Me card:** `wash` fill, 1px `edge`, `rounded-2xl`, with the Mini-Me's colours available to its content. Without a Mini-Me it renders as a neutral card. For anything a Mini-Me made or is doing.
+- **Padding:** a card pads itself, `p-5`, or `p-4` with `size="sm"`; a card with full-width bands sets `p-0`.
+- **Interactive Component card:** `ComponentCard`, a small white card; a title, actions and a footer note sit in bands divided by hairlines, and the body (a table, a chart) runs to its edges.
+- **Result card:** `ResultCard`, a search result (a paper, a dataset) in a `ComponentCard`: its title, which opens the result, a byline and a description. Only the title opens it; the card holds other controls.
 - White things on the sheet (tables, paper sources, progress cards, buttons) are outlined on the white sheet and not inside a card or reply, whose own fill sets them apart.
 
 ### Tab switch
@@ -188,7 +191,8 @@ Inputs, text areas and selects: `--well` fill, no visible border, `rounded-xl`, 
 Every sheet, tool sheet, page header, section heading and editor header comes from one shared set: a serif title, an optional meta line, actions on the right, and a close button on a tool sheet.
 
 ### Rows and lists
-- Flat rows divided by hairlines, filling `--muted` on hover. A row leads with its avatar, sign or icon, then the name (truncated), with a count or time right-aligned in meta.
+- Flat rows divided by hairlines, filling `--muted` on hover (`ListRow`, `rounded-xl px-2 py-2.5`). A row leads with its avatar, sign or icon, then the name (truncated, `text-ui` 500) over an optional meta line, with a count, time or actions on the right.
+- Tables are `ui/table`: a `--muted` header row in `text-meta`, cells `px-3 py-2`, rows divided by hairlines.
 - A file's icon is in its maker's `ink`, or `ink-2` for your files, with no tile.
 - A list of Mini-Mes is a grid of cards; a list of Traits is rows.
 

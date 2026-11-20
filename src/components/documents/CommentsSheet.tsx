@@ -1,3 +1,4 @@
+import { ListRow } from "../shell/ListRow";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -115,26 +116,17 @@ export function CommentsSheet({
             {index === detachedFrom && (
               <h3 className="mt-6 mb-2.5 font-serif text-subheading text-foreground">Detached</h3>
             )}
-            <button
-              type="button"
-              onClick={() => onOpen(t.conversation_id)}
-              className={cn(
-                "flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors",
-                "duration-150 ease-out hover:bg-muted focus-visible:outline-2",
-                "focus-visible:outline-ring",
-              )}
-            >
-              <NumberBadge number={index + 1} />
-              <span className="grid min-w-0 flex-1 gap-0.5">
-                {location(t) && (
-                  <span className="truncate text-meta text-muted-foreground">{location(t)}</span>
-                )}
-                <span className="truncate">“{t.quote}”</span>
-              </span>
-              <span className="shrink-0 text-meta text-muted-foreground tabular-nums">
-                {formatClock(t.created_at)}
-              </span>
-            </button>
+            <ListRow
+              leading={<NumberBadge number={index + 1} />}
+              name={`“${t.quote}”`}
+              meta={location(t)}
+              trailing={
+                <span className="shrink-0 text-meta text-muted-foreground tabular-nums">
+                  {formatClock(t.created_at)}
+                </span>
+              }
+              onOpen={() => onOpen(t.conversation_id)}
+            />
           </li>
         ))}
       </ul>

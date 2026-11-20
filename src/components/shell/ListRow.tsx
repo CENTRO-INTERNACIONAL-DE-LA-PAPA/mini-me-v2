@@ -1,0 +1,52 @@
+import { cn } from "@/lib/utils";
+import type { ReactNode } from "react";
+
+/** One row of a list: a leading mark, a name over an optional meta line, and what follows on
+ * the right. With `onOpen` the row is a button that fills on hover. */
+export function ListRow({
+  leading,
+  name,
+  meta,
+  trailing,
+  title,
+  onOpen,
+  className,
+}: {
+  leading?: ReactNode;
+  name: ReactNode;
+  meta?: ReactNode;
+  trailing?: ReactNode;
+  title?: string;
+  onOpen?: () => void;
+  className?: string;
+}) {
+  const content = (
+    <>
+      {leading}
+      <span className="grid min-w-0 flex-1 gap-0.5">
+        <span className="truncate text-ui font-medium text-foreground">{name}</span>
+        {meta && <span className="truncate text-meta text-muted-foreground">{meta}</span>}
+      </span>
+      {trailing}
+    </>
+  );
+  const row = "flex w-full items-center gap-3 text-left";
+  return onOpen ? (
+    <button
+      type="button"
+      title={title}
+      onClick={onOpen}
+      className={cn(
+        row,
+        "cursor-pointer rounded-xl px-2 py-2.5 transition-colors duration-150 ease-out outline-none hover:bg-muted focus-visible:bg-muted",
+        className,
+      )}
+    >
+      {content}
+    </button>
+  ) : (
+    <div title={title} className={cn(row, "py-2.5", className)}>
+      {content}
+    </div>
+  );
+}

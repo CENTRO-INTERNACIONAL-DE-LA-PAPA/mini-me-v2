@@ -92,27 +92,27 @@ names. Shadcn components are added by the user with the CLI command given in the
 
 ## 4. Cards, rows and tables
 
-- [ ] 4.1 Add an `outline` variant to `ui/card` (white fill, 1px border) and make call sites
+- [x] 4.1 Add an `outline` variant to `ui/card` (white fill, 1px border) and make call sites
   use `Card`'s `default`/`sm` sizes instead of their own padding (Settings accounts, Library
   problems, editor problems, Overview, Home project cards, Mini-Me editor, Quarto notice,
   Document view cards, the Home and Trait editor Mini-Me rows). Verify: grep finds no
   `rounded-… border … bg-card` shells outside `ui/card`.
-- [ ] 4.2 Add `interactive/ComponentCard.tsx` (title, actions, footer) on
+- [x] 4.2 Add `interactive/ComponentCard.tsx` (title, actions, footer) on
   `Card variant="outline"` and use it for every Interactive Component and the Workflow progress
   card. Verify: a reply with a table and a chart shows matching corners, header and footer.
-- [ ] 4.3 Add `interactive/ResultCard.tsx` and use it for paper sources and dataset results,
+- [x] 4.3 Add `interactive/ResultCard.tsx` and use it for paper sources and dataset results,
   opening the result as settled in design.md's open question. Verify: both kinds of result look
   and open alike.
-- [ ] 4.4 Turn `LibraryParts.Row` into `shell/ListRow.tsx` (leading sign, name over meta, right
+- [x] 4.4 Turn `LibraryParts.Row` into `shell/ListRow.tsx` (leading sign, name over meta, right
   slot, `hover:bg-muted`) and use it in the Library, Overview outputs, Settings' key, Ai2 and
   feature-flag rows, the Outline and Steps panels, Comments and the Report panel. Verify: those
   rows share one radius and hover.
-- [ ] 4.5 Build the interactive table and Markdown tables on `ui/table`, keeping the sticky
+- [x] 4.5 Build the interactive table and Markdown tables on `ui/table`, keeping the sticky
   header and sort buttons. Verify: `npm test` passes, sorting works, and both tables share
   header weight and row padding.
-- [ ] 4.6 Update DESIGN.md §7 (Cards, Rows and lists) for the outline card, `ComponentCard`,
+- [x] 4.6 Update DESIGN.md §7 (Cards, Rows and lists) for the outline card, `ComponentCard`,
   `ResultCard` and `ListRow`. Verify: each is named there.
-- [ ] 4.7 In the app: a reply with a table, a chart, paper sources and datasets; the Library;
+- [x] 4.7 In the app: a reply with a table, a chart, paper sources and datasets; the Library;
   the Overview; Settings; Outline, Steps and Comments.
 
 ## 5. Page shells and headers

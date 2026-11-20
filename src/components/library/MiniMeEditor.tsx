@@ -258,7 +258,7 @@ function Appearance({
         <LabelledField label="Look">
           <div className="grid grid-cols-[200px_1fr] items-start gap-8">
             <div className="grid gap-5">
-              <Card className="items-center p-4">
+              <Card size="sm" className="items-center">
                 <Avatar avatar={draft.avatar} color={draft.colors} size={150} />
               </Card>
               <Button
