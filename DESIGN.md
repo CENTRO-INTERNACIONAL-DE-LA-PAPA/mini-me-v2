@@ -176,7 +176,7 @@ One style for tabs and toggle groups (`ToggleGroup`'s `plain` variant is for ite
 - **Link:** text only, normal weight, underlined on hover; for links inside text and table cells.
 
 ### Inputs
-Inputs, text areas and selects: `--well` fill, no visible border, `rounded-xl`, `text-ui`; focus shows a 1px ink border. Rows with inputs or well buttons sit on a white card, not a grey one. A search field is `SearchInput`: a leading search icon, 240px wide. A slider is the shadcn `Slider`: a round white thumb with an ink ring; its track can take a gradient (`--slider-track`), as the avatar hue does.
+Inputs, text areas and selects: `--well` fill, no visible border, `rounded-xl`, `text-ui`; focus shows a 1px ink border. Rows with inputs or well buttons sit on a white card, not a grey one. A field is the shadcn `Field`: a `text-ui` 500 label, a `text-meta` hint in `--muted-foreground` and any error in `--destructive`. In forms and inspectors the control sits under them (`LabelledField`); in Settings rows it sits on the right. A search field is `SearchInput`: a leading search icon, 240px wide. A slider is the shadcn `Slider`: a round white thumb with an ink ring; its track can take a gradient (`--slider-track`), as the avatar hue does.
 
 ### Name tags and chips
 - **Mini-Me name tag:** the Mini-Me's `tint` with its `ink` text and avatar; 16px avatar inline, 24px under a title, where it can add a status after a gap at 80% opacity.
@@ -212,7 +212,7 @@ Steps share one set of marks everywhere: done is an ink circle with a check; run
 - A passage someone commented on has a `--border-strong` underline and a number badge; the selected one fills with `--accent`. A suggested edit strikes the passage through and follows it with the new text in the Mini-Me's `ink`, underlined 2px in its `solid`.
 
 ### Popovers, tooltips, menus
-White, 1px `--border`, `rounded-xl`, no shadow. Items `rounded-md`; the highlighted item is `--accent`, never black. A confirmation is a popover under its button, aligned to its right edge: the question, a ghost Keep holding the focus, and a destructive action. A popover that reports a result holds one solid button to act on it.
+White, 1px `--border`, `rounded-xl`, no shadow. Items `rounded-md`; the highlighted item is `--accent`, never black. A confirmation is a popover under its button, aligned to its right edge: the question, a ghost Keep holding the focus, and a destructive action (`ConfirmButton`, or `ConfirmActions` inside a popover that already exists). Nothing asks inline. A popover that reports a result holds one solid button to act on it.
 
 ---
 

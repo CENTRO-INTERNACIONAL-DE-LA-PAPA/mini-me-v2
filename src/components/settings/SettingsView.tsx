@@ -1,9 +1,9 @@
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -55,6 +55,7 @@ import { reloadFeatureFlags, useFeatureFlags } from "../../hooks/useFeatureFlags
 import { recheckQuarto, showQuarto, useQuarto } from "../../hooks/useQuarto";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
 import { ErrorText } from "../shell/ErrorText";
+import { ConfirmButton } from "../shell/Confirm";
 import { StatusDot } from "../shell/StatusDot";
 
 const PROVIDERS: { id: ProviderId; name: string }[] = [
@@ -188,34 +189,32 @@ function Section({
 }
 
 /** One setting: its name and what it does on the left, its control on the right. */
+/** `status` reports the outcome of the row's last action, such as "Saved". */
 function SettingRow({
   label,
   htmlFor,
   description,
+  status,
   error,
   children,
 }: {
   label: string;
   htmlFor?: string;
   description?: ReactNode;
-  error?: string | null;
+  status?: ReactNode;
+  error?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-6 border-b border-border py-4">
-      <div className="grid flex-1 gap-0.5">
-        <Label htmlFor={htmlFor} className="font-medium">
-          {label}
-        </Label>
-        {(description || error) && (
-          <p className="text-meta text-muted-foreground">
-            {description}
-            {error && <span className="mt-1 block text-destructive">{error}</span>}
-          </p>
-        )}
-      </div>
+    <Field orientation="horizontal" className="border-b border-border py-4">
+      <FieldContent>
+        <FieldLabel htmlFor={htmlFor}>{label}</FieldLabel>
+        {description && <FieldDescription>{description}</FieldDescription>}
+        {status && <FieldDescription className="text-ink-2">{status}</FieldDescription>}
+        {error && <FieldError>{error}</FieldError>}
+      </FieldContent>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{children}</div>
-    </div>
+    </Field>
   );
 }
 
@@ -535,18 +534,17 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
       <SettingRow
         label="Your name"
         htmlFor="user-name"
-        description={
-          <>
-            Shown in Home's greeting and on your files. Leave it empty to show no name.
-            {unreadable && (
-              <span className="mt-1 block text-destructive">
-                user-profile.json in the app's config folder could not be read ({unreadable}), so it is
-                left unchanged. Fix or remove it, then restart Mini-Me.
-              </span>
-            )}
-          </>
+        description="Shown in Home's greeting and on your files. Leave it empty to show no name."
+        error={
+          unreadable ? (
+            <>
+              user-profile.json in the app's config folder could not be read ({unreadable}), so it
+              is left unchanged. Fix or remove it, then restart Mini-Me.
+            </>
+          ) : (
+            status
+          )
         }
-        error={status}
       >
         <Input
           id="user-name"
@@ -831,9 +829,9 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
           <>
             Used by every Mini-Me that calls an AI model, such as Scribe. Type the model ID
             exactly as the provider lists it.
-            {status && <span className="mt-1 block text-ink-2">{status}</span>}
           </>
         }
+        status={status}
       >
         <Select
           value={provider}
@@ -898,13 +896,15 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
             <>
               The address of a server that speaks the OpenAI or Anthropic API, such as LM Studio,
               Ollama or vLLM.
-              {sendsUnencrypted(endpoint) && (
-                <span className="mt-1 block text-ink-2">
-                  This address is not on this computer and does not use https, so the key and
-                  your messages are sent unencrypted.
-                </span>
-              )}
             </>
+          }
+          status={
+            sendsUnencrypted(endpoint) && (
+              <>
+                This address is not on this computer and does not use https, so the key and your
+                messages are sent unencrypted.
+              </>
+            )
           }
         >
           <Select
@@ -1039,9 +1039,9 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
           <>
             From 0 to 1. When Jev is less sure than this of its choice, Assistant answers
             instead, and Jev adds no reaction.
-            {status && <span className="mt-1 block text-ink-2">{status}</span>}
           </>
         }
+        status={status}
       >
         <Input
           id="threshold"
@@ -1136,7 +1136,6 @@ function ReplyDebugRows({ settings, onChanged }: { settings: AiSettings; onChang
 
 /** Clears the open Project's debug records, after asking. */
 function DebugDataRow({ projectId }: { projectId?: string }) {
-  const [asking, setAsking] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   async function clear() {
@@ -1147,45 +1146,26 @@ function DebugDataRow({ projectId }: { projectId?: string }) {
     } catch (e) {
       setStatus(errorMessage(e));
     }
-    setAsking(false);
   }
 
   return (
     <SettingRow
       label="Debug data"
       description={
-        <>
-          {projectId
-            ? "Deletes the debug records stored in the open Project."
-            : "Open a Project to clear its debug records."}
-          {asking && (
-            <span className="mt-1 block">Delete every debug record of this Project?</span>
-          )}
-          {status && <span className="mt-1 block text-ink-2">{status}</span>}
-        </>
+        projectId
+          ? "Deletes the debug records stored in the open Project."
+          : "Open a Project to clear its debug records."
       }
+      status={status}
     >
-      {asking ? (
-        <>
-          <Button variant="ghost" onClick={() => setAsking(false)}>
-            Keep
-          </Button>
-          <Button variant="destructive" onClick={() => void clear()}>
-            Clear
-          </Button>
-        </>
-      ) : (
-        <Button
-          variant="outline"
-          disabled={!projectId}
-          onClick={() => {
-            setStatus(null);
-            setAsking(true);
-          }}
-        >
-          Clear
-        </Button>
-      )}
+      <ConfirmButton
+        trigger={<Button variant="outline" disabled={!projectId} />}
+        question="Delete every debug record of this Project?"
+        action="Clear"
+        onConfirm={() => void clear()}
+      >
+        Clear
+      </ConfirmButton>
     </SettingRow>
   );
 }

@@ -1,3 +1,5 @@
+import { LabelledField } from "../shell/LabelledField";
+import { ConfirmButton } from "../shell/Confirm";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +8,7 @@ import { api } from "../../api";
 import type { MiniMe, TraitDraft, TraitSummary } from "../../protocol/types";
 import { traitIcon } from "../../lib/traitIcons";
 import { NIL_ID } from "./library";
-import { DeleteButton, EditorHeader, EditorPage, Field } from "./LibraryParts";
+import { EditorHeader, EditorPage } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { SheetSection } from "../shell/Sheet";
@@ -81,7 +83,13 @@ export function TraitEditor({
   ) : (
     <>
       {saved && !library.unreadable && (
-        <DeleteButton question={`Delete ${draft.name}? This can't be undone.`} onDelete={remove} />
+        <ConfirmButton
+                    trigger={<Button variant="outline" />}
+                    question={`Delete ${draft.name}? This can't be undone.`}
+                    onConfirm={remove}
+                  >
+                    Delete
+                  </ConfirmButton>
       )}
       <Button disabled={readOnly} onClick={save}>
         Save
@@ -109,7 +117,7 @@ export function TraitEditor({
       <div className="grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5 pt-6 pr-7 pb-8 pl-8 max-lg:grid-cols-1">
         <div className="grid gap-4.5">
           {!builtIn && (
-            <Field label="Name" htmlFor="trait-name">
+            <LabelledField label="Name" htmlFor="trait-name">
               <Input
                 id="trait-name"
                 placeholder="An imperative verb in Title Case, like Translate"
@@ -117,19 +125,19 @@ export function TraitEditor({
                 disabled={readOnly}
                 onChange={(e) => update({ name: e.target.value })}
               />
-            </Field>
+            </LabelledField>
           )}
-          <Field label="What it does" htmlFor="trait-description">
+          <LabelledField label="What it does" htmlFor="trait-description">
             <Input
               id="trait-description"
               value={draft.description}
               disabled={readOnly}
               onChange={(e) => update({ description: e.target.value })}
             />
-          </Field>
+          </LabelledField>
           {promptBased ? (
             <>
-              <Field label="Instructions" htmlFor="trait-instructions">
+              <LabelledField label="Instructions" htmlFor="trait-instructions">
                 <Textarea
                   id="trait-instructions"
                   className="min-h-40"
@@ -138,7 +146,7 @@ export function TraitEditor({
                   disabled={readOnly}
                   onChange={(e) => update({ instructions: e.target.value })}
                 />
-              </Field>
+              </LabelledField>
             </>
           ) : (
             <p className="text-meta text-muted-foreground">

@@ -1,3 +1,5 @@
+import { LabelledField } from "../shell/LabelledField";
+import { ConfirmButton } from "../shell/Confirm";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,10 +19,8 @@ import { PartTabs } from "../avatar/PartGrid";
 import { randomAvatar } from "../avatar/parts";
 import { NIL_ID } from "./library";
 import {
-  DeleteButton,
   EditorHeader,
   EditorPage,
-  Field,
   List,
   OriginBadge,
   Row,
@@ -134,10 +134,13 @@ export function MiniMeEditor({
             ) : (
               <>
                 {id && !library.unreadable && (
-                  <DeleteButton
+                  <ConfirmButton
+                    trigger={<Button variant="outline" />}
                     question={`Delete ${draft.name}? This can't be undone.`}
-                    onDelete={remove}
-                  />
+                    onConfirm={remove}
+                  >
+                    Delete
+                  </ConfirmButton>
                 )}
                 <Button disabled={readOnly} onClick={save}>
                   Save
@@ -217,15 +220,15 @@ function Appearance({
   const hue = hueOf(draft.colors);
   return (
     <>
-      <Field label="Name" htmlFor="mini-me-name">
+      <LabelledField label="Name" htmlFor="mini-me-name">
         <Input
           id="mini-me-name"
           value={draft.name}
           disabled={readOnly}
           onChange={(e) => onChange({ name: e.target.value })}
         />
-      </Field>
-      <Field
+      </LabelledField>
+      <LabelledField
         label="Description"
         htmlFor="mini-me-description"
         hint="What it does; Mini-Me reads this to choose who answers a message"
@@ -236,8 +239,8 @@ function Appearance({
           disabled={readOnly}
           onChange={(e) => onChange({ description: e.target.value })}
         />
-      </Field>
-      <Field label="Group" hint="The heading it is listed under when you type @">
+      </LabelledField>
+      <LabelledField label="Group" hint="The heading it is listed under when you type @">
         <ToggleGroup
           aria-label="Group"
           disabled={readOnly}
@@ -250,9 +253,9 @@ function Appearance({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-      </Field>
+      </LabelledField>
       {!readOnly && (
-        <Field label="Look">
+        <LabelledField label="Look">
           <div className="grid grid-cols-[200px_1fr] items-start gap-8">
             <div className="grid gap-5">
               <Card className="items-center p-4">
@@ -278,7 +281,7 @@ function Appearance({
               onChange={(avatar) => onChange({ avatar })}
             />
           </div>
-        </Field>
+        </LabelledField>
       )}
     </>
   );

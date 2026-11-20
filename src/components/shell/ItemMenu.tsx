@@ -5,6 +5,7 @@ import { MoreHorizontalIcon } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { errorMessage } from "../../api";
 import { ErrorText } from "./ErrorText";
+import { ConfirmActions } from "./Confirm";
 
 /** An action that needs nothing more from the user, such as Open or Duplicate. */
 export interface MenuAction {
@@ -158,17 +159,13 @@ export function ItemMenu({ name, actions = [], rename, remove, className }: Prop
             </form>
           )}
           {view === "delete" && remove && (
-            <>
-              <p>{remove.question}</p>
-              <div className="flex justify-end gap-2">
-                <Button ref={keep} variant="ghost" onClick={() => setOpen(false)}>
-                  Keep
-                </Button>
-                <Button variant="destructive" onClick={() => void run(remove.onDelete)}>
-                  Delete
-                </Button>
-              </div>
-            </>
+            <ConfirmActions
+              question={remove.question}
+              action="Delete"
+              keepRef={keep}
+              onKeep={() => setOpen(false)}
+              onConfirm={() => void run(remove.onDelete)}
+            />
           )}
           {error && <ErrorText>{error}</ErrorText>}
         </div>

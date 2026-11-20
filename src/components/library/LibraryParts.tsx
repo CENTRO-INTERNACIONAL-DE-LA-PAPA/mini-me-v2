@@ -1,11 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { MiniMe } from "../../protocol/types";
 import { count } from "../../lib/format";
 import { traitIcon } from "../../lib/traitIcons";
@@ -96,68 +94,6 @@ export function OriginBadge({ builtIn }: { builtIn: boolean }) {
     <Badge variant="outline" className="text-(--mm-ink,var(--ink-2))">
       {builtIn ? "Built-in" : "Yours"}
     </Badge>
-  );
-}
-
-/** A labelled field, with an optional hint below the label. */
-export function Field({
-  label,
-  htmlFor,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="grid gap-2">
-      <div className="grid gap-0.5">
-        <Label htmlFor={htmlFor} className="font-medium">
-          {label}
-        </Label>
-        {hint && <p className="text-meta text-muted-foreground">{hint}</p>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-/** A Delete button that asks `question` in a popover before calling `onDelete`; Keep has the
- * focus, and Keep, Escape or a click outside close it. */
-export function DeleteButton({
-  question,
-  onDelete,
-  variant = "outline",
-}: {
-  question: string;
-  onDelete: () => void;
-  variant?: "outline" | "mini-me";
-}) {
-  const [asking, setAsking] = useState(false);
-  const keep = useRef<HTMLButtonElement>(null);
-  return (
-    <Popover open={asking} onOpenChange={setAsking}>
-      <PopoverTrigger render={<Button variant={variant} />}>Delete</PopoverTrigger>
-      <PopoverContent align="end" initialFocus={keep}>
-        <p>{question}</p>
-        <div className="flex justify-end gap-2">
-          <Button ref={keep} variant="ghost" onClick={() => setAsking(false)}>
-            Keep
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              setAsking(false);
-              onDelete();
-            }}
-          >
-            Delete
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }
 

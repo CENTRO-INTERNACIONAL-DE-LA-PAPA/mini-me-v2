@@ -1,6 +1,8 @@
+import { LabelledField } from "../shell/LabelledField";
+import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { ConfirmButton } from "../shell/Confirm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -11,7 +13,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronRightIcon, PlusIcon, XIcon } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import type { MiniMe, TraitSummary, WorkflowBranch, WorkflowStep } from "../../protocol/types";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { count } from "../../lib/format";
@@ -75,7 +77,7 @@ export function StepInspector({
       <div className="grid gap-4.5">
         {step.type === "trait" && (
           <>
-            <Row label="Trait">
+            <LabelledField label="Trait">
               <Select
                 value={step.trait}
                 disabled={!editable}
@@ -94,7 +96,7 @@ export function StepInspector({
                   ))}
                 </SelectContent>
               </Select>
-            </Row>
+            </LabelledField>
             {trait && (
               <MiniMeSurface miniMe={miniMe} className="grid gap-2.5 rounded-xl p-3.5">
                 <p className="text-ui leading-normal text-foreground">{trait.description}</p>
@@ -113,13 +115,11 @@ export function StepInspector({
                 </div>
               </MiniMeSurface>
             )}
-            <div className="flex items-start justify-between gap-4">
-              <div className="grid gap-0.5">
-                <Label htmlFor="ask-before" className="font-medium">
-                  Ask before running
-                </Label>
-                <p className="text-meta text-muted-foreground">Adds an approval before this Step.</p>
-              </div>
+            <Field orientation="horizontal">
+              <FieldContent>
+                <FieldLabel htmlFor="ask-before">Ask before running</FieldLabel>
+                <FieldDescription>Adds an approval before this Step.</FieldDescription>
+              </FieldContent>
               <Switch
                 id="ask-before"
                 checked={asksBeforeRunning(steps, step.id, trait?.name ?? "this Step")}
@@ -128,20 +128,20 @@ export function StepInspector({
                   onChange(setAskBeforeRunning(steps, step.id, on, trait?.name ?? "this Step"))
                 }
               />
-            </div>
+            </Field>
           </>
         )}
         {step.type === "approval" && (
-          <Row label="What you are asked">
+          <LabelledField label="What you are asked">
             <Textarea
               value={step.prompt}
               disabled={!editable}
               onChange={(e) => change({ ...step, prompt: e.target.value })}
             />
-          </Row>
+          </LabelledField>
         )}
         {(step.type === "condition" || step.type === "loop") && (
-          <Row
+          <LabelledField
             label={step.type === "loop" ? "Repeat while" : "Question"}
             hint="The AI model answers it from the outputs so far."
           >
@@ -150,16 +150,16 @@ export function StepInspector({
               disabled={!editable}
               onChange={(e) => change({ ...step, question: e.target.value })}
             />
-          </Row>
+          </LabelledField>
         )}
         {step.type === "loop" && (
-          <Row label="At most" hint="From 1 to 10 times.">
+          <LabelledField label="At most" hint="From 1 to 10 times.">
             <LimitInput
               value={step.max_iterations}
               disabled={!editable}
               onChange={(max_iterations) => change({ ...step, max_iterations })}
             />
-          </Row>
+          </LabelledField>
         )}
         {(step.type === "condition" || step.type === "parallel") && (
           <Branches
@@ -230,14 +230,13 @@ function Branches({
   editable: boolean;
   onChange: (branches: WorkflowBranch[]) => void;
 }) {
-  const [confirming, setConfirming] = useState<number | null>(null);
   const nextLabel = () => {
     let n = branches.length + 1;
     while (branches.some((b) => b.label === `Branch ${n}`)) n++;
     return `Branch ${n}`;
   };
   return (
-    <Row label="Branches">
+    <LabelledField label="Branches">
       <div className="grid gap-2">
         {branches.map((branch, i) => (
           <div key={i} className="flex items-center gap-1.5">
@@ -250,45 +249,26 @@ function Branches({
               }
             />
             {editable && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Remove branch"
-                title={branches.length <= 2 ? "Keeps at least two branches" : undefined}
-                disabled={branches.length <= 2}
-                onClick={() =>
-                  branch.steps.length > 0
-                    ? setConfirming(i)
-                    : onChange(branches.filter((_, j) => j !== i))
+              <ConfirmButton
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Remove branch"
+                    title={branches.length <= 2 ? "Keeps at least two branches" : undefined}
+                    disabled={branches.length <= 2}
+                  />
                 }
+                question={`Remove "${branch.label}" and its ${stepCount(branch.steps)}?`}
+                action="Remove"
+                ask={branch.steps.length > 0}
+                onConfirm={() => onChange(branches.filter((_, j) => j !== i))}
               >
                 <XIcon />
-              </Button>
+              </ConfirmButton>
             )}
           </div>
         ))}
-        {confirming !== null && branches[confirming] && (
-          <div className="grid gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-meta">
-            <span>
-              Remove "{branches[confirming].label}" and its {stepCount(branches[confirming].steps)}?
-            </span>
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
-                Keep
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  onChange(branches.filter((_, j) => j !== confirming));
-                  setConfirming(null);
-                }}
-              >
-                Remove
-              </Button>
-            </div>
-          </div>
-        )}
         {editable && (
           <Button
             variant="outline"
@@ -301,7 +281,7 @@ function Branches({
           </Button>
         )}
       </div>
-    </Row>
+    </LabelledField>
   );
 }
 
@@ -310,12 +290,3 @@ function stepCount(steps: WorkflowStep[]): string {
   return count(allIds(steps).length, "Step");
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return (
-    <div className="grid gap-2">
-      <span className="text-meta font-medium text-muted-foreground">{label}</span>
-      {children}
-      {hint && <p className="text-meta text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}

@@ -76,17 +76,18 @@ names. Shadcn components are added by the user with the CLI command given in the
 
 ## 3. Fields and confirmations
 
-- [ ] 3.1 User runs `npx shadcn@latest add field`; restyle it to DESIGN.md. Verify: `tsc` clean.
-- [ ] 3.2 Build Settings' `SettingRow` on `Field` (horizontal), its errors and statuses on
+- [x] 3.1 User runs `npx shadcn@latest add field`; restyle it to DESIGN.md. Verify: `tsc` clean.
+- [x] 3.2 Build Settings' `SettingRow` on `Field` (horizontal), its errors and statuses on
   `FieldError`/`FieldDescription`. Verify: every Settings row keeps its label, hint and error.
-- [ ] 3.3 Replace `LibraryParts.Field` and the Workflow step inspector's `Row` and its
-  "Ask before running" block with `Field` (vertical). Verify: the Trait editor, Mini-Me editor
+- [x] 3.3 Replace `LibraryParts.Field` and the Workflow step inspector's `Row` with
+  `shell/LabelledField.tsx` (on `Field`, vertical), and its "Ask before running" block with a
+  horizontal `Field`. Verify: the Trait editor, Mini-Me editor
   and step inspector show labels and hints in one layout.
-- [ ] 3.4 Turn `LibraryParts.DeleteButton` into `shell/Confirm.tsx` (question, ghost Keep holding
+- [x] 3.4 Turn `LibraryParts.DeleteButton` into `shell/Confirm.tsx` (question, ghost Keep holding
   the focus, destructive action, popover aligned right) and use it in `ItemMenu`, the Library,
   the step inspector and Settings' debug-data row. Verify: deleting a Conversation, a Trait and
   a Step, and clearing debug data, each asks the same way and Keep cancels.
-- [ ] 3.5 Update DESIGN.md §7 (Inputs, Popovers) for `Field` and the confirmation. Verify:
+- [x] 3.5 Update DESIGN.md §7 (Inputs, Popovers) for `Field` and the confirmation. Verify:
   both are named there.
 
 ## 4. Cards, rows and tables
