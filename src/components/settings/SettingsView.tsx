@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { PageTitle, SheetSection } from "../shell/Sheet";
 import { ListRow } from "../shell/ListRow";
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
@@ -464,16 +465,17 @@ function QuartoForm({ status }: { status: QuartoStatus }) {
             Clear
           </Button>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label="Check again"
-          title="Check again"
-          onClick={recheckQuarto}
-        >
-          <RefreshCwIcon />
-        </Button>
+        <Hint label="Check again">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Check again"
+            onClick={recheckQuarto}
+          >
+            <RefreshCwIcon />
+          </Button>
+        </Hint>
       </SettingRow>
     </form>
   );
@@ -843,21 +845,22 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
             Save
           </Button>
           <Popover open={tested !== null} onOpenChange={(open) => !open && setTested(null)}>
-            <PopoverTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="icon"
-                  aria-label="Test model"
-                  title="Test model"
-                  disabled={testing || !model.trim()}
-                />
-              }
-              onClick={testModel}
-            >
-              <FlaskConicalIcon />
-            </PopoverTrigger>
+            <Hint label="Test model" disabled>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="icon"
+                    aria-label="Test model"
+                    disabled={testing || !model.trim()}
+                  />
+                }
+                onClick={testModel}
+              >
+                <FlaskConicalIcon />
+              </PopoverTrigger>
+            </Hint>
             <PopoverContent align="end">
               <p>{tested}</p>
             </PopoverContent>

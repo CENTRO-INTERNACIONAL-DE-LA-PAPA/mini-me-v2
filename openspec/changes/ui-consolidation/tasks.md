@@ -135,16 +135,16 @@ names. Shadcn components are added by the user with the CLI command given in the
 
 ## 6. Tooltips
 
-- [ ] 6.1 Add `shell/Hint.tsx` on the shadcn `Tooltip`, and a `TooltipProvider` at the app root
+- [x] 6.1 Add `shell/Hint.tsx` on the shadcn `Tooltip`, and a `TooltipProvider` at the app root
   if Base UI needs one for a shared delay. Verify: one hint shows on hover and keyboard focus.
-- [ ] 6.2 Replace `title=` with `Hint` in `shell/`, `workflow/` and `App.tsx`; an element with no
+- [x] 6.2 Replace `title=` with `Hint` in `shell/`, `workflow/` and `App.tsx`; an element with no
   visible text keeps an `aria-label`. Verify: grep finds no `title=` in those files.
-- [ ] 6.3 Same for `chat/`, `documents/` and `interactive/`. Verify: grep as above.
-- [ ] 6.4 Same for `settings/`, `library/`, `home/`, `overview/`, `files/` and `avatar/`.
+- [x] 6.3 Same for `chat/`, `documents/` and `interactive/`. Verify: grep as above.
+- [x] 6.4 Same for `settings/`, `library/`, `home/`, `overview/`, `files/` and `avatar/`.
   Verify: grep finds no `title=` attribute under `src/components` outside `ui/`; tests that
   queried `title` query the accessible name and `npm test` passes.
-- [ ] 6.5 Update DESIGN.md §7 (Popovers, tooltips, menus) for `Hint`. Verify: named there.
-- [ ] 6.6 In the app: hover and tab through the navigation, the sheets' icon buttons, the
+- [x] 6.5 Update DESIGN.md §7 (Popovers, tooltips, menus) for `Hint`. Verify: named there.
+- [x] 6.6 In the app: hover and tab through the navigation, the sheets' icon buttons, the
   Composer and a reply's actions; every hint appears in the same style.
 
 ## Workflow follow-up

@@ -220,6 +220,8 @@ Steps share one set of marks everywhere: done is an ink circle with a check; run
 - A passage someone commented on has a `--border-strong` underline and a number badge; the selected one fills with `--accent`. A suggested edit strikes the passage through and follows it with the new text in the Mini-Me's `ink`, underlined 2px in its `solid`.
 
 ### Popovers, tooltips, menus
+Hover hints are tooltips (`Hint`), never the browser's `title`: white, 1px `--border`, `rounded-xl`, `text-meta`, after a 400ms first delay; an icon button's hint repeats its `aria-label`. A disabled control's hint sits on a wrapper (`Hint disabled`). The navigation's rows show theirs only when it is collapsed to icons.
+
 White, 1px `--border`, `rounded-xl`, no shadow. Items `rounded-md`; the highlighted item is `--accent`, never black. A confirmation is a popover under its button, aligned to its right edge: the question, a ghost Keep holding the focus, and a destructive action (`ConfirmButton`, or `ConfirmActions` inside a popover that already exists). Nothing asks inline. A popover that reports a result holds one solid button to act on it.
 
 ---

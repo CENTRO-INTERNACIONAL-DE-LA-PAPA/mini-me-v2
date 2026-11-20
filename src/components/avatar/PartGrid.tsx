@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { MiniMeAvatar } from "../../protocol/types";
@@ -36,16 +37,17 @@ function PartGrid({ parts, selected, allowNone, preview, color, onSelect }: Grid
       )}
       {parts.map((part) => (
         <li key={part.id}>
-          <Button
-            variant="outline"
-            aria-pressed={selected === part.id}
-            title={part.id}
-            className={TILE}
-            onClick={() => onSelect(part.id)}
-          >
-            <Avatar avatar={preview(part.id)} color={color} size={60} />
-            <span className="w-full truncate text-meta">{part.label}</span>
-          </Button>
+          <Hint label={part.id}>
+            <Button
+              variant="outline"
+              aria-pressed={selected === part.id}
+              className={TILE}
+              onClick={() => onSelect(part.id)}
+            >
+              <Avatar avatar={preview(part.id)} color={color} size={60} />
+              <span className="w-full truncate text-meta">{part.label}</span>
+            </Button>
+          </Hint>
         </li>
       ))}
     </ul>

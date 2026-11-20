@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { ComponentCard } from "./ComponentCard";
 import { Button } from "@/components/ui/button";
 import {
@@ -134,14 +135,15 @@ function Theories({ preview }: { preview: unknown }) {
               return (
                 <li key={index} id={`${prefix}-${index + 1}`} className="scroll-mt-4">
                   {url ? (
-                    <Button
-                      variant="link"
-                      title={url}
-                      className="justify-start text-left text-meta whitespace-normal"
-                      onClick={() => openLink(url)}
-                    >
-                      {label}
-                    </Button>
+                    <Hint label={url}>
+                      <Button
+                        variant="link"
+                        className="justify-start text-left text-meta whitespace-normal"
+                        onClick={() => openLink(url)}
+                      >
+                        {label}
+                      </Button>
+                    </Hint>
                   ) : (
                     label
                   )}

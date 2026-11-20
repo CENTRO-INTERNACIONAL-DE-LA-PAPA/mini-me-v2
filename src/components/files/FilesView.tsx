@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
@@ -203,18 +204,19 @@ function FileRow({
       </TableCell>
       <TableCell>
         {entry.origin?.kind === "dataverse" ? (
-          <Button
-            variant="link"
-            title={entry.origin.title}
-            className="max-w-full"
-            onClick={(e) => {
-              e.stopPropagation();
-              const url = webUrl(entry.origin?.url);
-              if (url) openLink(url);
-            }}
-          >
-            <span className="truncate">From Dataverse</span>
-          </Button>
+          <Hint label={entry.origin.title}>
+            <Button
+              variant="link"
+              className="max-w-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                const url = webUrl(entry.origin?.url);
+                if (url) openLink(url);
+              }}
+            >
+              <span className="truncate">From Dataverse</span>
+            </Button>
+          </Hint>
         ) : by?.kind === "user" ? (
           <span className="flex items-center gap-2">
             {name && (
@@ -251,9 +253,9 @@ function FileRow({
             <span className="truncate">{entry.used_in[0].title}</span>
           </Button>
         ) : (
-          <span title={entry.used_in.map((c) => c.title).join(", ")}>
-            {entry.used_in.length} conversations
-          </span>
+          <Hint label={entry.used_in.map((c) => c.title).join(", ")}>
+            <span>{entry.used_in.length} conversations</span>
+          </Hint>
         )}
       </TableCell>
       <TableCell className="text-muted-foreground">{formatRelative(entry.created_at)}</TableCell>

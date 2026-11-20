@@ -1,3 +1,4 @@
+import { Hint } from "./Hint";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
@@ -16,6 +17,7 @@ export function ListRow({
   name: ReactNode;
   meta?: ReactNode;
   trailing?: ReactNode;
+  /** A hint shown on hover, such as the whole of a name that is cut short. */
   title?: string;
   onOpen?: () => void;
   className?: string;
@@ -31,10 +33,9 @@ export function ListRow({
     </>
   );
   const row = "flex w-full items-center gap-3 text-left";
-  return onOpen ? (
+  const element = onOpen ? (
     <button
       type="button"
-      title={title}
       onClick={onOpen}
       className={cn(
         row,
@@ -45,8 +46,7 @@ export function ListRow({
       {content}
     </button>
   ) : (
-    <div title={title} className={cn(row, "py-2.5", className)}>
-      {content}
-    </div>
+    <div className={cn(row, "py-2.5", className)}>{content}</div>
   );
+  return <Hint label={title}>{element}</Hint>;
 }

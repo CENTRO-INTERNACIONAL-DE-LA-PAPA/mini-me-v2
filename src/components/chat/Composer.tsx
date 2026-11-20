@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { Extension } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import HardBreak from "@tiptap/extension-hard-break";
@@ -325,26 +326,28 @@ export function Composer({
 
   const size = thread ? "size-7" : "size-8.5";
   const action = replying ? (
-    <Button
-      size="icon"
-      className={cn(size, "shrink-0 rounded-full", asked && "bg-(--mm-ink)")}
-      aria-label="Stop the reply"
-      title="Stop the reply"
-      onClick={stop}
-    >
-      <SquareIcon className="size-3 fill-current" />
-    </Button>
+    <Hint label="Stop the reply">
+      <Button
+        size="icon"
+        className={cn(size, "shrink-0 rounded-full", asked && "bg-(--mm-ink)")}
+        aria-label="Stop the reply"
+        onClick={stop}
+      >
+        <SquareIcon className="size-3 fill-current" />
+      </Button>
+    </Hint>
   ) : (
-    <Button
-      size="icon"
-      className={cn(size, "shrink-0 rounded-full", asked && "bg-(--mm-ink)")}
-      aria-label="Send"
-      title="Send"
-      onClick={send}
-      disabled={empty || !ready || choosing}
-    >
-      <ArrowUpIcon />
-    </Button>
+    <Hint label="Send">
+      <Button
+        size="icon"
+        className={cn(size, "shrink-0 rounded-full", asked && "bg-(--mm-ink)")}
+        aria-label="Send"
+        onClick={send}
+        disabled={empty || !ready || choosing}
+      >
+        <ArrowUpIcon />
+      </Button>
+    </Hint>
   );
 
   return (
@@ -420,33 +423,36 @@ export function Composer({
           />
           <EditorContent editor={editor} className="composer-editor" />
           <div className="flex items-center gap-0.5 px-1 pb-2.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Mention a Mini-Me"
-              title="Mention a Mini-Me"
-              onClick={() => startReference("@")}
-            >
-              <AtSignIcon />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Reference a file"
-              title="Reference a file"
-              onClick={() => startReference("#")}
-            >
-              <FileSearchIcon />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Attach files"
-              title="Attach files"
-              onClick={attach}
-            >
-              <PaperclipIcon />
-            </Button>
+            <Hint label="Mention a Mini-Me">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Mention a Mini-Me"
+                onClick={() => startReference("@")}
+              >
+                <AtSignIcon />
+              </Button>
+            </Hint>
+            <Hint label="Reference a file">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Reference a file"
+                onClick={() => startReference("#")}
+              >
+                <FileSearchIcon />
+              </Button>
+            </Hint>
+            <Hint label="Attach files">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Attach files"
+                onClick={attach}
+              >
+                <PaperclipIcon />
+              </Button>
+            </Hint>
             <span className="ml-2 flex-1 truncate text-meta text-muted-foreground">
               {asked ? (
                 <span className="flex items-center gap-1.5">

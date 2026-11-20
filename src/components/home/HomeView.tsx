@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -131,9 +132,11 @@ function ProjectCard({
           {activity?.mini_mes.map((id) => {
             const miniMe = miniMes.find((m) => m.id === id);
             return (
-              <span key={id} title={miniMe?.name} className="flex">
-                <MiniMeAvatar miniMe={miniMe} size={22} />
-              </span>
+              <Hint key={id} label={miniMe?.name}>
+                <span className="flex">
+                  <MiniMeAvatar miniMe={miniMe} size={22} />
+                </span>
+              </Hint>
             );
           })}
         </span>

@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -772,16 +773,17 @@ function SourceButton({
   children: ReactNode;
 }) {
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="text-ink-2"
-    >
-      {children}
-    </Button>
+    <Hint label={label}>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={label}
+        disabled={disabled}
+        onClick={onClick}
+        className="text-ink-2"
+      >
+        {children}
+      </Button>
+    </Hint>
   );
 }

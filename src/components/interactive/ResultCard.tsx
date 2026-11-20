@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import type { ReactNode } from "react";
 import { ComponentCard } from "./ComponentCard";
 import { openLink } from "./links";
@@ -21,14 +22,15 @@ export function ResultCard({
   return (
     <ComponentCard render={<article />} className="gap-1">
       {url ? (
-        <button
-          type="button"
-          title={url}
-          className={`${heading} cursor-pointer underline-offset-2 hover:underline`}
-          onClick={() => openLink(url)}
-        >
-          {title}
-        </button>
+        <Hint label={url}>
+          <button
+            type="button"
+            className={`${heading} cursor-pointer underline-offset-2 hover:underline`}
+            onClick={() => openLink(url)}
+          >
+            {title}
+          </button>
+        </Hint>
       ) : (
         <span className={heading}>{title}</span>
       )}

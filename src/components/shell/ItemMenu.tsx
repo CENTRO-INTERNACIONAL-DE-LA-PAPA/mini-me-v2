@@ -1,3 +1,4 @@
+import { Hint } from "./Hint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -69,20 +70,21 @@ export function ItemMenu({ name, actions = [], rename, remove, className }: Prop
 
   return (
     <Popover open={open} onOpenChange={show}>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Actions for ${name}`}
-            title="Actions"
-            className={className}
-            onClick={(event) => event.stopPropagation()}
-          />
-        }
-      >
-        <MoreHorizontalIcon />
-      </PopoverTrigger>
+      <Hint label="Actions">
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Actions for ${name}`}
+              className={className}
+              onClick={(event) => event.stopPropagation()}
+            />
+          }
+        >
+          <MoreHorizontalIcon />
+        </PopoverTrigger>
+      </Hint>
       {/* A popover is in the page's React tree, so a click in it must not reach the row. */}
       <PopoverContent
         align="end"

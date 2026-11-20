@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { ListRow } from "../shell/ListRow";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
@@ -170,16 +171,20 @@ export function OverviewView({
               </p>
             )}
             <div className="mt-1 flex items-center gap-3">
-              <Button
-                variant="mini-me"
-                size="sm"
-                disabled={writing || overview.conversations === 0}
-                title="Sends the text of this Project's messages, not its files, to the AI model chosen in Settings."
-                onClick={updateSummary}
+              <Hint
+                label="Sends the text of this Project's messages, not its files, to the AI model chosen in Settings."
+                disabled
               >
-                <RefreshCwIcon className={cn(writing && "animate-spin")} />
-                {writing ? "Writing summary…" : "Update summary"}
-              </Button>
+                <Button
+                  variant="mini-me"
+                  size="sm"
+                  disabled={writing || overview.conversations === 0}
+                  onClick={updateSummary}
+                >
+                  <RefreshCwIcon className={cn(writing && "animate-spin")} />
+                  {writing ? "Writing summary…" : "Update summary"}
+                </Button>
+              </Hint>
               {overview.summary_at !== null && !writing && (
                 <span className="text-meta text-muted-foreground">
                   Written {relativeInSentence(overview.summary_at)}
@@ -195,15 +200,16 @@ export function OverviewView({
               actions={
                 <span className="flex items-center gap-2">
                   <MiniMePill miniMe={featuredBy}>{featuredBy?.name ?? "Mini-Me"}</MiniMePill>
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    aria-label="Remove from Overview"
-                    title="Remove from Overview"
-                    onClick={unfeature}
-                  >
-                    <XIcon />
-                  </Button>
+                  <Hint label="Remove from Overview">
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      aria-label="Remove from Overview"
+                      onClick={unfeature}
+                    >
+                      <XIcon />
+                    </Button>
+                  </Hint>
                 </span>
               }
             >

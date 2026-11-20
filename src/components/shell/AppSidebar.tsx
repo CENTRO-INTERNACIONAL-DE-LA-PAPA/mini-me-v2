@@ -1,3 +1,4 @@
+import { Hint } from "./Hint";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -106,17 +107,20 @@ export function AppSidebar({
       <SidebarHeader className="gap-5.5 px-3.5 pt-5 pb-0">
         <div className={cn("flex items-center", collapsed ? "justify-center" : "justify-between px-2")}>
           {!collapsed && (
-            <button
-              type="button"
-              title="Home"
-              aria-label="Home"
-              onClick={() => onNavigate({ kind: "home" })}
-              className="cursor-pointer rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <Wordmark height={16} />
-            </button>
+            <Hint label="Home">
+              <button
+                type="button"
+                aria-label="Home"
+                onClick={() => onNavigate({ kind: "home" })}
+                className="cursor-pointer rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <Wordmark height={16} />
+              </button>
+            </Hint>
           )}
-          <SidebarTrigger title={collapsed ? "Show navigation" : undefined} />
+          <Hint label={collapsed ? "Show navigation" : undefined} side="right">
+            <SidebarTrigger />
+          </Hint>
         </div>
       </SidebarHeader>
       <SidebarContent className="gap-5.5 px-1.5 pt-5.5">
@@ -124,7 +128,7 @@ export function AppSidebar({
           <SidebarMenu className="gap-0.5">
             <SidebarMenuItem>
               <SidebarMenuButton
-                title="Home"
+                tooltip="Home"
                 isActive={view.kind === "home"}
                 onClick={() => onNavigate({ kind: "home" })}
               >
@@ -134,7 +138,7 @@ export function AppSidebar({
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
-                title="Mini-Mes"
+                tooltip="Mini-Mes"
                 className="mini-me-stack"
                 isActive={["library", "mini-me", "trait"].includes(view.kind)}
                 onClick={() => onNavigate({ kind: "library" })}
@@ -159,7 +163,7 @@ export function AppSidebar({
             <SidebarMenu className="gap-0.5">
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  title="Overview"
+                  tooltip="Overview"
                   isActive={view.kind === "overview"}
                   onClick={() => onNavigate({ kind: "overview" })}
                 >
@@ -169,7 +173,7 @@ export function AppSidebar({
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  title="Files"
+                  tooltip="Files"
                   isActive={view.kind === "files"}
                   onClick={() => onNavigate({ kind: "files" })}
                 >
@@ -249,15 +253,16 @@ export function AppSidebar({
               >
                 Conversations{conversations.length > 0 && ` (${conversations.length})`}
               </SidebarGroupLabel>
-              <Button
-                variant={collapsed ? "default" : "ghost"}
-                size="icon-sm"
-                aria-label="New conversation"
-                title="New conversation"
-                onClick={onNewConversation}
-              >
-                <PlusIcon />
-              </Button>
+              <Hint label="New conversation" side={collapsed ? "right" : undefined}>
+                <Button
+                  variant={collapsed ? "default" : "ghost"}
+                  size="icon-sm"
+                  aria-label="New conversation"
+                  onClick={onNewConversation}
+                >
+                  <PlusIcon />
+                </Button>
+              </Hint>
             </div>
             <SidebarMenu className={cn("gap-1", collapsed && "hidden")}>
               {conversations.map((conversation) => {
@@ -317,20 +322,21 @@ export function AppSidebar({
         )}
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              title={name ? `Settings (${name})` : "Settings"}
-              isActive={view.kind === "settings"}
-              onClick={() => onNavigate({ kind: "settings" })}
-            >
-              {name ? (
-                <Avatar size="sm">
-                  <AvatarFallback>{initials(name)}</AvatarFallback>
-                </Avatar>
-              ) : (
-                <SettingsIcon />
-              )}
-              <span>Settings</span>
-            </SidebarMenuButton>
+            <Hint label={name ? `Settings (${name})` : "Settings"} side="right">
+              <SidebarMenuButton
+                isActive={view.kind === "settings"}
+                onClick={() => onNavigate({ kind: "settings" })}
+              >
+                {name ? (
+                  <Avatar size="sm">
+                    <AvatarFallback>{initials(name)}</AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <SettingsIcon />
+                )}
+                <span>Settings</span>
+              </SidebarMenuButton>
+            </Hint>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

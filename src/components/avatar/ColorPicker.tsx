@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { Slider } from "@/components/ui/slider";
 import type { CSSProperties } from "react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -25,14 +26,15 @@ export function ColorPicker({ value, onChange }: ColorPickerProps) {
         }}
       >
         {COLOR_FAMILIES.map((family) => (
-          <ToggleGroupItem
-            key={family.name}
-            value={family.name}
-            aria-label={family.name}
-            title={family.name}
-            className="size-7 rounded-full outline-offset-2 aria-pressed:outline-2 aria-pressed:outline-ring"
-            style={{ background: family.solid }}
-          />
+          <Hint label={family.name}>
+            <ToggleGroupItem
+              key={family.name}
+              value={family.name}
+              aria-label={family.name}
+              className="size-7 rounded-full outline-offset-2 aria-pressed:outline-2 aria-pressed:outline-ring"
+              style={{ background: family.solid }}
+            />
+          </Hint>
         ))}
       </ToggleGroup>
       <Slider

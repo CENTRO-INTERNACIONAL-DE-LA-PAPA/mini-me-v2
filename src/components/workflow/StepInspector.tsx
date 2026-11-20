@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { LabelledField } from "../shell/LabelledField";
 import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { ConfirmButton } from "../shell/Confirm";
@@ -169,19 +170,20 @@ export function StepInspector({
           />
         )}
         {editable && (
-          <Button
-            variant="outline"
-            className="w-fit text-destructive"
-            disabled={!remaining}
-            title={remaining ? undefined : "A Workflow keeps at least one Step"}
-            onClick={() => {
-              if (!remaining) return;
-              onChange(remaining);
-              onSelect(null);
-            }}
-          >
-            Remove step
-          </Button>
+          <Hint label={remaining ? undefined : "A Workflow keeps at least one Step"} disabled>
+            <Button
+              variant="outline"
+              className="w-fit text-destructive"
+              disabled={!remaining}
+              onClick={() => {
+                if (!remaining) return;
+                onChange(remaining);
+                onSelect(null);
+              }}
+            >
+              Remove step
+            </Button>
+          </Hint>
         )}
       </div>
     </ToolSheet>
@@ -249,23 +251,24 @@ function Branches({
               }
             />
             {editable && (
-              <ConfirmButton
-                trigger={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Remove branch"
-                    title={branches.length <= 2 ? "Keeps at least two branches" : undefined}
-                    disabled={branches.length <= 2}
-                  />
-                }
-                question={`Remove "${branch.label}" and its ${stepCount(branch.steps)}?`}
-                action="Remove"
-                ask={branch.steps.length > 0}
-                onConfirm={() => onChange(branches.filter((_, j) => j !== i))}
-              >
-                <XIcon />
-              </ConfirmButton>
+              <Hint label={branches.length <= 2 ? "Keeps at least two branches" : undefined} disabled>
+                <ConfirmButton
+                  trigger={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Remove branch"
+                      disabled={branches.length <= 2}
+                    />
+                  }
+                  question={`Remove "${branch.label}" and its ${stepCount(branch.steps)}?`}
+                  action="Remove"
+                  ask={branch.steps.length > 0}
+                  onConfirm={() => onChange(branches.filter((_, j) => j !== i))}
+                >
+                  <XIcon />
+                </ConfirmButton>
+              </Hint>
             )}
           </div>
         ))}

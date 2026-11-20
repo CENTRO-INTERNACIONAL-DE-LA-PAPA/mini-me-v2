@@ -1,3 +1,4 @@
+import { Hint } from "./Hint";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -72,9 +73,11 @@ export function ToolSheetHeading({ children }: { children: ReactNode }) {
 /** The well-filled square close button at the top right of a sheet. */
 function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Button variant="secondary" size="icon" aria-label={label} title={label} onClick={onClick}>
-      <XIcon />
-    </Button>
+    <Hint label={label}>
+      <Button variant="secondary" size="icon" aria-label={label} onClick={onClick}>
+        <XIcon />
+      </Button>
+    </Hint>
   );
 }
 
