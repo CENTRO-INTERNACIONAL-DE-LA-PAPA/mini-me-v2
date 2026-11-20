@@ -1,3 +1,6 @@
+import { Hint } from "../shell/Hint";
+import { ComponentCard } from "./ComponentCard";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -75,7 +78,7 @@ function TheorySection({ theory, number, prefix }: SectionProps) {
   return (
     <section className="flex flex-col gap-3 border-b border-border px-4 py-4 last:border-b-0">
       <header className="flex items-start gap-3">
-        <h3 className="flex-1 text-[15px] leading-snug font-semibold text-balance text-foreground">
+        <h3 className="flex-1 text-body leading-snug font-semibold text-balance text-foreground">
           {number}. {worded(theory.name, version)}
         </h3>
         <Select value={version} onValueChange={(value) => setVersion(value as Version)}>
@@ -118,7 +121,7 @@ function Theories({ preview }: { preview: unknown }) {
   const { theories, references } = preview as TheoriesData;
   const prefix = `ref-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
   return (
-    <div className="overflow-hidden rounded-xl border border-card-edge bg-card">
+    <ComponentCard className="gap-0 p-0">
       {theories.map((theory, index) => (
         <TheorySection key={index} theory={theory} number={index + 1} prefix={prefix} />
       ))}
@@ -132,14 +135,15 @@ function Theories({ preview }: { preview: unknown }) {
               return (
                 <li key={index} id={`${prefix}-${index + 1}`} className="scroll-mt-4">
                   {url ? (
-                    <button
-                      type="button"
-                      title={url}
-                      className="cursor-pointer text-left text-foreground hover:opacity-70"
-                      onClick={() => openLink(url)}
-                    >
-                      {label}
-                    </button>
+                    <Hint label={url}>
+                      <Button
+                        variant="link"
+                        className="justify-start text-left text-meta whitespace-normal"
+                        onClick={() => openLink(url)}
+                      >
+                        {label}
+                      </Button>
+                    </Hint>
                   ) : (
                     label
                   )}
@@ -149,7 +153,7 @@ function Theories({ preview }: { preview: unknown }) {
           </ol>
         </section>
       )}
-    </div>
+    </ComponentCard>
   );
 }
 

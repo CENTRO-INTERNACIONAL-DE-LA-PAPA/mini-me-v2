@@ -95,9 +95,7 @@ Use the text tokens, never arbitrary pixel sizes.
 | `text-sheet-title` | serif | 34 / 500, −0.01em | Sheet titles |
 | `text-identity` | serif | 32 / 500 | An editor's identity name |
 | `text-column-title` | serif | 28 / 500 | A column page's title; a sheet title while a tool sheet is open |
-| `text-nav-project` | serif | 24 / 500 | The Project name in the navigation |
-| `text-tool-title` | serif | 24 / 500 | Tool sheet titles |
-| `text-card-title` | serif | 23 / 500 | Card names |
+| `text-tool-title` | serif | 24 / 500 | Tool sheet titles, card names, the Project name in the navigation |
 | `text-heading` | serif | 20 / 400 | Section headings |
 | `text-name` | serif | 17 / 500 | A Mini-Me's name in a reply |
 | `text-subheading` | serif | 15 / 400 | Sub-sections and groups |
@@ -116,23 +114,25 @@ Use the text tokens, never arbitrary pixel sizes.
 
 ## 5. Shape, spacing, depth
 
-| Token | Value | Use |
+| Class | Value | Use |
 |---|---|---|
-| desk gap | 12px | Around and between sheets |
-| `rounded-sheet` | 18px | Sheets, library cards |
-| `rounded-card` | 16px | Cards and boards |
-| `rounded-2xl` | 14px | Rows inside cards, Workflow nodes, inspector cards |
-| `rounded-well` | 12px | Tab-switch tracks, inputs, search fields, popovers |
-| `rounded-control` | 9px | Tab-switch pills, icon buttons |
+| `p-3 gap-3` | 12px | The desk: around and between sheets |
+| `rounded-2xl` | 16px | Sheets, cards, boards, library cards, the floating composer |
+| `rounded-xl` | 12px | Rows inside cards, Workflow nodes, inspector cards, tab-switch tracks, inputs, search fields, popovers, tooltips |
+| `rounded-lg` | 8px | Tab-switch pills, icon buttons |
+| `rounded-md` | 6px | Menu and select items |
+| `rounded-sm` | 4px | Checkboxes, comment number badges |
 | `rounded-full` | 999px | Buttons, chips, name tags, a Workflow's start and end, marker pills |
-| `rounded-composer` | 20px | The floating composer |
-| bubble | `14 14 4 14` | Your messages |
+| `rounded-2xl rounded-br-sm` | 16px, 4px bottom right | Your message bubble |
+
+Radii are Tailwind's own scale; the theme does not redefine it.
+
 
 **Depth: none.** No box shadows, on anything. Sheets stand out by sitting on the grey desk; everything else is told apart by fills, and by 1px outlines where a fill matches its background. A selected node gets an ink border and a 4px outline in its Mini-Me's tint.
 
 Option tiles (avatar parts, swatches) are circles or rounded squares, never pill-stretched ovals.
 
-Sheet padding: 32px left, 24–28px top. Tool sheets: 22px top, 18px right, 24px left. Base unit 2px; common steps 4, 6, 8, 10, 12, 14, 16, 20, 24, 32.
+Sheet padding: `pl-8`, `pt-6`–`pt-7`. Tool sheets: `pt-5.5 pr-4.5 pl-6`. Spacing and sizes use Tailwind's scale in 2px steps (`0.5`), most often `1`, `1.5`, `2`, `2.5`, `3`, `3.5`, `4`, `5`, `6`, `8`. Arbitrary `[…px]` values are kept for fixed layout widths only.
 
 ---
 
@@ -146,7 +146,7 @@ Sheet padding: 32px left, 24–28px top. Tool sheets: 22px top, 18px right, 24px
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Navigation sheet, 256px.** The wordmark (it leads Home), the open Project or a dashed placeholder when none is open, the Project's views, its Conversations, status lines, and a bottom card with the Mini-Mes and your initials. The selected item is a white row.
+- **Navigation sheet, 256px.** The wordmark (it leads Home); the app's rows, Home and Mini-Mes (an avatar stack that hops on hover); the open Project's name as a serif group heading with a ⌄ for its menu, or a dashed placeholder when none is open, above its views; its Conversations, status lines, and a Settings row with your initials at the bottom. The selected item is a white row.
 - **Main sheet, flexible.** The view being worked on.
 - **Tool sheet, 340–380px.** A tool beside the main sheet. Only one at a time; a well-filled close button sits top-right.
 - **Content widths.** A chat column is 820px, or 680px with a tool sheet open; its composer spans it and its messages sit 20px inside. A column page (settings, notes) is a 210px list and content up to 760px, centred together.
@@ -159,42 +159,58 @@ Sheet padding: 32px left, 24–28px top. Tool sheets: 22px top, 18px right, 24px
 Always build from shadcn/ui components. Add a missing one from shadcn/ui rather than writing it from scratch, and change its styling wherever it differs from this guide.
 
 ### Cards
-- **Neutral card:** `--muted` fill, 1px `--border`, `rounded-card`. For things that belong to no Mini-Me.
-- **White card:** a white fill with an outline, for rows that hold well-filled buttons or inputs, so they don't sink into the fill. Related items share one white card, divided by hairlines, rather than a card each.
-- **Mini-Me card:** `wash` fill, 1px `edge`, `rounded-card`, with the Mini-Me's colours available to its content. Without a Mini-Me it renders as a neutral card. For anything a Mini-Me made or is doing.
+- **Neutral card:** `Card`, `--muted` fill, `rounded-2xl`. For things that belong to no Mini-Me.
+- **White card:** `Card variant="outline"`, a white fill with an outline, for rows that hold well-filled buttons or inputs, so they don't sink into the fill. Related items share one white card, divided by hairlines, rather than a card each.
+- **Mini-Me card:** `wash` fill, 1px `edge`, `rounded-2xl`, with the Mini-Me's colours available to its content. Without a Mini-Me it renders as a neutral card. For anything a Mini-Me made or is doing.
+- **Padding:** a card pads itself, `p-5`, or `p-4` with `size="sm"`; a card with full-width bands sets `p-0`.
+- **Interactive Component card:** `ComponentCard`, a small white card; a title, actions and a footer note sit in bands divided by hairlines, and the body (a table, a chart) runs to its edges.
+- **Result card:** `ResultCard`, a search result (a paper, a dataset) in a `ComponentCard`: its title, which opens the result, a byline and a description. Only the title opens it; the card holds other controls.
 - White things on the sheet (tables, paper sources, progress cards, buttons) are outlined on the white sheet and not inside a card or reply, whose own fill sets them apart.
 
 ### Tab switch
-Track `--well`, radius 12, padding 4, gap 4. Option: 13/500, padding 7×12, radius 9, optional 15px icon. Selected: white fill, 1px `--border`, ink text. Unselected: `--ink-2`, no fill. Vertical lists use padding 5 and options 9×11.
+One style for tabs and toggle groups (`ToggleGroup`'s `plain` variant is for items that draw themselves, such as colour swatches). Track `--well`, `rounded-xl p-1 gap-1`. Option: `text-control` 500, `px-3 py-2`, `rounded-lg`, optional `size-4` icon. Selected: white fill, 1px `--border`, ink text. Unselected: `--ink-2`, no fill. Vertical lists use `p-1.5` and options `px-3 py-2.5`.
 
 ### Buttons
 - **Default:** ink fill, white text, pill, 13.5/500. Only one ink button per header.
 - **Secondary / outline:** `--well` fill, ink text, pill.
 - **Mini-Me:** white, with a 1px `edge` outline only on white.
-- **Ghost:** no fill; icon buttons 30×30, radius 9.
+- **Ghost:** no fill; icon buttons `size-7.5 rounded-lg`.
 - **Destructive:** red text only, no fill.
+- **Link:** text only, normal weight, underlined on hover; for links inside text and table cells.
 
 ### Inputs
-Inputs, text areas and selects: `--well` fill, no visible border, radius 12, 13.5px; focus shows a 1px ink border. Rows with inputs or well buttons sit on a white card, not a grey one.
+Inputs, text areas and selects: `--well` fill, no visible border, `rounded-xl`, `text-ui`; focus shows a 1px ink border. Rows with inputs or well buttons sit on a white card, not a grey one. A field is the shadcn `Field`: a `text-ui` 500 label, a `text-meta` hint in `--muted-foreground` and any error in `--destructive`. In forms and inspectors the control sits under them (`LabelledField`); in Settings rows it sits on the right. A search field is `SearchInput`: a leading search icon, 240px wide. A slider is the shadcn `Slider`: a round white thumb with an ink ring; its track can take a gradient (`--slider-track`), as the avatar hue does.
 
 ### Name tags and chips
 - **Mini-Me name tag:** the Mini-Me's `tint` with its `ink` text and avatar; 16px avatar inline, 24px under a title, where it can add a status after a gap at 80% opacity.
+- **Origin badge:** "Built-in" or "Yours", an outline badge in the Mini-Me's `ink`.
+- **Your initials:** the shadcn `Avatar`, `size="sm"`: a grey circle with the initials in `text-meta`.
 - **Reference chip:** one chip for every file, table and chart, wherever it appears: white, outlined, an optional 13px leading icon, and a button when it opens what it names.
 
 ### Sheets and headers
 Every sheet, tool sheet, page header, section heading and editor header comes from one shared set: a serif title, an optional meta line, actions on the right, and a close button on a tool sheet.
+- **Page:** `SheetPage`, or `PageTitle` where the page sits in a column (Settings): `text-sheet-title`, a `text-ui` line under it, actions on the right.
+- **Section:** `SheetSection`: a `text-heading` serif title, short meta (a count) beside it, an optional sentence under it in `text-meta`, actions on the right.
+- **Tool sheet group:** `ToolSheetGroup`: a `text-subheading` serif heading over its rows, groups `mt-6` apart.
+- **Editor:** `EditorHeader`, then its content padded by `EDITOR_BODY` (`px-8 pt-6 pb-8`).
 
 ### Rows and lists
-- Flat rows divided by hairlines, filling `--muted` on hover. A row leads with its avatar, sign or icon, then the name (truncated), with a count or time right-aligned in meta.
+- Flat rows divided by hairlines, filling `--muted` on hover (`ListRow`, `rounded-xl px-2 py-2.5`). A row leads with its avatar, sign or icon, then the name (truncated, `text-ui` 500) over an optional meta line, with a count, time or actions on the right.
+- Tables are `ui/table`: a `--muted` header row in `text-meta`, cells `px-3 py-2`, rows divided by hairlines.
 - A file's icon is in its maker's `ink`, or `ink-2` for your files, with no tile.
 - A list of Mini-Mes is a grid of cards; a list of Traits is rows.
 
 ### Replies and messages
-- **Reply:** a Mini-Me card, padding 16×18. Header: 28px avatar, serif name, time and status in `ink`. Body 15px. Action pills are Mini-Me buttons; an active one is solid ink.
-- **Your message:** right-aligned, max 520px, `--bubble` fill without an outline, the bubble radius, the time below.
+- **Reply:** a Mini-Me card, `px-4.5 py-4`. Header: 28px avatar, serif name, time and status in `ink`. Body 15px. Action pills are Mini-Me buttons; an active one is solid ink.
+- **Your message:** right-aligned, max 520px, `--bubble` fill without an outline, `rounded-2xl rounded-br-sm`, the time below.
 - **Reactions:** a small white outlined pill over the bubble's bottom-left corner: avatar and emoji.
-- **Composer:** floats 22px above the bottom of the sheet. White, 1px outline (the addressed Mini-Me's `edge`, else `--border`), radius 20; a 34px round send button in the Mini-Me's `ink`, else ink. The list above keeps enough bottom padding for its last item to clear it.
+- **Composer:** floats `bottom-5.5` above the bottom of the sheet. White, 1px outline (the addressed Mini-Me's `edge`, else `--border`), `rounded-2xl`; a `size-8.5` round send button in the Mini-Me's `ink`, else ink. The list above keeps enough bottom padding for its last item to clear it.
 - **Fade:** the only gradient: 56px from the sheet's white to transparent at the top of a message list.
+
+### Status, errors and empty states
+- **Status dot:** `StatusDot`, an 8px circle, green when on, `--off` otherwise; before a status line or a label such as "Connected".
+- **Error:** `ErrorText`, one `text-meta` line in `--destructive`, spaced by its container.
+- **Empty state:** the shadcn `Empty` with an `EmptyDescription`: centred `text-ui` in `--muted-foreground`, with room around it. One size everywhere, from an empty list to an empty Conversation.
 
 ### Progress and timelines
 Steps share one set of marks everywhere: done is an ink circle with a check; running is a spinner in the Mini-Me's `solid`; pending is a white circle with a grey ring. A vertical timeline joins them with a 1.5px connector, ink when done.
@@ -204,7 +220,9 @@ Steps share one set of marks everywhere: done is an ink circle with a check; run
 - A passage someone commented on has a `--border-strong` underline and a number badge; the selected one fills with `--accent`. A suggested edit strikes the passage through and follows it with the new text in the Mini-Me's `ink`, underlined 2px in its `solid`.
 
 ### Popovers, tooltips, menus
-White, 1px `--border`, radius 12, no shadow. Items radius 7; the highlighted item is `--accent`, never black. A confirmation is a popover under its button, aligned to its right edge: the question, a ghost Keep holding the focus, and a destructive action. A popover that reports a result holds one solid button to act on it.
+Hover hints are tooltips (`Hint`), never the browser's `title`: white, 1px `--border`, `rounded-xl`, `text-meta`, after a 400ms first delay; an icon button's hint repeats its `aria-label`. A disabled control's hint sits on a wrapper (`Hint disabled`). The navigation's rows show theirs only when it is collapsed to icons.
+
+White, 1px `--border`, `rounded-xl`, no shadow. Items `rounded-md`; the highlighted item is `--accent`, never black. A confirmation is a popover under its button, aligned to its right edge: the question, a ghost Keep holding the focus, and a destructive action (`ConfirmButton`, or `ConfirmActions` inside a popover that already exists). Nothing asks inline. A popover that reports a result holds one solid button to act on it.
 
 ---
 

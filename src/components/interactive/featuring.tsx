@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { Button } from "@/components/ui/button";
 import { PinIcon } from "lucide-react";
 import { createContext, useCallback, useContext, type ReactNode } from "react";
@@ -43,15 +44,16 @@ export function FeatureButton({ componentId }: { componentId?: string }) {
   const featured = featuring.featuredId === componentId;
   const label = featured ? "Remove from Overview" : "Feature on Overview";
   return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      aria-pressed={featured}
-      aria-label={label}
-      title={label}
-      onClick={() => featuring.toggle(componentId)}
-    >
-      <PinIcon />
-    </Button>
+    <Hint label={label}>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-pressed={featured}
+        aria-label={label}
+        onClick={() => featuring.toggle(componentId)}
+      >
+        <PinIcon />
+      </Button>
+    </Hint>
   );
 }

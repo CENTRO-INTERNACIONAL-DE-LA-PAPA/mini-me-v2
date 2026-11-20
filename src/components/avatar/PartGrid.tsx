@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { MiniMeAvatar } from "../../protocol/types";
@@ -15,7 +16,7 @@ interface GridProps {
 }
 
 const TILE =
-  "aspect-square h-auto w-full flex-col gap-1 rounded-card border-border bg-card py-2 font-normal hover:bg-muted aria-pressed:border-foreground aria-pressed:bg-card aria-pressed:text-foreground";
+  "aspect-square h-auto w-full flex-col gap-1 rounded-2xl border-border bg-card py-2 font-normal hover:bg-muted aria-pressed:border-foreground aria-pressed:bg-card aria-pressed:text-foreground";
 
 /** A grid of avatar parts to pick from, each drawn on `preview(id)`. */
 function PartGrid({ parts, selected, allowNone, preview, color, onSelect }: GridProps) {
@@ -36,16 +37,17 @@ function PartGrid({ parts, selected, allowNone, preview, color, onSelect }: Grid
       )}
       {parts.map((part) => (
         <li key={part.id}>
-          <Button
-            variant="outline"
-            aria-pressed={selected === part.id}
-            title={part.id}
-            className={TILE}
-            onClick={() => onSelect(part.id)}
-          >
-            <Avatar avatar={preview(part.id)} color={color} size={60} />
-            <span className="w-full truncate text-meta">{part.label}</span>
-          </Button>
+          <Hint label={part.id}>
+            <Button
+              variant="outline"
+              aria-pressed={selected === part.id}
+              className={TILE}
+              onClick={() => onSelect(part.id)}
+            >
+              <Avatar avatar={preview(part.id)} color={color} size={60} />
+              <span className="w-full truncate text-meta">{part.label}</span>
+            </Button>
+          </Hint>
         </li>
       ))}
     </ul>

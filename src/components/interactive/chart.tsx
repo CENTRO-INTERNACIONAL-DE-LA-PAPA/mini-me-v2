@@ -1,3 +1,5 @@
+import { ComponentCard } from "./ComponentCard";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { lazy, Suspense, useMemo, useReducer } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -33,29 +35,39 @@ export function ChartView({
   const sample = "sample" in view ? view.sample : undefined;
 
   return (
-    <section
+    <ComponentCard
+      render={<section />}
       aria-label={chart.title || "Chart"}
-      className="w-full min-w-0 overflow-hidden rounded-xl border border-card-edge bg-card"
+      title={chart.title}
+      actions={
+        <>
+          {chart.views.length > 1 && (
+            <ToggleGroup
+              aria-label="Chart type"
+              value={[String(state.view)]}
+              onValueChange={(value) =>
+                value.length > 0 && dispatch({ type: "chooseView", view: Number(value[0]) })
+              }
+            >
+              {chart.views.map((v, index) => (
+                <ToggleGroupItem key={index} value={String(index)}>
+                  {VIEW_NAMES[v.type]}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          )}
+          <FeatureButton componentId={componentId} />
+        </>
+      }
+      footer={
+        sample && (
+          <p>
+            Sample of {numberFormat.format(sample.shown)} of {numberFormat.format(sample.total)}{" "}
+            points
+          </p>
+        )
+      }
     >
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-2.5">
-        <h3 className="mr-auto text-ui font-semibold">{chart.title}</h3>
-        {chart.views.length > 1 && (
-          <div role="group" aria-label="Chart type" className="flex gap-1">
-            {chart.views.map((v, index) => (
-              <Button
-                key={index}
-                variant="ghost"
-                size="xs"
-                aria-pressed={state.view === index}
-                onClick={() => dispatch({ type: "chooseView", view: index })}
-              >
-                {VIEW_NAMES[v.type]}
-              </Button>
-            ))}
-          </div>
-        )}
-        <FeatureButton componentId={componentId} />
-      </header>
       <div className="px-4 pt-3 pb-2">
         <Suspense fallback={<div className="min-h-[300px]" />}>
           <ChartFigure chart={chart} state={state} color={color} />
@@ -89,13 +101,7 @@ export function ChartView({
           })}
         </ul>
       )}
-      {sample && (
-        <p className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
-          Sample of {numberFormat.format(sample.shown)} of {numberFormat.format(sample.total)}{" "}
-          points
-        </p>
-      )}
-    </section>
+    </ComponentCard>
   );
 }
 

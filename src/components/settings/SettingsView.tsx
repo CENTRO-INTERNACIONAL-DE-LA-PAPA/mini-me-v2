@@ -1,8 +1,12 @@
+import { Hint } from "../shell/Hint";
+import { PageTitle, SheetSection } from "../shell/Sheet";
+import { ListRow } from "../shell/ListRow";
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -12,7 +16,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { appLabel } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import {
   FlaskConicalIcon,
   InfoIcon,
@@ -54,6 +57,9 @@ import { refreshReplyDebug } from "../../hooks/useReplyDebug";
 import { reloadFeatureFlags, useFeatureFlags } from "../../hooks/useFeatureFlags";
 import { recheckQuarto, showQuarto, useQuarto } from "../../hooks/useQuarto";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
+import { ErrorText } from "../shell/ErrorText";
+import { ConfirmButton } from "../shell/Confirm";
+import { StatusDot } from "../shell/StatusDot";
 
 const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "openai", name: "OpenAI" },
@@ -132,7 +138,7 @@ export function SettingsView({
       onSelect={setPage}
     >
       <div className="min-w-0">
-        {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
+        {error && <ErrorText className="mb-4">{error}</ErrorText>}
         {shown === "general" && <GeneralPage />}
         {settings && shown === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
         {settings && shown === "accounts" && (
@@ -158,62 +164,33 @@ export function SettingsView({
   );
 }
 
-function PageHeader({ title, lead }: { title: string; lead: string }) {
-  return (
-    <header className="mb-7 grid gap-1.5">
-      <h1 className="font-serif text-sheet-title font-medium text-foreground">{title}</h1>
-      <p className="text-ui text-pretty text-muted-foreground">{lead}</p>
-    </header>
-  );
-}
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="mt-7 first:mt-0">
-      <h3 className="font-serif text-heading text-foreground">{title}</h3>
-      {description && <p className="mt-1 text-meta text-muted-foreground">{description}</p>}
-      <div className="mt-3">{children}</div>
-    </section>
-  );
-}
-
-/** One setting: its name and what it does on the left, its control on the right. */
+/** One setting: its name and what it does on the left, its control on the right; `status`
+ * reports the outcome of its last action, such as "Saved". */
 function SettingRow({
   label,
   htmlFor,
   description,
+  status,
   error,
   children,
 }: {
   label: string;
   htmlFor?: string;
   description?: ReactNode;
-  error?: string | null;
+  status?: ReactNode;
+  error?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-6 border-b border-border py-4">
-      <div className="grid flex-1 gap-0.5">
-        <Label htmlFor={htmlFor} className="font-medium">
-          {label}
-        </Label>
-        {(description || error) && (
-          <p className="text-meta text-muted-foreground">
-            {description}
-            {error && <span className="mt-1 block text-destructive">{error}</span>}
-          </p>
-        )}
-      </div>
+    <Field orientation="horizontal" className="border-b border-border py-4">
+      <FieldContent>
+        <FieldLabel htmlFor={htmlFor}>{label}</FieldLabel>
+        {description && <FieldDescription>{description}</FieldDescription>}
+        {status && <FieldDescription className="text-ink-2">{status}</FieldDescription>}
+        {error && <FieldError>{error}</FieldError>}
+      </FieldContent>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{children}</div>
-    </div>
+    </Field>
   );
 }
 
@@ -261,17 +238,17 @@ function SwitchRow({
 /** An account or key's card, outlined on white so the well-filled controls inside stand out. */
 function AccountCard({ render, children }: { render?: ReactElement; children: ReactNode }) {
   return (
-    <Card render={render} className="gap-0 rounded-2xl border border-border bg-card px-4 py-3.5">
+    <Card render={render} variant="outline" size="sm" className="gap-0">
       {children}
     </Card>
   );
 }
 
 /** A green or grey dot with its label, for whether something is set up. */
-function StatusDot({ on, children }: { on: boolean; children: ReactNode }) {
+function StatusLabel({ on, children }: { on: boolean; children: ReactNode }) {
   return (
     <span className="flex items-center gap-1.5 text-meta text-ink-2">
-      <span aria-hidden className={cn("size-[7px] rounded-full", on ? "bg-success" : "bg-off")} />
+      <StatusDot className={on ? "bg-success" : undefined} />
       {children}
     </span>
   );
@@ -280,22 +257,22 @@ function StatusDot({ on, children }: { on: boolean; children: ReactNode }) {
 function GeneralPage() {
   return (
     <>
-      <PageHeader title="General" lead="About you, and how Home looks." />
-      <Section
+      <PageTitle className="mb-7" title="General" description="About you, and how Home looks." />
+      <SheetSection className="mt-7 first:mt-0"
         title="You"
         description="What Mini-Me knows about you. It stays on this computer and is not sent to AI models."
       >
         <NameRow />
-      </Section>
-      <Section title="Home">
+      </SheetSection>
+      <SheetSection className="mt-7 first:mt-0" title="Home">
         <HomeMiniMesRow />
-      </Section>
-      <Section
+      </SheetSection>
+      <SheetSection className="mt-7 first:mt-0"
         title="Documents"
         description="Documents are edited and rendered with the Quarto installed on this computer."
       >
         <QuartoRow />
-      </Section>
+      </SheetSection>
     </>
   );
 }
@@ -314,9 +291,9 @@ function DeveloperPage({
 }) {
   return (
     <>
-      <PageHeader
+      <PageTitle className="mb-7"
         title="Developer"
-        lead="Options for developing and testing Mini-Me. This page is listed while Developer mode (Settings → About) is on."
+        description="Options for developing and testing Mini-Me. This page is listed while Developer mode (Settings → About) is on."
       />
       <ThresholdRow settings={settings} onChanged={onChanged} />
       <JevDebugRows settings={settings} onChanged={onChanged} />
@@ -363,7 +340,7 @@ function FeatureFlagsSection() {
   }
 
   return (
-    <Section
+    <SheetSection className="mt-7 first:mt-0"
       title="Feature flags"
       description="Experimental features this version carries switched off."
     >
@@ -392,30 +369,33 @@ function FeatureFlagsSection() {
         </SettingRow>
       </form>
       {flags.length === 0 ? (
-        <p className="py-4 text-meta text-muted-foreground">No feature flags are on.</p>
+        <Empty>
+          <EmptyDescription>No feature flags are on.</EmptyDescription>
+        </Empty>
       ) : (
         <>
           <h4 className="mt-5 mb-2 text-meta font-medium text-muted-foreground">Active</h4>
           <AccountCard render={<ul />}>
             {flags.map((flag) => (
-              <li
-                key={flag.id}
-                className="flex items-center gap-3 border-b border-border py-3 first:pt-0 last:border-b-0 last:pb-0"
-              >
-                <span className="grid flex-1 gap-0.5">
-                  <span className="font-medium">{flag.name}</span>
-                  <span className="text-meta text-muted-foreground">{flag.description}</span>
-                </span>
-                <StatusDot on>On</StatusDot>
-                <Button variant="outline" onClick={() => void turnOff(flag.id)}>
-                  Turn off
-                </Button>
+              <li key={flag.id} className="border-b border-border last:border-b-0">
+                <ListRow
+                  name={flag.name}
+                  meta={flag.description}
+                  trailing={
+                    <>
+                      <StatusLabel on>On</StatusLabel>
+                      <Button variant="outline" onClick={() => void turnOff(flag.id)}>
+                        Turn off
+                      </Button>
+                    </>
+                  }
+                />
               </li>
             ))}
           </AccountCard>
         </>
       )}
-    </Section>
+    </SheetSection>
   );
 }
 
@@ -485,16 +465,17 @@ function QuartoForm({ status }: { status: QuartoStatus }) {
             Clear
           </Button>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label="Check again"
-          title="Check again"
-          onClick={recheckQuarto}
-        >
-          <RefreshCwIcon />
-        </Button>
+        <Hint label="Check again">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Check again"
+            onClick={recheckQuarto}
+          >
+            <RefreshCwIcon />
+          </Button>
+        </Hint>
       </SettingRow>
     </form>
   );
@@ -531,18 +512,17 @@ function NameForm({ saved, unreadable }: { saved: string; unreadable: string | n
       <SettingRow
         label="Your name"
         htmlFor="user-name"
-        description={
-          <>
-            Shown in Home's greeting and on your files. Leave it empty to show no name.
-            {unreadable && (
-              <span className="mt-1 block text-destructive">
-                user-profile.json in the app's config folder could not be read ({unreadable}), so it is
-                left unchanged. Fix or remove it, then restart Mini-Me.
-              </span>
-            )}
-          </>
+        description="Shown in Home's greeting and on your files. Leave it empty to show no name."
+        error={
+          unreadable ? (
+            <>
+              user-profile.json in the app's config folder could not be read ({unreadable}), so it
+              is left unchanged. Fix or remove it, then restart Mini-Me.
+            </>
+          ) : (
+            status
+          )
         }
-        error={status}
       >
         <Input
           id="user-name"
@@ -574,7 +554,7 @@ function AboutPage({
 }) {
   return (
     <>
-      <PageHeader title="About" lead="What Mini-Me is, who makes it, and which version is running." />
+      <PageTitle className="mb-7" title="About" description="What Mini-Me is, who makes it, and which version is running." />
       <div className="grid gap-3 text-body text-foreground">
         <p>
           Mini-Me is a local-first research tool for scientists at the International Potato
@@ -706,11 +686,11 @@ function HomeMiniMesRow() {
 function ModelsPage({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
   return (
     <>
-      <PageHeader
+      <PageTitle className="mb-7"
         title="Models & keys"
-        lead="Mini-Mes call the AI model you choose here, with your own key. Keys are kept in your system's keychain and are only sent to their provider."
+        description="Mini-Mes call the AI model you choose here, with your own key. Keys are kept in your system's keychain and are only sent to their provider."
       />
-      <Section title="Providers">
+      <SheetSection className="mt-7 first:mt-0" title="Providers">
         <ul className="grid gap-2">
           {PROVIDERS.map((provider) => (
             <KeyRow
@@ -726,10 +706,10 @@ function ModelsPage({ settings, onChanged }: { settings: AiSettings; onChanged: 
             />
           ))}
         </ul>
-      </Section>
-      <Section title="Defaults">
+      </SheetSection>
+      <SheetSection className="mt-7 first:mt-0" title="Defaults">
         <ModelRow settings={settings} onSaved={onChanged} />
-      </Section>
+      </SheetSection>
     </>
   );
 }
@@ -737,17 +717,17 @@ function ModelsPage({ settings, onChanged }: { settings: AiSettings; onChanged: 
 function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
   return (
     <>
-      <PageHeader
+      <PageTitle className="mb-7"
         title="Accounts"
-        lead="Services Mini-Me signs in to, and the one that chooses which Mini-Me answers."
+        description="Services Mini-Me signs in to, and the one that chooses which Mini-Me answers."
       />
-      <Section
+      <SheetSection className="mt-7 first:mt-0"
         title="Ai2"
         description="Researcher and Theorist use Ai2's Asta services, which need an Ai2 account. Their messages are sent to Ai2; file contents are not."
       >
         <Ai2Row />
-      </Section>
-      <Section
+      </SheetSection>
+      <SheetSection className="mt-7 first:mt-0"
         title="Choosing a Mini-Me"
         description="When you don't mention a Mini-Me, Typesafe's Jev chooses one. Your message's text, the names of the Conversation's files, and the start of the last few messages and who wrote them are sent to Typesafe; file contents are not."
       >
@@ -759,8 +739,8 @@ function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged
             onChanged={onChanged}
           />
         </ul>
-      </Section>
-      <Section
+      </SheetSection>
+      <SheetSection className="mt-7 first:mt-0"
         title="CIP Dataverse"
         description="CIP's Archivist finds datasets in CIP's Dataverse. Public datasets need no token; add your Dataverse API token to download restricted files you have access to. The token stays on this computer and is sent only to CIP's Dataverse."
       >
@@ -772,7 +752,7 @@ function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged
             onChanged={onChanged}
           />
         </ul>
-      </Section>
+      </SheetSection>
     </>
   );
 }
@@ -827,9 +807,9 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
           <>
             Used by every Mini-Me that calls an AI model, such as Scribe. Type the model ID
             exactly as the provider lists it.
-            {status && <span className="mt-1 block text-ink-2">{status}</span>}
           </>
         }
+        status={status}
       >
         <Select
           value={provider}
@@ -865,21 +845,22 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
             Save
           </Button>
           <Popover open={tested !== null} onOpenChange={(open) => !open && setTested(null)}>
-            <PopoverTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="icon"
-                  aria-label="Test model"
-                  title="Test model"
-                  disabled={testing || !model.trim()}
-                />
-              }
-              onClick={testModel}
-            >
-              <FlaskConicalIcon />
-            </PopoverTrigger>
+            <Hint label="Test model" disabled>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="icon"
+                    aria-label="Test model"
+                    disabled={testing || !model.trim()}
+                  />
+                }
+                onClick={testModel}
+              >
+                <FlaskConicalIcon />
+              </PopoverTrigger>
+            </Hint>
             <PopoverContent align="end">
               <p>{tested}</p>
             </PopoverContent>
@@ -894,13 +875,15 @@ function ModelRow({ settings, onSaved }: { settings: AiSettings; onSaved: () => 
             <>
               The address of a server that speaks the OpenAI or Anthropic API, such as LM Studio,
               Ollama or vLLM.
-              {sendsUnencrypted(endpoint) && (
-                <span className="mt-1 block text-ink-2">
-                  This address is not on this computer and does not use https, so the key and
-                  your messages are sent unencrypted.
-                </span>
-              )}
             </>
+          }
+          status={
+            sendsUnencrypted(endpoint) && (
+              <>
+                This address is not on this computer and does not use https, so the key and your
+                messages are sent unencrypted.
+              </>
+            )
           }
         >
           <Select
@@ -966,30 +949,33 @@ function Ai2Row() {
   const signedIn = status?.state === "signed_in";
   return (
     <AccountCard>
-      <div className="flex items-center gap-3">
-        <span className="grid flex-1 gap-0.5">
-          <span className="font-medium">Ai2 account</span>
-          <span className="text-meta text-muted-foreground">
-            {signedIn
-              ? `Signed in as ${status.email ?? "your Ai2 account"}`
-              : status?.state === "pending"
-                ? "Waiting for you to confirm the code in your browser"
-                : "Sign in to use Researcher and Theorist"}
-          </span>
-        </span>
-        <StatusDot on={signedIn}>{signedIn ? "Signed in" : "Not signed in"}</StatusDot>
-        {signedIn ? (
-          <Button variant="outline" onClick={() => run(api.ai2SignOut)}>
-            Sign out
-          </Button>
-        ) : (
-          status?.state !== "pending" && (
-            <Button variant="outline" onClick={() => run(api.ai2StartSignIn)}>
-              Sign in
-            </Button>
-          )
-        )}
-      </div>
+      <ListRow
+        className="py-0"
+        name="Ai2 account"
+        meta={
+          signedIn
+            ? `Signed in as ${status.email ?? "your Ai2 account"}`
+            : status?.state === "pending"
+              ? "Waiting for you to confirm the code in your browser"
+              : "Sign in to use Researcher and Theorist"
+        }
+        trailing={
+          <>
+            <StatusLabel on={signedIn}>{signedIn ? "Signed in" : "Not signed in"}</StatusLabel>
+            {signedIn ? (
+              <Button variant="outline" onClick={() => run(api.ai2SignOut)}>
+                Sign out
+              </Button>
+            ) : (
+              status?.state !== "pending" && (
+                <Button variant="outline" onClick={() => run(api.ai2StartSignIn)}>
+                  Sign in
+                </Button>
+              )
+            )}
+          </>
+        }
+      />
       {status?.state === "pending" && (
         <div className="mt-3 grid gap-1 border-t border-border pt-3">
           <p>
@@ -1002,9 +988,9 @@ function Ai2Row() {
         </div>
       )}
       {status?.state === "signed_out" && status.error && (
-        <p className="mt-2 text-meta text-destructive">{status.error}</p>
+        <ErrorText className="mt-2">{status.error}</ErrorText>
       )}
-      {error && <p className="mt-2 text-meta text-destructive">{error}</p>}
+      {error && <ErrorText className="mt-2">{error}</ErrorText>}
     </AccountCard>
   );
 }
@@ -1035,9 +1021,9 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
           <>
             From 0 to 1. When Jev is less sure than this of its choice, Assistant answers
             instead, and Jev adds no reaction.
-            {status && <span className="mt-1 block text-ink-2">{status}</span>}
           </>
         }
+        status={status}
       >
         <Input
           id="threshold"
@@ -1132,7 +1118,6 @@ function ReplyDebugRows({ settings, onChanged }: { settings: AiSettings; onChang
 
 /** Clears the open Project's debug records, after asking. */
 function DebugDataRow({ projectId }: { projectId?: string }) {
-  const [asking, setAsking] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   async function clear() {
@@ -1143,45 +1128,26 @@ function DebugDataRow({ projectId }: { projectId?: string }) {
     } catch (e) {
       setStatus(errorMessage(e));
     }
-    setAsking(false);
   }
 
   return (
     <SettingRow
       label="Debug data"
       description={
-        <>
-          {projectId
-            ? "Deletes the debug records stored in the open Project."
-            : "Open a Project to clear its debug records."}
-          {asking && (
-            <span className="mt-1 block">Delete every debug record of this Project?</span>
-          )}
-          {status && <span className="mt-1 block text-ink-2">{status}</span>}
-        </>
+        projectId
+          ? "Deletes the debug records stored in the open Project."
+          : "Open a Project to clear its debug records."
       }
+      status={status}
     >
-      {asking ? (
-        <>
-          <Button variant="ghost" onClick={() => setAsking(false)}>
-            Keep
-          </Button>
-          <Button variant="destructive" onClick={() => void clear()}>
-            Clear
-          </Button>
-        </>
-      ) : (
-        <Button
-          variant="outline"
-          disabled={!projectId}
-          onClick={() => {
-            setStatus(null);
-            setAsking(true);
-          }}
-        >
-          Clear
-        </Button>
-      )}
+      <ConfirmButton
+        trigger={<Button variant="outline" disabled={!projectId} />}
+        question="Delete every debug record of this Project?"
+        action="Clear"
+        onConfirm={() => void clear()}
+      >
+        Clear
+      </ConfirmButton>
     </SettingRow>
   );
 }
@@ -1251,26 +1217,29 @@ function KeyRow({
 
   return (
     <AccountCard render={<li />}>
-      <div className="flex items-center gap-3.5">
-        <span
-          aria-hidden
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted font-serif text-name font-medium"
-        >
-          {name[0]}
-        </span>
-        <span className="grid flex-1 gap-0.5">
-          <span className="font-medium">{name}</span>
-          <span className="text-meta text-muted-foreground">
-            {saved ? "Key saved in your system's keychain" : hint}
+      <ListRow
+        className="py-0"
+        leading={
+          <span
+            aria-hidden
+            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted font-serif text-name font-medium"
+          >
+            {name[0]}
           </span>
-        </span>
-        <StatusDot on={saved}>{saved ? "Connected" : "Not connected"}</StatusDot>
-        <Button variant="outline" aria-expanded={editing} onClick={() => setEditing(!editing)}>
-          {saved ? "Edit" : "Add key"}
-        </Button>
-      </div>
+        }
+        name={name}
+        meta={saved ? "Key saved in your system's keychain" : hint}
+        trailing={
+          <>
+            <StatusLabel on={saved}>{saved ? "Connected" : "Not connected"}</StatusLabel>
+            <Button variant="outline" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+              {saved ? "Edit" : "Add key"}
+            </Button>
+          </>
+        }
+      />
       {editing && (
-        <form className="mt-3 flex gap-2 pl-[50px]" onSubmit={save}>
+        <form className="mt-3 flex gap-2 pl-12" onSubmit={save}>
           <Input
             aria-label={`${name} key`}
             type="password"
@@ -1290,7 +1259,7 @@ function KeyRow({
           )}
         </form>
       )}
-      {error && <p className="mt-2 pl-11 text-meta text-destructive">{error}</p>}
+      {error && <ErrorText className="mt-2 pl-12">{error}</ErrorText>}
     </AccountCard>
   );
 }

@@ -1,3 +1,5 @@
+import { ListRow } from "../shell/ListRow";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FilePlusIcon, FileTextIcon } from "lucide-react";
@@ -12,8 +14,9 @@ import { FileMark } from "../files/FileMark";
 import { isDocument } from "../files/files";
 import { openLink } from "../interactive/links";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
-import { ToolSheet } from "../shell/Sheet";
+import { ToolSheet, ToolSheetGroup } from "../shell/Sheet";
 import { documentsBlocked, quartoNotice } from "./quarto";
+import { ErrorText } from "../shell/ErrorText";
 
 /** The Mini-Mes that replied in `messages`, in the order they first replied. */
 export function draftSources(messages: MessageView[], miniMes: MiniMe[]): MiniMe[] {
@@ -86,7 +89,7 @@ export function ReportPanel({
   return (
     <ToolSheet title="Report" meta="Choose how to start" onClose={onClose}>
       <div className="grid gap-3">
-        <Card render={<section />} className="gap-3 p-4">
+        <Card render={<section />} size="sm" className="gap-3">
           <div className="flex items-start gap-3">
             <h3 className="flex-1 font-serif text-name text-foreground">
               Draft from this conversation
@@ -121,7 +124,8 @@ export function ReportPanel({
           render={
             <button type="button" disabled={busy || blocked} onClick={() => run(onStartBlank)} />
           }
-          className="flex-row items-center gap-3 p-4 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+          size="sm"
+          className="flex-row items-center gap-3 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-40"
         >
           <FilePlusIcon aria-hidden className="size-4 shrink-0" />
           <span className="grid">
@@ -132,49 +136,43 @@ export function ReportPanel({
         {blocked && quarto && (
           <p className="text-meta text-muted-foreground">
             {quartoNotice(quarto)}{" "}
-            <button
-              type="button"
-              className="underline"
+            <Button
+              variant="link"
+              className="text-meta text-muted-foreground underline"
               onClick={() => openLink(quarto.install_url)}
             >
               Get Quarto
-            </button>
+            </Button>
           </p>
         )}
-        {error && <p className="text-meta text-destructive">{error}</p>}
+        {error && <ErrorText>{error}</ErrorText>}
       </div>
-      <h3 className="mt-6 mb-2.5 font-serif text-section text-foreground">Open from Files</h3>
-      {documents.length === 0 ? (
-        <p className="text-meta text-muted-foreground">No documents in this Project yet.</p>
-      ) : (
-        <ul className="grid gap-1">
-          {documents.map((file) => {
-            const maker =
-              file.added_by?.kind === "mini_me"
-                ? miniMes.find((m) => m.id === file.added_by?.id)
-                : undefined;
-            return (
-              <li key={file.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(file.id)}
-                  className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left transition-colors duration-150 ease-out hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  <FileMark miniMe={maker} icon={FileTextIcon} />
-                  <span className="grid min-w-0 flex-1">
-                    <span className="truncate text-ui font-medium text-foreground">
-                      {file.name.replace(/\.qmd$/i, "")}
-                    </span>
-                    <span className="text-meta text-muted-foreground">
-                      {formatRelative(file.modified_at ?? file.created_at)}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <ToolSheetGroup label="Open from Files">
+        {documents.length === 0 ? (
+          <Empty>
+            <EmptyDescription>No documents in this Project yet.</EmptyDescription>
+          </Empty>
+        ) : (
+          <ul className="grid gap-1">
+            {documents.map((file) => {
+              const maker =
+                file.added_by?.kind === "mini_me"
+                  ? miniMes.find((m) => m.id === file.added_by?.id)
+                  : undefined;
+              return (
+                <li key={file.id}>
+                  <ListRow
+                    leading={<FileMark miniMe={maker} icon={FileTextIcon} />}
+                    name={file.name.replace(/\.qmd$/i, "")}
+                    meta={formatRelative(file.modified_at ?? file.created_at)}
+                    onOpen={() => onOpen(file.id)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </ToolSheetGroup>
     </ToolSheet>
   );
 }

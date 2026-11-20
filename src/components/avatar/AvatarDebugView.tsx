@@ -34,7 +34,7 @@ export function AvatarDebugView({ onClose }: Props) {
         <ChevronLeftIcon />
         Back
       </Button>
-      <h1 className="mb-6 text-page font-bold">[DEBUG] Avatars</h1>
+      <h1 className="mb-6 font-serif text-sheet-title font-medium">[DEBUG] Avatars</h1>
       <div className="grid grid-cols-[300px_1fr] items-start gap-10">
         <aside className="sticky top-6 grid gap-6">
           <div className="grid place-items-center rounded-xl border border-border bg-card p-6">

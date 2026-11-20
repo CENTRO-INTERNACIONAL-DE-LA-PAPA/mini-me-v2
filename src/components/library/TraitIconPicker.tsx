@@ -37,7 +37,7 @@ export function TraitIconPicker({
               onPick(name);
             }}
           >
-            <Icon className="size-[18px]" strokeWidth={1.4} />
+            <Icon className="size-4.5" strokeWidth={1.4} />
           </Button>
         ))}
       </PopoverContent>

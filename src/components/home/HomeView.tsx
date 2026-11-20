@@ -1,3 +1,5 @@
+import { Hint } from "../shell/Hint";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +21,7 @@ import { useLoad } from "../../hooks/useLoad";
 import { useRunningReplies } from "../../hooks/useRunningReplies";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { firstName } from "../../lib/names";
+import { ErrorText } from "../shell/ErrorText";
 
 interface Props {
   projects: ProjectSummary[];
@@ -122,23 +125,25 @@ function ProjectCard({
   return (
     <Card
       render={<button type="button" onClick={onOpen} />}
-      className="h-full w-full cursor-pointer justify-between gap-7 p-5 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring"
+      className="h-full w-full cursor-pointer justify-between gap-7 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring"
     >
-      <span className="flex items-center justify-between gap-3">
-        <span className="flex gap-0">
+      <span className="flex min-h-5.5 items-center justify-between gap-3">
+        <span className="flex">
           {activity?.mini_mes.map((id) => {
             const miniMe = miniMes.find((m) => m.id === id);
             return (
-              <span key={id} title={miniMe?.name}>
-                <MiniMeAvatar miniMe={miniMe} size={22} />
-              </span>
+              <Hint key={id} label={miniMe?.name}>
+                <span className="flex">
+                  <MiniMeAvatar miniMe={miniMe} size={22} />
+                </span>
+              </Hint>
             );
           })}
         </span>
         <span className="shrink-0 text-meta text-muted-foreground">{when}</span>
       </span>
       <span className="grid gap-1">
-        <span className="font-serif text-card-title font-medium text-foreground">
+        <span className="font-serif text-tool-title font-medium text-foreground">
           {project.name}
         </span>
         {summary && <span className="line-clamp-2 text-meta text-muted-foreground">{summary}</span>}
@@ -166,7 +171,7 @@ function NewProjectCard({
     onEditing(false);
   }
 
-  const tile = "h-full min-h-[150px] rounded-card border-[1.5px] border-dashed border-dash";
+  const tile = "h-full min-h-[150px] rounded-2xl border-[1.5px] border-dashed border-dash";
   if (editing) {
     return (
       <form onSubmit={submit} className={`${tile} flex flex-col justify-center gap-2 p-4`}>
@@ -213,9 +218,11 @@ function NeedsYou({
   return (
     <SheetSection title="Waiting on you">
       {error ? (
-        <p className="text-meta text-destructive">{error}</p>
+        <ErrorText>{error}</ErrorText>
       ) : approvals?.length === 0 ? (
-        <p className="text-body text-muted-foreground">Nothing is waiting on you.</p>
+        <Empty>
+          <EmptyDescription>Nothing is waiting on you.</EmptyDescription>
+        </Empty>
       ) : (
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
           {approvals?.map((approval) => {
@@ -225,10 +232,10 @@ function NeedsYou({
                 key={approval.message_id}
                 miniMe={miniMe}
                 render={<li />}
-                className="flex items-center gap-3.5 px-[18px] py-4"
+                className="flex items-center gap-3 px-4 py-3"
               >
                 <MiniMeAvatar miniMe={miniMe} size={40} />
-                <div className="grid min-w-0 flex-1 gap-[3px]">
+                <div className="grid min-w-0 flex-1 gap-1">
                   <span className="text-body font-medium text-foreground">{approval.prompt}</span>
                   <span className="truncate text-meta text-mm-ink">
                     {approval.conversation_title} ({approval.project_name})

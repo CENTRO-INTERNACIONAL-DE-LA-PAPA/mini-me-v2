@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
 import { useState } from "react";
 import { errorCode, errorMessage } from "../../api";
+import { ErrorText } from "../shell/ErrorText";
 
 /** A box on screen that a popover points at, such as a clicked suggestion. */
 export interface PopoverAnchor {
@@ -56,8 +57,8 @@ export function SuggestionPopover({
       <PopoverContent anchor={anchor} align="start">
         <p className="text-meta text-muted-foreground">Suggested by {author}</p>
         <p className="line-clamp-4 wrap-anywhere">{text.trim() ? text : "Remove this passage."}</p>
-        {problem && <p className="text-meta text-destructive">{problem}</p>}
-        {failure && <p className="text-meta text-destructive">{failure}</p>}
+        {problem && <ErrorText>{problem}</ErrorText>}
+        {failure && <ErrorText>{failure}</ErrorText>}
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run(onDiscard)}>
             Discard

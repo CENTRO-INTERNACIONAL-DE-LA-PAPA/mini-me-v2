@@ -1,3 +1,6 @@
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ComponentCard } from "./ComponentCard";
+import { Button } from "@/components/ui/button";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -129,96 +132,97 @@ export function TableView({
   }
 
   return (
-    <section
+    <ComponentCard
+      render={<section />}
       aria-label={title ?? "Table"}
-      className="w-full min-w-0 overflow-hidden rounded-xl border border-card-edge bg-card"
-    >
-      <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
-        <h3 className="mr-auto text-ui font-semibold">{title}</h3>
-        {notice && (
-          <span role="status" className="truncate text-meta text-muted-foreground">
-            {notice}
-          </span>
-        )}
-        <FeatureButton componentId={componentId} />
-        <ItemMenu name={title ?? "this table"} actions={actions} />
-      </header>
-      {/* Wide tables scroll sideways inside the card instead of widening the reply. */}
-      <div className="max-h-[420px] w-full overflow-auto overscroll-contain">
-        <table className="w-max min-w-full border-collapse text-ui tabular-nums">
-          <thead className="sticky top-0 bg-muted">
-            <tr>
-              {columns.map((column, index) => {
-                const numeric = column.type === "number";
-                const direction = sorting?.column === index ? sorting.desc : null;
-                return (
-                  <th
-                    key={index}
-                    scope="col"
-                    aria-sort={
-                      direction === null ? "none" : direction ? "descending" : "ascending"
-                    }
-                    className="border-b border-border p-0 text-meta font-medium whitespace-nowrap text-muted-foreground"
-                  >
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex w-full cursor-pointer items-center gap-1 px-3 py-2 transition-colors duration-150 ease-out hover:text-foreground",
-                        numeric && "justify-end",
-                      )}
-                      onClick={() => setSorting((current) => nextSorting(current, index, numeric))}
-                    >
-                      {column.name}
-                      {direction === false && <ArrowUp aria-hidden className="size-3.5" />}
-                      {direction === true && <ArrowDown aria-hidden className="size-3.5" />}
-                    </button>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((row, rowIndex) => (
-              <tr key={rowIndex} className="border-b border-border last:border-b-0">
-                {columns.map((column, index) => (
-                  <td
-                    key={index}
-                    className={cn(
-                      "px-3 py-1.5 whitespace-nowrap text-ink-2",
-                      column.type === "number" && "text-right",
-                    )}
-                  >
-                    {display(row[index] ?? null)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {total_rows !== undefined && total_rows > rows.length && (
-        <p className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
-          Showing {numberFormat.format(rows.length)} of {numberFormat.format(total_rows)} rows
-          {source && (
-            <>
-              ; the full table is in{" "}
-              {projectId && sourceAssetId ? (
-                <button
-                  type="button"
-                  onClick={openSource}
-                  className="cursor-pointer font-medium text-ink-2 underline-offset-2 hover:underline"
-                >
-                  {source}
-                </button>
-              ) : (
-                <span className="font-medium text-ink-2">{source}</span>
-              )}
-            </>
+      title={title}
+      actions={
+        <>
+          {notice && (
+            <span role="status" className="truncate text-meta text-muted-foreground">
+              {notice}
+            </span>
           )}
-          .
-        </p>
-      )}
-    </section>
+          <FeatureButton componentId={componentId} />
+          <ItemMenu name={title ?? "this table"} actions={actions} />
+        </>
+      }
+      footer={
+        total_rows !== undefined &&
+        total_rows > rows.length && (
+          <p>
+            Showing {numberFormat.format(rows.length)} of {numberFormat.format(total_rows)} rows
+            {source && (
+              <>
+                ; the full table is in{" "}
+                {projectId && sourceAssetId ? (
+                  <Button
+                    variant="link"
+                    onClick={openSource}
+                    className="text-meta font-medium text-ink-2"
+                  >
+                    {source}
+                  </Button>
+                ) : (
+                  <span className="font-medium text-ink-2">{source}</span>
+                )}
+              </>
+            )}
+            .
+          </p>
+        )
+      }
+    >
+      {/* Wide tables scroll sideways inside the card instead of widening the reply. */}
+      <Table
+        containerClassName="max-h-[420px] overflow-auto overscroll-contain"
+        className="w-max min-w-full tabular-nums"
+      >
+        <TableHeader className="sticky top-0 bg-muted">
+          <TableRow>
+            {columns.map((column, index) => {
+              const numeric = column.type === "number";
+              const direction = sorting?.column === index ? sorting.desc : null;
+              return (
+                <TableHead
+                  key={index}
+                  scope="col"
+                  aria-sort={direction === null ? "none" : direction ? "descending" : "ascending"}
+                  className="p-0"
+                >
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex h-9 w-full cursor-pointer items-center gap-1 px-3 transition-colors duration-150 ease-out hover:text-foreground",
+                      numeric && "justify-end",
+                    )}
+                    onClick={() => setSorting((current) => nextSorting(current, index, numeric))}
+                  >
+                    {column.name}
+                    {direction === false && <ArrowUp aria-hidden className="size-3.5" />}
+                    {direction === true && <ArrowDown aria-hidden className="size-3.5" />}
+                  </button>
+                </TableHead>
+              );
+            })}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((row, rowIndex) => (
+            <TableRow key={rowIndex}>
+              {columns.map((column, index) => (
+                <TableCell
+                  key={index}
+                  className={cn("text-ink-2", column.type === "number" && "text-right")}
+                >
+                  {display(row[index] ?? null)}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </ComponentCard>
   );
 }
 

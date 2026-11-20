@@ -9,6 +9,7 @@
 
 - The Mini-Me editor opens on Appearance, offers 16 colours and a Random button that rolls a new look.
 - Lists no longer shift sideways when a scrollbar appears.
+- A more consistent look: cards, lists, fields, empty states and hover hints match across the app, and Home and the Mini-Mes sit in the navigation beside your Project.
 
 ## Fixed
 

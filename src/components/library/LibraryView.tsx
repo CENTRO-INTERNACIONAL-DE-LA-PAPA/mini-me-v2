@@ -1,9 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { PlusIcon, SearchIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "../../api";
 import { MINI_ME_GROUPS } from "../../protocol/references";
@@ -11,9 +10,11 @@ import type { LibraryView as Library, MiniMe, TraitSummary } from "../../protoco
 import { List, MiniMeCard, Row, TraitIcon } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { count } from "../../lib/format";
-import { SheetPage } from "../shell/Sheet";
+import { SheetPage, SheetSection } from "../shell/Sheet";
 import type { LibraryTab, View } from "../shell/view";
 import { MetaParts } from "@/components/ui/meta-parts";
+import { ErrorText } from "../shell/ErrorText";
+import { SearchInput } from "../shell/SearchInput";
 
 /** A group's heading as the `@` list shows it, or the group itself for one it doesn't know. */
 const groupLabel = (group: string) => MINI_ME_GROUPS.find((g) => g.group === group)?.label ?? group;
@@ -71,26 +72,18 @@ export function LibraryView({ tab, onOpen }: { tab: LibraryTab; onOpen: (view: V
         </>
       }
     >
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
       {library && <Problems library={library} />}
       {library && (
         <>
           <div className="flex items-center justify-between gap-4">
             {!traits && <GroupFilter library={library} group={group} onSelect={setGroup} />}
-            <div className="relative ml-auto w-60 shrink-0">
-              <SearchIcon
-                aria-hidden
-                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                type="search"
-                aria-label={traits ? "Search Traits" : "Search Mini-Mes"}
-                placeholder="Search"
-                className="pl-9"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
+            <SearchInput
+              label={traits ? "Search Traits" : "Search Mini-Mes"}
+              value={query}
+              onChange={setQuery}
+              className="ml-auto"
+            />
           </div>
           {traits ? (
             <TraitLists library={library} query={query} onOpen={onOpen} />
@@ -128,9 +121,6 @@ function GroupFilter({
   return (
     <ToggleGroup
       aria-label="Filter by group"
-      variant="switch"
-      size="switch"
-      spacing={1}
       value={[group ?? ALL_GROUPS]}
       onValueChange={(value) => value.length > 0 && onSelect(value[0] === ALL_GROUPS ? null : value[0])}
     >
@@ -255,13 +245,11 @@ function Origins<T extends { id: string; built_in: boolean }>({
       {lists
         .filter((list) => list.entries.length > 0)
         .map((list) => (
-          <section key={list.name} className="grid gap-3">
-            <h2 className="flex items-baseline gap-2.5">
-              <span className="font-serif text-heading text-foreground">{list.name}</span>
-              <span className="text-meta text-muted-foreground">
-                <MetaParts parts={[list.entries.length, list.note]} />
-              </span>
-            </h2>
+          <SheetSection
+            key={list.name}
+            title={list.name}
+            meta={<MetaParts parts={[list.entries.length, list.note]} />}
+          >
             {grid ? (
               <ul className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
                 {list.entries.map(row)}
@@ -269,7 +257,7 @@ function Origins<T extends { id: string; built_in: boolean }>({
             ) : (
               <List>{list.entries.map(row)}</List>
             )}
-          </section>
+          </SheetSection>
         ))}
     </div>
   );
@@ -284,7 +272,7 @@ function rank(group: string): number {
 function Problems({ library }: { library: Library }) {
   if (!library.unreadable && library.skipped.length === 0) return null;
   return (
-    <Card render={<section />} className="gap-0 px-5 py-4 text-meta">
+    <Card render={<section />} className="gap-0 text-meta">
       {library.unreadable ? (
         <p className="text-destructive">
           Your Mini-Mes and Traits could not be read, so they can't be changed until

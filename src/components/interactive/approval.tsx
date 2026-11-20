@@ -1,7 +1,9 @@
+import { ComponentCard } from "./ComponentCard";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { api, errorMessage } from "../../api";
 import type { RendererProps, Renderers } from "./catalogue";
+import { ErrorText } from "../shell/ErrorText";
 
 /** Version 1 preview: the approval Step and what it asks. */
 interface ApprovalData {
@@ -41,7 +43,7 @@ function Approval({ preview, answer, projectId, messageId, componentId, replySta
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-card-edge bg-card px-4 py-3">
+    <ComponentCard className="gap-3">
       <p className="text-ui text-foreground">{prompt}</p>
       <div className="flex gap-2">
         <Button onClick={() => respond(true)} disabled={sending}>
@@ -51,8 +53,8 @@ function Approval({ preview, answer, projectId, messageId, componentId, replySta
           Reject
         </Button>
       </div>
-      {error && <p className="text-meta text-destructive">{error}</p>}
-    </div>
+      {error && <ErrorText>{error}</ErrorText>}
+    </ComponentCard>
   );
 }
 

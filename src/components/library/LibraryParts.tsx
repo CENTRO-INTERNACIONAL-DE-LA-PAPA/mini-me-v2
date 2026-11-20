@@ -1,11 +1,10 @@
+import { ListRow } from "../shell/ListRow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { MiniMe } from "../../protocol/types";
 import { count } from "../../lib/format";
 import { traitIcon } from "../../lib/traitIcons";
@@ -46,7 +45,7 @@ export function EditorHeader({
         <div className="flex min-w-0 flex-col gap-3.5">
           <Button
             variant="link"
-            className="w-fit gap-1.5 text-control font-normal text-muted-foreground"
+            className="w-fit gap-1.5 text-control text-muted-foreground"
             onClick={onBack}
           >
             <ChevronLeftIcon />
@@ -70,7 +69,8 @@ export function EditorHeader({
       {problems && (
         <Card
           render={<ul />}
-          className="max-h-32 gap-1 overflow-y-auto rounded-xl px-4 py-3 text-meta text-destructive"
+          size="sm"
+          className="max-h-32 gap-1 overflow-y-auto text-meta text-destructive"
         >
           {problems.split("\n").map((problem) => (
             <li key={problem}>{problem}</li>
@@ -81,79 +81,24 @@ export function EditorHeader({
   );
 }
 
+/** The padding of an editor's content under its header. */
+export const EDITOR_BODY = "px-8 pt-6 pb-8";
+
 /** An editor page that only has its header, such as one that could not load. */
 export function EditorPage({ children, ...header }: HeaderProps & { children: ReactNode }) {
   return (
-    <main className="flex w-full flex-col gap-6 pb-10">
+    <main className="flex w-full flex-col">
       <EditorHeader {...header} />
-      <div className="grid gap-6 px-8">{children}</div>
+      <div className={cn(EDITOR_BODY, "grid gap-6")}>{children}</div>
     </main>
   );
 }
 
 export function OriginBadge({ builtIn }: { builtIn: boolean }) {
-  return <Badge variant="secondary">{builtIn ? "Built-in" : "Yours"}</Badge>;
-}
-
-/** A labelled field, with an optional hint below the label. */
-export function Field({
-  label,
-  htmlFor,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  hint?: string;
-  children: ReactNode;
-}) {
   return (
-    <div className="grid gap-2">
-      <div className="grid gap-0.5">
-        <Label htmlFor={htmlFor} className="font-medium">
-          {label}
-        </Label>
-        {hint && <p className="text-meta text-muted-foreground">{hint}</p>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-/** A Delete button that asks `question` in a popover before calling `onDelete`; Keep has the
- * focus, and Keep, Escape or a click outside close it. */
-export function DeleteButton({
-  question,
-  onDelete,
-  variant = "outline",
-}: {
-  question: string;
-  onDelete: () => void;
-  variant?: "outline" | "mini-me";
-}) {
-  const [asking, setAsking] = useState(false);
-  const keep = useRef<HTMLButtonElement>(null);
-  return (
-    <Popover open={asking} onOpenChange={setAsking}>
-      <PopoverTrigger render={<Button variant={variant} />}>Delete</PopoverTrigger>
-      <PopoverContent align="end" initialFocus={keep}>
-        <p>{question}</p>
-        <div className="flex justify-end gap-2">
-          <Button ref={keep} variant="ghost" onClick={() => setAsking(false)}>
-            Keep
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              setAsking(false);
-              onDelete();
-            }}
-          >
-            Delete
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+    <Badge variant="outline" className="text-(--mm-ink,var(--ink-2))">
+      {builtIn ? "Built-in" : "Yours"}
+    </Badge>
   );
 }
 
@@ -184,19 +129,18 @@ export function Row({
 }) {
   return (
     <li>
-      <button
-        type="button"
-        className="flex w-full items-center gap-3.5 rounded-xl px-2 py-3 text-left transition-colors duration-150 ease-out outline-none hover:bg-accent focus-visible:bg-accent"
-        onClick={onOpen}
-      >
-        {icon}
-        <span className="grid min-w-0 flex-1 gap-0.5">
-          <span className="text-ui font-medium">{name}</span>
-          <span className="truncate text-meta text-muted-foreground">{description}</span>
-        </span>
-        {details}
-        <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-chev" />
-      </button>
+      <ListRow
+        leading={icon}
+        name={name}
+        meta={description}
+        trailing={
+          <>
+            {details}
+            <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-chev" />
+          </>
+        }
+        onOpen={onOpen}
+      />
     </li>
   );
 }
@@ -218,22 +162,17 @@ export function MiniMeCard({
         miniMe={coloured}
         render={<button type="button" onClick={onOpen} />}
         className={cn(
-          "flex h-full w-full cursor-pointer flex-col gap-[18px] rounded-sheet p-5 text-left",
+          "flex h-full w-full cursor-pointer flex-col gap-4.5 rounded-2xl p-5 text-left",
           "transition-colors duration-150 ease-out hover:bg-tint",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         )}
       >
         <span className="flex items-start justify-between">
           <MiniMeAvatar miniMe={miniMe} size={56} />
-          <Badge
-            variant="outline"
-            className="h-auto border border-card-edge bg-card px-2.5 py-[3px] text-meta text-(--mm-ink,var(--ink-2))"
-          >
-            {miniMe.built_in ? "Built-in" : "Yours"}
-          </Badge>
+          <OriginBadge builtIn={miniMe.built_in} />
         </span>
         <span className="flex flex-1 flex-col gap-1.5">
-          <span className="font-serif text-card-title font-medium text-foreground">
+          <span className="font-serif text-tool-title font-medium text-foreground">
             {miniMe.name}
           </span>
           <span className="line-clamp-3 text-ui text-pretty text-ink-2">{miniMe.description}</span>

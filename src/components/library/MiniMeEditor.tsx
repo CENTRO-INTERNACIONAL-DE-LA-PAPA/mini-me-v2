@@ -1,3 +1,7 @@
+import { cn } from "@/lib/utils";
+import { LabelledField } from "../shell/LabelledField";
+import { ConfirmButton } from "../shell/Confirm";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,10 +20,9 @@ import { PartTabs } from "../avatar/PartGrid";
 import { randomAvatar } from "../avatar/parts";
 import { NIL_ID } from "./library";
 import {
-  DeleteButton,
   EditorHeader,
+  EDITOR_BODY,
   EditorPage,
-  Field,
   List,
   OriginBadge,
   Row,
@@ -133,10 +136,13 @@ export function MiniMeEditor({
             ) : (
               <>
                 {id && !library.unreadable && (
-                  <DeleteButton
+                  <ConfirmButton
+                    trigger={<Button variant="outline" />}
                     question={`Delete ${draft.name}? This can't be undone.`}
-                    onDelete={remove}
-                  />
+                    onConfirm={remove}
+                  >
+                    Delete
+                  </ConfirmButton>
                 )}
                 <Button disabled={readOnly} onClick={save}>
                   Save
@@ -147,7 +153,7 @@ export function MiniMeEditor({
           problems={problems}
           onBack={onBack}
         />
-        <TabsContent value="workflow" className="flex min-h-0 flex-col pt-5 pr-5 pb-5 pl-8">
+        <TabsContent value="workflow" className={cn(EDITOR_BODY, "flex min-h-0 flex-col")}>
           <WorkflowCanvas
             steps={draft.workflow.steps}
             traits={library.traits}
@@ -159,11 +165,13 @@ export function MiniMeEditor({
           />
         </TabsContent>
         <TabsContent value="traits" className="min-h-0 overflow-y-auto">
-          <div className="mx-auto max-w-[760px] px-8 py-8">
+          <div className={cn(EDITOR_BODY, "mx-auto max-w-[760px]")}>
             {used.length === 0 ? (
-              <p className="text-ui text-muted-foreground">
-                Its Workflow runs no Traits yet. Add Trait steps on the Workflow tab.
-              </p>
+              <Empty>
+                <EmptyDescription>
+                  Its Workflow runs no Traits yet. Add Trait steps on the Workflow tab.
+                </EmptyDescription>
+              </Empty>
             ) : (
               <List>
                 {used.map((t) => (
@@ -181,7 +189,7 @@ export function MiniMeEditor({
           </div>
         </TabsContent>
         <TabsContent value="appearance" className="min-h-0 overflow-y-auto">
-          <div className="mx-auto grid max-w-[760px] gap-6 px-8 py-8">
+          <div className={cn(EDITOR_BODY, "mx-auto grid max-w-[760px] gap-6")}>
             <Appearance draft={draft} readOnly={readOnly} onChange={update} />
           </div>
         </TabsContent>
@@ -214,15 +222,15 @@ function Appearance({
   const hue = hueOf(draft.colors);
   return (
     <>
-      <Field label="Name" htmlFor="mini-me-name">
+      <LabelledField label="Name" htmlFor="mini-me-name">
         <Input
           id="mini-me-name"
           value={draft.name}
           disabled={readOnly}
           onChange={(e) => onChange({ name: e.target.value })}
         />
-      </Field>
-      <Field
+      </LabelledField>
+      <LabelledField
         label="Description"
         htmlFor="mini-me-description"
         hint="What it does; Mini-Me reads this to choose who answers a message"
@@ -233,13 +241,10 @@ function Appearance({
           disabled={readOnly}
           onChange={(e) => onChange({ description: e.target.value })}
         />
-      </Field>
-      <Field label="Group" hint="The heading it is listed under when you type @">
+      </LabelledField>
+      <LabelledField label="Group" hint="The heading it is listed under when you type @">
         <ToggleGroup
           aria-label="Group"
-          variant="switch"
-          size="switch"
-          spacing={1}
           disabled={readOnly}
           value={[draft.group]}
           onValueChange={(value) => value.length > 0 && onChange({ group: value[0] as MiniMeGroup })}
@@ -250,12 +255,12 @@ function Appearance({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-      </Field>
+      </LabelledField>
       {!readOnly && (
-        <Field label="Look">
+        <LabelledField label="Look">
           <div className="grid grid-cols-[200px_1fr] items-start gap-8">
             <div className="grid gap-5">
-              <Card className="items-center p-4">
+              <Card size="sm" className="items-center">
                 <Avatar avatar={draft.avatar} color={draft.colors} size={150} />
               </Card>
               <Button
@@ -278,7 +283,7 @@ function Appearance({
               onChange={(avatar) => onChange({ avatar })}
             />
           </div>
-        </Field>
+        </LabelledField>
       )}
     </>
   );

@@ -1,3 +1,4 @@
+import { ComponentCard } from "../interactive/ComponentCard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CheckIcon } from "lucide-react";
@@ -105,7 +106,7 @@ export function WorkflowProgress({
   const added = open === null ? [] : (byStep.get(open) ?? []);
 
   return (
-    <div className="rounded-xl border border-card-edge bg-card px-4 py-3">
+    <ComponentCard className="gap-0">
       <div className="flex items-start gap-3">
         <ol
           aria-label="Workflow progress"
@@ -131,17 +132,14 @@ export function WorkflowProgress({
             return (
               <li key={index} className="flex items-center">
                 {openable ? (
-                  <button
-                    className={cn(
-                      "flex cursor-pointer items-center gap-2 rounded-md",
-                      "underline-offset-4 hover:underline",
-                      open === index && "underline",
-                    )}
+                  <Button
+                    variant="link"
+                    className={cn("gap-2", open === index && "underline")}
                     aria-expanded={open === index}
                     onClick={() => setOpen(open === index ? null : index)}
                   >
                     {label}
-                  </button>
+                  </Button>
                 ) : (
                   <span className="flex items-center gap-2">{label}</span>
                 )}
@@ -176,7 +174,7 @@ export function WorkflowProgress({
           />
         </div>
       )}
-    </div>
+    </ComponentCard>
   );
 }
 
@@ -204,7 +202,7 @@ export function StepComponents({
 }
 
 export function StepMark({ state, color }: { state: StepState; color?: string }) {
-  const size = "size-[18px] shrink-0 rounded-full";
+  const size = "size-4.5 shrink-0 rounded-full";
   switch (state) {
     case "done":
       return (

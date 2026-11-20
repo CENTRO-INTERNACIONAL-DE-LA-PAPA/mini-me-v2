@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -20,14 +21,15 @@ export function ReferenceChip({
   children: ReactNode;
 }) {
   return (
-    <Badge
-      variant="outline"
-      title={title}
-      className={cn("align-middle", onOpen && "cursor-pointer", className)}
-      render={onOpen ? <button type="button" onClick={onOpen} /> : undefined}
-    >
-      {Icon && <Icon aria-hidden className="size-[13px]" />}
-      {children}
-    </Badge>
+    <Hint label={title}>
+      <Badge
+        variant="outline"
+        className={cn("align-middle", onOpen && "cursor-pointer", className)}
+        render={onOpen ? <button type="button" onClick={onOpen} /> : undefined}
+      >
+        {Icon && <Icon aria-hidden className="size-3.5" />}
+        {children}
+      </Badge>
+    </Hint>
   );
 }

@@ -1,3 +1,4 @@
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
@@ -164,48 +165,50 @@ export default function App() {
   }
 
   return (
-    <SidebarProvider>
-      <AppSidebar
-        view={view}
-        project={project}
-        projects={projects}
-        conversations={conversations}
-        unseen={unseen}
-        fileCount={fileCount}
-        onOpenProject={openProject}
-        onNavigate={navigate}
-        onNewConversation={newConversation}
-        onOpenConversation={openConversation}
-        onRenameConversation={renameConversation}
-        onDeleteConversation={deleteConversation}
-      />
-      {/* The desk: the open view's sheets float on it, 12px from the window and each other. */}
-      <SidebarInset className="h-svh min-w-0 flex-row gap-3 overflow-hidden bg-transparent p-3">
-        {error && (
-          <p
-            role="alert"
-            className="absolute top-5 left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-card px-4 py-2 text-meta text-destructive"
-          >
-            {error}
-          </p>
-        )}
-        <Main
+    <TooltipProvider>
+      <SidebarProvider>
+        <AppSidebar
           view={view}
           project={project}
           projects={projects}
           conversations={conversations}
+          unseen={unseen}
+          fileCount={fileCount}
           onOpenProject={openProject}
-          onCreateProject={createProject}
-          onConversationActivity={refreshConversations}
+          onNavigate={navigate}
+          onNewConversation={newConversation}
+          onOpenConversation={openConversation}
           onRenameConversation={renameConversation}
           onDeleteConversation={deleteConversation}
-          onRenameProject={renameProject}
-          onDeleteProject={deleteProject}
-          onNavigate={navigate}
-          onOpenReply={openConversation}
         />
-      </SidebarInset>
-    </SidebarProvider>
+        {/* The desk: the open view's sheets float on it, 12px from the window and each other. */}
+        <SidebarInset className="h-svh min-w-0 flex-row gap-3 overflow-hidden bg-transparent p-3">
+          {error && (
+            <p
+              role="alert"
+              className="absolute top-5 left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-card px-4 py-2 text-meta text-destructive"
+            >
+              {error}
+            </p>
+          )}
+          <Main
+            view={view}
+            project={project}
+            projects={projects}
+            conversations={conversations}
+            onOpenProject={openProject}
+            onCreateProject={createProject}
+            onConversationActivity={refreshConversations}
+            onRenameConversation={renameConversation}
+            onDeleteConversation={deleteConversation}
+            onRenameProject={renameProject}
+            onDeleteProject={deleteProject}
+            onNavigate={navigate}
+            onOpenReply={openConversation}
+          />
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }
 

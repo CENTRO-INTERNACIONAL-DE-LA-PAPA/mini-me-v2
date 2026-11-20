@@ -1,3 +1,7 @@
+import { cn } from "@/lib/utils";
+import { LabelledField } from "../shell/LabelledField";
+import { ConfirmButton } from "../shell/Confirm";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -5,7 +9,7 @@ import { api } from "../../api";
 import type { MiniMe, TraitDraft, TraitSummary } from "../../protocol/types";
 import { traitIcon } from "../../lib/traitIcons";
 import { NIL_ID } from "./library";
-import { DeleteButton, EditorHeader, EditorPage, Field } from "./LibraryParts";
+import { EDITOR_BODY, EditorHeader, EditorPage } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { SheetSection } from "../shell/Sheet";
@@ -80,7 +84,13 @@ export function TraitEditor({
   ) : (
     <>
       {saved && !library.unreadable && (
-        <DeleteButton question={`Delete ${draft.name}? This can't be undone.`} onDelete={remove} />
+        <ConfirmButton
+                    trigger={<Button variant="outline" />}
+                    question={`Delete ${draft.name}? This can't be undone.`}
+                    onConfirm={remove}
+                  >
+                    Delete
+                  </ConfirmButton>
       )}
       <Button disabled={readOnly} onClick={save}>
         Save
@@ -105,10 +115,15 @@ export function TraitEditor({
         problems={problems}
         onBack={onBack}
       />
-      <div className="grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5 pt-6 pr-7 pb-8 pl-8 max-lg:grid-cols-1">
-        <div className="grid gap-[18px]">
+      <div
+        className={cn(
+          EDITOR_BODY,
+          "grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5 max-lg:grid-cols-1",
+        )}
+      >
+        <div className="grid gap-4.5">
           {!builtIn && (
-            <Field label="Name" htmlFor="trait-name">
+            <LabelledField label="Name" htmlFor="trait-name">
               <Input
                 id="trait-name"
                 placeholder="An imperative verb in Title Case, like Translate"
@@ -116,19 +131,19 @@ export function TraitEditor({
                 disabled={readOnly}
                 onChange={(e) => update({ name: e.target.value })}
               />
-            </Field>
+            </LabelledField>
           )}
-          <Field label="What it does" htmlFor="trait-description">
+          <LabelledField label="What it does" htmlFor="trait-description">
             <Input
               id="trait-description"
               value={draft.description}
               disabled={readOnly}
               onChange={(e) => update({ description: e.target.value })}
             />
-          </Field>
+          </LabelledField>
           {promptBased ? (
             <>
-              <Field label="Instructions" htmlFor="trait-instructions">
+              <LabelledField label="Instructions" htmlFor="trait-instructions">
                 <Textarea
                   id="trait-instructions"
                   className="min-h-40"
@@ -137,7 +152,7 @@ export function TraitEditor({
                   disabled={readOnly}
                   onChange={(e) => update({ instructions: e.target.value })}
                 />
-              </Field>
+              </LabelledField>
             </>
           ) : (
             <p className="text-meta text-muted-foreground">
@@ -157,7 +172,9 @@ function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: bo
   return (
     <SheetSection title="Used by" meta={users.length > 0 ? users.length : undefined}>
       {users.length === 0 ? (
-        <p className="text-ui text-muted-foreground">No Mini-Me runs this Trait yet.</p>
+        <Empty>
+          <EmptyDescription>No Mini-Me runs this Trait yet.</EmptyDescription>
+        </Empty>
       ) : (
         <ul className="grid gap-2">
           {users.map((m, i) => (
@@ -165,7 +182,7 @@ function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: bo
               key={m?.id ?? i}
               miniMe={m}
               render={<li />}
-              className="flex items-center gap-3 rounded-2xl px-3.5 py-3"
+              className="flex items-center gap-3 px-4 py-3"
             >
               <MiniMeAvatar miniMe={m} size={32} />
               <span className="grid min-w-0">

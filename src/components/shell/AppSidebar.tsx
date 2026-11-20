@@ -1,3 +1,5 @@
+import { Hint } from "./Hint";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,8 +36,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api";
-import { useUserProfile } from "../../hooks/useUserProfile";
-import { initials } from "../../lib/names";
 import type {
   ConversationSummary,
   ProjectSummary,
@@ -51,6 +51,8 @@ import { DOTS_HOVER, ItemMenu } from "./ItemMenu";
 import { UpdateStatusLine } from "./UpdateStatusLine";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useRunningKey } from "../../hooks/useRunningReplies";
+import { useUserProfile } from "../../hooks/useUserProfile";
+import { initials } from "../../lib/names";
 import type { View } from "./view";
 import { Wordmark } from "./Wordmark";
 
@@ -102,38 +104,66 @@ export function AppSidebar({
 
   return (
     <Sidebar variant="floating" collapsible="icon">
-      <SidebarHeader className="gap-[22px] px-3.5 pt-5 pb-0">
+      <SidebarHeader className="gap-5.5 px-3.5 pt-5 pb-0">
         <div className={cn("flex items-center", collapsed ? "justify-center" : "justify-between px-2")}>
           {!collapsed && (
-            <button
-              type="button"
-              title="Home"
-              aria-label="Home"
-              onClick={() => onNavigate({ kind: "home" })}
-              className="cursor-pointer rounded-control outline-none focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <Wordmark height={16} />
-            </button>
+            <Hint label="Home">
+              <button
+                type="button"
+                aria-label="Home"
+                onClick={() => onNavigate({ kind: "home" })}
+                className="cursor-pointer rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <Wordmark height={16} />
+              </button>
+            </Hint>
           )}
-          <SidebarTrigger title={collapsed ? "Show navigation" : undefined} />
+          <Hint label={collapsed ? "Show navigation" : undefined} side="right">
+            <SidebarTrigger />
+          </Hint>
         </div>
-        {/* Collapsed, there is no wordmark and no switcher: expanding leads Home. */}
-        {!collapsed && (
-          <ProjectSwitcher
-            project={project}
-            projects={projects}
-            onOpen={onOpenProject}
-            onHome={() => onNavigate({ kind: "home" })}
-          />
-        )}
       </SidebarHeader>
-      <SidebarContent className="gap-[22px] px-1.5 pt-[22px]">
-        {project && (
-          <SidebarGroup className="py-0">
+      <SidebarContent className="gap-5.5 px-1.5 pt-5.5">
+        <SidebarGroup className="py-0">
+          <SidebarMenu className="gap-0.5">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Home"
+                isActive={view.kind === "home"}
+                onClick={() => onNavigate({ kind: "home" })}
+              >
+                <HomeIcon />
+                <span>Home</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Mini-Mes"
+                className="mini-me-stack"
+                isActive={["library", "mini-me", "trait"].includes(view.kind)}
+                onClick={() => onNavigate({ kind: "library" })}
+              >
+                <AvatarStack limit={collapsed ? 1 : STACKED.length} />
+                <span>Mini-Mes</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
+        <SidebarGroup className="gap-1.5 py-0">
+          {/* Collapsed, there is no wordmark and no switcher: the Home row leads Home. */}
+          {!collapsed && (
+            <ProjectSwitcher
+              project={project}
+              projects={projects}
+              onOpen={onOpenProject}
+              onHome={() => onNavigate({ kind: "home" })}
+            />
+          )}
+          {project && (
             <SidebarMenu className="gap-0.5">
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  title="Overview"
+                  tooltip="Overview"
                   isActive={view.kind === "overview"}
                   onClick={() => onNavigate({ kind: "overview" })}
                 >
@@ -143,7 +173,7 @@ export function AppSidebar({
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  title="Files"
+                  tooltip="Files"
                   isActive={view.kind === "files"}
                   onClick={() => onNavigate({ kind: "files" })}
                 >
@@ -155,8 +185,8 @@ export function AppSidebar({
                 </SidebarMenuBadge>
               </SidebarMenuItem>
             </SidebarMenu>
-          </SidebarGroup>
-        )}
+          )}
+        </SidebarGroup>
         {!project && !collapsed && recent.length > 0 && (
           <SidebarGroup className="py-0">
             <SidebarGroupLabel className="h-auto px-2.5 pt-0 pb-1.5 font-serif text-subheading font-normal text-foreground">
@@ -167,7 +197,7 @@ export function AppSidebar({
                 <SidebarMenuItem key={conversation.conversation_id}>
                   <SidebarMenuButton
                     size="lg"
-                    className={cn("h-auto flex-col items-start gap-0 py-[9px] pr-9", ROW_HOVER)}
+                    className={cn("h-auto flex-col items-start gap-0 py-2.5 pr-9", ROW_HOVER)}
                     onClick={() =>
                       onOpenConversation(conversation.project_id, conversation.conversation_id)
                     }
@@ -223,15 +253,16 @@ export function AppSidebar({
               >
                 Conversations{conversations.length > 0 && ` (${conversations.length})`}
               </SidebarGroupLabel>
-              <Button
-                variant={collapsed ? "default" : "ghost"}
-                size="icon-sm"
-                aria-label="New conversation"
-                title="New conversation"
-                onClick={onNewConversation}
-              >
-                <PlusIcon />
-              </Button>
+              <Hint label="New conversation" side={collapsed ? "right" : undefined}>
+                <Button
+                  variant={collapsed ? "default" : "ghost"}
+                  size="icon-sm"
+                  aria-label="New conversation"
+                  onClick={onNewConversation}
+                >
+                  <PlusIcon />
+                </Button>
+              </Hint>
             </div>
             <SidebarMenu className={cn("gap-1", collapsed && "hidden")}>
               {conversations.map((conversation) => {
@@ -242,7 +273,7 @@ export function AppSidebar({
                       size="lg"
                       isActive={active}
                       className={cn(
-                        "h-auto flex-col items-start gap-0 py-[9px] pr-9",
+                        "h-auto flex-col items-start gap-0 py-2.5 pr-9",
                         !active && ROW_HOVER,
                       )}
                       onClick={() => onNavigate({ kind: "conversation", id: conversation.id })}
@@ -289,34 +320,25 @@ export function AppSidebar({
             <UpdateStatusLine />
           </div>
         )}
-        {/* The Mini-Mes stack opens the Library; your avatar opens Settings. */}
-        <div
-          className={cn("flex items-center gap-1 rounded-well bg-card p-1", collapsed && "flex-col")}
-        >
-          <Button
-            variant="ghost"
-            title="Mini-Mes"
-            aria-pressed={["library", "mini-me", "trait"].includes(view.kind)}
-            onClick={() => onNavigate({ kind: "library" })}
-            className={cn(
-              "h-auto min-w-0 rounded-control px-1.5 py-1.5 text-control font-normal text-foreground aria-pressed:bg-accent aria-pressed:font-medium aria-pressed:text-foreground",
-              collapsed ? "w-full justify-center" : "flex-1 justify-start gap-2.5",
-            )}
-          >
-            <AvatarStack limit={collapsed ? 1 : STACKED.length} />
-            {!collapsed && <span className="truncate">Mini-Mes</span>}
-          </Button>
-          <Button
-            size="icon"
-            aria-label="Settings"
-            title={name ? `Settings (${name})` : "Settings"}
-            aria-pressed={view.kind === "settings"}
-            onClick={() => onNavigate({ kind: "settings" })}
-            className="rounded-full text-[10px] font-semibold aria-pressed:ring-2 aria-pressed:ring-border-strong"
-          >
-            {name ? initials(name) : <SettingsIcon />}
-          </Button>
-        </div>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <Hint label={name ? `Settings (${name})` : "Settings"} side="right">
+              <SidebarMenuButton
+                isActive={view.kind === "settings"}
+                onClick={() => onNavigate({ kind: "settings" })}
+              >
+                {name ? (
+                  <Avatar size="sm">
+                    <AvatarFallback>{initials(name)}</AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <SettingsIcon />
+                )}
+                <span>Settings</span>
+              </SidebarMenuButton>
+            </Hint>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );
@@ -348,8 +370,8 @@ function AvatarStack({ limit }: { limit: number }) {
   );
 }
 
-/** The open Project at the top of the navigation: a "Project" switcher above its serif name,
- * or a dashed card when none is open. Its menu switches to another Project. */
+/** The heading of the Project's group in the navigation: its name, or a dashed card when none is
+ * open. Its menu switches to another Project. */
 function ProjectSwitcher({
   project,
   projects,
@@ -367,24 +389,19 @@ function ProjectSwitcher({
         render={
           <button
             className={cn(
-              "flex w-full cursor-pointer flex-col items-start gap-2 rounded-xl text-left outline-none",
+              "flex w-full cursor-pointer rounded-xl text-left outline-none",
               "focus-visible:outline-2 focus-visible:outline-ring",
               project
-                ? "px-2 [&:hover_.switcher-label]:text-foreground"
-                : "border border-dashed border-dash px-3 py-3 transition-colors duration-150 hover:bg-sidebar-accent",
+                ? "items-center gap-1 px-2.5 font-serif text-subheading text-foreground [&:hover_svg]:text-foreground"
+                : "min-h-13.5 flex-col justify-center border border-dashed border-dash px-3 transition-colors duration-150 hover:bg-sidebar-accent",
             )}
           />
         }
       >
         {project ? (
           <>
-            <span className="switcher-label flex items-center gap-1 text-meta text-muted-foreground transition-colors duration-150">
-              Project
-              <ChevronDownIcon className="size-3.5" />
-            </span>
-            <span className="line-clamp-2 font-serif text-nav-project font-medium text-foreground">
-              {project.name}
-            </span>
+            <span className="truncate">{project.name}</span>
+            <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground transition-colors duration-150" />
           </>
         ) : (
           <span className="grid leading-tight">

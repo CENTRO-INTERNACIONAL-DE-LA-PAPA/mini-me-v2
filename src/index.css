@@ -20,11 +20,6 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -48,8 +43,6 @@
     --color-document-ink: var(--document-ink);
     --color-muted-on-ink: var(--muted-on-ink);
     --color-border-strong: var(--border-strong);
-    --color-border-composer: var(--border-composer);
-    --color-surface-1: var(--surface-1);
     --color-surface-3: var(--surface-3);
     --color-success: var(--success);
     --color-off: var(--off);
@@ -71,19 +64,6 @@
     --color-dash: var(--dash);
     --color-chev: var(--chev);
 
-    --radius-xs: 5px;
-    --radius-sm: 6px;
-    --radius-md: 7px;
-    --radius-lg: var(--radius);
-    --radius-xl: 10px;
-    --radius-2xl: 14px;
-    /* Floating sheets: the controls, wells, cards and sheets themselves. */
-    --radius-control: 9px;
-    --radius-well: 12px;
-    --radius-card: 16px;
-    --radius-sheet: 18px;
-    --radius-composer: 20px;
-
     --text-meta: 12.5px;
     --text-meta--line-height: 1.4;
     --text-ui: 13.5px;
@@ -100,15 +80,6 @@
     --text-section--letter-spacing: -0.01em;
     --text-lead: 18px;
     --text-lead--line-height: 1.6;
-    --text-header: 18px;
-    --text-header--line-height: 1.2;
-    --text-header--letter-spacing: -0.015em;
-    --text-page: 25px;
-    --text-page--line-height: 1.15;
-    --text-page--letter-spacing: -0.02em;
-    --text-display: 46px;
-    --text-display--line-height: 1.02;
-    --text-display--letter-spacing: -0.035em;
 
     /* Serif sizes (font-serif, weight 400–500, never bold). */
     --text-greeting: 44px;
@@ -121,27 +92,14 @@
     --text-identity--line-height: 1.1;
     --text-column-title: 28px;
     --text-column-title--line-height: 1.1;
-    --text-nav-project: 24px;
-    --text-nav-project--line-height: 1.12;
     --text-tool-title: 24px;
     --text-tool-title--line-height: 1.15;
-    --text-card-title: 23px;
-    --text-card-title--line-height: 1.15;
     --text-heading: 20px;
     --text-heading--line-height: 1.25;
     --text-name: 17px;
     --text-name--line-height: 1.3;
     --text-subheading: 15px;
     --text-subheading--line-height: 1.3;
-    --text-reply: 15.5px;
-    --text-reply--line-height: 1.6;
-
-    --shadow-composer: 0 4px 16px rgba(0, 0, 0, 0.04);
-    --shadow-float: 0 6px 20px rgba(0, 0, 0, 0.1);
-    --shadow-window: 0 1px 2px rgba(0, 0, 0, 0.06), 0 12px 40px rgba(0, 0, 0, 0.08);
-    --shadow-sheet: 0 1px 3px rgba(0, 0, 0, 0.05);
-    --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.08);
-    --shadow-floating: 0 12px 32px rgba(0, 0, 0, 0.1);
 }
 
 :root {
@@ -185,7 +143,6 @@
     --border: var(--line);
     --input: var(--line);
     --ring: var(--ink);
-    --radius: 8px;
 
     /* Tab-switch tracks, inputs, your messages, secondary and close buttons. */
     --well: var(--fill);
@@ -195,20 +152,12 @@
     --document-ink: var(--ink-2);
     --muted-on-ink: var(--ink-faint);
     --border-strong: var(--line-strong);
-    --border-composer: var(--line);
-    --surface-1: var(--fill);
     --surface-3: var(--desk);
     --off: var(--line-strong);
     /* The Workflow board (on `--muted`): its dot grid and its connectors. */
     --canvas-dot: var(--line-strong);
     --connector: var(--ink-faint);
 
-    /* Neutral fallbacks; a chart series made by a Mini-Me uses that Mini-Me's colour. */
-    --chart-1: var(--ink);
-    --chart-2: var(--ink-2);
-    --chart-3: var(--ink-muted);
-    --chart-4: var(--ink-faint);
-    --chart-5: var(--line-strong);
     /* Chart gridlines and faint separators. */
     --line-soft: var(--fill);
     /* Chart series after the first, which takes the colour of the Mini-Me that drew it. The
@@ -235,7 +184,13 @@
 @layer base {
     * {
         @apply border-border outline-ring;
-        /* Acts only on elements that scroll: content keeps its place when a scrollbar appears. */
+    }
+    /* Content keeps its place when a scrollbar appears. Not on `*`: `overflow-hidden` also makes a
+       scroll container, and every clipped pill and card would keep an empty gutter. */
+    .overflow-auto,
+    .overflow-y-auto,
+    .overflow-scroll,
+    .overflow-y-scroll {
         scrollbar-gutter: stable;
     }
     html {
@@ -298,6 +253,16 @@
     }
     .avatar.avatar-working .avatar-breathe {
         animation: avatar-work 800ms ease-in-out infinite;
+    }
+    /* The Mini-Mes entry in the navigation: its avatars hop one after another on hover. */
+    .mini-me-stack:hover .avatar .avatar-react {
+        animation: avatar-hop 450ms ease-out both;
+    }
+    .mini-me-stack:hover .avatar:nth-child(2) .avatar-react {
+        animation-delay: 80ms;
+    }
+    .mini-me-stack:hover .avatar:nth-child(3) .avatar-react {
+        animation-delay: 160ms;
     }
     /* Looking toward the pointer (src/components/avatar/look.ts): each layer leans by its own
        --layer-lean from src/components/avatar/layers.ts, so the head seems to turn. */

@@ -244,7 +244,7 @@ function Sidebar({
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-sheet"
+          className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-2xl"
         >
           {children}
         </div>
