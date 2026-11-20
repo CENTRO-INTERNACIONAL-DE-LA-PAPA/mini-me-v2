@@ -128,9 +128,6 @@ function GroupFilter({
   return (
     <ToggleGroup
       aria-label="Filter by group"
-      variant="switch"
-      size="switch"
-      spacing={1}
       value={[group ?? ALL_GROUPS]}
       onValueChange={(value) => value.length > 0 && onSelect(value[0] === ALL_GROUPS ? null : value[0])}
     >

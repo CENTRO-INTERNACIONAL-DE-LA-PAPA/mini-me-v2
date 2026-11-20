@@ -261,7 +261,7 @@ function SwitchRow({
 /** An account or key's card, outlined on white so the well-filled controls inside stand out. */
 function AccountCard({ render, children }: { render?: ReactElement; children: ReactNode }) {
   return (
-    <Card render={render} className="gap-0 rounded-2xl border border-border bg-card px-4 py-3.5">
+    <Card render={render} className="gap-0 rounded-xl border border-border bg-card px-4 py-3.5">
       {children}
     </Card>
   );
@@ -271,7 +271,7 @@ function AccountCard({ render, children }: { render?: ReactElement; children: Re
 function StatusDot({ on, children }: { on: boolean; children: ReactNode }) {
   return (
     <span className="flex items-center gap-1.5 text-meta text-ink-2">
-      <span aria-hidden className={cn("size-[7px] rounded-full", on ? "bg-success" : "bg-off")} />
+      <span aria-hidden className={cn("size-2 rounded-full", on ? "bg-success" : "bg-off")} />
       {children}
     </span>
   );
@@ -1270,7 +1270,7 @@ function KeyRow({
         </Button>
       </div>
       {editing && (
-        <form className="mt-3 flex gap-2 pl-[50px]" onSubmit={save}>
+        <form className="mt-3 flex gap-2 pl-12.5" onSubmit={save}>
           <Input
             aria-label={`${name} key`}
             type="password"

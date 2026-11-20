@@ -15,7 +15,7 @@ interface GridProps {
 }
 
 const TILE =
-  "aspect-square h-auto w-full flex-col gap-1 rounded-card border-border bg-card py-2 font-normal hover:bg-muted aria-pressed:border-foreground aria-pressed:bg-card aria-pressed:text-foreground";
+  "aspect-square h-auto w-full flex-col gap-1 rounded-2xl border-border bg-card py-2 font-normal hover:bg-muted aria-pressed:border-foreground aria-pressed:bg-card aria-pressed:text-foreground";
 
 /** A grid of avatar parts to pick from, each drawn on `preview(id)`. */
 function PartGrid({ parts, selected, allowNone, preview, color, onSelect }: GridProps) {

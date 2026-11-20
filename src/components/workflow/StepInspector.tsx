@@ -72,7 +72,7 @@ export function StepInspector({
       onClose={() => onSelect(null)}
       className="w-[340px]"
     >
-      <div className="grid gap-[18px]">
+      <div className="grid gap-4.5">
         {step.type === "trait" && (
           <>
             <Row label="Trait">
@@ -96,7 +96,7 @@ export function StepInspector({
               </Select>
             </Row>
             {trait && (
-              <MiniMeSurface miniMe={miniMe} className="grid gap-2.5 rounded-2xl p-3.5">
+              <MiniMeSurface miniMe={miniMe} className="grid gap-2.5 rounded-xl p-3.5">
                 <p className="text-ui leading-normal text-foreground">{trait.description}</p>
                 <div className="flex items-center justify-between text-meta">
                   <span className="text-mm-ink">
@@ -312,7 +312,7 @@ function stepCount(steps: WorkflowStep[]): string {
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="grid gap-[7px]">
+    <div className="grid gap-2">
       <span className="text-meta font-medium text-muted-foreground">{label}</span>
       {children}
       {hint && <p className="text-meta text-muted-foreground">{hint}</p>}

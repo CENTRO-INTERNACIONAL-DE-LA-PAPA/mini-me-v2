@@ -26,7 +26,7 @@ export function ReferenceChip({
       className={cn("align-middle", onOpen && "cursor-pointer", className)}
       render={onOpen ? <button type="button" onClick={onOpen} /> : undefined}
     >
-      {Icon && <Icon aria-hidden className="size-[13px]" />}
+      {Icon && <Icon aria-hidden className="size-3.5" />}
       {children}
     </Badge>
   );

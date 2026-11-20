@@ -204,7 +204,7 @@ export function StepComponents({
 }
 
 export function StepMark({ state, color }: { state: StepState; color?: string }) {
-  const size = "size-[18px] shrink-0 rounded-full";
+  const size = "size-4.5 shrink-0 rounded-full";
   switch (state) {
     case "done":
       return (

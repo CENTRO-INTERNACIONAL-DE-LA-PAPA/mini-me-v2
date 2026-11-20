@@ -228,7 +228,7 @@ function FileRow({
         ) : by?.kind === "mini_me" ? (
           <span
             style={surfaceStyle(miniMe?.colors)}
-            className="flex items-center gap-[7px] text-(--mm-ink,var(--foreground))"
+            className="flex items-center gap-2 text-(--mm-ink,var(--foreground))"
           >
             <MiniMeAvatar miniMe={miniMe} size={18} />
             {miniMe?.name ?? "Mini-Me"}

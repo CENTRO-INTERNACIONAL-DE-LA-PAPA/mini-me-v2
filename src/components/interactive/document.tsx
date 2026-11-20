@@ -24,8 +24,8 @@ export function DocumentCard({
   onOpen: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-card border border-card-edge bg-card px-4 py-3">
-      <FileTextIcon aria-hidden className="size-[18px] shrink-0 text-mm-ink" />
+    <div className="flex items-center gap-3 rounded-2xl border border-card-edge bg-card px-4 py-3">
+      <FileTextIcon aria-hidden className="size-4.5 shrink-0 text-mm-ink" />
       <span className="grid min-w-0 flex-1">
         <span className="truncate font-medium text-foreground">{title}</span>
         <span className="text-meta text-muted-foreground">

@@ -16,7 +16,7 @@ function Card({
     props: mergeProps<"div">(
       {
         className: cn(
-          "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-card bg-muted [--card-edge:transparent] py-(--card-spacing) text-ui text-card-foreground [--card-spacing:--spacing(5)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+          "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-2xl bg-muted [--card-edge:transparent] py-(--card-spacing) text-ui text-card-foreground [--card-spacing:--spacing(5)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
           className
         ),
       },
@@ -45,7 +45,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "font-heading text-card-title font-medium group-data-[size=sm]/card:text-name",
+        "font-heading text-tool-title font-medium group-data-[size=sm]/card:text-name",
         className
       )}
       {...props}

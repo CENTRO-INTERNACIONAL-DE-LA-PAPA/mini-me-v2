@@ -218,7 +218,7 @@ export function MiniMeCard({
         miniMe={coloured}
         render={<button type="button" onClick={onOpen} />}
         className={cn(
-          "flex h-full w-full cursor-pointer flex-col gap-[18px] rounded-sheet p-5 text-left",
+          "flex h-full w-full cursor-pointer flex-col gap-4.5 rounded-2xl p-5 text-left",
           "transition-colors duration-150 ease-out hover:bg-tint",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         )}
@@ -227,13 +227,13 @@ export function MiniMeCard({
           <MiniMeAvatar miniMe={miniMe} size={56} />
           <Badge
             variant="outline"
-            className="h-auto border border-card-edge bg-card px-2.5 py-[3px] text-meta text-(--mm-ink,var(--ink-2))"
+            className="h-auto border border-card-edge bg-card px-2.5 py-1 text-meta text-(--mm-ink,var(--ink-2))"
           >
             {miniMe.built_in ? "Built-in" : "Yours"}
           </Badge>
         </span>
         <span className="flex flex-1 flex-col gap-1.5">
-          <span className="font-serif text-card-title font-medium text-foreground">
+          <span className="font-serif text-tool-title font-medium text-foreground">
             {miniMe.name}
           </span>
           <span className="line-clamp-3 text-ui text-pretty text-ink-2">{miniMe.description}</span>

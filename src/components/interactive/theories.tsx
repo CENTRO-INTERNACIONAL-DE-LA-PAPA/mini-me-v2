@@ -75,7 +75,7 @@ function TheorySection({ theory, number, prefix }: SectionProps) {
   return (
     <section className="flex flex-col gap-3 border-b border-border px-4 py-4 last:border-b-0">
       <header className="flex items-start gap-3">
-        <h3 className="flex-1 text-[15px] leading-snug font-semibold text-balance text-foreground">
+        <h3 className="flex-1 text-body leading-snug font-semibold text-balance text-foreground">
           {number}. {worded(theory.name, version)}
         </h3>
         <Select value={version} onValueChange={(value) => setVersion(value as Version)}>

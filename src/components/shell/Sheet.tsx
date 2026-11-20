@@ -10,7 +10,7 @@ export function MainSheet({ className, children }: { className?: string; childre
   return (
     <div
       className={cn(
-        "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-sheet bg-background",
+        "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-background",
         className,
       )}
     >
@@ -38,11 +38,11 @@ export function ToolSheet({
   return (
     <aside
       className={cn(
-        "flex min-h-0 w-[380px] shrink-0 flex-col overflow-hidden rounded-sheet bg-background",
+        "flex min-h-0 w-[380px] shrink-0 flex-col overflow-hidden rounded-2xl bg-background",
         className,
       )}
     >
-      <header className="flex items-start gap-3 pt-[22px] pr-[18px] pb-4 pl-6">
+      <header className="flex items-start gap-3 pt-5.5 pr-4.5 pb-4 pl-6">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-tool-title font-medium text-foreground">{title}</h2>
           {meta && <p className="mt-1 text-meta text-muted-foreground">{meta}</p>}
@@ -123,9 +123,6 @@ export function ToolSwitch<Id extends string>({
   return (
     <ToggleGroup
       aria-label={label}
-      variant="switch"
-      size="switch"
-      spacing={1}
       value={value === null ? [] : [value]}
     >
       {options.map(({ id, label, icon: Icon }) => (

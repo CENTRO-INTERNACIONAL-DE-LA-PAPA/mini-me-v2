@@ -97,10 +97,10 @@ const ELEMENTS: Components = {
   li: styled("li", "mt-1 first:mt-0 [&>ol]:mt-1 [&>ul]:mt-1"),
   blockquote: styled("blockquote", "mt-2 border-l-2 border-border pl-3 first:mt-0"),
   hr: styled("hr", "my-3 border-border"),
-  code: styled("code", "rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.9em]"),
+  code: styled("code", "rounded-md bg-muted px-1 py-0.5 font-mono text-[0.9em]"),
   pre: styled(
     "pre",
-    "mt-2 overflow-x-auto rounded-sm bg-muted p-3 font-mono text-[13px] leading-normal " +
+    "mt-2 overflow-x-auto rounded-md bg-muted p-3 font-mono text-control leading-normal " +
       "first:mt-0 [&_code]:bg-transparent [&_code]:p-0",
   ),
   table: ({ node: _node, ...props }) => (

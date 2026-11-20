@@ -322,7 +322,7 @@ export function Composer({
     }
   }
 
-  const size = thread ? "size-7" : "size-[34px]";
+  const size = thread ? "size-7" : "size-8.5";
   const action = replying ? (
     <Button
       size="icon"
@@ -351,7 +351,7 @@ export function Composer({
     // comment thread's card it sits in place.
     <div
       className={cn(
-        thread ? "relative" : "absolute inset-x-0 bottom-[22px] z-20",
+        thread ? "relative" : "absolute inset-x-0 bottom-5.5 z-20",
         !thread && chatColumn(narrow, "composer"),
       )}
     >
@@ -362,7 +362,7 @@ export function Composer({
             query?.kind === "mini_me" ? "Mini-Mes" : "Files"
           }
           className={cn(
-            "absolute bottom-full left-9 mb-2 max-h-80 w-80 overflow-y-auto rounded-well border",
+            "absolute bottom-full left-9 mb-2 max-h-80 w-80 overflow-y-auto rounded-xl border",
             "border-border bg-popover p-1 text-popover-foreground",
           )}
         >
@@ -395,7 +395,7 @@ export function Composer({
       {thread ? (
         <div
           style={surfaceStyle(asked?.colors)}
-          className="rounded-control border border-edge bg-card p-1"
+          className="rounded-lg border border-edge bg-card p-1"
         >
           <AttachmentTray
             projectId={projectId}
@@ -410,7 +410,7 @@ export function Composer({
       ) : (
         <div
           style={surfaceStyle(asked?.colors)}
-          className="rounded-composer border border-edge bg-card px-1.5 pt-1"
+          className="rounded-2xl border border-edge bg-card px-1.5 pt-1"
         >
           <AttachmentTray
             projectId={projectId}

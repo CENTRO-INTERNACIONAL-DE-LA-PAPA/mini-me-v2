@@ -156,7 +156,7 @@ function NumberBadge({ number }: { number: number }) {
   return (
     <span
       className={cn(
-        "mt-px grid size-5 shrink-0 place-items-center rounded-[5px] border border-foreground",
+        "mt-px grid size-5 shrink-0 place-items-center rounded-sm border border-foreground",
         "text-meta leading-none font-semibold text-foreground tabular-nums",
       )}
     >

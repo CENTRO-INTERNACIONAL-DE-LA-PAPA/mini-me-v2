@@ -168,7 +168,7 @@ export function ChatView({
                   role="status"
                   className={cn(
                     "pointer-events-none absolute inset-3 z-30 flex flex-col items-center",
-                    "justify-center gap-2 rounded-card border-2 border-dashed border-primary",
+                    "justify-center gap-2 rounded-2xl border-2 border-dashed border-primary",
                     "bg-background/90 text-ui font-semibold",
                   )}
                 >
@@ -218,7 +218,7 @@ export function ChatView({
                 <div
                   ref={column}
                   className={cn(
-                    "flex flex-col gap-[22px] pt-8 pb-[150px]",
+                    "flex flex-col gap-5.5 pt-8 pb-[150px]",
                     chatColumn(panel !== null, "messages"),
                   )}
                 >

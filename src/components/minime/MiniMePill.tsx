@@ -25,7 +25,7 @@ export function MiniMePill({
       style={surfaceStyle(miniMe?.colors)}
       className={cn(
         "align-middle",
-        tag ? "h-[30px] gap-[7px] pr-3 pl-[3px] text-control font-medium" : "pr-2 pl-[3px]",
+        tag ? "h-7.5 gap-2 pr-3 pl-1 text-control font-medium" : "pr-2 pl-1",
         className,
       )}
     >

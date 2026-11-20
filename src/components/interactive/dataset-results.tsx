@@ -85,7 +85,7 @@ function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Data
           <li key={file.id} className="flex flex-col gap-0.5 border-t border-border py-2 first:border-t-0">
             <div className="flex items-center gap-2.5 text-ui">
               {file.asset ? (
-                <span className="w-[18px] shrink-0" aria-hidden />
+                <span className="w-4.5 shrink-0" aria-hidden />
               ) : (
                 <Checkbox
                   aria-label={`Download ${file.name}`}
@@ -106,7 +106,7 @@ function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Data
                 <LockIcon
                   aria-label="Restricted"
                   role="img"
-                  className="size-[15px] shrink-0 text-muted-foreground"
+                  className="size-4 shrink-0 text-muted-foreground"
                 >
                   <title>Restricted: needs access</title>
                 </LockIcon>

@@ -138,7 +138,7 @@ function ProjectCard({
         <span className="shrink-0 text-meta text-muted-foreground">{when}</span>
       </span>
       <span className="grid gap-1">
-        <span className="font-serif text-card-title font-medium text-foreground">
+        <span className="font-serif text-tool-title font-medium text-foreground">
           {project.name}
         </span>
         {summary && <span className="line-clamp-2 text-meta text-muted-foreground">{summary}</span>}
@@ -166,7 +166,7 @@ function NewProjectCard({
     onEditing(false);
   }
 
-  const tile = "h-full min-h-[150px] rounded-card border-[1.5px] border-dashed border-dash";
+  const tile = "h-full min-h-[150px] rounded-2xl border-[1.5px] border-dashed border-dash";
   if (editing) {
     return (
       <form onSubmit={submit} className={`${tile} flex flex-col justify-center gap-2 p-4`}>
@@ -225,10 +225,10 @@ function NeedsYou({
                 key={approval.message_id}
                 miniMe={miniMe}
                 render={<li />}
-                className="flex items-center gap-3.5 px-[18px] py-4"
+                className="flex items-center gap-3.5 px-4.5 py-4"
               >
                 <MiniMeAvatar miniMe={miniMe} size={40} />
-                <div className="grid min-w-0 flex-1 gap-[3px]">
+                <div className="grid min-w-0 flex-1 gap-1">
                   <span className="text-body font-medium text-foreground">{approval.prompt}</span>
                   <span className="truncate text-meta text-mm-ink">
                     {approval.conversation_title} ({approval.project_name})

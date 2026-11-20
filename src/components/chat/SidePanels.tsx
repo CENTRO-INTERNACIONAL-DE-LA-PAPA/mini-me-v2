@@ -95,7 +95,7 @@ export function OutlinePanel({ outline, onClose }: { outline: Outline; onClose: 
                     {miniMe ? (
                       <MiniMeAvatar miniMe={miniMe} size={22} />
                     ) : (
-                      <span aria-hidden className="w-[22px] shrink-0 text-center text-muted-foreground">
+                      <span aria-hidden className="w-5.5 shrink-0 text-center text-muted-foreground">
                         {group.sign}
                       </span>
                     )}

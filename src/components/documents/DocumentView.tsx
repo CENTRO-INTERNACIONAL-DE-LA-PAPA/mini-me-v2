@@ -644,7 +644,7 @@ export function DocumentView({
               {drafting && (
                 <div
                   role="status"
-                  className="mx-6 mt-4 flex items-center gap-3 rounded-card bg-card px-4 py-2.5"
+                  className="mx-6 mt-4 flex items-center gap-3 rounded-2xl bg-card px-4 py-2.5"
                 >
                   <MiniMeAvatar miniMe={scribe} size={26} />
                   <span className="flex-1 text-ui text-foreground">Scribe is drafting…</span>
@@ -666,7 +666,7 @@ export function DocumentView({
                     setChosen({ id: suggestion.id, anchor: at(rect) });
                   }}
                   className={cn(
-                    "mx-6 mt-4 truncate rounded-card bg-card px-4 py-2.5 text-left text-ui",
+                    "mx-6 mt-4 truncate rounded-2xl bg-card px-4 py-2.5 text-left text-ui",
                     "text-muted-foreground hover:bg-accent focus-visible:outline-2",
                     "focus-visible:outline-ring",
                   )}
@@ -680,7 +680,7 @@ export function DocumentView({
                 <div
                   ref={host}
                   onClick={() => view.current?.focus()}
-                  className="flex min-h-full flex-col rounded-control bg-card"
+                  className="flex min-h-full flex-col rounded-lg bg-card"
                 />
               </div>
             </section>
@@ -746,7 +746,7 @@ function PreviewPages({ pages }: { pages: string[] }) {
             key={url}
             src={url}
             alt={`Page ${index + 1}`}
-            className="w-full rounded-control bg-card"
+            className="w-full rounded-lg bg-card"
           />
         ))}
       </div>

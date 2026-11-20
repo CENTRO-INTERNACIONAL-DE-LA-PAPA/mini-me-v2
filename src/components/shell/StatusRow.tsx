@@ -15,7 +15,7 @@ export function StatusRow({
 }) {
   return (
     <div role="status" className="flex items-start gap-2 text-meta text-muted-foreground">
-      <span aria-hidden className={cn("mt-1.5 size-[7px] shrink-0 rounded-full", dot)} />
+      <span aria-hidden className={cn("mt-1.5 size-2 shrink-0 rounded-full", dot)} />
       <p className="flex-1">
         {children}
         {error && <span className="block text-destructive">{error}</span>}

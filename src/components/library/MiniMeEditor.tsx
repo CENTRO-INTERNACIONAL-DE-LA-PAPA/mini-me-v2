@@ -237,9 +237,6 @@ function Appearance({
       <Field label="Group" hint="The heading it is listed under when you type @">
         <ToggleGroup
           aria-label="Group"
-          variant="switch"
-          size="switch"
-          spacing={1}
           disabled={readOnly}
           value={[draft.group]}
           onValueChange={(value) => value.length > 0 && onChange({ group: value[0] as MiniMeGroup })}

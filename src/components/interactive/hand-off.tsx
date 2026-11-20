@@ -29,8 +29,8 @@ export function HandOffCard({
   onOpenFile?: () => void;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-card border border-card-edge bg-card px-4 py-3">
-      <ArrowRightIcon aria-hidden className="mt-0.5 size-[18px] shrink-0 text-mm-ink" />
+    <div className="flex items-start gap-3 rounded-2xl border border-card-edge bg-card px-4 py-3">
+      <ArrowRightIcon aria-hidden className="mt-0.5 size-4.5 shrink-0 text-mm-ink" />
       <span className="grid min-w-0 flex-1 gap-1">
         <span className="text-meta text-muted-foreground">
           Handed to <MiniMePill miniMe={miniMe}>@{name}</MiniMePill>

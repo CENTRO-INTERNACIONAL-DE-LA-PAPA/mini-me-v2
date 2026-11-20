@@ -144,7 +144,7 @@ export function OverviewView({
     >
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-start gap-4 max-lg:grid-cols-1">
         <div className="flex flex-col gap-4">
-          <Card aria-label="Summary" className="gap-2.5 px-[22px] py-5">
+          <Card aria-label="Summary" className="gap-2.5 px-5.5 py-5">
             <h2 className="font-serif text-heading text-foreground">Where things stand</h2>
             {overview.summary ? (
               <p className="text-body whitespace-pre-line text-document-ink">
