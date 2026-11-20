@@ -44,32 +44,34 @@ names. Shadcn components are added by the user with the CLI command given in the
 
 ## 2. Small shared parts
 
-- [ ] 2.1 Add `shell/ErrorText.tsx` and use it for every hand-written
+- [x] 2.1 Add `shell/ErrorText.tsx` and use it for every hand-written
   `text-meta text-destructive` error line, spacing coming from the parent's gap. Verify: grep
   finds `text-destructive` error paragraphs only in `ErrorText`, `StatusRow` and field errors.
-- [ ] 2.2 User runs `npx shadcn@latest add empty`; restyle it to DESIGN.md and use it for every
+- [x] 2.2 User runs `npx shadcn@latest add empty`; restyle it to DESIGN.md and use it for every
   empty state (Library, Trait and Mini-Me editors, Home, Overview, Settings, Files, Outline,
   Comments, Report, dataset results, Conversation), at one text size. Verify: grep finds no
   other empty-state text classes in those files.
-- [ ] 2.3 Add `shell/StatusDot.tsx` and use it in `StatusRow` and Settings' account status.
+- [x] 2.3 Add `shell/StatusDot.tsx` and use it in `StatusRow` and Settings' account status.
   Verify: the sidecar status line and the Settings accounts show the same dot.
-- [ ] 2.4 Add `shell/SearchInput.tsx` and use it in the Library and Files. Verify: both search
+- [x] 2.4 Add `shell/SearchInput.tsx` and use it in the Library and Files. Verify: both search
   fields have the same width, icon and behaviour.
-- [ ] 2.5 User runs `npx shadcn@latest add avatar`; restyle it and use its fallback for the
-  initials in Settings' API keys and Files' maker. Verify: both show initials in the same style.
-- [ ] 2.6 Replace link-style raw `<button>`s with `Button variant="link"` (Files, Report panel,
+- [x] 2.5 User runs `npx shadcn@latest add avatar`; restyle it and use its fallback for your
+  initials in the navigation's Settings row and in Files. Settings' API-key tiles are provider
+  marks, not people, and stay as they are. Verify: both show initials in the same style.
+- [x] 2.6 Replace link-style raw `<button>`s with `Button variant="link"` (Files, Report panel,
   interactive table, theories, dataset results, Overview, editor header), with one hover
-  style; the attachment tray's remove button becomes a ghost icon `Button`. Verify: grep finds
-  no raw `<button` outside `components/ui/` and the Composer's `@` list.
-- [ ] 2.7 Swap hand-drawn controls for existing components: chart-type switch and avatar
-  colour swatches → `ToggleGroup`; Document view divider → `Separator`; reaction pill and
-  comment number → `Badge`; `MiniMeCard`'s origin label → `OriginBadge`. Verify: each still
-  works by keyboard.
-- [ ] 2.8 User runs `npx shadcn@latest add slider`; restyle it and use it for the hue control
+  style (underline); the attachment tray's remove button becomes a ghost icon `Button`. Verify:
+  the raw `<button`s left are the rows, cards, sort headers and menus that 2.7, 4.2–4.5 and 5.5
+  replace, plus the wordmark and the Project heading.
+- [x] 2.7 Swap hand-drawn controls for existing components: chart-type switch and avatar
+  colour swatches → `ToggleGroup`; Document view divider → `Separator`; reaction pill → `Badge`;
+  `MiniMeCard`'s origin label → `OriginBadge`. The comment number stays its own square mark,
+  matching the one beside its passage. Verify: each still works by keyboard.
+- [x] 2.8 User runs `npx shadcn@latest add slider`; restyle it and use it for the hue control
   in the avatar colour picker, keeping its gradient track. Verify: dragging and arrow keys
   change the hue.
-- [ ] 2.9 Add the new parts to DESIGN.md §7. Verify: each part added in 2.1–2.8 is named there.
-- [ ] 2.10 In the app: trigger an error (wrong API key), see empty states (new Project), search
+- [x] 2.9 Add the new parts to DESIGN.md §7. Verify: each part added in 2.1–2.8 is named there.
+- [x] 2.10 In the app: trigger an error (wrong API key), see empty states (new Project), search
   the Library and Files, switch a chart's type, pick an avatar colour.
 
 ## 3. Fields and confirmations

@@ -1,3 +1,4 @@
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { lazy, Suspense, useMemo, useReducer } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -40,19 +41,19 @@ export function ChartView({
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-2.5">
         <h3 className="mr-auto text-ui font-semibold">{chart.title}</h3>
         {chart.views.length > 1 && (
-          <div role="group" aria-label="Chart type" className="flex gap-1">
+          <ToggleGroup
+            aria-label="Chart type"
+            value={[String(state.view)]}
+            onValueChange={(value) =>
+              value.length > 0 && dispatch({ type: "chooseView", view: Number(value[0]) })
+            }
+          >
             {chart.views.map((v, index) => (
-              <Button
-                key={index}
-                variant="ghost"
-                size="xs"
-                aria-pressed={state.view === index}
-                onClick={() => dispatch({ type: "chooseView", view: index })}
-              >
+              <ToggleGroupItem key={index} value={String(index)}>
                 {VIEW_NAMES[v.type]}
-              </Button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
         )}
         <FeatureButton componentId={componentId} />
       </header>

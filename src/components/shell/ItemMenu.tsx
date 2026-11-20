@@ -4,6 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { MoreHorizontalIcon } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { errorMessage } from "../../api";
+import { ErrorText } from "./ErrorText";
 
 /** An action that needs nothing more from the user, such as Open or Duplicate. */
 export interface MenuAction {
@@ -169,7 +170,7 @@ export function ItemMenu({ name, actions = [], rename, remove, className }: Prop
               </div>
             </>
           )}
-          {error && <p className="text-meta text-destructive">{error}</p>}
+          {error && <ErrorText>{error}</ErrorText>}
         </div>
       </PopoverContent>
     </Popover>

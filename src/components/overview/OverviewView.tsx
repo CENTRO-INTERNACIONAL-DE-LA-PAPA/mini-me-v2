@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ import {
   summaryParts,
 } from "./overview";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { ErrorText } from "../shell/ErrorText";
 
 interface Props {
   project: ProjectSummary;
@@ -118,7 +120,7 @@ export function OverviewView({
   }
 
   if (!overview) {
-    return error ? <p className="px-8 pt-14 text-meta text-destructive">{error}</p> : null;
+    return error ? <ErrorText className="px-8 pt-14">{error}</ErrorText> : null;
   }
 
   const miniMeOf = (id: string) => miniMes.find((m) => m.id === id);
@@ -183,7 +185,7 @@ export function OverviewView({
                 </span>
               )}
             </div>
-            {error && <p className="text-meta text-destructive">{error}</p>}
+            {error && <ErrorText>{error}</ErrorText>}
           </Card>
 
           {featured && (
@@ -225,9 +227,12 @@ export function OverviewView({
           }
         >
           {shown.length === 0 ? (
-            <p className="text-muted-foreground">
-              Tables, charts, papers and files that Mini-Mes make in this Project will appear here.
-            </p>
+            <Empty>
+              <EmptyDescription>
+                Tables, charts, papers and files that Mini-Mes make in this Project will appear
+                here.
+              </EmptyDescription>
+            </Empty>
           ) : (
             <ul className="grid gap-0.5">
               {shown.map((output) => (

@@ -1,3 +1,4 @@
+import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -624,7 +625,7 @@ export function DocumentView({
             >
               <ListIcon />
             </SourceButton>
-            <span aria-hidden className="mx-1 h-5 w-px bg-border" />
+            <Separator orientation="vertical" className="mx-1 h-5 self-center" />
             <SourceButton
               label="Comment on the selection"
               disabled={drafting || !hasSelection}

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { StatusDot } from "./StatusDot";
 
 export function StatusRow({
   dot = "bg-off",
@@ -15,7 +16,7 @@ export function StatusRow({
 }) {
   return (
     <div role="status" className="flex items-start gap-2 text-meta text-muted-foreground">
-      <span aria-hidden className={cn("mt-1.5 size-2 shrink-0 rounded-full", dot)} />
+      <StatusDot className={cn("mt-1.5", dot)} />
       <p className="flex-1">
         {children}
         {error && <span className="block text-destructive">{error}</span>}

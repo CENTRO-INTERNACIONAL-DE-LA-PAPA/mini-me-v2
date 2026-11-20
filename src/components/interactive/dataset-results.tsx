@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDownIcon, ChevronRightIcon, DownloadIcon, LockIcon } from "lucide-react";
@@ -12,6 +13,7 @@ import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import type { Renderers, RendererProps } from "./catalogue";
 import { openLink, webUrl } from "./links";
+import { ErrorText } from "../shell/ErrorText";
 
 /** `dataset-results` version 1 preview from *Search CIP Dataverse*; `datasets` is the first page. */
 interface DatasetResultsData {
@@ -75,9 +77,15 @@ function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Data
     }
   }
 
-  if (error) return <p className="text-meta text-destructive">{error}</p>;
+  if (error) return <ErrorText>{error}</ErrorText>;
   if (!files) return <p className="text-meta text-muted-foreground">Loading files…</p>;
-  if (files.length === 0) return <p className="text-meta text-muted-foreground">No files.</p>;
+  if (files.length === 0) {
+    return (
+      <Empty className="py-4">
+        <EmptyDescription>No files.</EmptyDescription>
+      </Empty>
+    );
+  }
   return (
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col">
@@ -117,7 +125,7 @@ function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Data
                 </ReferenceChip>
               )}
             </div>
-            {error && <p className="pl-7 text-meta text-destructive">{error}</p>}
+            {error && <ErrorText className="pl-7">{error}</ErrorText>}
           </li>
         ))}
       </ul>
@@ -204,7 +212,7 @@ function DatasetResults({ preview, projectId }: RendererProps) {
       {datasets.map((dataset) => (
         <DatasetCard key={dataset.id} dataset={dataset} projectId={projectId} />
       ))}
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
       {datasets.length < first.total && (
         <Button variant="outline" className="self-start" disabled={loading} onClick={() => void showMore()}>
           {loading ? "Loading…" : "Show more"}

@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ import { outline } from "./outline";
 import { useConversation } from "./useConversation";
 import { useFilesChanged } from "../../hooks/useFilesChanged";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { ErrorText } from "../shell/ErrorText";
 
 interface Props {
   projectId: string;
@@ -237,11 +239,13 @@ export function ChatView({
                     </p>
                   )}
                   {state.messages.length === 0 && (
-                    <p className="p-8 text-center text-muted-foreground">No messages yet.</p>
+                    <Empty>
+                      <EmptyDescription>No messages yet.</EmptyDescription>
+                    </Empty>
                   )}
                 </div>
               </div>
-              {error && <p className="px-8 py-2 text-meta text-destructive">{error}</p>}
+              {error && <ErrorText className="px-8 py-2">{error}</ErrorText>}
               <Composer
                 ref={composer}
                 narrow={panel !== null}

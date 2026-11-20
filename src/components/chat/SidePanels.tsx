@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 import { useState, type ReactNode } from "react";
 import type { MessageView } from "../../protocol/eventStore";
@@ -75,7 +76,9 @@ export function OutlinePanel({ outline, onClose }: { outline: Outline; onClose: 
   return (
     <SidePanel title="Outline" meta={`${total} used`} onClose={onClose}>
       {groups.length === 0 && (
-        <p className="text-body text-muted-foreground">Nothing has been used yet.</p>
+        <Empty>
+          <EmptyDescription>Nothing has been used yet.</EmptyDescription>
+        </Empty>
       )}
       {groups.map((group) => (
         <Group key={group.label} label={group.label}>

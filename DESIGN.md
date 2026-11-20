@@ -165,7 +165,7 @@ Always build from shadcn/ui components. Add a missing one from shadcn/ui rather 
 - White things on the sheet (tables, paper sources, progress cards, buttons) are outlined on the white sheet and not inside a card or reply, whose own fill sets them apart.
 
 ### Tab switch
-One style for tabs and toggle groups. Track `--well`, `rounded-xl p-1 gap-1`. Option: `text-control` 500, `px-3 py-2`, `rounded-lg`, optional `size-4` icon. Selected: white fill, 1px `--border`, ink text. Unselected: `--ink-2`, no fill. Vertical lists use `p-1.5` and options `px-3 py-2.5`.
+One style for tabs and toggle groups (`ToggleGroup`'s `plain` variant is for items that draw themselves, such as colour swatches). Track `--well`, `rounded-xl p-1 gap-1`. Option: `text-control` 500, `px-3 py-2`, `rounded-lg`, optional `size-4` icon. Selected: white fill, 1px `--border`, ink text. Unselected: `--ink-2`, no fill. Vertical lists use `p-1.5` and options `px-3 py-2.5`.
 
 ### Buttons
 - **Default:** ink fill, white text, pill, 13.5/500. Only one ink button per header.
@@ -173,12 +173,15 @@ One style for tabs and toggle groups. Track `--well`, `rounded-xl p-1 gap-1`. Op
 - **Mini-Me:** white, with a 1px `edge` outline only on white.
 - **Ghost:** no fill; icon buttons `size-7.5 rounded-lg`.
 - **Destructive:** red text only, no fill.
+- **Link:** text only, normal weight, underlined on hover; for links inside text and table cells.
 
 ### Inputs
-Inputs, text areas and selects: `--well` fill, no visible border, `rounded-xl`, `text-ui`; focus shows a 1px ink border. Rows with inputs or well buttons sit on a white card, not a grey one.
+Inputs, text areas and selects: `--well` fill, no visible border, `rounded-xl`, `text-ui`; focus shows a 1px ink border. Rows with inputs or well buttons sit on a white card, not a grey one. A search field is `SearchInput`: a leading search icon, 240px wide. A slider is the shadcn `Slider`: a round white thumb with an ink ring; its track can take a gradient (`--slider-track`), as the avatar hue does.
 
 ### Name tags and chips
 - **Mini-Me name tag:** the Mini-Me's `tint` with its `ink` text and avatar; 16px avatar inline, 24px under a title, where it can add a status after a gap at 80% opacity.
+- **Origin badge:** "Built-in" or "Yours", an outline badge in the Mini-Me's `ink`.
+- **Your initials:** the shadcn `Avatar`, `size="sm"`: a grey circle with the initials in `text-meta`.
 - **Reference chip:** one chip for every file, table and chart, wherever it appears: white, outlined, an optional 13px leading icon, and a button when it opens what it names.
 
 ### Sheets and headers
@@ -195,6 +198,11 @@ Every sheet, tool sheet, page header, section heading and editor header comes fr
 - **Reactions:** a small white outlined pill over the bubble's bottom-left corner: avatar and emoji.
 - **Composer:** floats `bottom-5.5` above the bottom of the sheet. White, 1px outline (the addressed Mini-Me's `edge`, else `--border`), `rounded-2xl`; a `size-8.5` round send button in the Mini-Me's `ink`, else ink. The list above keeps enough bottom padding for its last item to clear it.
 - **Fade:** the only gradient: 56px from the sheet's white to transparent at the top of a message list.
+
+### Status, errors and empty states
+- **Status dot:** `StatusDot`, an 8px circle, green when on, `--off` otherwise; before a status line or a label such as "Connected".
+- **Error:** `ErrorText`, one `text-meta` line in `--destructive`, spaced by its container.
+- **Empty state:** the shadcn `Empty` with an `EmptyDescription`: centred `text-ui` in `--muted-foreground`, with room around it. One size everywhere, from an empty list to an empty Conversation.
 
 ### Progress and timelines
 Steps share one set of marks everywhere: done is an ink circle with a check; running is a spinner in the Mini-Me's `solid`; pending is a white circle with a grey ring. A vertical timeline joins them with a 1.5px connector, ink when done.

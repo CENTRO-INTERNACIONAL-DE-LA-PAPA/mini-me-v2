@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, errorMessage } from "../../api";
 import type { ThirdParty, ThirdPartyComponent } from "../../protocol/types";
 import { openLink } from "../interactive/links";
+import { ErrorText } from "./ErrorText";
 
 const PARTS: { part: ThirdPartyComponent["part"]; title: string }[] = [
   { part: "core", title: "Core" },
@@ -42,7 +43,7 @@ export function ThirdPartyView({ onClose }: { onClose: () => void }) {
         </h1>
         <Button onClick={onClose}>Close</Button>
       </header>
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
       {list === null && (
         <p className="text-body text-muted-foreground">
           The list of third-party software comes with released builds.

@@ -46,7 +46,7 @@ export function EditorHeader({
         <div className="flex min-w-0 flex-col gap-3.5">
           <Button
             variant="link"
-            className="w-fit gap-1.5 text-control font-normal text-muted-foreground"
+            className="w-fit gap-1.5 text-control text-muted-foreground"
             onClick={onBack}
           >
             <ChevronLeftIcon />
@@ -92,7 +92,11 @@ export function EditorPage({ children, ...header }: HeaderProps & { children: Re
 }
 
 export function OriginBadge({ builtIn }: { builtIn: boolean }) {
-  return <Badge variant="secondary">{builtIn ? "Built-in" : "Yours"}</Badge>;
+  return (
+    <Badge variant="outline" className="text-(--mm-ink,var(--ink-2))">
+      {builtIn ? "Built-in" : "Yours"}
+    </Badge>
+  );
 }
 
 /** A labelled field, with an optional hint below the label. */
@@ -225,12 +229,7 @@ export function MiniMeCard({
       >
         <span className="flex items-start justify-between">
           <MiniMeAvatar miniMe={miniMe} size={56} />
-          <Badge
-            variant="outline"
-            className="h-auto border border-card-edge bg-card px-2.5 py-1 text-meta text-(--mm-ink,var(--ink-2))"
-          >
-            {miniMe.built_in ? "Built-in" : "Yours"}
-          </Badge>
+          <OriginBadge builtIn={miniMe.built_in} />
         </span>
         <span className="flex flex-1 flex-col gap-1.5">
           <span className="font-serif text-tool-title font-medium text-foreground">

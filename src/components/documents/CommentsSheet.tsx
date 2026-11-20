@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ import { ItemMenu } from "../shell/ItemMenu";
 import { ToolSheet } from "../shell/Sheet";
 import type { Placement } from "./anchors";
 import { passageLocation } from "./location";
+import { ErrorText } from "../shell/ErrorText";
 
 type Tab = "open" | "resolved";
 
@@ -98,11 +100,13 @@ export function CommentsSheet({
         </TabsList>
       </Tabs>
       {shown.length === 0 && (
-        <p className="text-body text-muted-foreground">
-          {tab === "open"
-            ? "Select text in the source and click the comment button to start a thread."
-            : "Resolved threads appear here."}
-        </p>
+        <Empty>
+          <EmptyDescription>
+            {tab === "open"
+              ? "Select text in the source and click the comment button to start a thread."
+              : "Resolved threads appear here."}
+          </EmptyDescription>
+        </Empty>
       )}
       {/* `grid-cols-1` lets rows shrink below their content, so long passages truncate. */}
       <ul className="grid grid-cols-1">
@@ -269,7 +273,7 @@ function ThreadView({
           ))}
         </div>
       )}
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
       {!detached && !thread.resolved && (
         <div className="sticky bottom-0 bg-background pt-1">
           <Composer

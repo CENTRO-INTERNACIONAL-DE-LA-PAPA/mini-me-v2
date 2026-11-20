@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ import { useLoad } from "../../hooks/useLoad";
 import { useRunningReplies } from "../../hooks/useRunningReplies";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { firstName } from "../../lib/names";
+import { ErrorText } from "../shell/ErrorText";
 
 interface Props {
   projects: ProjectSummary[];
@@ -213,9 +215,11 @@ function NeedsYou({
   return (
     <SheetSection title="Waiting on you">
       {error ? (
-        <p className="text-meta text-destructive">{error}</p>
+        <ErrorText>{error}</ErrorText>
       ) : approvals?.length === 0 ? (
-        <p className="text-body text-muted-foreground">Nothing is waiting on you.</p>
+        <Empty>
+          <EmptyDescription>Nothing is waiting on you.</EmptyDescription>
+        </Empty>
       ) : (
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
           {approvals?.map((approval) => {

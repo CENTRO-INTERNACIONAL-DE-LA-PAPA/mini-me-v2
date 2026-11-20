@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { memo, useCallback, useState } from "react";
@@ -25,6 +26,7 @@ import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
 import { MetaParts } from "@/components/ui/meta-parts";
+import { ErrorText } from "../shell/ErrorText";
 
 const STATUS_LABEL: Record<string, string | undefined> = {
   streaming: "Replying…",
@@ -133,9 +135,9 @@ export const MessageItem = memo(function MessageItem({
         />
       )}
       {message.failure && (
-        <p className="text-meta text-destructive">{message.failure.message}</p>
+        <ErrorText>{message.failure.message}</ErrorText>
       )}
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
     </>
   );
 
@@ -269,8 +271,7 @@ function ReactionPills({
           <li key={emoji} className="pointer-events-auto">
             <Tooltip>
               <TooltipTrigger
-                render={<span />}
-                className="flex h-6 items-center gap-1 rounded-full border border-border bg-card px-1.5 text-meta"
+                render={<Badge variant="outline" className="gap-1 px-1.5 text-meta" />}
               >
                 {byMiniMes.slice(0, 3).map((reaction, index) => (
                   <MiniMeAvatar

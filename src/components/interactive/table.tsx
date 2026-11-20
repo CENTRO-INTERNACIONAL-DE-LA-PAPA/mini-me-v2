@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -203,13 +204,13 @@ export function TableView({
             <>
               ; the full table is in{" "}
               {projectId && sourceAssetId ? (
-                <button
-                  type="button"
+                <Button
+                  variant="link"
                   onClick={openSource}
-                  className="cursor-pointer font-medium text-ink-2 underline-offset-2 hover:underline"
+                  className="text-meta font-medium text-ink-2"
                 >
                   {source}
-                </button>
+                </Button>
               ) : (
                 <span className="font-medium text-ink-2">{source}</span>
               )}

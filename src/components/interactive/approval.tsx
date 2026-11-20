@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { api, errorMessage } from "../../api";
 import type { RendererProps, Renderers } from "./catalogue";
+import { ErrorText } from "../shell/ErrorText";
 
 /** Version 1 preview: the approval Step and what it asks. */
 interface ApprovalData {
@@ -51,7 +52,7 @@ function Approval({ preview, answer, projectId, messageId, componentId, replySta
           Reject
         </Button>
       </div>
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
     </div>
   );
 }

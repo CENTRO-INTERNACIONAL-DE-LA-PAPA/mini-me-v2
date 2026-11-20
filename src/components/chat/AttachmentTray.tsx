@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../../api";
@@ -88,14 +89,14 @@ function RemoveButton({
   onRemove: (asset: AssetRef) => void;
 }) {
   return (
-    <button
-      type="button"
-      className="flex cursor-pointer p-0.5 text-muted-foreground hover:text-foreground"
+    <Button
+      variant="ghost"
+      size="icon-xs"
       aria-label={`Remove ${asset.name}`}
       title={`Remove ${asset.name}`}
       onClick={() => onRemove(asset)}
     >
-      <XIcon aria-hidden className="size-3.5" />
-    </button>
+      <XIcon aria-hidden />
+    </Button>
   );
 }

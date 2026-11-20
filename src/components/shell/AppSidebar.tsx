@@ -1,3 +1,4 @@
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -322,9 +323,9 @@ export function AppSidebar({
               onClick={() => onNavigate({ kind: "settings" })}
             >
               {name ? (
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-meta font-semibold text-foreground">
-                  {initials(name)}
-                </span>
+                <Avatar size="sm">
+                  <AvatarFallback>{initials(name)}</AvatarFallback>
+                </Avatar>
               ) : (
                 <SettingsIcon />
               )}

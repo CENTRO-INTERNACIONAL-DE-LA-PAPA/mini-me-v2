@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -161,9 +162,11 @@ export function MiniMeEditor({
         <TabsContent value="traits" className="min-h-0 overflow-y-auto">
           <div className="mx-auto max-w-[760px] px-8 py-8">
             {used.length === 0 ? (
-              <p className="text-ui text-muted-foreground">
-                Its Workflow runs no Traits yet. Add Trait steps on the Workflow tab.
-              </p>
+              <Empty>
+                <EmptyDescription>
+                  Its Workflow runs no Traits yet. Add Trait steps on the Workflow tab.
+                </EmptyDescription>
+              </Empty>
             ) : (
               <List>
                 {used.map((t) => (

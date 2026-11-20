@@ -34,6 +34,7 @@ import {
   SquareIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ErrorText } from "../shell/ErrorText";
 
 interface Props {
   projectId: string;
@@ -385,7 +386,7 @@ export function Composer({
           ))}
         </div>
       )}
-      {error && <p className="mb-2 text-meta text-destructive">{error}</p>}
+      {error && <ErrorText className="mb-2">{error}</ErrorText>}
       {!ready && sidecar && (
         <p role="status" className="mb-2 text-meta text-muted-foreground">
           {sidecar.detail}

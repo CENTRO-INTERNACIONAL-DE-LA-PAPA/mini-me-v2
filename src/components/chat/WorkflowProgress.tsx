@@ -131,17 +131,14 @@ export function WorkflowProgress({
             return (
               <li key={index} className="flex items-center">
                 {openable ? (
-                  <button
-                    className={cn(
-                      "flex cursor-pointer items-center gap-2 rounded-md",
-                      "underline-offset-4 hover:underline",
-                      open === index && "underline",
-                    )}
+                  <Button
+                    variant="link"
+                    className={cn("gap-2", open === index && "underline")}
                     aria-expanded={open === index}
                     onClick={() => setOpen(open === index ? null : index)}
                   >
                     {label}
-                  </button>
+                  </Button>
                 ) : (
                   <span className="flex items-center gap-2">{label}</span>
                 )}

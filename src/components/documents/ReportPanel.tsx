@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FilePlusIcon, FileTextIcon } from "lucide-react";
@@ -14,6 +15,7 @@ import { openLink } from "../interactive/links";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { ToolSheet } from "../shell/Sheet";
 import { documentsBlocked, quartoNotice } from "./quarto";
+import { ErrorText } from "../shell/ErrorText";
 
 /** The Mini-Mes that replied in `messages`, in the order they first replied. */
 export function draftSources(messages: MessageView[], miniMes: MiniMe[]): MiniMe[] {
@@ -132,20 +134,22 @@ export function ReportPanel({
         {blocked && quarto && (
           <p className="text-meta text-muted-foreground">
             {quartoNotice(quarto)}{" "}
-            <button
-              type="button"
-              className="underline"
+            <Button
+              variant="link"
+              className="text-meta text-muted-foreground underline"
               onClick={() => openLink(quarto.install_url)}
             >
               Get Quarto
-            </button>
+            </Button>
           </p>
         )}
-        {error && <p className="text-meta text-destructive">{error}</p>}
+        {error && <ErrorText>{error}</ErrorText>}
       </div>
       <h3 className="mt-6 mb-2.5 font-serif text-section text-foreground">Open from Files</h3>
       {documents.length === 0 ? (
-        <p className="text-meta text-muted-foreground">No documents in this Project yet.</p>
+        <Empty>
+          <EmptyDescription>No documents in this Project yet.</EmptyDescription>
+        </Empty>
       ) : (
         <ul className="grid gap-1">
           {documents.map((file) => {

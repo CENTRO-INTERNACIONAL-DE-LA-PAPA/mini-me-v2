@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Card } from "@/components/ui/card";
@@ -12,7 +13,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { appLabel } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import {
   FlaskConicalIcon,
   InfoIcon,
@@ -54,6 +54,8 @@ import { refreshReplyDebug } from "../../hooks/useReplyDebug";
 import { reloadFeatureFlags, useFeatureFlags } from "../../hooks/useFeatureFlags";
 import { recheckQuarto, showQuarto, useQuarto } from "../../hooks/useQuarto";
 import { refreshUserProfile, useUserProfile } from "../../hooks/useUserProfile";
+import { ErrorText } from "../shell/ErrorText";
+import { StatusDot } from "../shell/StatusDot";
 
 const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "openai", name: "OpenAI" },
@@ -132,7 +134,7 @@ export function SettingsView({
       onSelect={setPage}
     >
       <div className="min-w-0">
-        {error && <p className="mb-4 text-meta text-destructive">{error}</p>}
+        {error && <ErrorText className="mb-4">{error}</ErrorText>}
         {shown === "general" && <GeneralPage />}
         {settings && shown === "models" && <ModelsPage settings={settings} onChanged={refresh} />}
         {settings && shown === "accounts" && (
@@ -268,10 +270,10 @@ function AccountCard({ render, children }: { render?: ReactElement; children: Re
 }
 
 /** A green or grey dot with its label, for whether something is set up. */
-function StatusDot({ on, children }: { on: boolean; children: ReactNode }) {
+function StatusLabel({ on, children }: { on: boolean; children: ReactNode }) {
   return (
     <span className="flex items-center gap-1.5 text-meta text-ink-2">
-      <span aria-hidden className={cn("size-2 rounded-full", on ? "bg-success" : "bg-off")} />
+      <StatusDot className={on ? "bg-success" : undefined} />
       {children}
     </span>
   );
@@ -392,7 +394,9 @@ function FeatureFlagsSection() {
         </SettingRow>
       </form>
       {flags.length === 0 ? (
-        <p className="py-4 text-meta text-muted-foreground">No feature flags are on.</p>
+        <Empty>
+          <EmptyDescription>No feature flags are on.</EmptyDescription>
+        </Empty>
       ) : (
         <>
           <h4 className="mt-5 mb-2 text-meta font-medium text-muted-foreground">Active</h4>
@@ -406,7 +410,7 @@ function FeatureFlagsSection() {
                   <span className="font-medium">{flag.name}</span>
                   <span className="text-meta text-muted-foreground">{flag.description}</span>
                 </span>
-                <StatusDot on>On</StatusDot>
+                <StatusLabel on>On</StatusLabel>
                 <Button variant="outline" onClick={() => void turnOff(flag.id)}>
                   Turn off
                 </Button>
@@ -977,7 +981,7 @@ function Ai2Row() {
                 : "Sign in to use Researcher and Theorist"}
           </span>
         </span>
-        <StatusDot on={signedIn}>{signedIn ? "Signed in" : "Not signed in"}</StatusDot>
+        <StatusLabel on={signedIn}>{signedIn ? "Signed in" : "Not signed in"}</StatusLabel>
         {signedIn ? (
           <Button variant="outline" onClick={() => run(api.ai2SignOut)}>
             Sign out
@@ -1002,9 +1006,9 @@ function Ai2Row() {
         </div>
       )}
       {status?.state === "signed_out" && status.error && (
-        <p className="mt-2 text-meta text-destructive">{status.error}</p>
+        <ErrorText className="mt-2">{status.error}</ErrorText>
       )}
-      {error && <p className="mt-2 text-meta text-destructive">{error}</p>}
+      {error && <ErrorText className="mt-2">{error}</ErrorText>}
     </AccountCard>
   );
 }
@@ -1264,7 +1268,7 @@ function KeyRow({
             {saved ? "Key saved in your system's keychain" : hint}
           </span>
         </span>
-        <StatusDot on={saved}>{saved ? "Connected" : "Not connected"}</StatusDot>
+        <StatusLabel on={saved}>{saved ? "Connected" : "Not connected"}</StatusLabel>
         <Button variant="outline" aria-expanded={editing} onClick={() => setEditing(!editing)}>
           {saved ? "Edit" : "Add key"}
         </Button>
@@ -1290,7 +1294,7 @@ function KeyRow({
           )}
         </form>
       )}
-      {error && <p className="mt-2 pl-11 text-meta text-destructive">{error}</p>}
+      {error && <ErrorText className="mt-2 pl-12.5">{error}</ErrorText>}
     </AccountCard>
   );
 }

@@ -1,9 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { PlusIcon, SearchIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "../../api";
 import { MINI_ME_GROUPS } from "../../protocol/references";
@@ -14,6 +13,8 @@ import { count } from "../../lib/format";
 import { SheetPage } from "../shell/Sheet";
 import type { LibraryTab, View } from "../shell/view";
 import { MetaParts } from "@/components/ui/meta-parts";
+import { ErrorText } from "../shell/ErrorText";
+import { SearchInput } from "../shell/SearchInput";
 
 /** A group's heading as the `@` list shows it, or the group itself for one it doesn't know. */
 const groupLabel = (group: string) => MINI_ME_GROUPS.find((g) => g.group === group)?.label ?? group;
@@ -71,26 +72,18 @@ export function LibraryView({ tab, onOpen }: { tab: LibraryTab; onOpen: (view: V
         </>
       }
     >
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
       {library && <Problems library={library} />}
       {library && (
         <>
           <div className="flex items-center justify-between gap-4">
             {!traits && <GroupFilter library={library} group={group} onSelect={setGroup} />}
-            <div className="relative ml-auto w-60 shrink-0">
-              <SearchIcon
-                aria-hidden
-                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                type="search"
-                aria-label={traits ? "Search Traits" : "Search Mini-Mes"}
-                placeholder="Search"
-                className="pl-9"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
+            <SearchInput
+              label={traits ? "Search Traits" : "Search Mini-Mes"}
+              value={query}
+              onChange={setQuery}
+              className="ml-auto"
+            />
           </div>
           {traits ? (
             <TraitLists library={library} query={query} onOpen={onOpen} />

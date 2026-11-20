@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -132,14 +133,14 @@ function Theories({ preview }: { preview: unknown }) {
               return (
                 <li key={index} id={`${prefix}-${index + 1}`} className="scroll-mt-4">
                   {url ? (
-                    <button
-                      type="button"
+                    <Button
+                      variant="link"
                       title={url}
-                      className="cursor-pointer text-left text-foreground hover:opacity-70"
+                      className="justify-start text-left text-meta whitespace-normal"
                       onClick={() => openLink(url)}
                     >
                       {label}
-                    </button>
+                    </Button>
                   ) : (
                     label
                   )}

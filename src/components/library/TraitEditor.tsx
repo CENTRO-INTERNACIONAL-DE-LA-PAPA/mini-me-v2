@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -157,7 +158,9 @@ function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: bo
   return (
     <SheetSection title="Used by" meta={users.length > 0 ? users.length : undefined}>
       {users.length === 0 ? (
-        <p className="text-ui text-muted-foreground">No Mini-Me runs this Trait yet.</p>
+        <Empty>
+          <EmptyDescription>No Mini-Me runs this Trait yet.</EmptyDescription>
+        </Empty>
       ) : (
         <ul className="grid gap-2">
           {users.map((m, i) => (
