@@ -1,3 +1,10 @@
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -26,7 +33,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -218,8 +224,6 @@ function Ghost({ label, at }: { label: string; at: { x: number; y: number } }) {
   );
 }
 
-const MENU = { width: 240, maxHeight: 288, margin: 8 };
-
 function TraitMenu({
   traits,
   at,
@@ -231,43 +235,23 @@ function TraitMenu({
   onPick: (t: TraitSummary) => void;
   onCancel: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-  // Opens at the drop point, moved in so it stays inside the window.
-  const left = Math.max(MENU.margin, Math.min(at.x, window.innerWidth - MENU.width - MENU.margin));
-  const top = Math.max(
-    MENU.margin,
-    Math.min(at.y, window.innerHeight - MENU.maxHeight - MENU.margin),
-  );
+  // Opens at the drop point; the menu keeps itself inside the window.
+  const anchor = { getBoundingClientRect: () => new DOMRect(at.x, at.y, 0, 0) };
   return (
-    <>
-      <div className="fixed inset-0 z-40" onPointerDown={onCancel} />
-      <div
-        role="menu"
-        aria-label="Pick the Trait this Step runs"
-        className="fixed z-50 overflow-y-auto rounded-lg border border-border bg-card p-1"
-        style={{ left, top, width: MENU.width, maxHeight: MENU.maxHeight }}
-      >
-        <p className="px-2 py-1.5 text-meta text-muted-foreground">
-          {traits.length > 0 ? "Which Trait does it run?" : "There are no Traits to run."}
-        </p>
-        {traits.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="menuitem"
-            autoFocus={t === traits[0]}
-            className="block w-full rounded-md px-2 py-1.5 text-left text-ui outline-none hover:bg-accent focus-visible:bg-accent"
-            onClick={() => onPick(t)}
-          >
-            {t.name}
-          </button>
-        ))}
-      </div>
-    </>
+    <DropdownMenu open onOpenChange={(open) => !open && onCancel()}>
+      <DropdownMenuContent anchor={anchor} className="max-h-72 w-60">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            {traits.length > 0 ? "Which Trait does it run?" : "There are no Traits to run."}
+          </DropdownMenuLabel>
+          {traits.map((t) => (
+            <DropdownMenuItem key={t.id} onClick={() => onPick(t)}>
+              {t.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

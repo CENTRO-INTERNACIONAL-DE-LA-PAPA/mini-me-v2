@@ -54,6 +54,21 @@ export function ToolSheet({
   );
 }
 
+/** A group in a tool sheet: its serif heading, then its content. */
+export function ToolSheetGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <section className="mt-6 first:mt-0">
+      <ToolSheetHeading>{label}</ToolSheetHeading>
+      {children}
+    </section>
+  );
+}
+
+/** A group's heading in a tool sheet, for a group that is not its own section. */
+export function ToolSheetHeading({ children }: { children: ReactNode }) {
+  return <h3 className="mb-2.5 font-serif text-subheading text-foreground">{children}</h3>;
+}
+
 /** The well-filled square close button at the top right of a sheet. */
 function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -156,15 +171,7 @@ export function SheetPage({
   return (
     <main className={cn("flex w-full flex-col gap-6 px-8 pt-7 pb-10", className)}>
       <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <h1 className="font-serif text-sheet-title font-medium text-foreground">{title}</h1>
-            {titleAction}
-          </div>
-          {description && (
-            <p className="max-w-[560px] text-ui text-pretty text-muted-foreground">{description}</p>
-          )}
-        </div>
+        <PageTitle title={title} titleAction={titleAction} description={description} />
         {actions && <div className="flex shrink-0 items-center gap-2.5">{actions}</div>}
       </header>
       {children}
@@ -172,17 +179,44 @@ export function SheetPage({
   );
 }
 
-/** A titled part of a sheet: a serif heading in sentence case, optional meta beside it and
- * actions such as a tab switch on the right, then its content. */
+/** A page's serif title, with anything right after it (its "…" menu) and a line under it. */
+export function PageTitle({
+  title,
+  titleAction,
+  description,
+  className,
+}: {
+  title: ReactNode;
+  titleAction?: ReactNode;
+  description?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <h1 className="font-serif text-sheet-title font-medium text-foreground">{title}</h1>
+        {titleAction}
+      </div>
+      {description && (
+        <p className="max-w-[560px] text-ui text-pretty text-muted-foreground">{description}</p>
+      )}
+    </div>
+  );
+}
+
+/** A titled part of a sheet: a serif heading in sentence case, short meta (a count) beside it,
+ * a sentence about it under it, actions such as a tab switch on the right, then its content. */
 export function SheetSection({
   title,
   meta,
+  description,
   actions,
   className,
   children,
 }: {
   title: ReactNode;
   meta?: ReactNode;
+  description?: ReactNode;
   actions?: ReactNode;
   className?: string;
   children: ReactNode;
@@ -190,10 +224,13 @@ export function SheetSection({
   return (
     <section className={cn("flex flex-col gap-3.5", className)}>
       <header className="flex items-center justify-between gap-4">
-        <h2 className="flex items-baseline gap-2.5">
-          <span className="font-serif text-heading text-foreground">{title}</span>
-          {meta && <span className="text-meta text-muted-foreground">{meta}</span>}
-        </h2>
+        <div className="grid gap-1">
+          <h2 className="flex items-baseline gap-2.5">
+            <span className="font-serif text-heading text-foreground">{title}</span>
+            {meta && <span className="text-meta text-muted-foreground">{meta}</span>}
+          </h2>
+          {description && <p className="text-meta text-muted-foreground">{description}</p>}
+        </div>
         {actions}
       </header>
       {children}

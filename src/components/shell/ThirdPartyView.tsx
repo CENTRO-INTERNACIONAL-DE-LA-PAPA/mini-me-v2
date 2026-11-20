@@ -1,3 +1,5 @@
+import { Empty, EmptyDescription } from "@/components/ui/empty";
+import { SheetPage } from "./Sheet";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../../api";
@@ -36,18 +38,18 @@ export function ThirdPartyView({ onClose }: { onClose: () => void }) {
     document.getElementById(anchor(index))?.scrollIntoView({ block: "start" });
 
   return (
-    <main className="mx-auto flex w-full max-w-[760px] flex-col gap-7 px-10 py-9">
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-        <h1 className="font-serif text-sheet-title font-medium text-foreground">
-          Third-party Software
-        </h1>
-        <Button onClick={onClose}>Close</Button>
-      </header>
+    <SheetPage
+      title="Third-party Software"
+      actions={<Button onClick={onClose}>Close</Button>}
+      className="mx-auto max-w-[760px]"
+    >
       {error && <ErrorText>{error}</ErrorText>}
       {list === null && (
-        <p className="text-body text-muted-foreground">
-          The list of third-party software comes with released builds.
-        </p>
+        <Empty>
+          <EmptyDescription>
+            The list of third-party software comes with released builds.
+          </EmptyDescription>
+        </Empty>
       )}
       {list && (
         <>
@@ -112,6 +114,6 @@ export function ThirdPartyView({ onClose }: { onClose: () => void }) {
           ))}
         </>
       )}
-    </main>
+    </SheetPage>
   );
 }

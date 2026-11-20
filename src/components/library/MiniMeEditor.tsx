@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { LabelledField } from "../shell/LabelledField";
 import { ConfirmButton } from "../shell/Confirm";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
@@ -20,6 +21,7 @@ import { randomAvatar } from "../avatar/parts";
 import { NIL_ID } from "./library";
 import {
   EditorHeader,
+  EDITOR_BODY,
   EditorPage,
   List,
   OriginBadge,
@@ -151,7 +153,7 @@ export function MiniMeEditor({
           problems={problems}
           onBack={onBack}
         />
-        <TabsContent value="workflow" className="flex min-h-0 flex-col pt-5 pr-5 pb-5 pl-8">
+        <TabsContent value="workflow" className={cn(EDITOR_BODY, "flex min-h-0 flex-col")}>
           <WorkflowCanvas
             steps={draft.workflow.steps}
             traits={library.traits}
@@ -163,7 +165,7 @@ export function MiniMeEditor({
           />
         </TabsContent>
         <TabsContent value="traits" className="min-h-0 overflow-y-auto">
-          <div className="mx-auto max-w-[760px] px-8 py-8">
+          <div className={cn(EDITOR_BODY, "mx-auto max-w-[760px]")}>
             {used.length === 0 ? (
               <Empty>
                 <EmptyDescription>
@@ -187,7 +189,7 @@ export function MiniMeEditor({
           </div>
         </TabsContent>
         <TabsContent value="appearance" className="min-h-0 overflow-y-auto">
-          <div className="mx-auto grid max-w-[760px] gap-6 px-8 py-8">
+          <div className={cn(EDITOR_BODY, "mx-auto grid max-w-[760px] gap-6")}>
             <Appearance draft={draft} readOnly={readOnly} onChange={update} />
           </div>
         </TabsContent>

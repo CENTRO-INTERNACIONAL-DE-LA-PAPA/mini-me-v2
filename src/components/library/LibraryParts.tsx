@@ -81,12 +81,15 @@ export function EditorHeader({
   );
 }
 
+/** The padding of an editor's content under its header. */
+export const EDITOR_BODY = "px-8 pt-6 pb-8";
+
 /** An editor page that only has its header, such as one that could not load. */
 export function EditorPage({ children, ...header }: HeaderProps & { children: ReactNode }) {
   return (
-    <main className="flex w-full flex-col gap-6 pb-10">
+    <main className="flex w-full flex-col">
       <EditorHeader {...header} />
-      <div className="grid gap-6 px-8">{children}</div>
+      <div className={cn(EDITOR_BODY, "grid gap-6")}>{children}</div>
     </main>
   );
 }

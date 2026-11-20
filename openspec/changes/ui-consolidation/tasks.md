@@ -117,20 +117,20 @@ names. Shadcn components are added by the user with the CLI command given in the
 
 ## 5. Page shells and headers
 
-- [ ] 5.1 Add a `description` slot to `SheetSection`; build Settings' `PageHeader` and `Section`
+- [x] 5.1 Add a `description` slot to `SheetSection`; build Settings' `PageHeader` and `Section`
   and the Library's origins header on `SheetHeader`/`SheetSection`. Verify: Settings and the
   Library show headings in one style.
-- [ ] 5.2 Build the License, What's New and Third-party views on `SheetPage`. Verify: they sit
+- [x] 5.2 Build the License, What's New and Third-party views on `SheetPage`. Verify: they sit
   at the same inset as other pages and still close.
-- [ ] 5.3 Add `ToolSheetGroup` to `shell/Sheet.tsx` and use it in the Outline and Steps panels,
+- [x] 5.3 Add `ToolSheetGroup` to `shell/Sheet.tsx` and use it in the Outline and Steps panels,
   Comments and the Report panel; delete `SidePanel`. Verify: group headings match in all four.
-- [ ] 5.4 Put the editor body padding on `EditorPage` and remove it from the Trait and Mini-Me
+- [x] 5.4 Put the editor body padding on `EditorPage` and remove it from the Trait and Mini-Me
   editors. Verify: both editors' content lines up with their headers.
-- [ ] 5.5 Replace the Workflow canvas's hand-built Trait picker with a `DropdownMenu` opened at
+- [x] 5.5 Replace the Workflow canvas's hand-built Trait picker with a `DropdownMenu` opened at
   the drop point. Verify: dropping onto the canvas opens it there; arrows, Enter and Escape work.
-- [ ] 5.6 Update DESIGN.md §7 (Sheets and headers) for the description slot and
+- [x] 5.6 Update DESIGN.md §7 (Sheets and headers) for the description slot and
   `ToolSheetGroup`. Verify: both are named there.
-- [ ] 5.7 In the app: Settings, the Library, the About pages, the tool sheets, both editors, and
+- [x] 5.7 In the app: Settings, the Library, the About pages, the tool sheets, both editors, and
   adding a Step by dropping a Trait.
 
 ## 6. Tooltips

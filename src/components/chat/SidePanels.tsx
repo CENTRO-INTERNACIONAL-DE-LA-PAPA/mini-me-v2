@@ -1,12 +1,12 @@
 import { ListRow } from "../shell/ListRow";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import type { MessageView } from "../../protocol/eventStore";
 import type { Outline, OutlineEntry } from "./outline";
 import { Markdown } from "./Markdown";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
-import { ToolSheet } from "../shell/Sheet";
+import { ToolSheet, ToolSheetGroup } from "../shell/Sheet";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import {
   StepComponents,
@@ -23,33 +23,6 @@ export type Panel =
   | { kind: "outline" }
   | { kind: "report" }
   | { kind: "steps"; messageId: string };
-
-function SidePanel({
-  title,
-  meta,
-  onClose,
-  children,
-}: {
-  title: string;
-  meta: ReactNode;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <ToolSheet title={title} meta={meta} onClose={onClose}>
-      {children}
-    </ToolSheet>
-  );
-}
-
-function Group({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="mt-6 first:mt-0">
-      <h3 className="mb-2.5 font-serif text-subheading text-foreground">{label}</h3>
-      {children}
-    </section>
-  );
-}
 
 /** What the Conversation uses: its Mini-Mes, files and tables and charts. Clicking an entry
  * scrolls to the next message it appears in, wrapping back to the first. */
@@ -75,14 +48,14 @@ export function OutlinePanel({ outline, onClose }: { outline: Outline; onClose: 
   const total = groups.reduce((sum, group) => sum + group.entries.length, 0);
 
   return (
-    <SidePanel title="Outline" meta={`${total} used`} onClose={onClose}>
+    <ToolSheet title="Outline" meta={`${total} used`} onClose={onClose}>
       {groups.length === 0 && (
         <Empty>
           <EmptyDescription>Nothing has been used yet.</EmptyDescription>
         </Empty>
       )}
       {groups.map((group) => (
-        <Group key={group.label} label={group.label}>
+        <ToolSheetGroup key={group.label} label={group.label}>
           {/* `grid-cols-1` lets rows shrink below their content, so long names truncate. */}
           <ul className="grid grid-cols-1">
             {group.entries.map((entry) => {
@@ -117,9 +90,9 @@ export function OutlinePanel({ outline, onClose }: { outline: Outline; onClose: 
               );
             })}
           </ul>
-        </Group>
+        </ToolSheetGroup>
       ))}
-    </SidePanel>
+    </ToolSheet>
   );
 }
 
@@ -141,7 +114,7 @@ export function StepsPanel({ message, onClose }: { message: MessageView; onClose
   const done = message.steps.filter((s) => s.done).length;
 
   return (
-    <SidePanel
+    <ToolSheet
       title={miniMe ? `${miniMe.name}'s Workflow` : "Workflow"}
       meta={
         <MetaParts
@@ -204,6 +177,6 @@ export function StepsPanel({ message, onClose }: { message: MessageView; onClose
           );
         })}
       </ol>
-    </SidePanel>
+    </ToolSheet>
   );
 }

@@ -189,6 +189,10 @@ Inputs, text areas and selects: `--well` fill, no visible border, `rounded-xl`, 
 
 ### Sheets and headers
 Every sheet, tool sheet, page header, section heading and editor header comes from one shared set: a serif title, an optional meta line, actions on the right, and a close button on a tool sheet.
+- **Page:** `SheetPage`, or `PageTitle` where the page sits in a column (Settings): `text-sheet-title`, a `text-ui` line under it, actions on the right.
+- **Section:** `SheetSection`: a `text-heading` serif title, short meta (a count) beside it, an optional sentence under it in `text-meta`, actions on the right.
+- **Tool sheet group:** `ToolSheetGroup`: a `text-subheading` serif heading over its rows, groups `mt-6` apart.
+- **Editor:** `EditorHeader`, then its content padded by `EDITOR_BODY` (`px-8 pt-6 pb-8`).
 
 ### Rows and lists
 - Flat rows divided by hairlines, filling `--muted` on hover (`ListRow`, `rounded-xl px-2 py-2.5`). A row leads with its avatar, sign or icon, then the name (truncated, `text-ui` 500) over an optional meta line, with a count, time or actions on the right.

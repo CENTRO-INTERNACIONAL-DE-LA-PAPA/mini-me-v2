@@ -14,7 +14,7 @@ import { FileMark } from "../files/FileMark";
 import { isDocument } from "../files/files";
 import { openLink } from "../interactive/links";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
-import { ToolSheet } from "../shell/Sheet";
+import { ToolSheet, ToolSheetGroup } from "../shell/Sheet";
 import { documentsBlocked, quartoNotice } from "./quarto";
 import { ErrorText } from "../shell/ErrorText";
 
@@ -147,31 +147,32 @@ export function ReportPanel({
         )}
         {error && <ErrorText>{error}</ErrorText>}
       </div>
-      <h3 className="mt-6 mb-2.5 font-serif text-section text-foreground">Open from Files</h3>
-      {documents.length === 0 ? (
-        <Empty>
-          <EmptyDescription>No documents in this Project yet.</EmptyDescription>
-        </Empty>
-      ) : (
-        <ul className="grid gap-1">
-          {documents.map((file) => {
-            const maker =
-              file.added_by?.kind === "mini_me"
-                ? miniMes.find((m) => m.id === file.added_by?.id)
-                : undefined;
-            return (
-              <li key={file.id}>
-                <ListRow
-                  leading={<FileMark miniMe={maker} icon={FileTextIcon} />}
-                  name={file.name.replace(/\.qmd$/i, "")}
-                  meta={formatRelative(file.modified_at ?? file.created_at)}
-                  onOpen={() => onOpen(file.id)}
-                />
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <ToolSheetGroup label="Open from Files">
+        {documents.length === 0 ? (
+          <Empty>
+            <EmptyDescription>No documents in this Project yet.</EmptyDescription>
+          </Empty>
+        ) : (
+          <ul className="grid gap-1">
+            {documents.map((file) => {
+              const maker =
+                file.added_by?.kind === "mini_me"
+                  ? miniMes.find((m) => m.id === file.added_by?.id)
+                  : undefined;
+              return (
+                <li key={file.id}>
+                  <ListRow
+                    leading={<FileMark miniMe={maker} icon={FileTextIcon} />}
+                    name={file.name.replace(/\.qmd$/i, "")}
+                    meta={formatRelative(file.modified_at ?? file.created_at)}
+                    onOpen={() => onOpen(file.id)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </ToolSheetGroup>
     </ToolSheet>
   );
 }

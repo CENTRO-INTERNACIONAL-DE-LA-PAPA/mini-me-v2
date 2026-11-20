@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { LabelledField } from "../shell/LabelledField";
 import { ConfirmButton } from "../shell/Confirm";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
@@ -8,7 +9,7 @@ import { api } from "../../api";
 import type { MiniMe, TraitDraft, TraitSummary } from "../../protocol/types";
 import { traitIcon } from "../../lib/traitIcons";
 import { NIL_ID } from "./library";
-import { EditorHeader, EditorPage } from "./LibraryParts";
+import { EDITOR_BODY, EditorHeader, EditorPage } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { SheetSection } from "../shell/Sheet";
@@ -114,7 +115,12 @@ export function TraitEditor({
         problems={problems}
         onBack={onBack}
       />
-      <div className="grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5 pt-6 pr-7 pb-8 pl-8 max-lg:grid-cols-1">
+      <div
+        className={cn(
+          EDITOR_BODY,
+          "grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5 max-lg:grid-cols-1",
+        )}
+      >
         <div className="grid gap-4.5">
           {!builtIn && (
             <LabelledField label="Name" htmlFor="trait-name">

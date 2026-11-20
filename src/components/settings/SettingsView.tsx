@@ -1,3 +1,4 @@
+import { PageTitle, SheetSection } from "../shell/Sheet";
 import { ListRow } from "../shell/ListRow";
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
@@ -162,35 +163,8 @@ export function SettingsView({
   );
 }
 
-function PageHeader({ title, lead }: { title: string; lead: string }) {
-  return (
-    <header className="mb-7 grid gap-1.5">
-      <h1 className="font-serif text-sheet-title font-medium text-foreground">{title}</h1>
-      <p className="text-ui text-pretty text-muted-foreground">{lead}</p>
-    </header>
-  );
-}
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="mt-7 first:mt-0">
-      <h3 className="font-serif text-heading text-foreground">{title}</h3>
-      {description && <p className="mt-1 text-meta text-muted-foreground">{description}</p>}
-      <div className="mt-3">{children}</div>
-    </section>
-  );
-}
-
-/** One setting: its name and what it does on the left, its control on the right. */
-/** `status` reports the outcome of the row's last action, such as "Saved". */
+/** One setting: its name and what it does on the left, its control on the right; `status`
+ * reports the outcome of its last action, such as "Saved". */
 function SettingRow({
   label,
   htmlFor,
@@ -282,22 +256,22 @@ function StatusLabel({ on, children }: { on: boolean; children: ReactNode }) {
 function GeneralPage() {
   return (
     <>
-      <PageHeader title="General" lead="About you, and how Home looks." />
-      <Section
+      <PageTitle className="mb-7" title="General" description="About you, and how Home looks." />
+      <SheetSection className="mt-7 first:mt-0"
         title="You"
         description="What Mini-Me knows about you. It stays on this computer and is not sent to AI models."
       >
         <NameRow />
-      </Section>
-      <Section title="Home">
+      </SheetSection>
+      <SheetSection className="mt-7 first:mt-0" title="Home">
         <HomeMiniMesRow />
-      </Section>
-      <Section
+      </SheetSection>
+      <SheetSection className="mt-7 first:mt-0"
         title="Documents"
         description="Documents are edited and rendered with the Quarto installed on this computer."
       >
         <QuartoRow />
-      </Section>
+      </SheetSection>
     </>
   );
 }
@@ -316,9 +290,9 @@ function DeveloperPage({
 }) {
   return (
     <>
-      <PageHeader
+      <PageTitle className="mb-7"
         title="Developer"
-        lead="Options for developing and testing Mini-Me. This page is listed while Developer mode (Settings → About) is on."
+        description="Options for developing and testing Mini-Me. This page is listed while Developer mode (Settings → About) is on."
       />
       <ThresholdRow settings={settings} onChanged={onChanged} />
       <JevDebugRows settings={settings} onChanged={onChanged} />
@@ -365,7 +339,7 @@ function FeatureFlagsSection() {
   }
 
   return (
-    <Section
+    <SheetSection className="mt-7 first:mt-0"
       title="Feature flags"
       description="Experimental features this version carries switched off."
     >
@@ -420,7 +394,7 @@ function FeatureFlagsSection() {
           </AccountCard>
         </>
       )}
-    </Section>
+    </SheetSection>
   );
 }
 
@@ -578,7 +552,7 @@ function AboutPage({
 }) {
   return (
     <>
-      <PageHeader title="About" lead="What Mini-Me is, who makes it, and which version is running." />
+      <PageTitle className="mb-7" title="About" description="What Mini-Me is, who makes it, and which version is running." />
       <div className="grid gap-3 text-body text-foreground">
         <p>
           Mini-Me is a local-first research tool for scientists at the International Potato
@@ -710,11 +684,11 @@ function HomeMiniMesRow() {
 function ModelsPage({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
   return (
     <>
-      <PageHeader
+      <PageTitle className="mb-7"
         title="Models & keys"
-        lead="Mini-Mes call the AI model you choose here, with your own key. Keys are kept in your system's keychain and are only sent to their provider."
+        description="Mini-Mes call the AI model you choose here, with your own key. Keys are kept in your system's keychain and are only sent to their provider."
       />
-      <Section title="Providers">
+      <SheetSection className="mt-7 first:mt-0" title="Providers">
         <ul className="grid gap-2">
           {PROVIDERS.map((provider) => (
             <KeyRow
@@ -730,10 +704,10 @@ function ModelsPage({ settings, onChanged }: { settings: AiSettings; onChanged: 
             />
           ))}
         </ul>
-      </Section>
-      <Section title="Defaults">
+      </SheetSection>
+      <SheetSection className="mt-7 first:mt-0" title="Defaults">
         <ModelRow settings={settings} onSaved={onChanged} />
-      </Section>
+      </SheetSection>
     </>
   );
 }
@@ -741,17 +715,17 @@ function ModelsPage({ settings, onChanged }: { settings: AiSettings; onChanged: 
 function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged: () => void }) {
   return (
     <>
-      <PageHeader
+      <PageTitle className="mb-7"
         title="Accounts"
-        lead="Services Mini-Me signs in to, and the one that chooses which Mini-Me answers."
+        description="Services Mini-Me signs in to, and the one that chooses which Mini-Me answers."
       />
-      <Section
+      <SheetSection className="mt-7 first:mt-0"
         title="Ai2"
         description="Researcher and Theorist use Ai2's Asta services, which need an Ai2 account. Their messages are sent to Ai2; file contents are not."
       >
         <Ai2Row />
-      </Section>
-      <Section
+      </SheetSection>
+      <SheetSection className="mt-7 first:mt-0"
         title="Choosing a Mini-Me"
         description="When you don't mention a Mini-Me, Typesafe's Jev chooses one. Your message's text, the names of the Conversation's files, and the start of the last few messages and who wrote them are sent to Typesafe; file contents are not."
       >
@@ -763,8 +737,8 @@ function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged
             onChanged={onChanged}
           />
         </ul>
-      </Section>
-      <Section
+      </SheetSection>
+      <SheetSection className="mt-7 first:mt-0"
         title="CIP Dataverse"
         description="CIP's Archivist finds datasets in CIP's Dataverse. Public datasets need no token; add your Dataverse API token to download restricted files you have access to. The token stays on this computer and is sent only to CIP's Dataverse."
       >
@@ -776,7 +750,7 @@ function AccountsPage({ settings, onChanged }: { settings: AiSettings; onChanged
             onChanged={onChanged}
           />
         </ul>
-      </Section>
+      </SheetSection>
     </>
   );
 }

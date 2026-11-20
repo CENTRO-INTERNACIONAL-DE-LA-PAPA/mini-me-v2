@@ -11,7 +11,7 @@ import { Composer } from "../chat/Composer";
 import { MessageItem } from "../chat/MessageItem";
 import { useConversation } from "../chat/useConversation";
 import { ItemMenu } from "../shell/ItemMenu";
-import { ToolSheet } from "../shell/Sheet";
+import { ToolSheet, ToolSheetHeading } from "../shell/Sheet";
 import type { Placement } from "./anchors";
 import { passageLocation } from "./location";
 import { ErrorText } from "../shell/ErrorText";
@@ -114,7 +114,9 @@ export function CommentsSheet({
         {shown.map((t, index) => (
           <li key={t.conversation_id} className="min-w-0">
             {index === detachedFrom && (
-              <h3 className="mt-6 mb-2.5 font-serif text-subheading text-foreground">Detached</h3>
+              <div className="mt-6">
+                <ToolSheetHeading>Detached</ToolSheetHeading>
+              </div>
             )}
             <ListRow
               leading={<NumberBadge number={index + 1} />}

@@ -126,12 +126,12 @@ function ProjectCard({
       render={<button type="button" onClick={onOpen} />}
       className="h-full w-full cursor-pointer justify-between gap-7 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring"
     >
-      <span className="flex items-center justify-between gap-3">
-        <span className="flex gap-0">
+      <span className="flex min-h-5.5 items-center justify-between gap-3">
+        <span className="flex">
           {activity?.mini_mes.map((id) => {
             const miniMe = miniMes.find((m) => m.id === id);
             return (
-              <span key={id} title={miniMe?.name}>
+              <span key={id} title={miniMe?.name} className="flex">
                 <MiniMeAvatar miniMe={miniMe} size={22} />
               </span>
             );

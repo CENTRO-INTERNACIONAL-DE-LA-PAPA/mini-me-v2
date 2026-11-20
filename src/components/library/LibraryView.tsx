@@ -10,7 +10,7 @@ import type { LibraryView as Library, MiniMe, TraitSummary } from "../../protoco
 import { List, MiniMeCard, Row, TraitIcon } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { count } from "../../lib/format";
-import { SheetPage } from "../shell/Sheet";
+import { SheetPage, SheetSection } from "../shell/Sheet";
 import type { LibraryTab, View } from "../shell/view";
 import { MetaParts } from "@/components/ui/meta-parts";
 import { ErrorText } from "../shell/ErrorText";
@@ -245,13 +245,11 @@ function Origins<T extends { id: string; built_in: boolean }>({
       {lists
         .filter((list) => list.entries.length > 0)
         .map((list) => (
-          <section key={list.name} className="grid gap-3">
-            <h2 className="flex items-baseline gap-2.5">
-              <span className="font-serif text-heading text-foreground">{list.name}</span>
-              <span className="text-meta text-muted-foreground">
-                <MetaParts parts={[list.entries.length, list.note]} />
-              </span>
-            </h2>
+          <SheetSection
+            key={list.name}
+            title={list.name}
+            meta={<MetaParts parts={[list.entries.length, list.note]} />}
+          >
             {grid ? (
               <ul className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
                 {list.entries.map(row)}
@@ -259,7 +257,7 @@ function Origins<T extends { id: string; built_in: boolean }>({
             ) : (
               <List>{list.entries.map(row)}</List>
             )}
-          </section>
+          </SheetSection>
         ))}
     </div>
   );
