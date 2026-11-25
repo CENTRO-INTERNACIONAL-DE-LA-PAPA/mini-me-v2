@@ -200,7 +200,7 @@ Every sheet, tool sheet, page header, section heading and editor header comes fr
 - **Editor:** `EditorHeader`, then its content padded by `EDITOR_BODY` (`px-8 pt-6 pb-8`).
 
 ### Rows and lists
-- Flat rows divided by hairlines, filling `--muted` on hover (`ListRow`, `rounded-lg px-2 py-2.5`). A row leads with its avatar, sign or icon, then the name (truncated, `text-ui` 500) over an optional meta line, with a count, time or actions on the right.
+- Flat rows divided by hairlines, filling `--muted` on hover (`ListRow`, `rounded-lg px-2 py-2`). A one-line row is 36px tall, the same as a navigation row; a meta line makes it taller. A row leads with its avatar, sign or icon, then the name (truncated, `text-ui` 500) over an optional meta line, with a count, time or actions on the right.
 - Tables are `ui/table`: a `--muted` header row in `text-meta`, cells `px-3 py-2`, rows divided by hairlines.
 - A file's icon is in its maker's `ink`, or `ink-2` for your files, with no tile.
 - A list of Mini-Mes is a grid of cards; a list of Traits is rows.

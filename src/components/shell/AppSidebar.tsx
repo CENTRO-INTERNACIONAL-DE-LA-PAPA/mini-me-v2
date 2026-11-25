@@ -250,25 +250,25 @@ export function AppSidebar({
             <UpdateStatusLine />
           </div>
         )}
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <Hint label={name ? `Settings (${name})` : "Settings"} side="right">
+        <div className="flex items-center gap-2">
+          <SidebarMenu className="flex-1">
+            <SidebarMenuItem>
               <SidebarMenuButton
+                tooltip="Settings"
                 isActive={view.kind === "settings"}
                 onClick={() => onNavigate({ kind: "settings" })}
               >
-                {name ? (
-                  <Avatar size="sm">
-                    <AvatarFallback>{initials(name)}</AvatarFallback>
-                  </Avatar>
-                ) : (
-                  <SettingsIcon />
-                )}
+                <SettingsIcon />
                 <span>Settings</span>
               </SidebarMenuButton>
-            </Hint>
-          </SidebarMenuItem>
-        </SidebarMenu>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          {name && !collapsed && (
+            <Avatar size="sm">
+              <AvatarFallback>{initials(name)}</AvatarFallback>
+            </Avatar>
+          )}
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
