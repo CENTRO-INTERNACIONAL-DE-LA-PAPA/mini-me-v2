@@ -2,14 +2,17 @@
 `{slot}` gaps. The model chooses a template and fills its slots; Plot checks and fills them."""
 
 import json
+import re
 from importlib import resources
 from typing import Any, Literal
 
 import pandas as pd
 from pydantic import BaseModel, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from mini_me_sidecar.adapters.data.charts import (
     COLOUR,
+    COLOUR_CHANNELS,
     MAX_HEIGHT,
     MIN_HEIGHT,
     SCHEMES,
@@ -20,6 +23,7 @@ from mini_me_sidecar.adapters.data.charts import (
     MarkOption,
     Scale,
 )
+from mini_me_sidecar.adapters.data.tables import column_type
 
 ColumnType = Literal["number", "text", "date", "boolean"]
 
@@ -28,7 +32,7 @@ FACET_PANEL = 160
 
 FACET_TYPES = ("text", "boolean", "number")
 
-TEMPLATE_SLOTS = ("x", "y", "category", "value", "group", "columns")
+TEMPLATE_SLOTS = ("x", "y", "category", "value", "group", "correlated_columns")
 
 
 class SlotSpec(BaseModel):
@@ -38,8 +42,8 @@ class SlotSpec(BaseModel):
 
 class Template(BaseModel):
     """`slots` maps a slot of `ChartChoice` (`x`, `y`, `category`, `value`, `group` or
-    `columns`) to the column types it takes; `chart` is a `ChartDescription` without its title,
-    whose strings may hold `{slot}` and `{aggregate}` gaps."""
+    `correlated_columns`) to the column types it takes; `chart` is a `ChartDescription` without
+    its title, whose strings may hold `{slot}` and `{aggregate}` gaps."""
 
     name: str
     description: str
@@ -61,7 +65,11 @@ class ChartChoice(BaseModel):
     category: str | None = None
     value: str | None = None
     group: str | None = None
-    columns: list[str] = []
+    correlated_columns: list[str] = Field(
+        [], description="Only for the correlation heatmap: the number columns to correlate"
+    )
+    # Columns the model named in slots its template does not have, for the reply to mention.
+    ignored_columns: SkipJsonSchema[list[str]] = []
     aggregate: Literal["count", "sum", "mean", "median", "min", "max"] | None = Field(
         None, description="How a template that aggregates combines values; mean when empty"
     )
@@ -89,9 +97,19 @@ class ChartChoice(BaseModel):
         if template is None:
             return data
         unused = {s for s in TEMPLATE_SLOTS if s not in template.slots}
+        named = [_column_names(data[s]) for s in unused if s in data]
         if not uses_aggregate(template):
             unused.add("aggregate")
-        return {k: v for k, v in data.items() if k not in unused}
+        kept = {k: v for k, v in data.items() if k not in unused}
+        return {**kept, "ignored_columns": [n for names in named for n in names]}
+
+
+
+def _column_names(value: Any) -> list[str]:
+    """The column names in a slot's value, written as names or as `{"name": ...}` objects."""
+    items = value if isinstance(value, list) else [value]
+    names = [i.get("name") if isinstance(i, dict) else i for i in items]
+    return [n for n in names if isinstance(n, str)]
 
 
 class ChartPlan(BaseModel):
@@ -136,12 +154,12 @@ def choice_problem(choice: ChartChoice, types: dict[str, str]) -> str | None:
         return f"no chart template `{choice.template}`"
     for slot, spec in template.slots.items():
         filled = getattr(choice, slot)
-        names = filled if slot == "columns" else [filled] if filled else []
+        names = filled if slot == "correlated_columns" else [filled] if filled else []
         if not names:
             if spec.required:
                 return f"the {slot} slot is empty"
             continue
-        if slot == "columns" and len(set(names)) < 2:
+        if slot == "correlated_columns" and len(set(names)) < 2:
             return "the columns slot needs at least 2 columns"
         for name in names:
             if name not in types:
@@ -171,12 +189,31 @@ def fill_template(
     ignored with their reasons."""
     template = TEMPLATES[choice.template]
     slots: dict[str, Any] = {name: getattr(choice, name) for name in template.slots}
-    if "columns" in slots:
-        slots["columns"] = list(dict.fromkeys(slots["columns"])) or None
+    if "correlated_columns" in slots:
+        slots["correlated_columns"] = list(dict.fromkeys(slots["correlated_columns"])) or None
     slots["aggregate"] = choice.aggregate or "mean"
     filled = _fill(template.chart, slots)
-    chart = ChartDescription.model_validate({**filled, "title": choice.title})
+    categories = [
+        column
+        for slot, column in slots.items()
+        if slot in colour_slots(template)
+        and isinstance(column, str)
+        and column_type(table[column]) == "number"
+    ]
+    chart = ChartDescription.model_validate(
+        {**filled, "title": choice.title, "categories": categories}
+    )
     return _style(chart, choice, template, table)
+
+
+def colour_slots(template: Template) -> set[str]:
+    gaps = (
+        re.fullmatch(r"\{(\w+)\}", str(channel.get("column")))
+        for mark in template.chart["marks"]
+        for channel in mark.get("channels", [])
+        if channel["name"] in COLOUR_CHANNELS
+    )
+    return {gap[1] for gap in gaps if gap}
 
 
 def _fill(node: Any, slots: dict[str, Any]) -> Any:
@@ -196,7 +233,7 @@ def _fill(node: Any, slots: dict[str, Any]) -> Any:
             filled = _fill(item, slots)
             if filled is MISSING:
                 continue
-            # A `{columns}` gap inside a list stands for its columns, one item each.
+            # A `{correlated_columns}` gap inside a list stands for its columns, one item each.
             if isinstance(item, str) and isinstance(filled, list):
                 items.extend(filled)
             else:
@@ -290,6 +327,16 @@ def _facet(datasets: list[Any], marks: list[Mark], column: str) -> tuple[list[An
     return grouped, marks
 
 
+
+def unplaced_columns(choice: ChartChoice) -> list[str]:
+    """The columns the model named only in slots its template does not have."""
+    template = TEMPLATES[choice.template]
+    placed = {choice.facet} | {
+        name for slot in template.slots for name in _column_names(getattr(choice, slot))
+    }
+    return [c for c in dict.fromkeys(choice.ignored_columns) if c not in placed]
+
+
 def choice_text(choice: ChartChoice) -> str:
     """The template, its slots and the style slots in words, for the chart's text."""
     template = TEMPLATES[choice.template]
@@ -297,7 +344,7 @@ def choice_text(choice: ChartChoice) -> str:
     for name in template.slots:
         filled = getattr(choice, name)
         if filled:
-            slots.append(f"{name} {', '.join(filled) if name == 'columns' else filled}")
+            slots.append(f"{name} {', '.join(filled) if name == 'correlated_columns' else filled}")
     if uses_aggregate(template):
         slots.append(f"aggregate {choice.aggregate or 'mean'}")
     style = [

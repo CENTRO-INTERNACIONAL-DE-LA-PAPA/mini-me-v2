@@ -123,8 +123,9 @@ drawing; the Rust core is unchanged and stores the component as today):
 13. **A slot takes every column type its chart can draw there.** Positions of raw rows and
    binned values take number or date; a value that is aggregated, or fed to a statistic (box,
    density, trend line, correlation), takes number; a group or colour takes text, boolean or
-   number, a number group drawn as categories; a category takes text, boolean or number. The
-   template format test enforces this.
+   number, a number column that a template colours by being drawn as text labels; a category
+   takes text, boolean or number. The template format test draws every template with every
+   type each slot accepts, and checks that every slot drawn as a colour takes numbers.
 14. **Plot explains, and never fails on the model's answer.** An answer that can't be read (no
    tool call, no chart list, every chart malformed) gives a normal reply that says so in plain
    words. A chart that is not drawn, or an unreadable answer, comes with suggestions computed

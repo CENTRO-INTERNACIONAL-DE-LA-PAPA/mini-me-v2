@@ -4,13 +4,15 @@
   "slots": {
     "value": {
       "types": [
-        "number"
+        "number",
+        "date"
       ]
     },
     "category": {
       "types": [
         "text",
-        "boolean"
+        "boolean",
+        "number"
       ]
     }
   },

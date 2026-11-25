@@ -65,12 +65,27 @@ def build_chart(frame: pd.DataFrame, chart: ChartDescription) -> ChartResult:
         frames[dataset.name] = rows
         if dropped:
             _note(result, _missing_note(dropped))
+    frames = {name: _as_categories(rows, chart.categories) for name, rows in frames.items()}
     chart = _drop_log_scales(chart, frames, result)
     chart = _with_colour_domain(chart, frame, frames)
-    result.data["description"] = chart.model_dump()
+    result.data["description"] = chart.model_dump(exclude={"categories"})
     result.data["datasets"] = {name: _dataset_data(rows) for name, rows in frames.items()}
     _fit(result, chart, frames)
     return result
+
+
+def _as_categories(rows: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """`rows` with the number `columns` as text labels, so they colour as categories."""
+    present = [c for c in columns if c in rows.columns]
+    if not present:
+        return rows
+    return rows.assign(**{c: rows[c].map(_label) for c in present})
+
+
+def _label(value: Any) -> Any:
+    if pd.isna(value):
+        return value
+    return f"{value:g}" if isinstance(value, float) else str(value)
 
 
 def _note(result: ChartResult, note: str) -> None:
@@ -246,7 +261,11 @@ def _with_colour_domain(
     values = frames[dataset][column]
     if column_type(values) not in ("text", "boolean"):
         return chart
-    source = table[column] if column in table.columns else values
+    source = (
+        _as_categories(table[[column]], chart.categories)[column]
+        if column in table.columns
+        else values
+    )
     order = [json_value(v) for v in source.dropna().value_counts().index]
     present = set(values.dropna().map(json_value))
     domain = [v for v in order if v in present]

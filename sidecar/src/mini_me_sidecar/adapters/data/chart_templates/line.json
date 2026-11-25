@@ -16,7 +16,8 @@
     "group": {
       "types": [
         "text",
-        "boolean"
+        "boolean",
+        "number"
       ],
       "required": false
     }

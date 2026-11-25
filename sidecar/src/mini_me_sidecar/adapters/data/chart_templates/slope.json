@@ -5,7 +5,8 @@
     "category": {
       "types": [
         "text",
-        "boolean"
+        "boolean",
+        "number"
       ]
     },
     "group": {

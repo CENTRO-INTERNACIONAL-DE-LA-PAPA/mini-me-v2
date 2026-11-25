@@ -10,7 +10,9 @@ from mini_me_sidecar.adapters.data.templates import (
     TEMPLATES,
     ChartChoice,
     choice_problem,
+    colour_slots,
     fill_template,
+    unplaced_columns,
 )
 
 TABLE = pd.DataFrame(
@@ -22,6 +24,7 @@ TABLE = pd.DataFrame(
         "height": [5.0, 6, 7, 9],
         "day": pd.to_datetime(["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01"]),
         "ok": [True, False, True, True],
+        "block": [1, 1, 1, 2],
     }
 )
 TYPES = {
@@ -32,6 +35,7 @@ TYPES = {
     "height": "number",
     "day": "date",
     "ok": "boolean",
+    "block": "number",
 }
 # The Observable Plot marks, channels and options a template may use: every mark but `geo`,
 # `graticule`, `sphere` and `image`, which need map data or pictures, and `auto`, `tip` and
@@ -59,6 +63,8 @@ OPTIONS = frozenset(
 
 # A column of each type, for filling any template's slots in the format test.
 BY_TYPE = {"text": "variety", "number": "yield", "date": "day", "boolean": "ok"}
+# Another column of each type, for a second slot of the same type.
+OTHER_BY_TYPE = {"text": "season", "number": "block", "date": "day", "boolean": "ok"}
 
 
 def choose(**fields) -> ChartChoice:
@@ -73,18 +79,23 @@ def test_slots_must_name_columns_of_the_types_they_take():
     assert problem(template="bar", category="variety") == "the value slot is empty"
     assert "text column" in problem(template="bar", category="variety", value="variety")
     assert problem(template="bar", category="variety", value="heigth") == "no column `heigth`"
-    assert "at least 2" in problem(template="correlation_heatmap", columns=["yield", "yield"])
+    heatmap = {"template": "correlation_heatmap"}
+    assert "at least 2" in problem(**heatmap, correlated_columns=["yield", "yield"])
     assert "can't split panels" in problem(template="scatter", x="yield", y="height", facet="day")
     assert problem(template="line", x="day", y="yield") is None
 
 
 def test_slots_the_template_does_not_have_are_ignored():
-    stray = {"columns": [{"name": "yield"}], "aggregate": "average"}
+    stray = {"correlated_columns": [{"name": "yield"}], "aggregate": "average"}
     choice = ChartChoice.model_validate(
         {"template": "histogram", "title": "t", "value": "yield", **stray}
     )
-    assert choice.columns == [] and choice.aggregate is None
+    assert choice.correlated_columns == [] and choice.aggregate is None
     assert choice_problem(choice, TYPES) is None
+
+    misplaced = {"correlated_columns": ["yield", "block"], "facet": "site"}
+    choice = choose(template="scatter", x="yield", y="height", **misplaced)
+    assert unplaced_columns(choice) == ["block"]
 
     with pytest.raises(ValidationError):
         ChartChoice.model_validate({"template": "correlation_heatmap", "title": "t", **stray})
@@ -128,9 +139,25 @@ def test_style_slots_apply_to_any_template():
     assert [label for label, _ in ignored] == ["scheme rainbowz", "colour red; x"]
     assert chart.colour is None and chart.height == 800
 
-    heatmap = choose(template="correlation_heatmap", columns=["yield", "height"], facet="site")
+    heatmap = choose(
+        template="correlation_heatmap", correlated_columns=["yield", "height"], facet="site"
+    )
     _, ignored = fill_template(heatmap, TABLE)
     assert [label for label, _ in ignored] == ["facet site"]
+
+
+def fillings(template):
+    """The slots filled with their first type, then each slot with each of its other types."""
+    first = {
+        slot: (["yield", "height"] if slot == "correlated_columns" else BY_TYPE[spec.types[0]])
+        for slot, spec in template.slots.items()
+    }
+    if "group" in first and first.get("category") == first["group"]:
+        first["group"] = "season"
+    yield first
+    for slot, spec in template.slots.items():
+        if slot != "correlated_columns":
+            yield from ({**first, slot: OTHER_BY_TYPE[kind]} for kind in spec.types[1:])
 
 
 def test_every_template_loads_fills_and_draws():
@@ -142,18 +169,25 @@ def test_every_template_loads_fills_and_draws():
             assert mark["mark"] in MARKS, template.name
             assert {c["name"] for c in mark.get("channels", [])} <= CHANNELS, template.name
             assert {o["name"] for o in mark.get("options", [])} <= OPTIONS, template.name
-        fields = {
-            slot: (["yield", "height"] if slot == "columns" else BY_TYPE[spec.types[0]])
-            for slot, spec in template.slots.items()
-        }
-        # Slots that take text take different columns, so a group differs from a category.
-        if "group" in fields and fields.get("category") == fields["group"]:
-            fields["group"] = "season"
-        choice = choose(template=template.name, **fields)
-        assert choice_problem(choice, TYPES) is None, template.name
-        chart, ignored = fill_template(choice, TABLE)
-        assert ignored == [], template.name
-        own_rows = {d.name for d in chart.datasets if not is_summarized(d)}
-        statistical = [m for m in chart.marks if m.mark in STATISTICAL_MARKS]
-        assert all(m.dataset in own_rows for m in statistical), template.name
-        assert build_chart(TABLE, chart).fits, template.name
+        for slot in colour_slots(template) - {"correlated_columns"}:
+            assert "number" in template.slots[slot].types, (template.name, slot)
+        for fields in fillings(template):
+            label = (template.name, fields)
+            choice = choose(template=template.name, **fields)
+            assert choice_problem(choice, TYPES) is None, label
+            chart, ignored = fill_template(choice, TABLE)
+            assert ignored == [], label
+            own_rows = {d.name for d in chart.datasets if not is_summarized(d)}
+            statistical = [m for m in chart.marks if m.mark in STATISTICAL_MARKS]
+            assert all(m.dataset in own_rows for m in statistical), label
+            assert build_chart(TABLE, chart).fits, label
+
+
+def test_a_number_group_is_coloured_as_categories():
+    choice = choose(template="scatter", x="yield", y="height", group="block")
+    chart, _ = fill_template(choice, TABLE)
+    data = build_chart(TABLE, chart).data
+    columns = {c["name"]: c["type"] for d in data["datasets"].values() for c in d["columns"]}
+    assert columns["block"] == "text"
+    colour = next(s for s in data["description"]["scales"] if s["scale"] == "color")
+    assert colour["domain"] == ["1", "2"] and "categories" not in data["description"]

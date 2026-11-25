@@ -2,7 +2,7 @@
   "name": "correlation_heatmap",
   "description": "How strongly each pair of number columns moves together, from -1 to 1.",
   "slots": {
-    "columns": {
+    "correlated_columns": {
       "types": [
         "number"
       ]
@@ -17,7 +17,7 @@
           {
             "kind": "correlate",
             "columns": [
-              "{columns}"
+              "{correlated_columns}"
             ]
           }
         ]

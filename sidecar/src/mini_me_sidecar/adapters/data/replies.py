@@ -20,6 +20,7 @@ from mini_me_sidecar.adapters.data.templates import (
     choice_problem,
     fill_template,
     templates_text,
+    unplaced_columns,
 )
 from mini_me_sidecar.adapters.data.choose import choose
 from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
@@ -175,7 +176,11 @@ def _fill_choices(
             ignored.append((f'chart "{choice.title}"', reason))
             continue
         chart, styles = fill_template(choice, frame)
-        ignored += styles
+        ignored += styles + [
+            (f"column {column}", f"a {choice.template} chart has no place for it")
+            for column in unplaced_columns(choice)
+            if column in types
+        ]
         drawn.append((choice, chart))
     return drawn, ignored
 

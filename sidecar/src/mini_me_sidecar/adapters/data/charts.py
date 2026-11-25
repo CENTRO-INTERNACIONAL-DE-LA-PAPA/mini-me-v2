@@ -176,7 +176,8 @@ class Scale(BaseModel):
 
 class ChartDescription(BaseModel):
     """One chart: its datasets, the marks drawn from them, and its scales. `height` is in
-    pixels; `colour` replaces the Mini-Me's colour for uncoloured marks."""
+    pixels; `colour` replaces the Mini-Me's colour for uncoloured marks; `categories` are
+    number columns coloured as categories, not along a scale."""
 
     title: str
     height: int | None = None
@@ -184,6 +185,7 @@ class ChartDescription(BaseModel):
     datasets: list[Dataset] = []
     marks: list[Mark]
     scales: list[Scale] = []
+    categories: list[str] = []
 
 
 def is_summarized(dataset: Dataset) -> bool:

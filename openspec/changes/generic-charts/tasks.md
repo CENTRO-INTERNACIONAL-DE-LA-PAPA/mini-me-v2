@@ -81,7 +81,7 @@
 - [x] 7.1 Check templates in the format test only: Plot stops running `check_chart` at
   runtime, keeping the slot check and the log-scale check on the data; the structural checks
   move into the test, and code nothing else uses is deleted. Verify: `uv run pytest` passes.
-- [ ] 7.2 Apply the slot-type rule to every template and add it to the format test. A number
+- [x] 7.2 Apply the slot-type rule to every template and add it to the format test. A number
   group is coloured as categories. Verify: pytest, `npm test` and `npx tsc --noEmit` pass.
 - [ ] 7.3 Plot explains an unreadable answer in its reply instead of failing; `choose` reports
   it to Plot, and Validate, Clean and Join keep failing. Verify: pytest for an answer with no
