@@ -19,12 +19,12 @@ kind SHALL NOT need a change to the event protocol, the link protocol or the Pro
 #### Scenario: Kinds in this version
 - **WHEN** the app starts
 - **THEN** the UI renders `paper-sources` version 1, `theories` version 1, `table`
-  version 1, `approval` version 1, `chart` version 1, `document` version 1, `hand-off`
+  version 1, `approval` version 1, `chart` version 2, `document` version 1, `hand-off`
   version 1 and `dataset-results` version 1
 
 #### Scenario: Every listed kind is rendered
 - **WHEN** the app is built
-- **THEN** every kind that a Trait's adapter adds has a renderer for version 1
+- **THEN** every kind that a Trait's adapter adds has a renderer for the version it adds
 
 #### Scenario: No Trait adds an approval
 - **WHEN** a Trait call sends `component.add` with kind `approval`
@@ -251,64 +251,58 @@ component's `answer`, and a component SHALL be answered at most once.
 - **THEN** that approval's `answer` is `{ "approved": true }` or `{ "approved": false }`, as
   the user chose
 
-### Requirement: Chart component
-The preview of `chart` version 1 SHALL be `{ title, views }`, with one or more views. Each view
-has a `type` (`histogram`, `bar`, `line`, `scatter`, `box` or `heatmap`), the columns it
-uses with their names and types, and the values its type needs. A view with series lists
-them in order. A line or scatter view that was sampled carries `sample: { shown, total }`.
-
-#### Scenario: Chart with two views
-- **WHEN** a component holds a histogram view and a box view of `yield`
-- **THEN** the UI draws the histogram first and offers the box view
-
 ### Requirement: Charts are drawn in a card
 The UI SHALL draw a chart in a white bordered card with its title, the axes labelled with
-their column names, and a legend when the view has series. When a view was sampled, the
-card SHALL say "Sample of n of m points". The chart SHALL use the theme's chart tokens, its
-first series SHALL be drawn in the `solid` colour of the Mini-Me that wrote the reply, the
-next seven in the theme's series colours, and any further ones in generated colours, so
-each series of a view has its own colour.
+their column names or the scale's label, and a legend when a colour scale shows a text or
+boolean column. When a dataset was sampled, the card SHALL say "Sample of n of m points". A
+mark with no colour SHALL be drawn in the `solid` colour of the Mini-Me that wrote the reply.
+A colour scale of text or boolean values SHALL take that solid first, the theme's seven series
+colours next and generated colours after them, so each value has its own colour. A colour the
+description names SHALL be drawn as named.
 
 #### Scenario: Plotter's chart
-- **WHEN** Plotter's reply holds a histogram of `yield` with no series
+- **WHEN** Plotter's reply holds a histogram of `yield` with no colour channel
 - **THEN** the bars are drawn in Plotter's solid colour on a white bordered card
 
 #### Scenario: Sampled scatter
-- **WHEN** a scatter view carries `sample: { shown: 5000, total: 48210 }`
+- **WHEN** a dataset carries `sample: { shown: 5000, total: 48210 }`
 - **THEN** the card says "Sample of 5,000 of 48,210 points"
 
+#### Scenario: Colour asked for
+- **WHEN** the description gives a bar mark the fill `steelblue`
+- **THEN** the bars are drawn in steel blue
+
 ### Requirement: Hovering shows exact values
-When the pointer is over a point, bar, box or cell of a chart, the UI SHALL show a tooltip
-with that shape's exact values: its column names and values, and its series when there is
-one. Elsewhere on the chart, no tooltip SHALL show.
+When the pointer is over a shape that a mark drew from one row of a dataset, the UI SHALL show
+a tooltip with that row's values for the columns the mark's channels show. Shapes that a mark
+computes from many rows, such as a box or a density contour, and the rest of the chart SHALL
+show no tooltip.
 
 #### Scenario: Outlier above a box
-- **WHEN** the user hovers an outlier dot drawn above a box
-- **THEN** the tooltip shows that outlier's value, not the box's statistics
+- **WHEN** the user hovers an outlier dot drawn by a box mark
+- **THEN** no tooltip shows, since the box mark computes its dots from many rows
+
+#### Scenario: Dumbbell dot
+- **WHEN** the user hovers the 2024 dot of "Yungay" in a dumbbell chart of mean `yield`
+- **THEN** the tooltip shows `variety` "Yungay", `year` 2024 and its mean `yield`
 
 #### Scenario: Hovering a bar
 - **WHEN** the user hovers the bar for `variety` "Yungay" in a mean-of-`yield` bar chart
 - **THEN** a tooltip shows "Yungay" and its mean `yield`
 
 ### Requirement: Showing and hiding series
-Clicking a legend entry SHALL hide that series, and clicking it again SHALL show it. At least
-one series SHALL stay visible.
+Clicking a legend entry SHALL hide the rows that have that value in the colour scale's column,
+in every mark coloured by that column, and clicking it again SHALL show them. At least one
+value SHALL stay visible.
 
 #### Scenario: Hiding a treatment
-- **WHEN** the user clicks "Control" in the legend of a line chart with three treatments
+- **WHEN** the user clicks "Control" in the legend of a line chart coloured by `treatment`,
+  which has three values
 - **THEN** the "Control" line disappears and the other two stay
 
 #### Scenario: Last series stays
-- **WHEN** only one series is visible and the user clicks its legend entry
-- **THEN** that series stays visible
-
-### Requirement: Switching views
-When a chart has more than one view, the UI SHALL show a toggle with one button per view,
-named by its type. Choosing one SHALL draw that view.
-
-#### Scenario: Switching to the box plot
-- **WHEN** the user chooses "Box" on a chart whose first view is a histogram
-- **THEN** the chart is drawn as the box view
+- **WHEN** only one value is visible and the user clicks its legend entry
+- **THEN** that value stays visible
 
 ### Requirement: Chart controls are not saved
 A chart's controls SHALL only change what the UI shows. They SHALL add no event and send
@@ -317,7 +311,7 @@ Conversation is opened again.
 
 #### Scenario: Reopening a Conversation
 - **WHEN** the user hides a series, leaves the Conversation and opens it again
-- **THEN** the chart shows its first view with every series
+- **THEN** the chart shows every series
 
 ### Requirement: Checks on an added component
 The core SHALL reject `component.add` from a Trait call with:
@@ -398,3 +392,29 @@ read from that file. Components the core creates, and `document` components, SHA
   the file in Excel
 - **THEN** Curator's reply still shows the 80 rows, and a Trait that reads the table's source
   file gets the edited rows
+
+### Requirement: Chart preview
+The preview of `chart` version 2 SHALL be `{ title, source, description, datasets }`.
+`description` is the chart description as drawn, with only its valid parts. `datasets` maps
+each dataset's name to its columns, each with a name and a type (number, text, date or
+boolean), and its rows. A sampled dataset carries `sample: { shown, total }`.
+
+#### Scenario: Chart with two datasets
+- **WHEN** a component's description draws dots from a dataset of rows and a line from a
+  dataset of means
+- **THEN** the UI draws both marks in one figure, each from its own dataset
+
+#### Scenario: Chart drawn before version 2
+- **WHEN** a Conversation holds a `chart` version 1 component
+- **THEN** the UI shows that component's text
+
+### Requirement: Chart text
+A chart's `text` SHALL describe it in plain words, complete enough to choose it again: its
+title, its template with the column in each slot, its style slots, and the rows of each
+dataset.
+
+#### Scenario: Bar chart of means
+- **WHEN** a chart is the bar template with `category` `variety`, `value` `yield`, aggregate
+  mean and a log `y` scale
+- **THEN** its text names the bar template, `variety`, `yield`, the mean and the log `y`
+  scale
