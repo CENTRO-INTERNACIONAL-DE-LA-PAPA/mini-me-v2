@@ -1,0 +1,78 @@
+{
+  "name": "stacked_area",
+  "description": "Totals of a value over a date or ordered number, stacked by group; use a sum or count.",
+  "slots": {
+    "x": {
+      "types": [
+        "date",
+        "number"
+      ]
+    },
+    "y": {
+      "types": [
+        "number"
+      ]
+    },
+    "group": {
+      "types": [
+        "text",
+        "boolean"
+      ]
+    }
+  },
+  "chart": {
+    "datasets": [
+      {
+        "name": "points",
+        "operations": [
+          {
+            "kind": "group",
+            "by": [
+              "{x}",
+              "{group}"
+            ],
+            "aggregates": [
+              {
+                "how": "{aggregate}",
+                "column": "{y}",
+                "name": "{aggregate}_{y}"
+              }
+            ]
+          },
+          {
+            "kind": "sort",
+            "by": [
+              "{x}"
+            ]
+          }
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "areaY",
+        "dataset": "points",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{x}"
+          },
+          {
+            "name": "y",
+            "column": "{aggregate}_{y}"
+          },
+          {
+            "name": "fill",
+            "column": "{group}"
+          }
+        ]
+      }
+    ],
+    "scales": [
+      {
+        "scale": "y",
+        "label": "{aggregate} of {y}"
+      }
+    ]
+  }
+}

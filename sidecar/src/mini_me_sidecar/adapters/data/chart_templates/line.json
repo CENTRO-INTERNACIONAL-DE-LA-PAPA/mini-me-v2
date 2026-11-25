@@ -1,0 +1,101 @@
+{
+  "name": "line",
+  "description": "An aggregate of a value over a date or ordered number, one line per group.",
+  "slots": {
+    "x": {
+      "types": [
+        "date",
+        "number"
+      ]
+    },
+    "y": {
+      "types": [
+        "number"
+      ]
+    },
+    "group": {
+      "types": [
+        "text",
+        "boolean"
+      ],
+      "required": false
+    }
+  },
+  "chart": {
+    "datasets": [
+      {
+        "name": "points",
+        "operations": [
+          {
+            "kind": "group",
+            "by": [
+              "{x}",
+              "{group}"
+            ],
+            "aggregates": [
+              {
+                "how": "{aggregate}",
+                "column": "{y}",
+                "name": "{aggregate}_{y}"
+              }
+            ]
+          },
+          {
+            "kind": "sort",
+            "by": [
+              "{x}"
+            ]
+          }
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "lineY",
+        "dataset": "points",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{x}"
+          },
+          {
+            "name": "y",
+            "column": "{aggregate}_{y}"
+          },
+          {
+            "name": "stroke",
+            "column": "{group}"
+          }
+        ]
+      },
+      {
+        "mark": "dot",
+        "dataset": "points",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{x}"
+          },
+          {
+            "name": "y",
+            "column": "{aggregate}_{y}"
+          },
+          {
+            "name": "fill",
+            "column": "{group}"
+          },
+          {
+            "name": "r",
+            "value": 2.5
+          }
+        ]
+      }
+    ],
+    "scales": [
+      {
+        "scale": "y",
+        "label": "{aggregate} of {y}"
+      }
+    ]
+  }
+}

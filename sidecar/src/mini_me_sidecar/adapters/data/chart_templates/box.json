@@ -1,0 +1,48 @@
+{
+  "name": "box",
+  "description": "How a value is spread in each category: median, middle half, whiskers and outliers.",
+  "slots": {
+    "category": {
+      "types": [
+        "text",
+        "boolean",
+        "number"
+      ]
+    },
+    "value": {
+      "types": [
+        "number"
+      ]
+    }
+  },
+  "chart": {
+    "datasets": [
+      {
+        "name": "rows",
+        "operations": []
+      }
+    ],
+    "marks": [
+      {
+        "mark": "boxY",
+        "dataset": "rows",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{category}"
+          },
+          {
+            "name": "y",
+            "column": "{value}"
+          }
+        ]
+      }
+    ],
+    "scales": [
+      {
+        "scale": "y",
+        "label": "{value}"
+      }
+    ]
+  }
+}

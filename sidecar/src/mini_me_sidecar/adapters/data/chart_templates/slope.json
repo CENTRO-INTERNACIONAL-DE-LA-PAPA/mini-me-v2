@@ -1,0 +1,107 @@
+{
+  "name": "slope",
+  "description": "How an aggregate of a value changes for each category between a few periods, one line per category.",
+  "slots": {
+    "category": {
+      "types": [
+        "text",
+        "boolean"
+      ]
+    },
+    "group": {
+      "types": [
+        "text",
+        "number",
+        "date",
+        "boolean"
+      ]
+    },
+    "value": {
+      "types": [
+        "number"
+      ]
+    }
+  },
+  "chart": {
+    "datasets": [
+      {
+        "name": "points",
+        "operations": [
+          {
+            "kind": "group",
+            "by": [
+              "{group}",
+              "{category}"
+            ],
+            "aggregates": [
+              {
+                "how": "{aggregate}",
+                "column": "{value}",
+                "name": "{aggregate}_{value}"
+              }
+            ]
+          },
+          {
+            "kind": "sort",
+            "by": [
+              "{group}"
+            ]
+          }
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "lineY",
+        "dataset": "points",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{group}"
+          },
+          {
+            "name": "y",
+            "column": "{aggregate}_{value}"
+          },
+          {
+            "name": "z",
+            "column": "{category}"
+          },
+          {
+            "name": "stroke",
+            "column": "{category}"
+          }
+        ]
+      },
+      {
+        "mark": "dot",
+        "dataset": "points",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{group}"
+          },
+          {
+            "name": "y",
+            "column": "{aggregate}_{value}"
+          },
+          {
+            "name": "fill",
+            "column": "{category}"
+          }
+        ]
+      }
+    ],
+    "scales": [
+      {
+        "scale": "x",
+        "type": "point",
+        "label": "{group}"
+      },
+      {
+        "scale": "y",
+        "label": "{aggregate} of {value}"
+      }
+    ]
+  }
+}

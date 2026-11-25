@@ -1,0 +1,98 @@
+{
+  "name": "ridgeline",
+  "description": "How a value is spread in each category, as stacked outlines of counts per bin, one row per category.",
+  "slots": {
+    "value": {
+      "types": [
+        "number"
+      ]
+    },
+    "category": {
+      "types": [
+        "text",
+        "boolean"
+      ]
+    }
+  },
+  "chart": {
+    "height": 420,
+    "datasets": [
+      {
+        "name": "bins",
+        "operations": [
+          {
+            "kind": "bin",
+            "column": "{value}"
+          },
+          {
+            "kind": "group",
+            "by": [
+              "{value}_start",
+              "{value}_end",
+              "{category}"
+            ],
+            "aggregates": [
+              {
+                "how": "count",
+                "column": null,
+                "name": "count"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "areaY",
+        "dataset": "bins",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{value}_start"
+          },
+          {
+            "name": "y",
+            "column": "count"
+          },
+          {
+            "name": "fy",
+            "column": "{category}"
+          },
+          {
+            "name": "fillOpacity",
+            "value": 0.4
+          }
+        ]
+      },
+      {
+        "mark": "lineY",
+        "dataset": "bins",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{value}_start"
+          },
+          {
+            "name": "y",
+            "column": "count"
+          },
+          {
+            "name": "fy",
+            "column": "{category}"
+          }
+        ]
+      }
+    ],
+    "scales": [
+      {
+        "scale": "x",
+        "label": "{value}"
+      },
+      {
+        "scale": "y",
+        "label": "Rows"
+      }
+    ]
+  }
+}

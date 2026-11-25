@@ -1,0 +1,65 @@
+{
+  "name": "scatter",
+  "description": "One dot per row, two number columns against each other; a group colours the dots.",
+  "slots": {
+    "x": {
+      "types": [
+        "number"
+      ]
+    },
+    "y": {
+      "types": [
+        "number"
+      ]
+    },
+    "group": {
+      "types": [
+        "text",
+        "boolean"
+      ],
+      "required": false
+    }
+  },
+  "chart": {
+    "datasets": [
+      {
+        "name": "rows",
+        "operations": []
+      }
+    ],
+    "marks": [
+      {
+        "mark": "dot",
+        "dataset": "rows",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{x}"
+          },
+          {
+            "name": "y",
+            "column": "{y}"
+          },
+          {
+            "name": "fill",
+            "column": "{group}"
+          },
+          {
+            "name": "fillOpacity",
+            "value": 0.7
+          }
+        ]
+      }
+    ],
+    "scales": [
+      {
+        "scale": "x",
+        "label": "{x}"
+      },
+      {
+        "scale": "y",
+        "label": "{y}"
+      }
+    ]
+  }
+}

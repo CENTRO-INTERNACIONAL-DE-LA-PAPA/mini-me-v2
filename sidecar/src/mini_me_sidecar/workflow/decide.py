@@ -44,7 +44,7 @@ async def decide(
     )
     turns = [("system", SYSTEM), ("human", material)]
     # Tool calling works with every provider and with OpenRouter's models.
-    answer = await ask_structured(ctx, decision_schema(choices), turns, none_if_invalid=True)
+    answer = await ask_structured(ctx, decision_schema(choices), turns)
     choice = getattr(answer, "choice", None)
     if choice not in choices:
         raise TraitError(

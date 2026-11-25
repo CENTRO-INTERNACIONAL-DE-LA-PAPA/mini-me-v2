@@ -1,5 +1,6 @@
-"""Plot: the values each `chart` view draws, computed with pandas, and the chart's text. Every
-series, category and outlier is kept; only points are sampled, and only to fit the size limit."""
+"""Plot: the rows of each dataset a chart description draws, computed with pandas from the full
+table, and the chart's text. Only datasets of the table's own rows are sampled, and only to fit
+the size limit."""
 
 import json
 import math
@@ -9,25 +10,39 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from mini_me_sidecar.adapters.data.catalogue import Chart, chart_axes, chart_problem
+from mini_me_sidecar.adapters.data.charts import (
+    STATISTICAL_MARKS,
+    Bin,
+    ChartDescription,
+    Correlate,
+    Dataset,
+    Filter,
+    Group,
+    Scale,
+    SortRows,
+    Unpivot,
+    aggregate_name,
+    colour_column,
+    is_summarized,
+    scale_columns,
+)
 from mini_me_sidecar.adapters.data.preview import json_value
+from mini_me_sidecar.adapters.data.templates import ChartChoice, choice_text
+from mini_me_sidecar.adapters.data.tables import column_type
 
 # Under the core's 2 MiB limit, leaving room for the title and the JSON the core wraps around it.
 MAX_BYTES = 2_000_000
 
-# The most bins a histogram has, for each series.
+# The most bins a bin operation makes.
 MAX_BINS = 100
 
-# What a view of each type has too many of when it cannot be drawn.
-TOO_MANY = {"histogram": "bins", "bar": "bars", "box": "groups", "heatmap": "columns"}
-
-KIND_NAMES = {
-    "histogram": "Histogram",
-    "bar": "Bar chart",
-    "line": "Line chart",
-    "scatter": "Scatter chart",
-    "box": "Box plot",
-    "heatmap": "Correlation heatmap",
+COMPARE = {
+    "==": lambda s, v: s == v,
+    "!=": lambda s, v: s != v,
+    "<": lambda s, v: s < v,
+    "<=": lambda s, v: s <= v,
+    ">": lambda s, v: s > v,
+    ">=": lambda s, v: s >= v,
 }
 
 
@@ -37,183 +52,145 @@ class ChartResult:
 
     data: dict[str, Any]
     notes: list[str] = field(default_factory=list)
+    ignored: list[tuple[str, str]] = field(default_factory=list)
     fits: bool = True
 
 
-def as_type(chart: Chart, kind: str) -> Chart:
-    """`chart` as type `kind`: a histogram's values and series become a box or bar chart's `y`
-    and groups, and the other way round."""
-    update: dict[str, Any] = {"type": kind}
-    if chart.type == "histogram" and kind in ("box", "bar"):
-        update |= {"x": chart.series, "y": chart.x, "series": None}
-    elif chart.type in ("box", "bar") and kind == "histogram":
-        update |= {"x": chart.y, "series": chart.x}
-    if kind == "bar" and update.get("y", chart.y) and chart.aggregate in (None, "count"):
-        update["aggregate"] = "mean"
-    return chart.model_copy(update=update)
-
-
-def chart_views(chart: Chart, types: dict[str, str]) -> list[Chart]:
-    """`chart`, which must be valid, and its valid alternatives, each type once."""
-    views = [chart]
-    for kind in chart.alternatives:
-        if any(v.type == kind for v in views):
-            continue
-        alternative = as_type(chart, kind)
-        if chart_problem(alternative, types) is None:
-            views.append(alternative)
-    return views
-
-
-def build_chart(frame: pd.DataFrame, chart: Chart, types: dict[str, str]) -> ChartResult:
-    """The component data of a valid chart with its alternative views."""
-    result = ChartResult({"title": chart.title or _default_title(chart), "views": []})
-    sampled: list[tuple[dict[str, Any], pd.DataFrame]] = []
-    for view in chart_views(chart, types):
-        data, notes, points = _view(frame, view, types)
-        result.data["views"].append(data)
-        result.notes.extend(n for n in notes if n not in result.notes)
-        if points is not None:
-            sampled.append((data, points))
-    _fit(result, sampled)
+def build_chart(frame: pd.DataFrame, chart: ChartDescription) -> ChartResult:
+    """The component data of a checked chart: its description and each dataset's rows."""
+    result = ChartResult({"title": chart.title, "description": None, "datasets": {}})
+    frames: dict[str, pd.DataFrame] = {}
+    for dataset in chart.datasets:
+        rows, dropped = _dataset_rows(frame, dataset, _used_columns(chart, dataset.name))
+        frames[dataset.name] = rows
+        if dropped:
+            _note(result, _missing_note(dropped))
+    chart = _drop_log_scales(chart, frames, result)
+    chart = _with_colour_domain(chart, frame, frames)
+    result.data["description"] = chart.model_dump()
+    result.data["datasets"] = {name: _dataset_data(rows) for name, rows in frames.items()}
+    _fit(result, chart, frames)
     return result
 
 
-def _fit(result: ChartResult, sampled: list[tuple[dict[str, Any], pd.DataFrame]]) -> None:
-    """Drops alternative views, then samples points, until the chart fits `MAX_BYTES`, noting
-    each. The same table gives the same sample; a too-large first view marks the chart unfit."""
-    views = result.data["views"]
-    budget = MAX_BYTES - len(json.dumps({**result.data, "views": []}))
-    sizes = [len(json.dumps({k: v for k, v in view.items() if k != "points"})) for view in views]
-    if sizes[0] > budget:
-        result.fits = False
-        result.data["views"] = views[:1]
-        result.notes.append(
-            f"it has too many {TOO_MANY[views[0]['type']]} to draw, so it is described in "
-            "text below"
-        )
-        return
-    kept, used = [views[0]], sizes[0]
-    for view, size in zip(views[1:], sizes[1:]):
-        if used + size > budget:
-            name = KIND_NAMES[view["type"]].lower()
-            result.notes.append(f"the {name} view was left out, as it has too many values")
-        else:
-            kept.append(view)
-            used += size
-    result.data["views"] = kept
-    sampled = [(view, points) for view, points in sampled if any(view is k for k in kept)]
-    # Each pass scales every sample by the share over the limit, serialising once per pass.
-    while sampled and any(len(view["points"]) > 1 for view, _ in sampled):
-        total = len(json.dumps(result.data))
-        if total <= MAX_BYTES:
-            break
-        point_bytes = sum(len(json.dumps(view["points"])) for view, _ in sampled)
-        scale = max(MAX_BYTES - (total - point_bytes), 0) / point_bytes
-        for view, points in sampled:
-            _set_points(view, points, max(1, int(len(view["points"]) * scale)))
-    for view, points in sampled:
-        if "sample" in view:
-            note = f"a sample of {len(view['points']):,} of {len(points):,} points is shown"
-            if note not in result.notes:
-                result.notes.append(note)
+def _note(result: ChartResult, note: str) -> None:
+    if note not in result.notes:
+        result.notes.append(note)
 
 
-def _set_points(view: dict[str, Any], points: pd.DataFrame, size: int) -> None:
-    """Sets a sample of `size` of `points`, recording it in the view so its bytes are counted."""
-    shown = points.sample(size, random_state=0) if size < len(points) else points
-    if view["type"] == "line":
-        shown = shown.sort_values("x", kind="stable")
-    view["points"] = [_point(row) for row in shown.itertuples(False)]
-    if len(shown) < len(points):
-        view["sample"] = {"shown": len(shown), "total": len(points)}
+def _missing_note(dropped: int) -> str:
+    if dropped == 1:
+        return "1 row with missing values was left out"
+    return f"{dropped:,} rows with missing values were left out"
 
 
-def chart_text(data: dict[str, Any]) -> str:
-    """One line per view, for history and app versions without the kind."""
-    return "\n".join([data["title"], *(_view_text(v) for v in data["views"])])
+def _used_columns(chart: ChartDescription, dataset: str) -> list[str]:
+    named = [
+        c.column for m in chart.marks if m.dataset == dataset for c in m.channels if c.column
+    ]
+    return list(dict.fromkeys(named))
 
 
-def _view(
-    frame: pd.DataFrame, chart: Chart, types: dict[str, str]
-) -> tuple[dict[str, Any], list[str], pd.DataFrame | None]:
-    """A view's data, what the reply says about it, and for line and scatter views all their
-    points, which `_fit` may sample."""
-    if chart.type == "heatmap":
-        return _heatmap(frame, chart), [], None
-    # Only the columns `chart_problem` checked, so an ignored column neither fails nor drops rows.
-    axes = chart_axes(chart)
-    used = [getattr(chart, axis) for axis in axes]
-    if chart.series and chart.type != "box":
-        used.append(chart.series)
-    rows = frame[list(dict.fromkeys(used))].dropna()
-    notes = []
+def _dataset_rows(
+    frame: pd.DataFrame, dataset: Dataset, shown: list[str]
+) -> tuple[pd.DataFrame, int]:
+    """The rows with only the `shown` columns, and how many table rows lacked a used value."""
+    table_columns = [c for c in _operation_columns(dataset) + shown if c in frame.columns]
+    rows = frame.dropna(subset=list(dict.fromkeys(table_columns)))
     dropped = len(frame) - len(rows)
-    if dropped:
-        notes.append(
-            "1 row with missing values was left out"
-            if dropped == 1
-            else f"{dropped:,} rows with missing values were left out"
+    for operation in dataset.operations:
+        rows = _run(rows, operation)
+    return rows[shown].reset_index(drop=True), dropped
+
+
+def _operation_columns(dataset: Dataset) -> list[str]:
+    """The columns the operations read, less correlated ones, which pandas pairs itself."""
+    names: list[str] = []
+    for operation in dataset.operations:
+        if isinstance(operation, Filter) and operation.operator != "not_missing":
+            names.append(operation.column)
+        elif isinstance(operation, Group):
+            names += operation.by + [a.column for a in operation.aggregates if a.column]
+        elif isinstance(operation, Bin):
+            names.append(operation.column)
+        elif isinstance(operation, Unpivot):
+            names += operation.columns
+        elif isinstance(operation, SortRows):
+            names += operation.by
+    return names
+
+
+def _run(rows: pd.DataFrame, operation: Any) -> pd.DataFrame:
+    if isinstance(operation, Filter):
+        return rows[_filter_mask(rows[operation.column], operation)]
+    if isinstance(operation, Group):
+        return _group(rows, operation)
+    if isinstance(operation, Bin):
+        return _bin(rows, operation)
+    if isinstance(operation, Correlate):
+        return _correlate(rows, operation.columns)
+    if isinstance(operation, Unpivot):
+        kept = [c for c in rows.columns if c not in operation.columns]
+        return rows.melt(
+            id_vars=kept,
+            value_vars=operation.columns,
+            var_name=operation.names_to,
+            value_name=operation.values_to,
         )
-    view: dict[str, Any] = {"type": chart.type}
-    for axis in axes:
-        column = getattr(chart, axis)
-        view[axis] = {"name": column, "type": types[column]}
-    series: pd.Series | None = None
-    if chart.series and chart.type != "box":
-        series = rows[chart.series].astype(str)
-        view["series_column"] = chart.series
-        view["series"] = _series_order(series)
-    if chart.type == "histogram":
-        view["bins"] = _histogram(rows[chart.x], series)
-    elif chart.type == "bar":
-        view["aggregate"] = chart.aggregate or "count"
-        view["bars"] = _bars(rows, chart, series)
-    elif chart.type == "box":
-        view["groups"] = _box(rows[chart.x], rows[chart.y])
-    else:
-        if chart.type == "line":
-            view["aggregate"] = chart.aggregate or "mean"
-        points = _points(rows, chart, series)
-        _set_points(view, points, len(points))
-        return view, notes, points
-    return view, notes, None
+    if isinstance(operation, SortRows):
+        return rows.sort_values(operation.by, ascending=not operation.descending, kind="stable")
+    return rows.head(operation.n)
 
 
-def _series_order(series: pd.Series) -> list[str]:
-    """Series values from most to least frequent."""
-    return series.value_counts().index.tolist()
+def _filter_mask(values: pd.Series, operation: Filter) -> pd.Series:
+    if operation.operator == "not_missing":
+        return values.notna()
+    targets = operation.value if isinstance(operation.value, list) else [operation.value]
+    if pd.api.types.is_datetime64_any_dtype(values):
+        targets = [pd.Timestamp(t).tz_localize(values.dt.tz) for t in targets]
+    if operation.operator == "in":
+        return values.isin(targets)
+    return COMPARE[operation.operator](values, targets[0])
 
 
-def _histogram(values: pd.Series, series: pd.Series | None) -> list[dict[str, Any]]:
+def _group(rows: pd.DataFrame, operation: Group) -> pd.DataFrame:
+    keys = operation.by or [pd.Series(0, index=rows.index)]
+    groups = rows.groupby(keys, sort=False, dropna=True)
+    result = pd.DataFrame(index=groups.size().index)
+    for aggregate in operation.aggregates:
+        name = aggregate_name(aggregate)
+        if aggregate.how == "count":
+            result[name] = groups.size()
+        else:
+            result[name] = groups[aggregate.column].agg(aggregate.how)
+    return result.reset_index(drop=not operation.by)
+
+
+def _bin(rows: pd.DataFrame, operation: Bin) -> pd.DataFrame:
+    values = rows[operation.column]
     dates = pd.api.types.is_datetime64_any_dtype(values)
+    zone = values.dt.tz if dates else None
     if dates:
         # Dates with a time zone are binned by their local time.
-        if values.dt.tz is not None:
+        if zone is not None:
             values = values.dt.tz_localize(None)
         # Binned as microseconds: nanoseconds only reach the years 1677 to 2262.
         numbers = values.astype("datetime64[us]").astype("int64").to_numpy()
     else:
         numbers = values.to_numpy(dtype=float)
-    edges = np.histogram_bin_edges(numbers, _bin_count(numbers))
-
-    def edge(value: float) -> Any:
-        if dates:
-            return json_value(pd.Timestamp(np.datetime64(int(value), "us")))
-        return json_value(float(value))
-
-    groups = [(None, numbers)]
-    if series is not None:
-        groups = [(name, numbers[(series == name).to_numpy()]) for name in _series_order(series)]
-    bins = []
-    for name, group in groups:
-        counts, _ = np.histogram(group, edges)
-        for x0, x1, count in zip(edges[:-1], edges[1:], counts):
-            entry: dict[str, Any] = {"x0": edge(x0), "x1": edge(x1), "count": int(count)}
-            if name is not None:
-                entry["series"] = name
-            bins.append(entry)
-    return bins
+    count = _bin_count(numbers)
+    if operation.bins is not None:
+        count = min(count, operation.bins)
+    edges = np.histogram_bin_edges(numbers, count) if len(numbers) else np.array([0.0, 1.0])
+    index = np.clip(np.searchsorted(edges, numbers, side="right") - 1, 0, len(edges) - 2)
+    start, end = edges[index], edges[index + 1]
+    binned = rows.drop(columns=operation.column)
+    if dates:
+        start = pd.to_datetime(start.astype("int64"), unit="us").tz_localize(zone)
+        end = pd.to_datetime(end.astype("int64"), unit="us").tz_localize(zone)
+    binned[f"{operation.column}_start"] = np.asarray(start)
+    binned[f"{operation.column}_end"] = np.asarray(end)
+    return binned
 
 
 def _bin_count(numbers: np.ndarray) -> int:
@@ -229,159 +206,108 @@ def _bin_count(numbers: np.ndarray) -> int:
     return min(max(sturges, freedman), MAX_BINS)
 
 
-def _aggregate(values: Any, how: str) -> pd.Series:
-    """A grouped series' size or aggregate."""
-    return values.size() if how == "count" else values.agg(how)
-
-
-def _bars(rows: pd.DataFrame, chart: Chart, series: pd.Series | None) -> list[dict[str, Any]]:
-    how = chart.aggregate or "count"
-    category = rows[chart.x].astype(str)
-    target = rows[chart.y] if how != "count" else pd.Series(1, index=rows.index)
-    totals = _aggregate(target.groupby(category), how).sort_values(ascending=False)
-    order = totals.index.tolist()
-    keys = [category] if series is None else [category, series]
-    values = _aggregate(target.groupby(keys), how)
-    bars = []
-    for key, value in values.items():
-        x, name = (key, None) if series is None else key
-        entry: dict[str, Any] = {"x": x, "y": json_value(value)}
-        if name is not None:
-            entry["series"] = name
-        bars.append(entry)
-    rank = {category: position for position, category in enumerate(order)}
-    bars.sort(key=lambda b: rank[b["x"]])
-    return bars
-
-
-def _box(groups: pd.Series, values: pd.Series) -> list[dict[str, Any]]:
-    labels = groups.astype(str)
-    result = []
-    for name in labels.value_counts().index:
-        group = values[labels == name].astype(float)
-        q1, median, q3 = (float(v) for v in group.quantile([0.25, 0.5, 0.75]))
-        reach = 1.5 * (q3 - q1)
-        inside = group[(group >= q1 - reach) & (group <= q3 + reach)]
-        outside = group[(group < q1 - reach) | (group > q3 + reach)]
-        result.append(
-            {
-                "group": name,
-                "q1": json_value(q1),
-                "median": json_value(median),
-                "q3": json_value(q3),
-                "low": json_value(inside.min()),
-                "high": json_value(inside.max()),
-                "count": len(group),
-                "outliers": sorted(json_value(v) for v in outside),
-            }
-        )
-    return result
-
-
-def _points(rows: pd.DataFrame, chart: Chart, series: pd.Series | None) -> pd.DataFrame:
-    points = pd.DataFrame({"x": rows[chart.x], "y": rows[chart.y]})
-    if series is not None:
-        points["series"] = series
-    if chart.type == "line":
-        keys = ["x", "series"] if series is not None else ["x"]
-        points = _aggregate(points.groupby(keys)["y"], chart.aggregate or "mean")
-        points = points.rename("y").reset_index()
-    return points[[c for c in ("x", "y", "series") if c in points]]
-
-
-def _point(row: tuple) -> dict[str, Any]:
-    point = {"x": json_value(row[0]), "y": json_value(row[1])}
-    if len(row) > 2:
-        point["series"] = row[2]
-    return point
-
-
-def _heatmap(frame: pd.DataFrame, chart: Chart) -> dict[str, Any]:
-    columns = list(dict.fromkeys(chart.columns))
-    correlations = frame[columns].astype(float).corr()
-    cells = [
-        {"x": x, "y": y, "value": json_value(round(float(correlations.loc[y, x]), 4))}
-        for y in columns
-        for x in columns
-    ]
-    return {"type": "heatmap", "columns": columns, "cells": cells}
-
-
-def _default_title(chart: Chart) -> str:
-    return _view_title(
-        {
-            "type": chart.type,
-            "x": {"name": chart.x},
-            "y": {"name": chart.y},
-            "series_column": chart.series,
-            "columns": chart.columns,
-            "aggregate": chart.aggregate,
-        }
+def _correlate(rows: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    names = list(dict.fromkeys(columns))
+    correlations = rows[names].astype(float).corr()
+    return pd.DataFrame(
+        [
+            {"x": x, "y": y, "correlation": round(float(correlations.loc[y, x]), 4)}
+            for y in names
+            for x in names
+        ]
     )
 
 
-def _view_title(view: dict[str, Any]) -> str:
-    kind = view["type"]
-    x = (view.get("x") or {}).get("name")
-    y = (view.get("y") or {}).get("name")
-    by = f" by {view['series_column']}" if view.get("series_column") else ""
-    if kind == "heatmap":
-        return f"{KIND_NAMES[kind]} of " + ", ".join(view.get("columns") or [])
-    if kind == "histogram":
-        return f"{KIND_NAMES[kind]} of {x}{by}"
-    if kind == "bar":
-        how = view.get("aggregate") or "count"
-        measure = "count of rows" if how == "count" or not y else f"{how} {y}"
-        return f"{KIND_NAMES[kind]} of {measure} by {x}" + (
-            f" and {view['series_column']}" if by else ""
-        )
-    if kind == "box":
-        return f"{KIND_NAMES[kind]} of {y} by {x}"
-    if kind == "line":
-        return f"{KIND_NAMES[kind]} of {view.get('aggregate') or 'mean'} {y} over {x}{by}"
-    return f"{KIND_NAMES[kind]} of {y} against {x}{by}"
+def _drop_log_scales(
+    chart: ChartDescription, frames: dict[str, pd.DataFrame], result: ChartResult
+) -> ChartDescription:
+    """`chart` without the log scales whose columns hold a value at or below 0."""
+    kept = []
+    for scale in chart.scales:
+        if scale.type == "log" and any(
+            (frames[dataset][column] <= 0).any()
+            for dataset, column in scale_columns(chart, scale.scale)
+            if pd.api.types.is_numeric_dtype(frames[dataset][column])
+        ):
+            result.ignored.append((f"log scale for {scale.scale}", "it has values at or below 0"))
+            continue
+        kept.append(scale)
+    return chart.model_copy(update={"scales": kept})
 
 
-def _view_text(view: dict[str, Any]) -> str:
-    title = _view_title(view)
-    kind = view["type"]
-    if kind == "histogram":
-        bins = view["bins"]
-        edges = {b["x0"] for b in bins}
-        total = sum(b["count"] for b in bins)
-        return (
-            f"{title}: {len(edges)} bins, {total:,} values from {_num(bins[0]['x0'])} "
-            f"to {_num(bins[-1]['x1'])}"
-        )
-    if kind == "bar":
-        shown = ", ".join(
-            f"{b['x']}{' (' + b['series'] + ')' if 'series' in b else ''} {_num(b['y'])}"
-            for b in view["bars"][:10]
-        )
-        more = f", and {len(view['bars']) - 10} more" if len(view["bars"]) > 10 else ""
-        return f"{title}: {shown}{more}"
-    if kind == "box":
-        shown = ", ".join(f"{g['group']} median {_num(g['median'])}" for g in view["groups"][:10])
-        return f"{title}: {shown}"
-    if kind == "heatmap":
-        pairs = [
-            f"{c['y']}–{c['x']} {_num(c['value'])}"
-            for c in view["cells"]
-            if view["columns"].index(c["x"]) > view["columns"].index(c["y"])
-        ]
-        return f"{title}: " + ", ".join(pairs[:15])
-    points = view["points"]
-    text = f"{title}: {len(points):,} points"
-    if "sample" in view:
-        text += f" (a sample of {view['sample']['total']:,})"
-    if kind == "line" and points:
-        text += f" from {_num(points[0]['x'])} to {_num(points[-1]['x'])}"
-    return text
+def _with_colour_domain(
+    chart: ChartDescription, table: pd.DataFrame, frames: dict[str, pd.DataFrame]
+) -> ChartDescription:
+    """Sets a missing colour domain to the legend's text values, most frequent first."""
+    found = colour_column(chart)
+    if found is None or any(s.scale == "color" and s.domain for s in chart.scales):
+        return chart
+    dataset, column = found
+    values = frames[dataset][column]
+    if column_type(values) not in ("text", "boolean"):
+        return chart
+    source = table[column] if column in table.columns else values
+    order = [json_value(v) for v in source.dropna().value_counts().index]
+    present = set(values.dropna().map(json_value))
+    domain = [v for v in order if v in present]
+    scales = [s for s in chart.scales if s.scale != "color"]
+    colour = next((s for s in chart.scales if s.scale == "color"), None)
+    if colour is None:
+        colour = Scale(scale="color")
+    colour = colour.model_copy(update={"domain": domain})
+    return chart.model_copy(update={"scales": [*scales, colour]})
 
 
-def _num(value: Any) -> str:
-    if isinstance(value, float):
-        return f"{value:,.4g}" if abs(value) < 1e6 else f"{value:,.0f}"
-    if isinstance(value, int) and not isinstance(value, bool):
-        return f"{value:,}"
-    return str(value)
+def _dataset_data(rows: pd.DataFrame) -> dict[str, Any]:
+    return {
+        "columns": [{"name": str(c), "type": column_type(rows[c])} for c in rows.columns],
+        "rows": [[json_value(v) for v in row] for row in rows.itertuples(index=False)],
+    }
+
+
+def _fit(result: ChartResult, chart: ChartDescription, frames: dict[str, pd.DataFrame]) -> None:
+    """Samples own-row datasets, the same way each time, until the chart fits, else unfits it."""
+    datasets = result.data["datasets"]
+    sampled = [d.name for d in chart.datasets if not is_summarized(d) and len(frames[d.name]) > 1]
+    # Each pass scales every sample by the share over the limit, serialising once per pass.
+    while len(json.dumps(result.data)) > MAX_BYTES:
+        shrinking = [n for n in sampled if len(datasets[n]["rows"]) > 1]
+        if not shrinking:
+            break
+        total = len(json.dumps(result.data))
+        row_bytes = sum(len(json.dumps(datasets[n]["rows"])) for n in shrinking)
+        scale = max(MAX_BYTES - (total - row_bytes), 0) / row_bytes
+        for name in shrinking:
+            size = max(1, int(len(datasets[name]["rows"]) * scale))
+            _set_sample(datasets[name], frames[name], size)
+    if len(json.dumps(result.data)) > MAX_BYTES:
+        result.fits = False
+        result.notes.append("it has too many values to draw, so it is described in text below")
+        return
+    for name in sampled:
+        sample = datasets[name].get("sample")
+        if sample:
+            _note(result, f"a sample of {sample['shown']:,} of {sample['total']:,} points is shown")
+            for mark in chart.marks:
+                if mark.dataset == name and mark.mark in STATISTICAL_MARKS:
+                    _note(result, f"its {mark.mark} mark is drawn from that sample")
+
+
+def _set_sample(data: dict[str, Any], rows: pd.DataFrame, size: int) -> None:
+    """Keeps a sample of `size` rows in table order, recording it so its bytes are counted."""
+    shown = rows.sample(size, random_state=0).sort_index() if size < len(rows) else rows
+    data["rows"] = [[json_value(v) for v in row] for row in shown.itertuples(index=False)]
+    data["sample"] = {"shown": len(shown), "total": len(rows)}
+
+
+def chart_text(data: dict[str, Any], choice: ChartChoice) -> str:
+    """The title, the template with its slots and style, and each dataset's rows."""
+    lines = [data["title"], choice_text(choice)]
+    for name, dataset in data["datasets"].items():
+        rows = len(dataset["rows"])
+        columns = ", ".join(c["name"] for c in dataset["columns"])
+        held = f"{rows:,} row{'s' if rows != 1 else ''} of {columns}"
+        if "sample" in dataset:
+            held += f", a sample of {dataset['sample']['total']:,}"
+        lines.append(f'Data "{name}": {held}.')
+    return "\n".join(lines)

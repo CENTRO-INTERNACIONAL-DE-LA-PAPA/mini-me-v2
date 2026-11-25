@@ -7,19 +7,25 @@ import pandas as pd
 from pydantic import BaseModel
 
 from mini_me_sidecar.adapters.data.catalogue import (
-    ChartPlan,
     CheckPlan,
     CleanPlan,
     JoinPlan,
-    chart_problem,
     describe_entry,
     problem,
+)
+from mini_me_sidecar.adapters.data.charts import ChartDescription, check_chart
+from mini_me_sidecar.adapters.data.templates import (
+    ChartChoice,
+    ChartPlan,
+    choice_problem,
+    fill_template,
+    templates_text,
 )
 from mini_me_sidecar.adapters.data.choose import choose
 from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
 from mini_me_sidecar.adapters.data.describe import describe
 from mini_me_sidecar.adapters.data.join import join, shared_key
-from mini_me_sidecar.adapters.data.plot import build_chart, chart_text
+from mini_me_sidecar.adapters.data.plot import ChartResult, build_chart, chart_text
 from mini_me_sidecar.adapters.data.profile import profile as profile_frame
 from mini_me_sidecar.adapters.data.profile import summary
 from mini_me_sidecar.adapters.data.tables import (
@@ -32,7 +38,7 @@ from mini_me_sidecar.adapters.data.tables import (
 )
 from mini_me_sidecar.adapters.data.validate import results_frame, run_checks
 from mini_me_sidecar.adapters.data.worker import WORKERS
-from mini_me_sidecar.context import CallContext, TraitError
+from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.components import show_chart
 from mini_me_sidecar.tools.files import MAX_FILE_BYTES, save_file
@@ -52,7 +58,7 @@ async def profile(ctx: CallContext, text: str) -> None:
 
 async def validate(ctx: CallContext, text: str) -> None:
     tables = await read_tables(ctx, text)
-    plan = await choose(ctx, CheckPlan, text, [describe(t) for t in tables])
+    plan, malformed = await choose(ctx, CheckPlan, text, [describe(t) for t in tables])
     usable = {id(c) for t in tables for c in plan.checks if not problem(c, _columns(t))}
     ignored = [c for c in plan.checks if id(c) not in usable]
     for table in tables:
@@ -73,12 +79,12 @@ async def validate(ctx: CallContext, text: str) -> None:
             results_name=f"{table.stem}-checks.csv",
         )
         await save_file(ctx, f"{table.stem}-validation.html", "text/html", report.encode())
-    _write_ignored(ctx, [(describe_entry(c), _why(c, tables)) for c in ignored])
+    _write_ignored(ctx, malformed + [(describe_entry(c), _why(c, tables)) for c in ignored])
 
 
 async def clean(ctx: CallContext, text: str) -> None:
     table = (await read_tables(ctx, text))[0]
-    plan = await choose(ctx, CleanPlan, text, [describe(table)])
+    plan, malformed = await choose(ctx, CleanPlan, text, [describe(table)])
     ctx.progress(f"Cleaning {table.name}")
     cleaned, log = await WORKERS.run(ctx, apply_actions, table.frame, plan.actions)
     applied = [a for a in log if not a.note]
@@ -90,6 +96,7 @@ async def clean(ctx: CallContext, text: str) -> None:
     for entry in log:
         if entry.note:
             ctx.write(f"- {entry.action}: {entry.note}\n")
+    _write_ignored(ctx, malformed)
     source = await _save(ctx, table, cleaned, "cleaned")
     await show_frame(
         ctx, log_frame(log), "Cleaning actions", results_name=f"{table.stem}-cleaning-log.csv"
@@ -105,7 +112,7 @@ async def join_tables(ctx: CallContext, text: str) -> None:
     left, right = tables[0], tables[1]
     if ctx.model is not None and ctx.model.model:
         descriptions = [describe(left, values=False), describe(right, values=False)]
-        plan = await choose(ctx, JoinPlan, text, descriptions)
+        plan, _ = await choose(ctx, JoinPlan, text, descriptions)
     elif (plan := shared_key(left.frame, right.frame)) is None:
         raise TraitError(
             "model_not_set",
@@ -126,18 +133,68 @@ async def join_tables(ctx: CallContext, text: str) -> None:
     await show_frame(ctx, result, f"{left.stem} joined with {right.stem}", source)
 
 
+PICKED_CHART = "The chart the message refers to, which the new chart is based on:\n"
+
+
 async def plot(ctx: CallContext, text: str) -> None:
     tables = await read_tables(ctx, text)
     table = tables[0]
-    plan = await choose(ctx, ChartPlan, text, [describe(table)])
+    picked = await _picked_chart_text(ctx)
+    extra = templates_text() + (f"\n\n{PICKED_CHART}{picked}" if picked else "")
+    plan, malformed = await choose(ctx, ChartPlan, text, [describe(table)], extra)
     types = {str(c): column_type(table.frame[c]) for c in table.frame.columns}
+    drawn, ignored = _fill_choices(plan.charts, table.frame, types)
+    ignored = malformed + ignored
+    _write_plot_intro(ctx, tables, len(drawn))
+    results = []
+    for choice, chart in drawn:
+        ctx.progress(f"Drawing {chart.title or 'a chart'}")
+        result = await WORKERS.run(ctx, build_chart, table.frame, chart)
+        if table.source_id:
+            result.data.update(source=table.name)
+        notes = "; ".join(result.notes)
+        ctx.write(f"- {result.data['title']}" + (f": {notes}" if notes else "") + "\n")
+        ignored += result.ignored
+        results.append((choice, result))
+    if drawn:
+        ctx.write("\n")
+    for choice, result in results:
+        await _show_chart(ctx, result, chart_text(result.data, choice), table.source_id)
+    _write_ignored(ctx, ignored, "Not drawn")
+
+
+def _fill_choices(
+    choices: list[ChartChoice], frame: pd.DataFrame, types: dict[str, str]
+) -> tuple[list[tuple[ChartChoice, ChartDescription]], list[tuple[str, str]]]:
+    """Each choice whose slots fit the table, as its filled and checked chart, and what was
+    ignored with the reasons."""
     drawn, ignored = [], []
-    for chart in plan.charts:
-        reason = chart_problem(chart, types)
-        if reason is None:
-            drawn.append(chart)
-        else:
-            ignored.append((describe_entry(chart), reason))
+    for choice in choices:
+        reason = choice_problem(choice, types)
+        if reason is not None:
+            ignored.append((f'chart "{choice.title}"', reason))
+            continue
+        chart, styles = fill_template(choice, frame)
+        checked = check_chart(chart, types)
+        ignored += styles + checked.ignored
+        if checked.chart is not None:
+            drawn.append((choice, checked.chart))
+    return drawn, ignored
+
+
+async def _picked_chart_text(ctx: CallContext) -> str | None:
+    """The text of the chart Jev picked for this reply, if it picked one."""
+    if not ctx.picked_component:
+        return None
+    try:
+        component = await ctx.read_component(str(ctx.picked_component.get("component_id")))
+    except CoreRequestError:
+        return None
+    return str(component.get("text") or "") if component.get("kind") == "chart" else None
+
+
+def _write_plot_intro(ctx: CallContext, tables: list[Table], drawn: int) -> None:
+    table = tables[0]
     ctx.write(_sheet_note(table))
     unused = [t.name for t in tables[1:]]
     if unused:
@@ -149,27 +206,20 @@ async def plot(ctx: CallContext, text: str) -> None:
     if not drawn:
         ctx.write(f"None of the charts the AI model chose fit `{table.name}`.\n\n")
     else:
-        ctx.write(f"Drew {len(drawn)} chart{'s' if len(drawn) > 1 else ''} of `{table.name}`:\n")
-    results = []
-    for chart in drawn:
-        ctx.progress(f"Drawing {chart.title or chart.type}")
-        result = await WORKERS.run(ctx, build_chart, table.frame, chart, types)
-        if table.source_id:
-            result.data.update(source=table.name)
-        notes = "; ".join(result.notes)
-        ctx.write(f"- {result.data['title']}" + (f": {notes}" if notes else "") + "\n")
-        results.append(result)
-    if drawn:
-        ctx.write("\n")
-    for result in results:
-        if not result.fits:
-            ctx.write(chart_text(result.data) + "\n\n")
-            continue
+        ctx.write(f"Drew {drawn} chart{'s' if drawn > 1 else ''} of `{table.name}`:\n")
+
+
+async def _show_chart(
+    ctx: CallContext, result: ChartResult, text: str, source_id: str | None
+) -> None:
+    """Shows the chart, or writes its text when it is too large or the core refuses it."""
+    if result.fits:
         try:
-            await show_chart(ctx, result.data, chart_text(result.data), table.source_id)
+            await show_chart(ctx, result.data, text, source_id)
+            return
         except ToolError:
-            ctx.write(chart_text(result.data) + "\n\n")
-    _write_ignored(ctx, ignored, "Not drawn")
+            pass
+    ctx.write(text + "\n\n")
 
 
 async def read_tables(ctx: CallContext, text: str, fallback: bool = True) -> list[Table]:

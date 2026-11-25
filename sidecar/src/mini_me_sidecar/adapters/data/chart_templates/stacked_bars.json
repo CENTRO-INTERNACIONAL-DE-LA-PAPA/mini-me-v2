@@ -1,0 +1,81 @@
+{
+  "name": "stacked_bars",
+  "description": "Totals of a value per category, each bar split into its groups; use a sum or count.",
+  "slots": {
+    "category": {
+      "types": [
+        "text",
+        "boolean",
+        "number"
+      ]
+    },
+    "value": {
+      "types": [
+        "number"
+      ]
+    },
+    "group": {
+      "types": [
+        "text",
+        "boolean"
+      ]
+    }
+  },
+  "chart": {
+    "datasets": [
+      {
+        "name": "bars",
+        "operations": [
+          {
+            "kind": "group",
+            "by": [
+              "{category}",
+              "{group}"
+            ],
+            "aggregates": [
+              {
+                "how": "{aggregate}",
+                "column": "{value}",
+                "name": "{aggregate}_{value}"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "barY",
+        "dataset": "bars",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{category}"
+          },
+          {
+            "name": "y",
+            "column": "{aggregate}_{value}"
+          },
+          {
+            "name": "fill",
+            "column": "{group}"
+          }
+        ],
+        "options": [
+          {
+            "name": "sort",
+            "value": {
+              "x": "-y"
+            }
+          }
+        ]
+      }
+    ],
+    "scales": [
+      {
+        "scale": "y",
+        "label": "{aggregate} of {value}"
+      }
+    ]
+  }
+}

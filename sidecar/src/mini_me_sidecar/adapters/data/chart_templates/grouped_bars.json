@@ -1,0 +1,85 @@
+{
+  "name": "grouped_bars",
+  "description": "Bars of an aggregate of a value side by side for each group, within each category.",
+  "slots": {
+    "category": {
+      "types": [
+        "text",
+        "boolean",
+        "number"
+      ]
+    },
+    "value": {
+      "types": [
+        "number"
+      ]
+    },
+    "group": {
+      "types": [
+        "text",
+        "boolean"
+      ]
+    }
+  },
+  "chart": {
+    "datasets": [
+      {
+        "name": "bars",
+        "operations": [
+          {
+            "kind": "group",
+            "by": [
+              "{category}",
+              "{group}"
+            ],
+            "aggregates": [
+              {
+                "how": "{aggregate}",
+                "column": "{value}",
+                "name": "{aggregate}_{value}"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "barY",
+        "dataset": "bars",
+        "channels": [
+          {
+            "name": "fx",
+            "column": "{category}"
+          },
+          {
+            "name": "x",
+            "column": "{group}"
+          },
+          {
+            "name": "y",
+            "column": "{aggregate}_{value}"
+          },
+          {
+            "name": "fill",
+            "column": "{group}"
+          }
+        ]
+      }
+    ],
+    "scales": [
+      {
+        "scale": "fx",
+        "label": "{category}"
+      },
+      {
+        "scale": "x",
+        "label": ""
+      },
+      {
+        "scale": "y",
+        "label": "{aggregate} of {value}"
+      }
+    ]
+  }
+}

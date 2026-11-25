@@ -1,0 +1,83 @@
+{
+  "name": "scatter_trend",
+  "description": "A scatter chart with a linear trend line, one per group.",
+  "slots": {
+    "x": {
+      "types": [
+        "number"
+      ]
+    },
+    "y": {
+      "types": [
+        "number"
+      ]
+    },
+    "group": {
+      "types": [
+        "text",
+        "boolean"
+      ],
+      "required": false
+    }
+  },
+  "chart": {
+    "datasets": [
+      {
+        "name": "rows",
+        "operations": []
+      }
+    ],
+    "marks": [
+      {
+        "mark": "dot",
+        "dataset": "rows",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{x}"
+          },
+          {
+            "name": "y",
+            "column": "{y}"
+          },
+          {
+            "name": "fill",
+            "column": "{group}"
+          },
+          {
+            "name": "fillOpacity",
+            "value": 0.6
+          }
+        ]
+      },
+      {
+        "mark": "linearRegressionY",
+        "dataset": "rows",
+        "channels": [
+          {
+            "name": "x",
+            "column": "{x}"
+          },
+          {
+            "name": "y",
+            "column": "{y}"
+          },
+          {
+            "name": "stroke",
+            "column": "{group}"
+          }
+        ]
+      }
+    ],
+    "scales": [
+      {
+        "scale": "x",
+        "label": "{x}"
+      },
+      {
+        "scale": "y",
+        "label": "{y}"
+      }
+    ]
+  }
+}

@@ -1,35 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type ChartData, chartReducer, initialState, parseChart } from "./chart-model";
+import { chartReducer, initialState, legendOf, parseChart } from "./chart-model";
 import { type ChartColours, chartSpec } from "./chart-plot";
-
-const chart: ChartData = parseChart({
-  title: "Yield by treatment",
-  views: [
-    {
-      type: "histogram",
-      x: { name: "yield", type: "number" },
-      series: ["Control", "Fungicide"],
-      series_column: "treatment",
-      bins: [
-        { x0: 0, x1: 10, count: 3, series: "Control" },
-        { x0: 0, x1: 10, count: 5, series: "Fungicide" },
-      ],
-    },
-    {
-      type: "box",
-      x: { name: "treatment", type: "text" },
-      y: { name: "yield", type: "number" },
-      groups: [
-        { group: "Control", q1: 3, median: 5, q3: 7, low: 1, high: 8, count: 9, outliers: [20] },
-      ],
-    },
-    {
-      type: "heatmap",
-      columns: ["yield", "height"],
-      cells: [{ x: "yield", y: "height", value: 0.6 }],
-    },
-  ],
-});
 
 const colours: ChartColours = {
   first: "#9769DC",
@@ -41,110 +12,127 @@ const colours: ChartColours = {
   muted: "#8a8a8a",
 };
 
-const reduce = chartReducer(chart);
-
-function markData(view: number, hidden: string[] = []) {
-  const marks = (chartSpec(chart, view, hidden, colours, 600).options.marks ?? []) as {
-    data?: unknown;
-  }[];
-  return marks.map((m) => m.data);
+function channel(name: string, column: string) {
+  return { name, column, value: null };
 }
 
-describe("chart version 1", () => {
-  it("refuses data with no view it can draw", () => {
-    expect(() => parseChart({ title: "x", views: [{ type: "map" }] })).toThrow();
+function mark(name: string, dataset: string | null, ...channels: [string, string][]) {
+  return {
+    mark: name,
+    dataset,
+    values: [],
+    channels: channels.map(([c, column]) => channel(c, column)),
+    options: [],
+  };
+}
+
+function colourScale(domain: string[]) {
+  return {
+    scale: "color",
+    type: null,
+    label: null,
+    domain,
+    reverse: null,
+    zero: null,
+    nice: null,
+    percent: null,
+    tick_rotate: null,
+    scheme: null,
+    legend: null,
+  };
+}
+
+// Mean yield of two varieties in two years, drawn as a dumbbell: a rule per variety and a dot
+// per year.
+const dumbbell = parseChart({
+  title: "Yield by variety",
+  description: {
+    title: "Yield by variety",
+    height: 300,
+    marks: [
+      mark("ruleY", "means", ["x", "variety"], ["y1", "mean_yield"]),
+      mark("dot", "means", ["x", "variety"], ["y", "mean_yield"], ["fill", "year"]),
+    ],
+    scales: [colourScale(["2023", "2024"])],
+  },
+  datasets: {
+    means: {
+      columns: [
+        { name: "variety", type: "text" },
+        { name: "year", type: "text" },
+        { name: "mean_yield", type: "number" },
+      ],
+      rows: [
+        ["Yungay", "2023", 20],
+        ["Yungay", "2024", 24],
+        ["Canchan", "2023", 18],
+        ["Canchan", "2024", 21],
+      ],
+    },
+  },
+});
+
+function marks(chart = dumbbell, hidden: string[] = []) {
+  return (chartSpec(chart, hidden, colours, 600).options.marks ?? []) as {
+    ariaLabel?: string;
+    data?: unknown[];
+  }[];
+}
+
+describe("chart version 2", () => {
+  it("reads rows as objects, dates as UTC days, and refuses data with no mark", () => {
+    const harvest = parseChart({
+      title: "",
+      description: { title: "", height: null, marks: [mark("dot", "d")], scales: [] },
+      datasets: { d: { columns: [{ name: "day", type: "date" }], rows: [["2024-03-01"]] } },
+    });
+    expect(harvest.datasets.d.rows[0].day).toEqual(new Date("2024-03-01T00:00:00Z"));
+    expect(() => parseChart({ title: "x", description: { marks: [] }, datasets: {} })).toThrow();
     expect(() => parseChart(null)).toThrow();
   });
 
-  it("hides and shows series, but never the last visible one", () => {
-    const hidden = reduce(initialState, { type: "toggleSeries", series: "Control" });
-    expect(hidden.hidden).toEqual(["Control"]);
-    expect(reduce(hidden, { type: "toggleSeries", series: "Fungicide" })).toBe(hidden);
-    expect(reduce(hidden, { type: "toggleSeries", series: "Control" }).hidden).toEqual([]);
+  it("draws each described mark after the gridlines", () => {
+    expect(marks().map((m) => m.ariaLabel)).toEqual(["y-grid", "rule", "dot"]);
   });
 
-  it("switches only to views the chart has", () => {
-    expect(reduce(initialState, { type: "chooseView", view: 1 }).view).toBe(1);
-    expect(reduce(initialState, { type: "chooseView", view: 7 })).toBe(initialState);
+  it("hides and shows legend values, but never the last visible one", () => {
+    const reduce = chartReducer(legendOf(dumbbell));
+    const hidden = reduce(initialState, { type: "toggleValue", value: "2023" });
+    expect(hidden.hidden).toEqual(["2023"]);
+    expect(reduce(hidden, { type: "toggleValue", value: "2024" })).toBe(hidden);
+    expect(reduce(hidden, { type: "toggleValue", value: "2023" }).hidden).toEqual([]);
+    const [, , dots] = marks(dumbbell, ["2023"]);
+    expect((dots.data as { year: string }[]).map((r) => r.year)).toEqual(["2024", "2024"]);
   });
 
-  it("leaves hidden series out of the drawn data", () => {
-    const [, bars] = markData(0, ["Control"]);
-    expect((bars as { series: string }[]).map((b) => b.series)).toEqual(["Fungicide"]);
-  });
-
-  it("draws a box plot from its statistics, with outliers as dots", () => {
-    const data = markData(1);
-    expect(data[2]).toBe(chart.views[1].type === "box" ? chart.views[1].groups : null);
-    expect(data[4]).toEqual([{ group: "Control", value: 20 }]);
-  });
-
-  it("colours correlations on a fixed scale from −1 to 1", () => {
-    const { options } = chartSpec(chart, 2, [], colours, 600);
-    expect((options.color as { domain: number[] }).domain).toEqual([-1, 0, 1]);
-  });
-
-  it("gives every series its own colour, generating more past the palette", () => {
-    const series = Array.from({ length: 30 }, (_, i) => `v${i}`);
-    const many = parseChart({
-      title: "",
-      views: [{ type: "histogram", x: { name: "v", type: "number" }, series, bins: [] }],
-    });
-    const range = (chartSpec(many, 0, [], colours, 600).options.color as { range: string[] }).range;
+  it("gives every legend value its own colour, generating more past the palette", () => {
+    const values = Array.from({ length: 30 }, (_, i) => `v${i}`);
+    const scales = [colourScale(values)];
+    const many = { ...dumbbell, description: { ...dumbbell.description, scales } };
+    const range = (chartSpec(many, [], colours, 600).options.color as { range: string[] }).range;
     expect(range.slice(0, 8)).toEqual([colours.first, ...colours.palette]);
     expect(new Set(range).size).toBe(30);
     expect(range[8]).toMatch(/^#[0-9a-f]{6}$/);
   });
 
-  it("describes the hovered box with its statistics", () => {
-    const [boxes, outliers] = chartSpec(chart, 1, [], colours, 600).tips;
-    expect(boxes.lines(boxes.data[0] as never)).toContainEqual(["Median", "5"]);
-    expect(outliers.lines(outliers.data[0] as never)).toEqual([
-      ["treatment", "Control"],
-      ["yield (outlier)", "20"],
-    ]);
+  it("colours the legend's first value in the chart's own colour when it has one", () => {
+    const blue = { ...dumbbell, description: { ...dumbbell.description, colour: "steelblue" } };
+    const range = (chartSpec(blue, [], colours, 600).options.color as { range: string[] }).range;
+    expect(range[0]).toBe("steelblue");
   });
-});
 
-function tipLines(chart: ChartData, row: unknown) {
-  return chartSpec(chart, 0, [], colours, 600).tips[0].lines(row as never);
-}
-
-describe("chart tooltips", () => {
-  it("label a count bar chart's bars as rows, even with a y column", () => {
-    const bar = { x: "Yungay", y: 3 };
-    const chart: ChartData = {
-      title: "Plots by variety",
-      views: [
-        {
-          type: "bar",
-          x: { name: "variety", type: "text" },
-          y: { name: "yield", type: "number" },
-          aggregate: "count",
-          bars: [bar],
-        },
-      ],
-    };
-    expect(tipLines(chart, bar)).toEqual([
+  it("shows a hovered row's columns, and no tooltip on marks computed from many rows", () => {
+    const spec = chartSpec(dumbbell, [], colours, 600);
+    const dots = spec.tips[1];
+    expect(dots.lines(dots.data[1] as never)).toEqual([
       ["variety", "Yungay"],
-      ["Rows", "3"],
+      ["mean_yield", "24"],
+      ["year", "2024"],
     ]);
-  });
-
-  it("show a date on its own day in any time zone", () => {
-    const chart: ChartData = {
-      title: "Harvests",
-      views: [
-        {
-          type: "histogram",
-          x: { name: "harvest", type: "date" },
-          bins: [{ x0: "2024-03-01", x1: "2024-03-08", count: 2 }],
-        },
-      ],
+    const boxes = {
+      ...dumbbell,
+      description: { ...dumbbell.description, marks: [mark("boxY", "means", ["y", "mean_yield"])] },
     };
-    const spec = chartSpec(chart, 0, [], colours, 600);
-    const [[, range]] = spec.tips[0].lines(spec.tips[0].data[0] as never);
-    const day = (d: number) => new Date(2024, 2, d).toLocaleDateString();
-    expect(range).toBe(`${day(1)} – ${day(8)}`);
+    expect(chartSpec(boxes, [], colours, 600).tips).toEqual([]);
   });
 });
