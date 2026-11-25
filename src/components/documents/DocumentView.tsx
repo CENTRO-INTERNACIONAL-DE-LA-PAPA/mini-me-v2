@@ -61,7 +61,7 @@ const SAVE_DELAY_MS = 1000;
 const DRAFT_REFRESH_MS = 250;
 
 /** The bar over the source and the preview: the formatting buttons, and the preview's state. */
-const BAR = "mt-5 flex h-11 shrink-0 items-center gap-0.5 border-y border-border bg-background px-4";
+const BAR = "mt-5 flex h-11 shrink-0 items-center gap-1 border-y border-border bg-background px-4";
 
 interface Props {
   projectId: Uuid;
@@ -649,7 +649,7 @@ export function DocumentView({
                   role="status"
                   variant="outline"
                   size="sm"
-                  className="mx-6 mt-4 flex-row items-center gap-3 py-2.5"
+                  className="mx-6 mt-4 flex-row items-center gap-3"
                 >
                   <MiniMeAvatar miniMe={scribe} size={28} />
                   <span className="flex-1 text-ui text-foreground">Scribe is drafting…</span>
@@ -676,7 +676,7 @@ export function DocumentView({
                       }}
                     />
                   }
-                  className="mx-6 mt-4 block cursor-pointer truncate py-2.5 text-left text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                  className="mx-6 mt-4 block cursor-pointer truncate text-left text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   A suggestion by {authorName(suggestion)} lost its passage: “{suggestion.text}”
                 </Card>

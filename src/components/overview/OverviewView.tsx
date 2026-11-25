@@ -122,7 +122,7 @@ export function OverviewView({
   }
 
   if (!overview) {
-    return error ? <ErrorText className="px-8 pt-14">{error}</ErrorText> : null;
+    return error ? <ErrorText className="px-8 pt-6">{error}</ErrorText> : null;
   }
 
   const miniMeOf = (id: string) => miniMes.find((m) => m.id === id);
@@ -148,7 +148,7 @@ export function OverviewView({
     >
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-start gap-4 max-lg:grid-cols-1">
         <div className="flex flex-col gap-4">
-          <Card aria-label="Summary" className="gap-2.5">
+          <Card aria-label="Summary" className="gap-3">
             <h2 className="font-serif text-heading text-foreground">Where things stand</h2>
             {overview.summary ? (
               <p className="text-body whitespace-pre-line text-document-ink">
@@ -170,7 +170,7 @@ export function OverviewView({
                 No summary yet. Mini-Me can write one from this Project's Conversations.
               </p>
             )}
-            <div className="mt-1 flex items-center gap-3">
+            <div className="mt-1 flex items-center gap-2">
               <Hint
                 label="Sends the text of this Project's messages, not its files, to the AI model chosen in Settings."
                 disabled

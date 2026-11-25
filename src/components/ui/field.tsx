@@ -7,7 +7,7 @@ const fieldVariants = cva("group/field flex w-full", {
   variants: {
     orientation: {
       vertical: "flex-col gap-2",
-      horizontal: "flex-row items-start gap-6",
+      horizontal: "flex-row items-start gap-4",
     },
   },
   defaultVariants: {
@@ -35,7 +35,7 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="field-content"
-      className={cn("flex min-w-0 flex-1 flex-col gap-0.5", className)}
+      className={cn("flex min-w-0 flex-1 flex-col gap-1", className)}
       {...props}
     />
   )

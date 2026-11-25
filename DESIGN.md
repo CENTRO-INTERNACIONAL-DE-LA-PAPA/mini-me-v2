@@ -138,7 +138,26 @@ Fields stay rectangles and buttons stay round, so the two never look alike.
 
 Option tiles (avatar parts, swatches) are circles or rounded squares, never pill-stretched ovals.
 
-Sheet padding: `pl-8`, `pt-6`–`pt-7`. Tool sheets: `pt-5.5 pr-4.5 pl-6`. Spacing and sizes use Tailwind's scale in 2px steps (`0.5`), most often `1`, `1.5`, `2`, `2.5`, `3`, `3.5`, `4`, `5`, `6`, `8`. Arbitrary `[…px]` values are kept for fixed layout widths only.
+**Spacing** uses one scale: 2, 4, 8, 12, 16, 24 and 32px (`0.5 1 2 3 4 6 8`). Row and item padding keeps 10px (`px-2.5`). Each job has one value:
+
+| Job | Value |
+|---|---|
+| Icon or avatar beside its text, in a control or row | 8px (`gap-2`); 4px in badges and `xs` buttons |
+| Identity mark (18px icon, 28px+ avatar) before a card's text | 12px (`gap-3`) |
+| Siblings in a row (buttons, chips) | 8px; 4px in packed toolbars and tab tracks |
+| A title against its actions | 16px |
+| Name over its meta line | 2px |
+| Title over description, label over hint | 4px |
+| Blocks inside a card or reply | 12px |
+| Form fields | 24px |
+| Cards in a grid or column | 12px |
+| Sections of a page | 24px |
+| Columns of a page | 32px |
+| Card padding | 20px, or 16px for a small card, a reply or a coloured list item; bands inside a card 16 × 8px |
+| Page padding | 32px at the sides, 24px top, 32px bottom, for every main page, Home and Settings; 24px for tool sheets |
+| Control heights | 24 (`xs`), 32 (`sm`), 36px (default) |
+
+Values that make room for something (a checkmark, a row's "…" button, a list indent) are not spacing and follow what they make room for. Arbitrary `[…px]` values are kept for fixed layout widths only.
 
 ---
 

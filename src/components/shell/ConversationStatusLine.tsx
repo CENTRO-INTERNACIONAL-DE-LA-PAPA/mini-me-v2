@@ -8,7 +8,7 @@ import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 export function ConversationStatusLine({ status }: { status: ConversationStatus }) {
   const miniMe = useMiniMes().find((m) => m.id === status.mini_me.id);
   return (
-    <span className="flex w-full items-center gap-1.5 text-meta font-normal">
+    <span className="flex w-full items-center gap-2 text-meta font-normal">
       {/* Menu buttons size every svg as an icon; avatar bodies are svgs that fill their box. */}
       <span className="flex size-4 shrink-0 [&_svg]:size-full!">
         <MiniMeAvatar miniMe={miniMe} size={16} working={status.kind === "running"} />

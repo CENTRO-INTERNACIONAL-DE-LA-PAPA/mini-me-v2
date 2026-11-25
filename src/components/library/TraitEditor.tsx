@@ -118,10 +118,10 @@ export function TraitEditor({
       <div
         className={cn(
           EDITOR_BODY,
-          "grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5 max-lg:grid-cols-1",
+          "grid grid-cols-[minmax(0,1fr)_340px] items-start gap-8 max-lg:grid-cols-1",
         )}
       >
-        <div className="grid gap-4.5">
+        <div className="grid gap-6">
           {!builtIn && (
             <LabelledField label="Name" htmlFor="trait-name">
               <Input
@@ -182,7 +182,7 @@ function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: bo
               key={m?.id ?? i}
               miniMe={m}
               render={<li />}
-              className="flex items-center gap-3 px-4 py-3"
+              className="flex items-center gap-3 p-4"
             >
               <MiniMeAvatar miniMe={m} size={28} />
               <span className="grid min-w-0">

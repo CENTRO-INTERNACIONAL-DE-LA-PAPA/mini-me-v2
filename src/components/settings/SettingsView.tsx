@@ -250,7 +250,7 @@ function AccountCard({ render, children }: { render?: ReactElement; children: Re
 /** A green or grey dot with its label, for whether something is set up. */
 function StatusLabel({ on, children }: { on: boolean; children: ReactNode }) {
   return (
-    <span className="flex items-center gap-1.5 text-meta text-ink-2">
+    <span className="flex items-center gap-2 text-meta text-ink-2">
       <StatusDot className={on ? "bg-success" : undefined} />
       {children}
     </span>

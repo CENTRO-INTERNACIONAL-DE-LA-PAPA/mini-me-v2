@@ -220,7 +220,7 @@ export function ChatView({
                 <div
                   ref={column}
                   className={cn(
-                    "flex flex-col gap-5.5 pt-8 pb-[150px]",
+                    "flex flex-col gap-6 pt-8 pb-[150px]",
                     chatColumn(panel !== null, "messages"),
                   )}
                 >

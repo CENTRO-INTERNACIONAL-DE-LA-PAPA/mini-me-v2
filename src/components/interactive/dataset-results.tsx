@@ -92,7 +92,7 @@ function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Data
       <ul className="flex flex-col">
         {files.map(({ file, error }) => (
           <li key={file.id} className="flex flex-col gap-0.5 border-t border-border py-2 first:border-t-0">
-            <div className="flex items-center gap-2.5 text-ui">
+            <div className="flex items-center gap-2 text-ui">
               {file.asset ? (
                 <span className="w-4.5 shrink-0" aria-hidden />
               ) : (

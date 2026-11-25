@@ -43,7 +43,7 @@ export function ToolSheet({
         className,
       )}
     >
-      <header className="flex items-start gap-3 pt-5.5 pr-4.5 pb-4 pl-6">
+      <header className="flex items-start gap-4 px-6 pt-6 pb-4">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-tool-title font-medium text-foreground">{title}</h2>
           {meta && <p className="mt-1 text-meta text-muted-foreground">{meta}</p>}
@@ -101,7 +101,7 @@ export function SheetHeader({
   return (
     <header className="flex items-start justify-between gap-4 pt-6 pr-6 pl-8">
       <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-2">
           <h1
             className={cn(
               "truncate font-serif font-medium text-foreground",
@@ -172,10 +172,10 @@ export function SheetPage({
   children: ReactNode;
 }) {
   return (
-    <main className={cn("flex w-full flex-col gap-6 px-8 pt-7 pb-10", className)}>
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+    <main className={cn("flex w-full flex-col gap-6 px-8 pt-6 pb-8", className)}>
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <PageTitle title={title} titleAction={titleAction} description={description} />
-        {actions && <div className="flex shrink-0 items-center gap-2.5">{actions}</div>}
+        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </header>
       {children}
     </main>
@@ -195,8 +195,8 @@ export function PageTitle({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
-      <div className="flex min-w-0 items-center gap-1.5">
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
+      <div className="flex min-w-0 items-center gap-2">
         <h1 className="font-serif text-sheet-title font-medium text-foreground">{title}</h1>
         {titleAction}
       </div>
@@ -225,10 +225,10 @@ export function SheetSection({
   children: ReactNode;
 }) {
   return (
-    <section className={cn("flex flex-col gap-3.5", className)}>
+    <section className={cn("flex flex-col gap-3", className)}>
       <header className="flex items-center justify-between gap-4">
         <div className="grid gap-1">
-          <h2 className="flex items-baseline gap-2.5">
+          <h2 className="flex items-baseline gap-2">
             <span className="font-serif text-heading text-foreground">{title}</span>
             {meta && <span className="text-meta text-muted-foreground">{meta}</span>}
           </h2>

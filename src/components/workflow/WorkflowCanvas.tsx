@@ -297,7 +297,7 @@ function StepCard({
       {...press}
       className={cn(
         press.className,
-        "flex items-center gap-2.5 rounded-xl px-3.5",
+        "flex items-center gap-3 rounded-xl px-4",
         step.type === "trait"
           ? "h-10 w-[220px] justify-center border border-edge bg-wash"
           : "h-14 w-[220px] border border-border bg-card",

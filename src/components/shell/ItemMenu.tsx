@@ -136,7 +136,7 @@ export function ItemMenu({ name, actions = [], rename, remove, className }: Prop
           )}
           {view === "rename" && rename && (
             <form onSubmit={submit} className="grid gap-2">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <Input
                   autoFocus
                   aria-label="New name"

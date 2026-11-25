@@ -41,17 +41,17 @@ export function EditorHeader({
 }: HeaderProps) {
   return (
     <div className="flex flex-col gap-4 pt-6 pr-6 pl-8">
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-        <div className="flex min-w-0 flex-col gap-3.5">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-3">
           <Button
             variant="link"
-            className="w-fit gap-1.5 text-control text-muted-foreground"
+            className="w-fit gap-2 text-control text-muted-foreground"
             onClick={onBack}
           >
             <ChevronLeftIcon />
             {back}
           </Button>
-          <div className="flex min-w-0 items-center gap-4">
+          <div className="flex min-w-0 items-center gap-3">
             {icon && <span className="flex shrink-0 text-foreground">{icon}</span>}
             <div className="grid min-w-0 gap-1">
               <h1 className="truncate font-serif text-identity font-medium text-foreground">
@@ -162,7 +162,7 @@ export function MiniMeCard({
         miniMe={coloured}
         render={<button type="button" onClick={onOpen} />}
         className={cn(
-          "flex h-full w-full cursor-pointer flex-col gap-4.5 rounded-2xl p-5 text-left",
+          "flex h-full w-full cursor-pointer flex-col gap-3 rounded-2xl p-5 text-left",
           "transition-colors duration-150 ease-out hover:bg-tint",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         )}
@@ -171,7 +171,7 @@ export function MiniMeCard({
           <MiniMeAvatar miniMe={miniMe} size={56} />
           <OriginBadge builtIn={miniMe.built_in} />
         </span>
-        <span className="flex flex-1 flex-col gap-1.5">
+        <span className="flex flex-1 flex-col gap-1">
           <span className="font-serif text-tool-title font-medium text-foreground">
             {miniMe.name}
           </span>

@@ -26,7 +26,7 @@ export function ComponentCard({
       {...props}
     >
       {(title !== undefined || actions !== undefined) && (
-        <CardHeader className="flex-wrap gap-y-2 border-b border-border px-4 py-2.5">
+        <CardHeader className="flex-wrap gap-y-2 border-b border-border px-4 py-2">
           <CardTitle className="mr-auto">{title}</CardTitle>
           {actions}
         </CardHeader>

@@ -32,14 +32,14 @@ export function ListRow({
       {trailing}
     </>
   );
-  const row = "flex min-h-9 w-full items-center gap-3 py-2 text-left";
+  const row = "flex min-h-9 w-full items-center gap-2 py-2 text-left";
   const element = onOpen ? (
     <button
       type="button"
       onClick={onOpen}
       className={cn(
         row,
-        "cursor-pointer rounded-lg px-2 transition-colors duration-150 ease-out outline-none hover:bg-muted focus-visible:bg-muted",
+        "cursor-pointer rounded-lg px-2.5 transition-colors duration-150 ease-out outline-none hover:bg-muted focus-visible:bg-muted",
         className,
       )}
     >

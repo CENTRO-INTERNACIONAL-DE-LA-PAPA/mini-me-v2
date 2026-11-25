@@ -197,7 +197,7 @@ function FileRow({
   return (
     <TableRow className="cursor-pointer" onClick={onOpen}>
       <TableCell className="max-w-80">
-        <span className="flex items-center gap-3">
+        <span className="flex items-center gap-2">
           <FileMark miniMe={miniMe} icon={Icon} />
           <span className="truncate font-medium">{entry.name}</span>
         </span>

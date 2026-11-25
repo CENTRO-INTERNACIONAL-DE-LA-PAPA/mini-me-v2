@@ -59,8 +59,8 @@ export function HomeView({ projects, onOpen, onCreate, onOpenReply }: Props) {
     [replies, projects],
   );
   return (
-    <main className="flex w-full flex-col gap-10 px-14 py-12">
-      <header className="flex flex-wrap items-end justify-between gap-6">
+    <main className="flex w-full flex-col gap-6 px-8 pt-6 pb-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-2">
           <h1 className="font-serif text-greeting font-medium text-foreground">
             {greeting(new Date(), name)}
@@ -125,9 +125,9 @@ function ProjectCard({
   return (
     <Card
       render={<button type="button" onClick={onOpen} />}
-      className="h-full w-full cursor-pointer justify-between gap-7 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring"
+      className="h-full w-full cursor-pointer justify-between gap-6 text-left transition-colors duration-150 ease-out hover:bg-well-hover focus-visible:outline-2 focus-visible:outline-ring"
     >
-      <span className="flex min-h-5.5 items-center justify-between gap-3">
+      <span className="flex min-h-5.5 items-center justify-between gap-2">
         <span className="flex">
           {activity?.mini_mes.map((id) => {
             const miniMe = miniMes.find((m) => m.id === id);
@@ -183,7 +183,7 @@ function NewProjectCard({
           autoFocus
           onKeyDown={(e) => e.key === "Escape" && onEditing(false)}
         />
-        <div className="flex justify-end gap-1.5">
+        <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={() => onEditing(false)}>
             Cancel
           </Button>
@@ -232,7 +232,7 @@ function NeedsYou({
                 key={approval.message_id}
                 miniMe={miniMe}
                 render={<li />}
-                className="flex items-center gap-3 px-4 py-3"
+                className="flex items-center gap-3 p-4"
               >
                 <MiniMeAvatar miniMe={miniMe} size={40} />
                 <div className="grid min-w-0 flex-1 gap-1">

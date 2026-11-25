@@ -75,7 +75,7 @@ export function StepInspector({
       onClose={() => onSelect(null)}
       className="w-[340px]"
     >
-      <div className="grid gap-4.5">
+      <div className="grid gap-6">
         {step.type === "trait" && (
           <>
             <LabelledField label="Trait">
@@ -99,7 +99,7 @@ export function StepInspector({
               </Select>
             </LabelledField>
             {trait && (
-              <MiniMeSurface miniMe={miniMe} className="grid gap-2.5 rounded-xl p-3.5">
+              <MiniMeSurface miniMe={miniMe} className="grid gap-3 rounded-xl p-4">
                 <p className="text-ui leading-normal text-foreground">{trait.description}</p>
                 <div className="flex items-center justify-between text-meta">
                   <span className="text-mm-ink">
@@ -241,7 +241,7 @@ function Branches({
     <LabelledField label="Branches">
       <div className="grid gap-2">
         {branches.map((branch, i) => (
-          <div key={i} className="flex items-center gap-1.5">
+          <div key={i} className="flex items-center gap-2">
             <Input
               aria-label={`Branch ${i + 1} label`}
               value={branch.label}

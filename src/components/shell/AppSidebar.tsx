@@ -363,7 +363,7 @@ function ProjectSwitcher({
 /** A Conversation's title in the sidebar, with a dot when its reply ended while not open. */
 function ConversationTitle({ title, unseen }: { title: string; unseen: boolean }) {
   return (
-    <span className="flex w-full items-center gap-1.5 text-foreground">
+    <span className="flex w-full items-center gap-2 text-foreground">
       <span className="truncate">{title}</span>
       {unseen && (
         <span role="img" aria-label="New" className="size-1.5 shrink-0 rounded-full bg-primary" />
