@@ -19,10 +19,11 @@ from mini_me_sidecar.adapters.data.templates import (
     ChartPlan,
     choice_problem,
     fill_template,
+    slots_text,
     templates_text,
     unplaced_columns,
 )
-from mini_me_sidecar.adapters.data.choose import choose
+from mini_me_sidecar.adapters.data.choose import UnusableAnswer, choose
 from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
 from mini_me_sidecar.adapters.data.describe import describe
 from mini_me_sidecar.adapters.data.join import join, shared_key
@@ -142,7 +143,12 @@ async def plot(ctx: CallContext, text: str) -> None:
     table = tables[0]
     picked = await _picked_chart_text(ctx)
     extra = templates_text() + (f"\n\n{PICKED_CHART}{picked}" if picked else "")
-    plan, malformed = await choose(ctx, ChartPlan, text, [describe(table)], extra)
+    try:
+        plan, malformed = await choose(ctx, ChartPlan, text, [describe(table)], extra)
+    except UnusableAnswer as error:
+        ctx.write(_sheet_note(table) + _unusable_text(table.name))
+        _write_ignored(ctx, error.malformed, "Not drawn")
+        return
     types = {str(c): column_type(table.frame[c]) for c in table.frame.columns}
     drawn, ignored = _fill_choices(plan.charts, table.frame, types)
     ignored = malformed + ignored
@@ -153,8 +159,9 @@ async def plot(ctx: CallContext, text: str) -> None:
         result = await WORKERS.run(ctx, build_chart, table.frame, chart)
         if table.source_id:
             result.data.update(source=table.name)
-        notes = "; ".join(result.notes)
-        ctx.write(f"- {result.data['title']}" + (f": {notes}" if notes else "") + "\n")
+        drew = f"{choice.template} chart, {slots_text(choice)}"
+        notes = "".join(f"; {note}" for note in result.notes)
+        ctx.write(f"- {result.data['title']}: {drew}{notes}\n")
         ignored += result.ignored
         results.append((choice, result))
     if drawn:
@@ -194,6 +201,13 @@ async def _picked_chart_text(ctx: CallContext) -> str | None:
     except CoreRequestError:
         return None
     return str(component.get("text") or "") if component.get("kind") == "chart" else None
+
+
+def _unusable_text(table_name: str) -> str:
+    return (
+        f"I couldn't make a chart of `{table_name}` from this request. Try again, perhaps "
+        "naming the kind of chart and the columns to show.\n\n"
+    )
 
 
 def _write_plot_intro(ctx: CallContext, tables: list[Table], drawn: int) -> None:

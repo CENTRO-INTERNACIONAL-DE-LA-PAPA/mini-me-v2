@@ -337,16 +337,22 @@ def unplaced_columns(choice: ChartChoice) -> list[str]:
     return [c for c in dict.fromkeys(choice.ignored_columns) if c not in placed]
 
 
-def choice_text(choice: ChartChoice) -> str:
-    """The template, its slots and the style slots in words, for the chart's text."""
+def slots_text(choice: ChartChoice) -> str:
+    """The template's slots in words, an empty optional one as "no <slot>"."""
     template = TEMPLATES[choice.template]
-    slots = []
+    parts = []
     for name in template.slots:
         filled = getattr(choice, name)
-        if filled:
-            slots.append(f"{name} {', '.join(filled) if name == 'correlated_columns' else filled}")
+        if isinstance(filled, list):
+            filled = ", ".join(filled)
+        parts.append(f"{name} {filled}" if filled else f"no {name}")
     if uses_aggregate(template):
-        slots.append(f"aggregate {choice.aggregate or 'mean'}")
+        parts.append(f"aggregate {choice.aggregate or 'mean'}")
+    return ", ".join(parts)
+
+
+def choice_text(choice: ChartChoice) -> str:
+    """The template, its slots and the style slots in words, for the chart's text."""
     style = [
         f"colour {choice.colour}" if choice.colour else "",
         f"scheme {choice.scheme}" if choice.scheme else "",
@@ -358,5 +364,5 @@ def choice_text(choice: ChartChoice) -> str:
         f"one panel per {choice.facet}" if choice.facet else "",
     ]
     shown = [s for s in style if s]
-    text = f"Chart template {template.name}: {', '.join(slots)}."
+    text = f"Chart template {choice.template}: {slots_text(choice)}."
     return text + (f" Style: {', '.join(shown)}." if shown else "")

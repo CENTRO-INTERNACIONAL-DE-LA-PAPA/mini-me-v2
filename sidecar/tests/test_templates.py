@@ -12,6 +12,7 @@ from mini_me_sidecar.adapters.data.templates import (
     choice_problem,
     colour_slots,
     fill_template,
+    slots_text,
     unplaced_columns,
 )
 
@@ -99,6 +100,13 @@ def test_slots_the_template_does_not_have_are_ignored():
 
     with pytest.raises(ValidationError):
         ChartChoice.model_validate({"template": "correlation_heatmap", "title": "t", **stray})
+
+
+def test_slots_text_names_empty_optional_slots():
+    scatter = choose(template="scatter", x="blight", y="yield")
+    assert slots_text(scatter) == "x blight, y yield, no group"
+    bars = choose(template="bar", category="variety", value="yield", aggregate="sum")
+    assert slots_text(bars) == "category variety, value yield, aggregate sum"
 
 
 def test_an_empty_optional_slot_leaves_out_what_uses_it():

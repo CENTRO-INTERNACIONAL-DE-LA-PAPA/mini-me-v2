@@ -14,6 +14,18 @@ from mini_me_sidecar.context import CallContext, TraitError
 Plan = TypeVar("Plan", bound=BaseModel)
 
 
+class UnusableAnswer(TraitError):
+    """The model's answer held nothing usable; `malformed` lists its entries with the reasons."""
+
+    def __init__(self, malformed: list[tuple[str, str]]) -> None:
+        super().__init__(
+            "provider_empty",
+            "I couldn't work out what to do from this request. Try again, perhaps saying more "
+            "precisely what you want.",
+        )
+        self.malformed = malformed
+
+
 async def choose(
     ctx: CallContext,
     schema: type[Plan],
@@ -41,11 +53,7 @@ async def choose(
             file=sys.stderr,
             flush=True,
         )
-        raise TraitError(
-            "provider_empty",
-            f"{model.model} gave no usable answer. Try again, or choose another model in "
-            "Settings.",
-        )
+        raise UnusableAnswer(malformed)
     return plan, malformed
 
 

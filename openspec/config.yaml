@@ -124,6 +124,9 @@ rules:
       use agent nouns ("Summarizer"). A name that needs "and" describes two Traits.
     - When a requirement adds or changes protocol events, list each event's type and payload.
     - When a requirement touches the filesystem, state how Project-folder confinement holds.
+    - A fallback or failure message the user sees speaks as the Mini-Me ("I couldn't …") and
+      never names or blames the AI model, unless the problem is specific to that model, such
+      as a model that can't call tools.
   design:
     - Say which process (UI, Rust core, sidecar) owns each responsibility, and keep durable
       state in the Rust core.

@@ -132,6 +132,8 @@ drawing; the Rust core is unchanged and stores the component as today):
    from the table and the templates, not by the model: the table's columns that fit the
    failing slot, and up to three templates whose slots the named columns (or, with none, the
    table's columns) can fill. Validate, Clean and Join keep failing on an unreadable answer.
+   Each drawn chart's line in the reply names its template and slots, an empty optional slot
+   as "no <slot>", so what was drawn shows whatever words the request used.
 
 Alternatives considered:
 

@@ -123,6 +123,11 @@ has a valid mark, the reply SHALL say so, list what it ignored and add no compon
 - **THEN** the reply says the model's answer could not be used and suggests templates that
   fit the table's columns, and the reply does not fail
 
+#### Scenario: What was drawn
+- **WHEN** Plot draws a scatter of `yield` against `blight` with no group
+- **THEN** the reply's line for it names the scatter template, its `x` and `y` columns and
+  "no group"
+
 #### Scenario: Ignored scale
 - **WHEN** the model asks for a log `y` scale on a chart whose `y` values include 0
 - **THEN** the chart is drawn with a linear `y` scale, and the reply lists the log scale as

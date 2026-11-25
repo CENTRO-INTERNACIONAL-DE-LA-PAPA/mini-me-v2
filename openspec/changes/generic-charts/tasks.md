@@ -83,9 +83,10 @@
   move into the test, and code nothing else uses is deleted. Verify: `uv run pytest` passes.
 - [x] 7.2 Apply the slot-type rule to every template and add it to the format test. A number
   group is coloured as categories. Verify: pytest, `npm test` and `npx tsc --noEmit` pass.
-- [ ] 7.3 Plot explains an unreadable answer in its reply instead of failing; `choose` reports
-  it to Plot, and Validate, Clean and Join keep failing. Verify: pytest for an answer with no
-  tool call passes.
+- [x] 7.3 Plot explains an unreadable answer in its reply instead of failing; `choose` reports
+  it to Plot, and Validate, Clean and Join keep failing. Each drawn chart's line names its
+  template and slots. Verify: pytest for the slots in words passes; the unreadable-answer
+  reply is checked in the app (8.1).
 - [ ] 7.4 Suggestions under each chart not drawn and under an unreadable answer: columns that
   fit the failing slot, and up to three templates that fit. Verify: pytest for a box plot whose
   `value` is a text column passes.
