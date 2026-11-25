@@ -51,7 +51,7 @@ export function AvatarDebugView({ onClose }: Props) {
               (color ? ` color={{ solid: "${color.solid}", ink: "${color.ink}" }}` : "") +
               " />"}
           </code>
-          <Button variant="outline" onClick={randomize}>
+          <Button variant="secondary" onClick={randomize}>
             Randomize
           </Button>
         </aside>

@@ -537,7 +537,7 @@ export function DocumentView({
             actions={
               <>
                 <Button
-                  variant={showComments ? "default" : "secondary"}
+                  variant="secondary"
                   aria-pressed={showComments}
                   disabled={blocked}
                   onClick={() => (showComments ? hideComments() : setShowComments(true))}
@@ -654,7 +654,7 @@ export function DocumentView({
                   <MiniMeAvatar miniMe={scribe} size={26} />
                   <span className="flex-1 text-ui text-foreground">Scribe is drafting…</span>
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
                     onClick={() => draftId.current && void api.stopDraft(draftId.current)}
                   >
@@ -687,7 +687,7 @@ export function DocumentView({
                 <div
                   ref={host}
                   onClick={() => view.current?.focus()}
-                  className="flex min-h-full flex-col rounded-lg bg-card"
+                  className="flex min-h-full flex-col rounded-xl bg-card"
                 />
               </div>
             </section>
@@ -753,7 +753,7 @@ function PreviewPages({ pages }: { pages: string[] }) {
             key={url}
             src={url}
             alt={`Page ${index + 1}`}
-            className="w-full rounded-lg bg-card"
+            className="w-full rounded-xl bg-card"
           />
         ))}
       </div>

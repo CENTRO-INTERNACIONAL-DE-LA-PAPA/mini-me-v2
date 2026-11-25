@@ -34,7 +34,7 @@ export function DocumentCard({
         </span>
       </span>
       {!removed && (
-        <Button variant="mini-me" size="sm" onClick={onOpen}>
+        <Button variant="secondary" size="sm" onClick={onOpen}>
           Open
         </Button>
       )}

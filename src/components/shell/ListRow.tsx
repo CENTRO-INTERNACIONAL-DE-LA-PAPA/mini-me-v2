@@ -39,7 +39,7 @@ export function ListRow({
       onClick={onOpen}
       className={cn(
         row,
-        "cursor-pointer rounded-xl px-2 py-2.5 transition-colors duration-150 ease-out outline-none hover:bg-muted focus-visible:bg-muted",
+        "cursor-pointer rounded-lg px-2 py-2.5 transition-colors duration-150 ease-out outline-none hover:bg-muted focus-visible:bg-muted",
         className,
       )}
     >

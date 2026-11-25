@@ -17,7 +17,7 @@ function Tabs({ className, ...props }: TabsPrimitive.Root.Props) {
 const tabSwitchTrack = "flex w-fit items-center gap-1 rounded-xl bg-well p-1 text-ink-2"
 
 const tabSwitchOption =
-  "inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-transparent px-3 py-2 text-control font-medium whitespace-nowrap transition-[color,background-color] duration-150 ease-out outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40 data-active:bg-card data-active:text-foreground aria-pressed:bg-card aria-pressed:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+  "inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-transparent px-3 py-2 text-control font-medium whitespace-nowrap transition-[color,background-color] duration-150 ease-out outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40 data-active:border-border data-active:bg-card data-active:text-foreground aria-pressed:border-border aria-pressed:bg-card aria-pressed:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
 
 function TabsList({ className, ...props }: TabsPrimitive.List.Props) {
   return (

@@ -36,7 +36,7 @@ export function SidecarStatusLine({ status }: { status: SidecarStatus | null }) 
       error={error}
       action={
         status.state === "stopped" && (
-          <Button variant="outline" size="xs" onClick={restart}>
+          <Button variant="secondary" size="xs" onClick={restart}>
             Try again
           </Button>
         )

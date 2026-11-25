@@ -49,7 +49,7 @@ function Approval({ preview, answer, projectId, messageId, componentId, replySta
         <Button onClick={() => respond(true)} disabled={sending}>
           Approve
         </Button>
-        <Button variant="outline" onClick={() => respond(false)} disabled={sending}>
+        <Button variant="secondary" onClick={() => respond(false)} disabled={sending}>
           Reject
         </Button>
       </div>

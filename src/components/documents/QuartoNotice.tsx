@@ -12,7 +12,7 @@ export function QuartoNotice({ status, onCheck }: { status: QuartoStatus; onChec
       <p className="text-ui text-ink-2">{quartoNotice(status)}</p>
       <div className="flex gap-2">
         <Button onClick={() => openLink(status.install_url)}>Get Quarto</Button>
-        <Button variant="outline" onClick={onCheck}>
+        <Button variant="secondary" onClick={onCheck}>
           Check again
         </Button>
       </div>

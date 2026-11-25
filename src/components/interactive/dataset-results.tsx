@@ -131,7 +131,7 @@ function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Data
         ))}
       </ul>
       <Button
-        variant="outline"
+        variant="secondary"
         className="self-start"
         disabled={ticked.size === 0 || downloading}
         onClick={() => void download()}
@@ -202,7 +202,7 @@ function DatasetResults({ preview, projectId }: RendererProps) {
       ))}
       {error && <ErrorText>{error}</ErrorText>}
       {datasets.length < first.total && (
-        <Button variant="outline" className="self-start" disabled={loading} onClick={() => void showMore()}>
+        <Button variant="secondary" className="self-start" disabled={loading} onClick={() => void showMore()}>
           {loading ? "Loading…" : "Show more"}
         </Button>
       )}

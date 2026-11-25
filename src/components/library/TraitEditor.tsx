@@ -85,7 +85,7 @@ export function TraitEditor({
     <>
       {saved && !library.unreadable && (
         <ConfirmButton
-                    trigger={<Button variant="outline" />}
+                    trigger={<Button variant="secondary" />}
                     question={`Delete ${draft.name}? This can't be undone.`}
                     onConfirm={remove}
                   >

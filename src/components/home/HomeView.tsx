@@ -242,7 +242,7 @@ function NeedsYou({
                   </span>
                 </div>
                 <Button
-                  variant="mini-me"
+                  variant="secondary"
                   size="sm"
                   onClick={() =>
                     onOpenReply(

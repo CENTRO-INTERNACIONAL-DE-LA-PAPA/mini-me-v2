@@ -397,7 +397,7 @@ function FeatureFlagsSection() {
                   trailing={
                     <>
                       <StatusLabel on>On</StatusLabel>
-                      <Button variant="outline" onClick={() => void turnOff(flag.id)}>
+                      <Button variant="secondary" onClick={() => void turnOff(flag.id)}>
                         Turn off
                       </Button>
                     </>
@@ -474,14 +474,14 @@ function QuartoForm({ status }: { status: QuartoStatus }) {
           Save
         </Button>
         {status.chosen && (
-          <Button type="button" variant="outline" onClick={() => void change(null)}>
+          <Button type="button" variant="secondary" onClick={() => void change(null)}>
             Clear
           </Button>
         )}
         <Hint label="Check again">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="icon"
             aria-label="Check again"
             onClick={recheckQuarto}
@@ -976,12 +976,12 @@ function Ai2Row() {
           <>
             <StatusLabel on={signedIn}>{signedIn ? "Signed in" : "Not signed in"}</StatusLabel>
             {signedIn ? (
-              <Button variant="outline" onClick={() => run(api.ai2SignOut)}>
+              <Button variant="secondary" onClick={() => run(api.ai2SignOut)}>
                 Sign out
               </Button>
             ) : (
               status?.state !== "pending" && (
-                <Button variant="outline" onClick={() => run(api.ai2StartSignIn)}>
+                <Button variant="secondary" onClick={() => run(api.ai2StartSignIn)}>
                   Sign in
                 </Button>
               )
@@ -1052,7 +1052,7 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
             setStatus(null);
           }}
         />
-        <Button type="submit" variant="outline" disabled={!valid || value === settings.threshold}>
+        <Button type="submit" variant="secondary" disabled={!valid || value === settings.threshold}>
           Save
         </Button>
       </SettingRow>
@@ -1154,7 +1154,7 @@ function DebugDataRow({ projectId }: { projectId?: string }) {
       status={status}
     >
       <ConfirmButton
-        trigger={<Button variant="outline" disabled={!projectId} />}
+        trigger={<Button variant="secondary" disabled={!projectId} />}
         question="Delete every debug record of this Project?"
         action="Clear"
         onConfirm={() => void clear()}
@@ -1175,7 +1175,7 @@ function SidecarLogRow() {
       error={error}
     >
       <Button
-        variant="outline"
+        variant="secondary"
         onClick={() => {
           setError(null);
           api.openSidecarLog().catch((e) => setError(errorMessage(e)));
@@ -1245,7 +1245,7 @@ function KeyRow({
         trailing={
           <>
             <StatusLabel on={saved}>{saved ? "Connected" : "Not connected"}</StatusLabel>
-            <Button variant="outline" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+            <Button variant="secondary" aria-expanded={editing} onClick={() => setEditing(!editing)}>
               {saved ? "Edit" : "Add key"}
             </Button>
           </>

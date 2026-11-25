@@ -176,7 +176,7 @@ export function OverviewView({
                 disabled
               >
                 <Button
-                  variant="mini-me"
+                  variant="secondary"
                   size="sm"
                   disabled={writing || overview.conversations === 0}
                   onClick={updateSummary}

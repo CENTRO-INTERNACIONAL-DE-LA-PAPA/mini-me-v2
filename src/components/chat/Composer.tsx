@@ -490,7 +490,7 @@ function SuggestionRow({
       aria-selected={selected}
       ref={row}
       className={cn(
-        "flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5",
+        "flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-lg px-2.5 py-1.5",
         "text-left",
         selected ? "bg-accent" : "hover:bg-accent",
       )}
