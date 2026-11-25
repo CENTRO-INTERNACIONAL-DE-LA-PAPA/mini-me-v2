@@ -109,7 +109,7 @@ export function List({ children }: { children: ReactNode }) {
 /** A Trait's mark, the same icon its Trait Steps show. */
 export function TraitIcon({ icon }: { icon: string | null }) {
   const Icon = traitIcon(icon);
-  return <Icon aria-hidden className="size-5 shrink-0 text-ink-2" strokeWidth={1.6} />;
+  return <Icon aria-hidden className="size-4.5 shrink-0 text-ink-2" />;
 }
 
 /** One Mini-Me or Trait in a list, opening its editor. */

@@ -651,7 +651,7 @@ export function DocumentView({
                   size="sm"
                   className="mx-6 mt-4 flex-row items-center gap-3 py-2.5"
                 >
-                  <MiniMeAvatar miniMe={scribe} size={26} />
+                  <MiniMeAvatar miniMe={scribe} size={28} />
                   <span className="flex-1 text-ui text-foreground">Scribe is drafting…</span>
                   <Button
                     variant="secondary"

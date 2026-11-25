@@ -294,7 +294,7 @@ function AvatarStack({ limit }: { limit: number }) {
     // Buttons size every svg as an icon; avatar bodies are svgs that fill their box.
     <span className="flex shrink-0 [&_svg]:size-full!">
       {shown.map((m, i) => (
-        <MiniMeAvatar key={m.id} miniMe={m} size={20} className={i > 0 ? "-ml-1.5" : undefined} />
+        <MiniMeAvatar key={m.id} miniMe={m} size={22} className={i > 0 ? "-ml-1.5" : undefined} />
       ))}
     </span>
   );

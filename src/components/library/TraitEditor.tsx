@@ -184,7 +184,7 @@ function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: bo
               render={<li />}
               className="flex items-center gap-3 px-4 py-3"
             >
-              <MiniMeAvatar miniMe={m} size={32} />
+              <MiniMeAvatar miniMe={m} size={28} />
               <span className="grid min-w-0">
                 <span className="truncate font-medium text-foreground">{m?.name ?? "Mini-Me"}</span>
                 {!builtIn && (

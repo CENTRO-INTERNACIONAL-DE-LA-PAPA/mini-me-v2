@@ -237,12 +237,22 @@ White, 1px `--border`, `rounded-xl`, no shadow. Items `rounded-lg`; the highligh
 ## 8. Iconography
 
 ### UI icons
-Lucide, outlined, stroke 1.4, 15–18px. Colour `--muted-foreground` (inactive), `--ink-2` (default) or ink (active). No filled variants.
+Lucide, outlined, stroke 1.4 (set once for every icon). Five sizes, by role:
+
+| Size | Use |
+|---|---|
+| 12px (`size-3`) | A glyph inside a mark: the check in a done Step, the stop square, the + on a drop target |
+| 14px (`size-3.5`) | Beside small text: chips, `xs` buttons, chevrons |
+| 16px (`size-4`) | Everything else: buttons, rows, menus, tabs, inputs, Workflow pills. Components size their icons to this, so an icon needs no class |
+| 18px (`size-4.5`) | The identity icon leading a card or Trait: a Trait's icon, a Workflow Step card, a hand-off or document card |
+| 24px (`size-6`) | A feature icon standing alone: an editor header, a drop zone |
+
+Colour `--muted-foreground` (inactive), `--ink-2` (default) or ink (active). No filled variants.
 
 ### Mini-Me avatars (solid style)
 A flat potato in the Mini-Me's **solid** colour. No outline, no background disc. Features are near-black; freckles use the Mini-Me's **ink**. Built from one part per layer (base, eyes, mouth, and optionally an accessory and a held item) plus a colour family. Never redraw avatars by hand.
 
-Sizes: 16 (inline chip), 18–22 (stacks, rows), 24 (name tags, Workflow start and end), 28 (reply header), 40 (prominent rows), 48 (editor header), 56 (library card). Stacks overlap by about a third.
+Sizes: 16 (inline, in text or a table cell), 22 (stacks and one-line rows), 24 (name tags, Workflow start and end), 28 (reply headers, two-line rows, status cards), 40 (prominent rows), 48 (editor header), 56 (library card). Nothing in between. Stacks overlap by about a third.
 
 ### Trait icons
 Plain line icons in ink, no fill, no colour, no potato silhouette (a potato always means a Mini-Me). Icons stand on their own: never on a filled or tinted tile.

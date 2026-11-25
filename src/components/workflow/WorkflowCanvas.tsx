@@ -392,7 +392,7 @@ function ControlNode({ data }: NodeProps<LayoutNode>) {
     step.type === "loop" ? RepeatIcon : step.type === "parallel" ? SplitIcon : GitForkIcon;
   return (
     <Pill step={step}>
-      <Icon className="size-4 shrink-0" strokeWidth={1.4} />
+      <Icon className="size-4 shrink-0" />
       <span className="truncate">{pillText(step)}</span>
     </Pill>
   );

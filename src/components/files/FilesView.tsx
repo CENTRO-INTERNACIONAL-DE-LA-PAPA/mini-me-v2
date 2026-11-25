@@ -231,7 +231,7 @@ function FileRow({
             style={surfaceStyle(miniMe?.colors)}
             className="flex items-center gap-2 text-(--mm-ink,var(--foreground))"
           >
-            <MiniMeAvatar miniMe={miniMe} size={18} />
+            <MiniMeAvatar miniMe={miniMe} size={16} />
             {miniMe?.name ?? "Mini-Me"}
           </span>
         ) : (
