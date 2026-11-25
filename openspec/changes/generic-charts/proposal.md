@@ -18,18 +18,24 @@ switch between the six types, because the model never sees how the earlier chart
   facet), a small flat answer that small models fill reliably.
 - **Data operations run in the sidecar:** *Plot* checks the slots against the table, fills the
   template and runs each dataset's operations with pandas on the full table, so counts and
-  means stay exact. A chart that does not fit is listed in the reply with the reason. Rows are sampled only
-  to fit the component size limit, as today.
+  means stay exact. Rows are sampled only to fit the component size limit, as today.
 - **One general renderer:** the UI turns any chart description into an Observable Plot
   figure, with tooltips, a legend that hides and shows values, and the theme's colours.
 - **Every mark except maps and images:** templates may use every Observable Plot mark except
   `geo`, `graticule`, `sphere` and `image`.
 - **Built-in templates:** the six current types and new ones (dumbbell, lollipop, area,
   stacked and grouped bars, density, ridgeline, range bars, slope chart and more). A new chart
-  type is a new template file, not new code. A request no template fits gets no chart.
+  type is a new template file, not new code.
 - **Follow-up charts:** a chart's text describes it in plain words. When Jev picks a chart for
   a follow-up such as "make it red", Plot gives the model that chart's text, and the reply
   holds a new chart based on it; the earlier chart is unchanged.
+- **Replies that explain:** each chart's line says which template and columns it drew. A
+  chart that can't be drawn from the columns the request named is not drawn with others
+  instead: the reply says why and suggests columns and charts that fit, computed from the
+  table. A malformed entry in the model's answer is dropped and listed, for Validate and Clean
+  too, and Plot never fails on the model's answer.
+- **Messages in the Mini-Me's voice:** fallback and failure messages of the data Traits, the
+  Dataverse search and Jev's decisions say "I" and no longer name the AI model.
 - **BREAKING:** `chart` moves to version 2, whose preview is a chart description with its
   datasets. Version 1 and its renderer are removed; charts drawn before show their text.
 - **Removed:** the six per-type code paths in the sidecar and the UI, their tests, and
@@ -58,11 +64,14 @@ None.
 
 ## Impact
 
-- Sidecar: `sidecar/src/mini_me_sidecar/adapters/data/plot.py`, the chart models in
-  `adapters/data/catalogue.py`, `adapters/data/replies.py` (`plot`), and their tests.
+- Sidecar: `sidecar/src/mini_me_sidecar/adapters/data/plot.py`, new `charts.py`,
+  `templates.py` and `chart_templates/`, the chart models removed from `catalogue.py`,
+  `choose.py` and `replies.py`, `adapters/providers.py` (raw tool arguments), the messages in
+  `adapters/dataverse.py` and `workflow/decide.py`, and their tests.
 - UI: `src/components/interactive/chart-plot.ts`, `chart-model.ts`, `chart.tsx`,
   `chart-figure.tsx`, and their tests.
 - Library: the *Plot* Trait's instructions in `src-tauri/library/builtin.json`.
+- Rules: `openspec/config.yaml` gains the rule on fallback messages.
 - Rust core: no change. The core stores and checks components without reading a chart's
   preview beyond its `title`.
 - No new dependency: Observable Plot is already bundled.

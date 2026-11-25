@@ -94,7 +94,7 @@
 
 ## 8. In the app
 
-- [ ] 8.1 With Plotter on a sample table: a histogram, a bar chart by category, a dumbbell, a
+- [x] 8.1 With Plotter on a sample table: a histogram, a bar chart by category, a dumbbell, a
   stacked area and small multiples draw with tooltips and legend; "use a log scale" and
   "colour by site" change the last chart; "make the bars blue" draws blue bars; a large table
   shows the sample note; a chart drawn before this change shows its text; featuring a chart

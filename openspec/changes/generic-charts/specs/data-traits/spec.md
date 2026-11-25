@@ -162,9 +162,7 @@ title, its slots and the style slots.
 ### Requirement: Template slots
 Plot SHALL check each filled slot against the table: the column exists and has a type the slot
 accepts. A chart with a required slot empty, or a slot that does not fit, SHALL NOT be drawn
-and SHALL be listed with the reason. A slot SHALL accept every column type its chart can draw
-there: number or date for positions of rows and binned values, number for aggregated or
-statistical values, and text, boolean or number for groups and categories. Slots the template does not have SHALL be ignored. An
+and SHALL be listed with the reason. Slots the template does not have SHALL be ignored. An
 optional slot left empty SHALL leave out the parts of the chart that use it.
 
 #### Scenario: Text column for a value
@@ -172,14 +170,24 @@ optional slot left empty SHALL leave out the parts of the chart that use it.
 - **THEN** that chart is not drawn, and the reply says `variety` is a text column and the
   slot needs numbers
 
+#### Scenario: Optional group left empty
+- **WHEN** the model answers with the line template and no `group`
+- **THEN** the chart draws one line, not one per group
+
+### Requirement: Slot types
+A slot SHALL accept every column type its chart can draw there: number or date for positions
+of rows and binned values, number for aggregated or statistical values, and text, boolean or
+number for groups and categories. A number column a chart colours by SHALL be drawn as
+categories, with a legend, not along a scale.
+
 #### Scenario: Dates on a scatter
 - **WHEN** the model fills a scatter template's `x` with `date`, a date column, and `y` with
   `price`
 - **THEN** the chart draws one dot per row over time
 
-#### Scenario: Optional group left empty
-- **WHEN** the model answers with the line template and no `group`
-- **THEN** the chart draws one line, not one per group
+#### Scenario: Number group
+- **WHEN** a scatter is coloured by `block`, a number column holding 1 to 4
+- **THEN** the dots take four category colours and the legend lists 1, 2, 3 and 4
 
 ### Requirement: Style slots
 Every template SHALL accept the same style slots: a colour or colour scheme the user names, a
