@@ -24,7 +24,6 @@ use crate::error::{AppError, AppResult};
 use crate::features::{self, FEATURES, FeatureFlag};
 use crate::projects::{self, ProjectSummary};
 use crate::project_activity::{self, ProjectActivity};
-use crate::recent::{self, RecentConversation};
 use crate::protocol::{
     AssetRef, Author, AuthorKind, Event, Message, MessageStatus, OpenedConversation, new_id,
     now_ms,
@@ -795,20 +794,6 @@ pub async fn get_message_status(
     let project = state.project(project_id)?;
     let place = project.lock().message_place(message_id)?;
     Ok(place.map(|(_, status)| status))
-}
-
-/// Across all Projects, newest first.
-#[tauri::command(rename_all = "snake_case")]
-pub async fn list_recent_conversations(
-    state: State<'_, AppState>,
-) -> AppResult<Vec<RecentConversation>> {
-    let mut list = recent::list(&state.data_root)?;
-    let running = state.runs.running();
-    for conversation in list.iter_mut().filter(|c| c.status.is_none()) {
-        conversation.status =
-            runs::running_status(&running, conversation.project_id, conversation.conversation_id);
-    }
-    Ok(list)
 }
 
 /// What Home's Project cards show beyond each Project's name.

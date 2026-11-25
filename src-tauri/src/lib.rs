@@ -17,7 +17,6 @@ mod overview;
 mod paths;
 mod project_activity;
 mod projects;
-mod recent;
 mod protocol;
 mod quarto;
 mod routing;
@@ -80,7 +79,6 @@ pub fn run() {
             ipc::answer_approval,
             ipc::list_paused_approvals,
             ipc::get_message_status,
-            ipc::list_recent_conversations,
             ipc::list_project_activity,
             ipc::subscribe_running_replies,
             ipc::import_assets,

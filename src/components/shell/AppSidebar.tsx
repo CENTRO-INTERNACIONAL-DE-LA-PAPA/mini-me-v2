@@ -34,14 +34,7 @@ import {
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { api } from "../../api";
-import type {
-  ConversationSummary,
-  ProjectSummary,
-  RecentConversation,
-  Uuid,
-} from "../../protocol/types";
+import type { ConversationSummary, ProjectSummary, Uuid } from "../../protocol/types";
 import { formatRelative } from "../../lib/format";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { ConversationStatusLine } from "./ConversationStatusLine";
@@ -50,7 +43,6 @@ import { SidecarStatusLine, sidecarReady, useSidecarStatus } from "./SidecarStat
 import { DOTS_HOVER, ItemMenu } from "./ItemMenu";
 import { UpdateStatusLine } from "./UpdateStatusLine";
 import { useMiniMes } from "../../hooks/useMiniMes";
-import { useRunningKey } from "../../hooks/useRunningReplies";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { initials } from "../../lib/names";
 import type { View } from "./view";
@@ -68,7 +60,6 @@ interface Props {
   onOpenProject: (project: ProjectSummary) => void;
   onNavigate: (view: View) => void;
   onNewConversation: () => void;
-  onOpenConversation: (projectId: Uuid, conversationId: Uuid) => void;
   onRenameConversation: (id: Uuid, title: string) => Promise<unknown>;
   onDeleteConversation: (id: Uuid) => Promise<unknown>;
 }
@@ -83,7 +74,6 @@ export function AppSidebar({
   onOpenProject,
   onNavigate,
   onNewConversation,
-  onOpenConversation,
   onRenameConversation,
   onDeleteConversation,
 }: Props) {
@@ -91,16 +81,6 @@ export function AppSidebar({
   // The navigation sheet shrinks to a rail of icons when a tool sheet opens in a small window.
   const collapsed = useSidebar().state === "collapsed";
   const name = useUserProfile()?.name;
-  const onHome = !project && view.kind === "home";
-  const [recent, setRecent] = useState<RecentConversation[]>([]);
-
-  const loadRecent = useCallback(() => api.listRecentConversations().then(setRecent), []);
-
-  // Refetched when Home shows and when a reply starts or stops, so activity and statuses follow.
-  const runningKey = useRunningKey();
-  useEffect(() => {
-    if (onHome) loadRecent().catch(() => {});
-  }, [onHome, loadRecent, runningKey]);
 
   return (
     <Sidebar variant="floating" collapsible="icon">
@@ -187,56 +167,6 @@ export function AppSidebar({
             </SidebarMenu>
           )}
         </SidebarGroup>
-        {!project && !collapsed && recent.length > 0 && (
-          <SidebarGroup className="py-0">
-            <SidebarGroupLabel className="h-auto px-2.5 pt-0 pb-1.5 font-serif text-subheading font-normal text-foreground">
-              Recent
-            </SidebarGroupLabel>
-            <SidebarMenu className="gap-1">
-              {recent.map((conversation) => (
-                <SidebarMenuItem key={conversation.conversation_id}>
-                  <SidebarMenuButton
-                    size="lg"
-                    className={cn("h-auto flex-col items-start gap-0 py-2.5 pr-9", ROW_HOVER)}
-                    onClick={() =>
-                      onOpenConversation(conversation.project_id, conversation.conversation_id)
-                    }
-                  >
-                    <ConversationTitle
-                      title={conversation.title}
-                      unseen={unseen.has(conversation.conversation_id)}
-                    />
-                    {conversation.status ? (
-                      <ConversationStatusLine status={conversation.status} />
-                    ) : (
-                      <span className="w-full truncate text-meta font-normal text-muted-foreground">
-                        {conversation.project_name} ({formatRelative(conversation.last_activity_at)})
-                      </span>
-                    )}
-                  </SidebarMenuButton>
-                  <ItemMenu
-                    name={conversation.title}
-                    className={cn(ROW_MENU, DOTS_HOVER)}
-                    rename={{
-                      current: conversation.title,
-                      onRename: (title) =>
-                        api
-                          .renameConversation(conversation.project_id, conversation.conversation_id, title)
-                          .then(loadRecent),
-                    }}
-                    remove={{
-                      question: `Delete "${conversation.title}" and its messages? This can't be undone.`,
-                      onDelete: () =>
-                        api
-                          .deleteConversation(conversation.project_id, conversation.conversation_id)
-                          .then(loadRecent),
-                    }}
-                  />
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroup>
-        )}
         {project && (
           <SidebarGroup className="py-0">
             <div

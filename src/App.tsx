@@ -177,7 +177,6 @@ export default function App() {
           onOpenProject={openProject}
           onNavigate={navigate}
           onNewConversation={newConversation}
-          onOpenConversation={openConversation}
           onRenameConversation={renameConversation}
           onDeleteConversation={deleteConversation}
         />
