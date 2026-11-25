@@ -7,6 +7,7 @@ import { useFilesChanged } from "./hooks/useFilesChanged";
 import { useReplyNotifications } from "./hooks/useReplyNotifications";
 import { useRunningKey } from "./hooks/useRunningReplies";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
+import { ComponentsDebugView } from "./components/shell/ComponentsDebugView";
 import { ChatView } from "./components/chat/ChatView";
 import { DocumentView } from "./components/documents/DocumentView";
 import { FilesView } from "./components/files/FilesView";
@@ -253,6 +254,7 @@ function Main({
           initialPage={view.page}
           projectId={project?.id}
           onOpenAvatars={() => onNavigate({ kind: "avatars" })}
+          onOpenComponents={() => onNavigate({ kind: "components" })}
           onOpenWhatsNew={() =>
             onNavigate({ kind: "whats-new", from: { kind: "settings", page: "about" } })
           }
@@ -273,6 +275,12 @@ function Main({
     case "avatars":
       // Opened from Settings → General, so closing it goes back there.
       return scrolling(<AvatarDebugView onClose={() => onNavigate({ kind: "settings" })} />);
+    case "components":
+      return scrolling(
+        <ComponentsDebugView
+          onClose={() => onNavigate({ kind: "settings", page: "developer" })}
+        />,
+      );
     case "library":
       return scrolling(<LibraryView tab={view.tab ?? "mini-mes"} onOpen={onNavigate} />);
     case "mini-me":

@@ -97,6 +97,7 @@ const PAGES: Section<Page>[] = [
 /** Settings, opening at `initialPage`; the Developer page can clear `projectId`'s debug records. */
 export function SettingsView({
   onOpenAvatars,
+  onOpenComponents,
   onOpenWhatsNew,
   onOpenLicense,
   onOpenThirdParty,
@@ -104,6 +105,7 @@ export function SettingsView({
   projectId,
 }: {
   onOpenAvatars: () => void;
+  onOpenComponents: () => void;
   onOpenWhatsNew: () => void;
   onOpenLicense: () => void;
   onOpenThirdParty: () => void;
@@ -149,6 +151,7 @@ export function SettingsView({
             settings={settings}
             onChanged={refresh}
             onOpenAvatars={onOpenAvatars}
+            onOpenComponents={onOpenComponents}
             projectId={projectId}
           />
         )}
@@ -282,11 +285,13 @@ function DeveloperPage({
   settings,
   onChanged,
   onOpenAvatars,
+  onOpenComponents,
   projectId,
 }: {
   settings: AiSettings;
   onChanged: () => void;
   onOpenAvatars: () => void;
+  onOpenComponents: () => void;
   projectId?: string;
 }) {
   return (
@@ -304,7 +309,15 @@ function DeveloperPage({
         label="Avatars"
         description="Every avatar base, face, accessory and colour, to try combinations."
       >
-        <Button variant="outline" onClick={onOpenAvatars}>
+        <Button variant="secondary" onClick={onOpenAvatars}>
+          Open
+        </Button>
+      </SettingRow>
+      <SettingRow
+        label="Components"
+        description="Every shared component in each of its states, to check the visual style."
+      >
+        <Button variant="secondary" onClick={onOpenComponents}>
           Open
         </Button>
       </SettingRow>
