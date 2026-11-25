@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from mini_me_sidecar.adapters.data.charts import MARKS, check_chart
+from mini_me_sidecar.adapters.data.charts import STATISTICAL_MARKS, is_summarized
 from mini_me_sidecar.adapters.data.plot import build_chart
 from mini_me_sidecar.adapters.data.templates import (
     TEMPLATES,
@@ -33,6 +33,30 @@ TYPES = {
     "day": "date",
     "ok": "boolean",
 }
+# The Observable Plot marks, channels and options a template may use: every mark but `geo`,
+# `graticule`, `sphere` and `image`, which need map data or pictures, and `auto`, `tip` and
+# `crosshair`, whose tooltips the app draws.
+MARKS = frozenset(
+    """area areaX areaY arrow axisX axisY axisFx axisFy gridX gridY gridFx gridFy barX barY
+    bollingerX bollingerY boxX boxY cell cellX cellY contour delaunayLink delaunayMesh hull
+    voronoi voronoiMesh density differenceX differenceY dot dotX dotY circle hexagon frame
+    hexgrid line lineX lineY linearRegressionX linearRegressionY link raster rect rectX rectY
+    ruleX ruleY text textX textY tickX tickY tree cluster vector vectorX vectorY spike waffleX
+    waffleY""".split()
+)
+
+CHANNELS = frozenset(
+    """x y x1 x2 y1 y2 fill stroke r opacity fillOpacity strokeOpacity strokeWidth symbol text
+    fx fy z rotate length weight path""".split()
+)
+
+OPTIONS = frozenset(
+    """curve marker markerStart markerMid markerEnd inset insetLeft insetRight insetTop
+    insetBottom dx dy textAnchor lineAnchor fontSize fontWeight fontStyle lineWidth bandwidth
+    thresholds interval strokeDasharray strokeLinecap rx ry frameAnchor bend headLength ci n k
+    unit gap anchor shape sort""".split()
+)
+
 # A column of each type, for filling any template's slots in the format test.
 BY_TYPE = {"text": "variety", "number": "yield", "date": "day", "boolean": "ok"}
 
@@ -97,6 +121,13 @@ def test_style_slots_apply_to_any_template():
     assert any(c.name == "fy" and c.column == "site" for c in chart.marks[0].channels)
     assert chart.height == 320
 
+    bars = {"template": "bar", "category": "variety", "value": "yield"}
+    chart, ignored = fill_template(
+        choose(**bars, scheme="rainbowz", colour="red; x", height=5000), TABLE
+    )
+    assert [label for label, _ in ignored] == ["scheme rainbowz", "colour red; x"]
+    assert chart.colour is None and chart.height == 800
+
     heatmap = choose(template="correlation_heatmap", columns=["yield", "height"], facet="site")
     _, ignored = fill_template(heatmap, TABLE)
     assert [label for label, _ in ignored] == ["facet site"]
@@ -107,7 +138,10 @@ def test_every_template_loads_fills_and_draws():
         text = template.model_dump_json()
         gaps = set(re.findall(r"\{(\w+)\}", text)) - {"aggregate"}
         assert gaps <= set(template.slots), template.name
-        assert {m["mark"] for m in template.chart["marks"]} <= MARKS, template.name
+        for mark in template.chart["marks"]:
+            assert mark["mark"] in MARKS, template.name
+            assert {c["name"] for c in mark.get("channels", [])} <= CHANNELS, template.name
+            assert {o["name"] for o in mark.get("options", [])} <= OPTIONS, template.name
         fields = {
             slot: (["yield", "height"] if slot == "columns" else BY_TYPE[spec.types[0]])
             for slot, spec in template.slots.items()
@@ -117,7 +151,9 @@ def test_every_template_loads_fills_and_draws():
             fields["group"] = "season"
         choice = choose(template=template.name, **fields)
         assert choice_problem(choice, TYPES) is None, template.name
-        chart, _ = fill_template(choice, TABLE)
-        checked = check_chart(chart, TYPES)
-        assert checked.ignored == [] and checked.chart is not None, template.name
-        assert build_chart(TABLE, checked.chart).fits, template.name
+        chart, ignored = fill_template(choice, TABLE)
+        assert ignored == [], template.name
+        own_rows = {d.name for d in chart.datasets if not is_summarized(d)}
+        statistical = [m for m in chart.marks if m.mark in STATISTICAL_MARKS]
+        assert all(m.dataset in own_rows for m in statistical), template.name
+        assert build_chart(TABLE, chart).fits, template.name

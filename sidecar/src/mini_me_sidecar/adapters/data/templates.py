@@ -9,7 +9,10 @@ import pandas as pd
 from pydantic import BaseModel, Field, model_validator
 
 from mini_me_sidecar.adapters.data.charts import (
+    COLOUR,
     MAX_HEIGHT,
+    MIN_HEIGHT,
+    SCHEMES,
     Channel,
     ChartDescription,
     Group,
@@ -211,8 +214,14 @@ def _style(
     ignored: list[tuple[str, str]] = []
     scales = list(chart.scales)
     marks = list(chart.marks)
-    if choice.scheme:
+    if choice.scheme and choice.scheme.lower() in SCHEMES:
         scales = _set_scale(scales, "color", scheme=choice.scheme)
+    elif choice.scheme:
+        ignored.append((f"scheme {choice.scheme}", "not a known colour scheme"))
+    colour = choice.colour
+    if colour is not None and not COLOUR.match(colour):
+        ignored.append((f"colour {colour}", "not a colour"))
+        colour = None
     if choice.log_x:
         scales = _set_scale(scales, "x", type="log")
     if choice.log_y:
@@ -238,8 +247,8 @@ def _style(
             "scales": scales,
             "marks": marks,
             "datasets": datasets,
-            "height": height,
-            "colour": choice.colour,
+            "height": min(max(height, MIN_HEIGHT), MAX_HEIGHT) if height else None,
+            "colour": colour,
         }
     )
     return styled, ignored

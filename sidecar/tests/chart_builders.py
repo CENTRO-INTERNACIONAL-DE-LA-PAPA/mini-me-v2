@@ -1,4 +1,4 @@
-"""Chart descriptions for tests, with every field the model leaves null filled in."""
+"""Chart descriptions for tests, with the optional fields spelled out."""
 
 from typing import Any
 

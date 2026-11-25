@@ -13,7 +13,7 @@ from mini_me_sidecar.adapters.data.catalogue import (
     describe_entry,
     problem,
 )
-from mini_me_sidecar.adapters.data.charts import ChartDescription, check_chart
+from mini_me_sidecar.adapters.data.charts import ChartDescription
 from mini_me_sidecar.adapters.data.templates import (
     ChartChoice,
     ChartPlan,
@@ -166,8 +166,8 @@ async def plot(ctx: CallContext, text: str) -> None:
 def _fill_choices(
     choices: list[ChartChoice], frame: pd.DataFrame, types: dict[str, str]
 ) -> tuple[list[tuple[ChartChoice, ChartDescription]], list[tuple[str, str]]]:
-    """Each choice whose slots fit the table, as its filled and checked chart, and what was
-    ignored with the reasons."""
+    """Each choice whose slots fit the table, as its filled chart, and what was ignored with
+    the reasons."""
     drawn, ignored = [], []
     for choice in choices:
         reason = choice_problem(choice, types)
@@ -175,10 +175,8 @@ def _fill_choices(
             ignored.append((f'chart "{choice.title}"', reason))
             continue
         chart, styles = fill_template(choice, frame)
-        checked = check_chart(chart, types)
-        ignored += styles + checked.ignored
-        if checked.chart is not None:
-            drawn.append((choice, checked.chart))
+        ignored += styles
+        drawn.append((choice, chart))
     return drawn, ignored
 
 

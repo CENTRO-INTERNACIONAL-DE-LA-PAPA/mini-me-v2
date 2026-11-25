@@ -4,19 +4,14 @@ import numpy as np
 import pandas as pd
 from chart_builders import chart, dataset, mark, scale
 
-from mini_me_sidecar.adapters.data.charts import check_chart
 from mini_me_sidecar.adapters.data.plot import MAX_BINS, MAX_BYTES, build_chart, chart_text
-from mini_me_sidecar.adapters.data.tables import column_type
 from mini_me_sidecar.adapters.data.templates import ChartChoice, fill_template
 
 COUNT = {"how": "count", "column": None, "name": None}
 
 
 def draw(frame: pd.DataFrame, datasets, marks, scales=()):
-    types = {str(name): column_type(frame[name]) for name in frame.columns}
-    checked = check_chart(chart(datasets, marks, scales), types)
-    assert checked.chart is not None, checked.ignored
-    return build_chart(frame, checked.chart)
+    return build_chart(frame, chart(datasets, marks, scales))
 
 
 def rows(result, name: str = "d") -> list[dict]:
@@ -140,7 +135,7 @@ def test_text_names_the_template_slots_style_and_rows():
         template="bar", title="t", category="variety", value="yield", log_y=True, reference=2.5
     )
     chart, _ = fill_template(choice, frame)
-    result = build_chart(frame, check_chart(chart, {"variety": "text", "yield": "number"}).chart)
+    result = build_chart(frame, chart)
     assert chart_text(result.data, choice).splitlines() == [
         "t",
         "Chart template bar: category variety, value yield, aggregate mean. "

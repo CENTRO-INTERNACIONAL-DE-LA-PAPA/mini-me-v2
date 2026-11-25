@@ -78,7 +78,7 @@
 
 ## 7. Simpler checks, clearer replies (sidecar)
 
-- [ ] 7.1 Check templates in the format test only: Plot stops running `check_chart` at
+- [x] 7.1 Check templates in the format test only: Plot stops running `check_chart` at
   runtime, keeping the slot check and the log-scale check on the data; the structural checks
   move into the test, and code nothing else uses is deleted. Verify: `uv run pytest` passes.
 - [ ] 7.2 Apply the slot-type rule to every template and add it to the format test. A number
