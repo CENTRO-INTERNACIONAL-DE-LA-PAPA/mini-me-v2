@@ -172,7 +172,7 @@ export function StepInspector({
         {editable && (
           <Hint label={remaining ? undefined : "A Workflow keeps at least one Step"} disabled>
             <Button
-              variant="outline"
+              variant="secondary"
               className="w-fit text-destructive"
               disabled={!remaining}
               onClick={() => {
@@ -274,7 +274,7 @@ function Branches({
         ))}
         {editable && (
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="w-fit"
             onClick={() => onChange([...branches, { label: nextLabel(), steps: [] }])}
