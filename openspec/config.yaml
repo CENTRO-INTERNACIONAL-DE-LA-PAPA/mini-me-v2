@@ -85,7 +85,8 @@ context: |
     exception is each Mini-Me's and Trait's own colour, used only where DESIGN.md allows.
     The UI is light only; there is no dark theme yet. Charts and tables take their colours
     from the same tokens; chart series past the tokens' palette take generated colours as
-    DESIGN.md describes.
+    DESIGN.md describes. A chart takes a colour or colour scheme outside the tokens only when
+    the user names one.
   - Fonts are bundled with the app, never loaded from a CDN, so the UI renders offline.
   - The UI runs in WebView2 (Windows), WebKit (macOS) and WebKitGTK (Linux); styles must work
     in all three.
@@ -123,6 +124,9 @@ rules:
       use agent nouns ("Summarizer"). A name that needs "and" describes two Traits.
     - When a requirement adds or changes protocol events, list each event's type and payload.
     - When a requirement touches the filesystem, state how Project-folder confinement holds.
+    - A fallback or failure message the user sees speaks as the Mini-Me ("I couldn't …") and
+      never names or blames the AI model, unless the problem is specific to that model, such
+      as a model that can't call tools.
   design:
     - Say which process (UI, Rust core, sidecar) owns each responsibility, and keep durable
       state in the Rust core.

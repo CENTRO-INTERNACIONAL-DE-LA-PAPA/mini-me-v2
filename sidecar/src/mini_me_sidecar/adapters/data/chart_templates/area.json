@@ -1,0 +1,37 @@
+{
+  "name": "area",
+  "description": "An aggregate of a value over a date or ordered number, filled down to zero.",
+  "slots": {"x": {"types": ["date", "number"]}, "y": {"types": ["number"]}},
+  "chart": {
+    "datasets": [
+      {
+        "name": "points",
+        "operations": [
+          {
+            "kind": "group",
+            "by": ["{x}"],
+            "aggregates": [{"how": "{aggregate}", "column": "{y}", "name": "{aggregate}_{y}"}]
+          },
+          {"kind": "sort", "by": ["{x}"]}
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "areaY",
+        "dataset": "points",
+        "channels": [
+          {"name": "x", "column": "{x}"},
+          {"name": "y", "column": "{aggregate}_{y}"},
+          {"name": "fillOpacity", "value": 0.3}
+        ]
+      },
+      {
+        "mark": "lineY",
+        "dataset": "points",
+        "channels": [{"name": "x", "column": "{x}"}, {"name": "y", "column": "{aggregate}_{y}"}]
+      }
+    ],
+    "scales": [{"scale": "y", "label": "{Aggregate} of {y}"}]
+  }
+}

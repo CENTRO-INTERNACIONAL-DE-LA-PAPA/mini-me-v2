@@ -70,7 +70,7 @@ export default function ChartFigure({
     if (!element || width === 0) return;
     let figure: Element | undefined;
     try {
-      spec.current = chartSpec(chart, state.view, state.hidden, readColours(element, color), width);
+      spec.current = chartSpec(chart, state.hidden, readColours(element, color), width);
       figure = Plot.plot(spec.current.options);
       element.replaceChildren(figure);
       setTip(null);

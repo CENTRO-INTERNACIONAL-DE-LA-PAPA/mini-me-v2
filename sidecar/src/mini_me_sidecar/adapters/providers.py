@@ -94,37 +94,52 @@ def anthropic_chat(model: Model, key: str, base_url: str | None, callbacks: Any)
     )
 
 
-async def structured_answer(chat: Any, schema: type[BaseModel], turns: list[Any]) -> Any:
-    """An instance of `schema`, or None. A model refusing the forced tool call (as some do with
-    thinking on) is offered the tool instead."""
+async def structured_arguments(chat: Any, schema: type[BaseModel], turns: list[Any]) -> Any:
+    """The arguments the model called `schema`'s tool with, not yet checked against it, or
+    None. A model refusing the forced tool call (as some do with thinking on) is offered the
+    tool instead."""
     try:
-        return await chat.with_structured_output(schema, method="function_calling").ainvoke(turns)
+        forced = chat.with_structured_output(schema, method="function_calling", include_raw=True)
+        reply = (await forced.ainvoke(turns))["raw"]
     except Exception as error:
         if not NO_FORCED_TOOL.search(str(error)):
             raise
-    reply = await chat.bind_tools([schema], tool_choice="auto").ainvoke(turns)
+        reply = await chat.bind_tools([schema], tool_choice="auto").ainvoke(turns)
     calls = getattr(reply, "tool_calls", None) or []
+    return calls[0]["args"] if calls else None
+
+
+async def structured_answer(chat: Any, schema: type[BaseModel], turns: list[Any]) -> Any:
+    """An instance of `schema`, or None when the answer does not fit it."""
     try:
-        return schema(**calls[0]["args"]) if calls else None
+        return schema.model_validate(await structured_arguments(chat, schema, turns))
     except ValidationError:
         return None
 
 
-async def ask_structured(
-    ctx: CallContext, schema: type[BaseModel], turns: list[Any], none_if_invalid: bool = False
-) -> Any:
-    """Errors become `provider_error`s; with `none_if_invalid`, an off-schema answer is None."""
+async def ask_arguments(ctx: CallContext, schema: type[BaseModel], turns: list[Any]) -> Any:
+    """The model's arguments for `schema`'s tool, unchecked, or None; errors become
+    `provider_error`s."""
     model = require_model(ctx)
     key = await ctx.secret(model.provider)
     try:
-        return await structured_answer(chat_model(model, key.reveal()), schema, turns)
+        return await structured_arguments(chat_model(model, key.reveal()), schema, turns)
     except TraitError:
         raise
     except Exception as error:
-        if none_if_invalid and isinstance(error, ValidationError):
-            return None
         log_error(error, model, key.reveal())
         raise provider_error(error, model) from None
+
+
+async def ask_structured(ctx: CallContext, schema: type[BaseModel], turns: list[Any]) -> Any:
+    """An instance of `schema`, or None when the answer does not fit it; other errors become
+    `provider_error`s."""
+    arguments = await ask_arguments(ctx, schema, turns)
+    try:
+        return schema.model_validate(arguments)
+    except ValidationError as error:
+        log_error(error, require_model(ctx), "")
+        return None
 
 
 def filtered(ending: dict[str, Any]) -> bool:

@@ -1,5 +1,4 @@
 import { ComponentCard } from "./ComponentCard";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { lazy, Suspense, useMemo, useReducer } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,11 +7,11 @@ import { FeatureButton } from "./featuring";
 import {
   chartReducer,
   initialState,
+  legendOf,
   parseChart,
   SERIES_TOKENS,
+  sampleOf,
   seriesColour,
-  seriesOf,
-  VIEW_NAMES,
 } from "./chart-model";
 
 // Plot and D3 load only when a chart is shown.
@@ -22,43 +21,24 @@ const numberFormat = new Intl.NumberFormat();
 
 const PALETTE = SERIES_TOKENS.map((name) => `var(${name})`);
 
-/** A chart card: title, view toggle, figure, and a legend that hides and shows series. */
+/** A chart card: title, figure, sample note, and a legend that hides and shows values. */
 export function ChartView({
   preview,
   color,
   componentId,
 }: Pick<RendererProps, "preview" | "color" | "componentId">) {
   const chart = useMemo(() => parseChart(preview), [preview]);
-  const [state, dispatch] = useReducer(chartReducer(chart), initialState);
-  const view = chart.views[state.view];
-  const series = seriesOf(view);
-  const sample = "sample" in view ? view.sample : undefined;
+  const legend = useMemo(() => legendOf(chart), [chart]);
+  const [state, dispatch] = useReducer(chartReducer(legend), initialState);
+  const sample = sampleOf(chart);
+  const first = chart.description.colour ?? color ?? "var(--primary)";
 
   return (
     <ComponentCard
       render={<section />}
       aria-label={chart.title || "Chart"}
       title={chart.title}
-      actions={
-        <>
-          {chart.views.length > 1 && (
-            <ToggleGroup
-              aria-label="Chart type"
-              value={[String(state.view)]}
-              onValueChange={(value) =>
-                value.length > 0 && dispatch({ type: "chooseView", view: Number(value[0]) })
-              }
-            >
-              {chart.views.map((v, index) => (
-                <ToggleGroupItem key={index} value={String(index)}>
-                  {VIEW_NAMES[v.type]}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          )}
-          <FeatureButton componentId={componentId} />
-        </>
-      }
+      actions={<FeatureButton componentId={componentId} />}
       footer={
         sample && (
           <p>
@@ -73,9 +53,9 @@ export function ChartView({
           <ChartFigure chart={chart} state={state} color={color} />
         </Suspense>
       </div>
-      {series.length > 0 && (
-        <ul aria-label="Series" className="flex flex-wrap gap-1 px-3 pb-3">
-          {series.map((name, index) => {
+      {legend && (
+        <ul aria-label={legend.column} className="flex flex-wrap gap-1 px-3 pb-3">
+          {legend.values.map((name, index) => {
             const hidden = state.hidden.includes(name);
             return (
               <li key={name}>
@@ -87,12 +67,12 @@ export function ChartView({
                     "aria-pressed:bg-transparent aria-pressed:text-ink-2",
                     hidden && "text-muted-foreground line-through",
                   )}
-                  onClick={() => dispatch({ type: "toggleSeries", series: name })}
+                  onClick={() => dispatch({ type: "toggleValue", value: name })}
                 >
                   <span
                     aria-hidden
                     className={cn("size-2.5 rounded-full", hidden && "opacity-30")}
-                    style={{ background: seriesColour(index, color ?? "var(--primary)", PALETTE) }}
+                    style={{ background: seriesColour(index, first, PALETTE) }}
                   />
                   {name}
                 </Button>
@@ -106,7 +86,7 @@ export function ChartView({
 }
 
 export const renderers: Renderers = {
-  1: ({ preview, color, componentId }) => (
+  2: ({ preview, color, componentId }) => (
     <ChartView preview={preview} color={color} componentId={componentId} />
   ),
 };

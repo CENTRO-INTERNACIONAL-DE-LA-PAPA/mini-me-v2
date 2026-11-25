@@ -105,11 +105,12 @@ Rows SHALL never be sent.
 
 ### Requirement: The model only chooses from fixed lists
 A data Trait SHALL ask the model for a structured answer naming entries of a fixed catalogue
-of checks, actions or charts with their parameters, and SHALL ignore any entry that is not
-in the catalogue, names a column the table does not have, or has invalid parameters, listing
-what it ignored in the reply. The data Trait, not the model, SHALL compute every number,
-check result, table and chart value it reports. When no AI model is set in Settings, a data
-Trait that needs one fails with the message "Choose an AI model in Settings first."
+of checks, actions or chart templates with their parameters, and SHALL ignore any entry that is not in the catalogue, names a column the table
+or dataset does not have, has invalid parameters, or does not fit its kind's schema, listing
+what it ignored in the reply and still using the other entries. The
+data Trait, not the model, SHALL compute every number, check result, table and chart value it
+reports. When no AI model is set in Settings, a data Trait that needs one fails with the
+message "Choose an AI model in Settings first."
 
 #### Scenario: Invented check ignored
 - **WHEN** the model's answer for Validate Data includes a check on a column `yeild` that
@@ -117,9 +118,20 @@ Trait that needs one fails with the message "Choose an AI model in Settings firs
 - **THEN** that check is not run, and the reply lists it as ignored
 
 #### Scenario: Invented chart ignored
-- **WHEN** the model's answer for Plot includes a scatter chart of `yield` against a column
+- **WHEN** the model's answer for Plot fills a scatter template's `y` slot with a column
   `heigth` that the table does not have
-- **THEN** that chart is not drawn, and the reply lists it as ignored
+- **THEN** that chart is not drawn, and the reply lists it as ignored with the reason
+
+#### Scenario: Malformed action ignored
+- **WHEN** the model's answer for Clean Data has a `map_values` action with `columns` in
+  place of `column`, and a well-formed `strip_whitespace` action
+- **THEN** the whitespace is stripped, and the reply lists the `map_values` action as not run
+  because it has no `column`
+
+#### Scenario: Malformed chart ignored
+- **WHEN** the model's answer for Plot has one chart with no `title` and one well-formed chart
+- **THEN** the well-formed chart is drawn, and the reply lists the other as not drawn with the
+  reason
 
 ### Requirement: Profile Data Trait
 The Trait library SHALL contain *Profile Data*, which reports, for each table it reads, the
@@ -215,15 +227,15 @@ and a preview of the result as a `table` component.
 - **THEN** the reply fails with a message asking for two tables
 
 ### Requirement: Plot Trait
-The Trait library SHALL contain *Plot*, which draws charts of the first table it reads. The
-model chooses the charts from the chart catalogue to match the user's message, and Plot
-draws every valid one. It reads further tables only to say in the reply that they were not
-used. Its reply is a short text and one `chart` component per chart, with no
-`table` component.
+The Trait library SHALL contain *Plot*, which draws charts of the first table it reads. For
+each chart that answers the user's message, the model chooses a chart template and fills its
+slots, and Plot draws every chart whose slots fit the table. It reads further tables only to say in the
+reply that they were not used. Its reply is a short text and one `chart` component per chart,
+with no `table` component.
 
 #### Scenario: Yield distribution
 - **WHEN** the user sends "@Plotter #field-trial.csv show me how yield is distributed"
-- **THEN** the reply holds a `chart` component with a histogram of `yield` and no `table`
+- **THEN** the reply holds a `chart` component showing a histogram of `yield` and no `table`
   component
 
 #### Scenario: Several tables referenced
@@ -234,71 +246,25 @@ used. Its reply is a short text and one `chart` component per chart, with no
 - **WHEN** no AI model is set in Settings and the user asks Plotter for a chart
 - **THEN** the reply fails with "Choose an AI model in Settings first."
 
-### Requirement: Chart catalogue
-Each chart the model chooses SHALL be one of these types, using columns of these types:
-- histogram: `x` number or date;
-- bar: `x` text or boolean, `y` number, aggregate count, sum, mean or median (count needs
-  no `y`);
-- line: `x` date or number, `y` number, aggregate for repeated `x` values;
-- scatter: `x` and `y` number;
-- box: `x` text or boolean groups, `y` number;
-- heatmap: two or more number columns, as pairwise correlations.
-
-#### Scenario: Wrong column type
-- **WHEN** the model chooses a histogram of `variety`, a text column
-- **THEN** that chart is ignored and listed in the reply with the reason
-
-#### Scenario: Count of rows per category
-- **WHEN** the model chooses a bar chart of `variety` with aggregate count
-- **THEN** the chart shows the number of rows for each value of `variety`
-
-### Requirement: Chart series
-A histogram, bar, line or scatter chart SHALL accept an optional `series` column of type
-text or boolean, which splits its values into one series per value of that column. Every
-value SHALL be its own series, ordered from most to least frequent; values are never
-grouped together.
-
-#### Scenario: Yield by treatment
-- **WHEN** the model chooses a line chart of `yield` over `date` with series `treatment`,
-  which has 3 values
-- **THEN** the chart has three series, one per treatment
-
-#### Scenario: Many series
-- **WHEN** the series column `site` has 30 values
-- **THEN** the chart has 30 series, the most frequent site first
-
-### Requirement: Alternative views
-For each chart, the model's answer SHALL allow other chart types that suit the same
-columns to be named as alternatives. Plot SHALL compute the data of every alternative that
-is valid for those columns and include it in the chart as an extra view, once per type. It
-SHALL drop invalid alternatives without listing them.
-
-#### Scenario: Histogram with a box plot alternative
-- **WHEN** the model chooses a histogram of `yield` with series `variety` and names box as
-  an alternative
-- **THEN** the chart has two views, the histogram first and a box plot of `yield` by
-  `variety` second
-
 ### Requirement: What a chart's data holds
-Plot SHALL compute only the values a chart type needs, with pandas: histogram bin edges and
-counts, bar and line aggregates for every category or `x` value, box-plot quartiles,
-whiskers and every outlier for every group, scatter and line points, or the Pearson
-correlation of each pair of heatmap columns. Rows missing a value the chart uses SHALL be left out, and the reply SHALL
-say how many were left out.
+Plot SHALL compute each dataset's rows with pandas from every row of the table, running its
+data operations in order. A dataset SHALL hold only the columns that the chart's marks use.
+Rows missing a value in a column a mark uses SHALL be left out of that dataset, and the reply
+SHALL say how many were left out.
 
 #### Scenario: Missing values left out
-- **WHEN** a scatter chart of `yield` against `height` is drawn from a table where 12 rows
-  have no `yield`
-- **THEN** the chart leaves those rows out, and the reply says 12 rows had missing values
+- **WHEN** a chart draws dots of `yield` against `height` from a table where 12 rows have no
+  `yield`
+- **THEN** the dataset leaves those rows out, and the reply says 12 rows had missing values
 
 #### Scenario: Correlation heatmap
-- **WHEN** the model chooses a heatmap of `yield`, `height` and `tubers`
-- **THEN** the chart holds the nine pairwise correlations of those columns
+- **WHEN** the model describes a dataset that correlates `yield`, `height` and `tubers`
+- **THEN** the dataset holds the nine pairwise correlations of those columns
 
 ### Requirement: A chart records its file
 Each chart Plot draws SHALL record the table file it was drawn from as the component's
 `source_asset_id`, and that file's name as `source` in its preview. The preview SHALL hold no
-rows of the file beyond the values its views need.
+rows of the file beyond the rows of its datasets.
 
 #### Scenario: Drawn from a file
 - **WHEN** Plot draws "Yield by variety" from `field-trial.csv`
@@ -311,28 +277,61 @@ rows of the file beyond the values its views need.
 - **THEN** the chart records `field-trial.csv`
 
 ### Requirement: Points are sampled only to fit the size limit
-A line or scatter view SHALL hold every point while the chart's data fits the core's
-component size limit. Only when it does not SHALL Plot draw a random sample, as large as
-fits and the same each time it charts the same table, and the reply SHALL say how many
-points were sampled from how many.
+A dataset whose rows are the table's own rows, with no group, bin or correlate operation,
+SHALL hold every row while the chart's data fits the core's component size limit. Only when it
+does not SHALL Plot keep a random sample of those rows, as large as fits and the same each time
+it charts the same table, and the reply SHALL say how many rows were sampled from how many. A
+grouped, binned or correlated dataset is never sampled; when it does not fit, the chart is
+described in text instead.
 
 #### Scenario: Scatter that fits
-- **WHEN** a scatter chart is drawn from a table of 12,000 rows with no missing values
-- **THEN** the chart holds all 12,000 points and is not a sample
+- **WHEN** a chart draws dots from a table of 12,000 rows with no missing values
+- **THEN** the dataset holds all 12,000 rows and is not a sample
 
 #### Scenario: Scatter too large to send whole
-- **WHEN** a scatter chart is drawn from a table of 120,000 rows
-- **THEN** the chart holds a sample that fits the limit, and the reply says how many of the
-  120,000 points it shows
+- **WHEN** a chart draws dots from a table of 120,000 rows
+- **THEN** the dataset holds a sample that fits the limit, and the reply says how many of
+  the 120,000 rows it shows
+
+#### Scenario: Too many groups
+- **WHEN** a chart draws bars of a dataset grouped by a column with 400,000 distinct values
+- **THEN** no `chart` component is added, and the reply describes the chart in text
 
 ### Requirement: Plot replies
-Plot's reply SHALL say, for each chart, what it shows and any rows left out or sampling. It SHALL list ignored charts with their reasons. When no chosen chart
-is valid, the reply SHALL say so, list the ignored charts and add no component.
+Plot's reply SHALL say, for each chart, what it shows and any rows left out or sampling. It
+SHALL list ignored charts and ignored parts of drawn charts with their reasons. When no chart
+has a valid mark, the reply SHALL say so, list what it ignored and add no component.
 
 #### Scenario: No valid chart
-- **WHEN** every chart the model chose names a column the table does not have
-- **THEN** the reply has no `chart` component, lists each ignored chart with its reason,
-  and does not fail
+- **WHEN** every chart the model chose fills a slot with a column the table does not have
+- **THEN** the reply has no `chart` component, lists each ignored chart with its reason, and
+  does not fail
+
+#### Scenario: Suggestions for a chart not drawn
+- **WHEN** the model fills a box template's `value` slot with `variety`, a text column
+- **THEN** the chart is not drawn, and the reply names the table's number columns that fit
+  the slot and templates that can show `variety`
+
+#### Scenario: Named column that doesn't fit
+- **WHEN** the user asks Plotter for "a box plot of variety by site"
+- **THEN** no chart is drawn with another column in place of `variety`; the reply says
+  `variety` is a text column and the value slot needs numbers, and suggests a count bar chart
+  of `site` grouped by `variety`
+
+#### Scenario: Unreadable answer
+- **WHEN** the model answers Plot without choosing any chart
+- **THEN** the reply says the model's answer could not be used and suggests templates that
+  fit the table's columns, and the reply does not fail
+
+#### Scenario: What was drawn
+- **WHEN** Plot draws a scatter of `yield` against `blight` with no group
+- **THEN** the reply's line for it names the scatter template, its `x` and `y` columns and
+  "no group"
+
+#### Scenario: Ignored scale
+- **WHEN** the model asks for a log `y` scale on a chart whose `y` values include 0
+- **THEN** the chart is drawn with a linear `y` scale, and the reply lists the log scale as
+  ignored
 
 ### Requirement: Stopping a data reply ends its work
 A data Trait's computations, including reading its tables, SHALL run outside the sidecar's
@@ -356,3 +355,116 @@ replies of other Conversations keep streaming while a data Trait works.
 - **WHEN** *Profile Data* reads a 100 MiB table while a Mini-Me's reply streams in another
   Conversation
 - **THEN** the other reply keeps streaming without pausing
+
+### Requirement: Chart templates
+Each chart type SHALL be a template shipped with the app: a name, a one-line description, its
+slots with the column types each accepts and whether it is required, and the chart it draws,
+built from data operations, marks and scales with gaps for its slots. The model SHALL be given
+every template's name, description and slots, and SHALL answer with a template's name, a
+title, its slots and the style slots.
+
+#### Scenario: Dumbbell chart
+- **WHEN** the user asks Plotter for the mean yield of each variety in Season 2023 and Season
+  2024
+- **THEN** the model answers with the dumbbell template, `category` `variety`, `group`
+  `season`, `value` `yield` and `aggregate` mean, and the chart joins each variety's two
+  means with a rule and marks them with dots coloured by `season`
+
+#### Scenario: Unknown template
+- **WHEN** the model answers with a template name that no template has
+- **THEN** that chart is not drawn, and the reply lists it as ignored with the reason
+
+### Requirement: Template slots
+Plot SHALL check each filled slot against the table: the column exists and has a type the slot
+accepts. A chart with a required slot empty, or a slot that does not fit, SHALL NOT be drawn
+and SHALL be listed with the reason. Slots the template does not have SHALL be ignored. An
+optional slot left empty SHALL leave out the parts of the chart that use it.
+
+#### Scenario: Text column for a value
+- **WHEN** the model fills a bar template's `value` slot with `variety`, a text column
+- **THEN** that chart is not drawn, and the reply says `variety` is a text column and the
+  slot needs numbers
+
+#### Scenario: Optional group left empty
+- **WHEN** the model answers with the line template and no `group`
+- **THEN** the chart draws one line, not one per group
+
+### Requirement: Slot types
+A slot SHALL accept every column type its chart can draw there: number or date for positions
+of rows and binned values, number for aggregated or statistical values, and text, boolean or
+number for groups and categories. A number column a chart colours by SHALL be drawn as
+categories, with a legend, not along a scale.
+
+#### Scenario: Dates on a scatter
+- **WHEN** the model fills a scatter template's `x` with `date`, a date column, and `y` with
+  `price`
+- **THEN** the chart draws one dot per row over time
+
+#### Scenario: Number group
+- **WHEN** a scatter is coloured by `block`, a number column holding 1 to 4
+- **THEN** the dots take four category colours and the legend lists 1, 2, 3 and 4
+
+### Requirement: Style slots
+Every template SHALL accept the same style slots: a colour or colour scheme the user names, a
+log scale for `x` or `y`, a reference line at a value, a height, a sort order of categories
+(by value or by name), and a facet column that draws one panel per value. The colour of a
+chart without a colour slot SHALL be the app's own.
+
+#### Scenario: Reference line
+- **WHEN** the user asks for a line at 20 t/ha on a bar chart of mean `yield`
+- **THEN** the model fills the reference slot with 20, and the chart draws a rule at 20
+
+#### Scenario: One panel per site
+- **WHEN** the user asks for mean `yield` by `variety` with one panel per `site`
+- **THEN** the model fills the facet slot with `site`, and the chart has one panel per site
+
+### Requirement: Chart data operations
+A dataset SHALL be built from the table only by these data operations, run in order: filter
+rows by a column's value; group by columns with aggregates (count, sum, mean, median, min,
+max or standard deviation); bin a number or date column; correlate number columns pairwise;
+unpivot columns into name and value columns; sort by columns; keep the first N rows.
+
+#### Scenario: Counts per category
+- **WHEN** a template's dataset groups by `variety` with a count
+- **THEN** it holds one row per value of `variety` with the number of rows of that value
+
+### Requirement: Allowed marks
+A template's marks SHALL be Observable Plot marks other than `geo`, `graticule`, `sphere` and
+`image`. Marks that compute statistics of their rows, such as box, density or linear
+regression, SHALL draw from a dataset of the table's own rows.
+
+#### Scenario: Template format
+- **WHEN** the app's tests run
+- **THEN** every template loads, and uses only allowed marks and its own slots
+
+#### Scenario: Box plot from sampled rows
+- **WHEN** a box mark draws `yield` by `variety` from a dataset that was sampled
+- **THEN** the reply says the box plot was drawn from a sample of the rows
+
+### Requirement: Built-in templates
+The app SHALL ship templates for at least histogram, bar, count bar, stacked bars, grouped
+bars, lollipop, range bars, line, area, stacked area, slope, dumbbell, scatter, scatter with a
+trend line, box, density, ridgeline, correlation heatmap and waffle charts. Adding a chart
+type SHALL need only a new template.
+
+#### Scenario: Asking for a chart type by name
+- **WHEN** the user asks Plotter for a lollipop chart of mean `yield` by `variety`
+- **THEN** the model answers with the lollipop template, and the chart has a rule and a dot
+  for each variety
+
+### Requirement: Follow-up charts
+When the reply's picked component is a chart, Plot SHALL give the model that chart's text
+along with the message and the table's description, so that the new chart can be based on it.
+The new chart is a new component in the new reply; the earlier chart is unchanged. With no
+picked chart, the model chooses a new chart from the message alone.
+
+#### Scenario: Log scale
+- **WHEN** Plotter drew a scatter of `yield` against `height` and the user then sends
+  "@Plotter use a log scale for yield" and Jev picks that chart
+- **THEN** the new reply holds a scatter of the same columns with a log `y` scale, and the
+  scatter in the earlier reply is unchanged
+
+#### Scenario: No picked chart
+- **WHEN** the Conversation has a chart of `yield`, the user sends "@Plotter #weather.csv
+  chart the rainfall per month" and Jev picks no component
+- **THEN** Plot draws from `weather.csv` a new chart of rainfall per month

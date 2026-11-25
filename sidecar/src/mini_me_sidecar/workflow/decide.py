@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, create_model
 
-from mini_me_sidecar.adapters.base import require_model
 from mini_me_sidecar.adapters.providers import ask_structured
 from mini_me_sidecar.context import CallContext, TraitError
 
@@ -34,7 +33,6 @@ async def decide(
 ) -> str:
     """The model's answer to `question`, one of `choices`. Raises `invalid_decision` when the
     model answers anything else."""
-    model = require_model(ctx)
     material = "\n\n".join(
         [
             f"The user's message:\n{message}",
@@ -44,12 +42,12 @@ async def decide(
     )
     turns = [("system", SYSTEM), ("human", material)]
     # Tool calling works with every provider and with OpenRouter's models.
-    answer = await ask_structured(ctx, decision_schema(choices), turns, none_if_invalid=True)
+    answer = await ask_structured(ctx, decision_schema(choices), turns)
     choice = getattr(answer, "choice", None)
     if choice not in choices:
         raise TraitError(
             "invalid_decision",
-            f"{model.model} did not answer with one of {', '.join(choices)}. Try again, or "
-            "choose another model in Settings.",
+            "I couldn't work out what to do next from this request. Try again, perhaps "
+            "saying it another way.",
         )
     return str(choice)

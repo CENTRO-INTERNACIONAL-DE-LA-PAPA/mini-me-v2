@@ -1,0 +1,42 @@
+{
+  "name": "lollipop",
+  "description": "Like a bar chart, a stick and a dot per category, lighter when there are many categories.",
+  "slots": {"category": {"types": ["text", "boolean", "number"]}, "value": {"types": ["number"]}},
+  "chart": {
+    "datasets": [
+      {
+        "name": "values",
+        "operations": [
+          {
+            "kind": "group",
+            "by": ["{category}"],
+            "aggregates": [
+              {"how": "{aggregate}", "column": "{value}", "name": "{aggregate}_{value}"}
+            ]
+          }
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "ruleX",
+        "dataset": "values",
+        "channels": [
+          {"name": "x", "column": "{category}"},
+          {"name": "y", "column": "{aggregate}_{value}"}
+        ],
+        "options": [{"name": "sort", "value": {"x": "-y"}}]
+      },
+      {
+        "mark": "dot",
+        "dataset": "values",
+        "channels": [
+          {"name": "x", "column": "{category}"},
+          {"name": "y", "column": "{aggregate}_{value}"},
+          {"name": "r", "value": 5}
+        ]
+      }
+    ],
+    "scales": [{"scale": "y", "label": "{Aggregate} of {value}"}]
+  }
+}
