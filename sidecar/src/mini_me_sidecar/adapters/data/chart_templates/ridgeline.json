@@ -93,7 +93,7 @@
       },
       {
         "scale": "y",
-        "label": "Rows"
+        "label": "Count of {value}"
       }
     ]
   }

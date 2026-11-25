@@ -20,6 +20,7 @@ from mini_me_sidecar.adapters.data.templates import (
     choice_problem,
     fill_template,
     slots_text,
+    suggestions,
     templates_text,
     unplaced_columns,
 )
@@ -81,7 +82,8 @@ async def validate(ctx: CallContext, text: str) -> None:
             results_name=f"{table.stem}-checks.csv",
         )
         await save_file(ctx, f"{table.stem}-validation.html", "text/html", report.encode())
-    _write_ignored(ctx, malformed + [(describe_entry(c), _why(c, tables)) for c in ignored])
+    left_out = malformed + [(describe_entry(c), _why(c, tables)) for c in ignored]
+    _write_ignored(ctx, left_out, "I didn't run these checks:")
 
 
 async def clean(ctx: CallContext, text: str) -> None:
@@ -98,7 +100,7 @@ async def clean(ctx: CallContext, text: str) -> None:
     for entry in log:
         if entry.note:
             ctx.write(f"- {entry.action}: {entry.note}\n")
-    _write_ignored(ctx, malformed)
+    _write_ignored(ctx, malformed, "I didn't apply these actions:")
     source = await _save(ctx, table, cleaned, "cleaned")
     await show_frame(
         ctx, log_frame(log), "Cleaning actions", results_name=f"{table.stem}-cleaning-log.csv"
@@ -143,13 +145,14 @@ async def plot(ctx: CallContext, text: str) -> None:
     table = tables[0]
     picked = await _picked_chart_text(ctx)
     extra = templates_text() + (f"\n\n{PICKED_CHART}{picked}" if picked else "")
+    types = {str(c): column_type(table.frame[c]) for c in table.frame.columns}
     try:
         plan, malformed = await choose(ctx, ChartPlan, text, [describe(table)], extra)
     except UnusableAnswer as error:
         ctx.write(_sheet_note(table) + _unusable_text(table.name))
-        _write_ignored(ctx, error.malformed, "Not drawn")
+        ctx.write("".join(f"{line}.\n\n" for line in suggestions(None, types)))
+        _write_ignored(ctx, error.malformed, "I left these out:")
         return
-    types = {str(c): column_type(table.frame[c]) for c in table.frame.columns}
     drawn, ignored = _fill_choices(plan.charts, table.frame, types)
     ignored = malformed + ignored
     _write_plot_intro(ctx, tables, len(drawn))
@@ -168,7 +171,8 @@ async def plot(ctx: CallContext, text: str) -> None:
         ctx.write("\n")
     for choice, result in results:
         await _show_chart(ctx, result, chart_text(result.data, choice), table.source_id)
-    _write_ignored(ctx, ignored, "Not drawn")
+    heading = f"I couldn't draw this from `{table.name}`:" if not drawn else "I left these out:"
+    _write_ignored(ctx, ignored, heading)
 
 
 def _fill_choices(
@@ -180,11 +184,12 @@ def _fill_choices(
     for choice in choices:
         reason = choice_problem(choice, types)
         if reason is not None:
-            ignored.append((f'chart "{choice.title}"', reason))
+            offered = "".join(f"\n  - {line}" for line in suggestions(choice, types))
+            ignored.append((f'"{choice.title}"', reason + offered))
             continue
         chart, styles = fill_template(choice, frame)
         ignored += styles + [
-            (f"column {column}", f"a {choice.template} chart has no place for it")
+            (f"Column `{column}`", f"a {choice.template} chart has no place for it")
             for column in unplaced_columns(choice)
             if column in types
         ]
@@ -220,9 +225,7 @@ def _write_plot_intro(ctx: CallContext, tables: list[Table], drawn: int) -> None
             + ", ".join(f"`{name}`" for name in unused)
             + ".\n\n"
         )
-    if not drawn:
-        ctx.write(f"None of the charts the AI model chose fit `{table.name}`.\n\n")
-    else:
+    if drawn:
         ctx.write(f"Drew {drawn} chart{'s' if drawn > 1 else ''} of `{table.name}`:\n")
 
 
@@ -276,11 +279,9 @@ def _sheet_note(table: Table) -> str:
     return note + ". "
 
 
-def _write_ignored(
-    ctx: CallContext, ignored: list[tuple[str, str]], heading: str = "Not run"
-) -> None:
+def _write_ignored(ctx: CallContext, ignored: list[tuple[str, str]], heading: str) -> None:
     if ignored:
-        ctx.write(f"{heading}, because the AI model's choice didn't fit the data:\n")
+        ctx.write(f"{heading}\n")
         for label, reason in ignored:
             ctx.write(f"- {label}: {reason}\n")
         ctx.write("\n")

@@ -100,7 +100,7 @@ def test_a_log_scale_over_values_at_or_below_zero_is_ignored():
     marks = [mark("dot", "d", x="x", y="y")]
     result = draw(frame, [dataset("d")], marks, [scale("x", type="log"), scale("y", type="log")])
     assert [s["scale"] for s in result.data["description"]["scales"]] == ["y"]
-    assert [label for label, _ in result.ignored] == ["log scale for x"]
+    assert [label for label, _ in result.ignored] == ["Log scale for x"]
 
 
 def test_own_rows_are_kept_while_they_fit_and_sampled_the_same_way_after():

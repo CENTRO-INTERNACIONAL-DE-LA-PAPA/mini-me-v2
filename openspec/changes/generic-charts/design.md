@@ -134,6 +134,10 @@ drawing; the Rust core is unchanged and stores the component as today):
    table's columns) can fill. Validate, Clean and Join keep failing on an unreadable answer.
    Each drawn chart's line in the reply names its template and slots, an empty optional slot
    as "no <slot>", so what was drawn shows whatever words the request used.
+   The Plot Trait's instructions tell the model to use exactly the columns the message names,
+   never another in their place, and to choose the closest template for them even when they
+   don't fit, so one request gives one outcome: the chart asked for, or why it can't be drawn.
+   Suggestions fill optional slots with the other named columns too.
 
 Alternatives considered:
 
@@ -190,3 +194,5 @@ The user accepted these recommendations after reviewing the draft:
    and runs model-written code.
 10. **Plot explains and suggests, without guessing a repair**; templates are checked by their
    format test rather than at runtime, and their files are compactly formatted.
+11. **No substitute columns:** a request whose named columns don't fit is explained, not
+   drawn with other columns.

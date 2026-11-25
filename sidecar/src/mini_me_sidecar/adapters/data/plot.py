@@ -244,7 +244,7 @@ def _drop_log_scales(
             for dataset, column in scale_columns(chart, scale.scale)
             if pd.api.types.is_numeric_dtype(frames[dataset][column])
         ):
-            result.ignored.append((f"log scale for {scale.scale}", "it has values at or below 0"))
+            result.ignored.append((f"Log scale for {scale.scale}", "it has values at or below 0"))
             continue
         kept.append(scale)
     return chart.model_copy(update={"scales": kept})

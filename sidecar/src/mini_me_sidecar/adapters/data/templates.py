@@ -153,26 +153,94 @@ def choice_problem(choice: ChartChoice, types: dict[str, str]) -> str | None:
     if template is None:
         return f"no chart template `{choice.template}`"
     for slot, spec in template.slots.items():
-        filled = getattr(choice, slot)
-        names = filled if slot == "correlated_columns" else [filled] if filled else []
-        if not names:
-            if spec.required:
-                return f"the {slot} slot is empty"
-            continue
-        if slot == "correlated_columns" and len(set(names)) < 2:
-            return "the columns slot needs at least 2 columns"
-        for name in names:
-            if name not in types:
-                return f"no column `{name}`"
-            if types[name] not in spec.types:
-                needs = " or ".join(spec.types)
-                return f"`{name}` is a {types[name]} column, and the {slot} slot needs {needs}"
+        if reason := _slot_problem(getattr(choice, slot), slot, spec, types):
+            return reason
     if choice.facet is not None:
         if choice.facet not in types:
             return f"no column `{choice.facet}`"
         if types[choice.facet] not in FACET_TYPES:
             return f"`{choice.facet}` is a {types[choice.facet]} column, which can't split panels"
     return None
+
+
+def _slot_problem(filled: Any, slot: str, spec: SlotSpec, types: dict[str, str]) -> str | None:
+    names = filled if slot == "correlated_columns" else [filled] if filled else []
+    if not names:
+        return f"the {slot} slot is empty" if spec.required else None
+    if slot == "correlated_columns" and len(set(names)) < 2:
+        return "the correlated_columns slot needs at least 2 columns"
+    for name in names:
+        if name not in types:
+            return f"no column `{name}`"
+        if types[name] not in spec.types:
+            needs = " or ".join(spec.types)
+            return f"`{name}` is a {types[name]} column, and the {slot} slot needs {needs}"
+    return None
+
+
+def suggestions(choice: ChartChoice | None, types: dict[str, str]) -> list[str]:
+    """What could be drawn instead: for `choice`, the table's columns that fit each slot it gets
+    wrong, then up to three charts of the columns it named (or, with none, of the table)."""
+    lines = []
+    template = TEMPLATES.get(choice.template) if choice else None
+    for slot, spec in (template.slots if template else {}).items():
+        if _slot_problem(getattr(choice, slot), slot, spec, types) is None:
+            continue
+        fitting = [f"`{c}`" for c, kind in types.items() if kind in spec.types][:6]
+        lines.append(f"Columns that fit the {slot} slot: {', '.join(fitting) or 'none'}")
+    named = _named_columns(choice, types) if choice else {}
+    examples = _examples(named, template, use_all=True) or _examples(types, template)
+    if examples:
+        about = ", ".join(f"`{c}`" for c in named) if named else "this table"
+        lines.append(f"Charts that can show {about}: {'; '.join(examples)}")
+    return lines
+
+
+def _named_columns(choice: ChartChoice, types: dict[str, str]) -> dict[str, str]:
+    values = [getattr(choice, slot) for slot in TEMPLATE_SLOTS]
+    names = [n for value in [*values, choice.facet] for n in _column_names(value)]
+    names += choice.ignored_columns
+    return {n: types[n] for n in dict.fromkeys(names) if n in types}
+
+
+def _examples(columns: dict[str, str], skip: Template | None, use_all: bool = False) -> list[str]:
+    """Up to three templates whose required slots `columns` fill, each with one filling. With
+    `use_all`, optional slots take the columns left over too, and charts using more of
+    `columns` come first; otherwise the simplest come first."""
+    found = []
+    for template in TEMPLATES.values():
+        filled = _example_slots(template, columns, use_all) if template is not skip else None
+        if filled:
+            used = sum(len(names) for names in filled.values())
+            order = (-used if use_all else 0, len(_required(template)), template.name)
+            found.append((order, template.name, filled))
+    examples = []
+    for _, name, filled in sorted(found)[:3]:
+        shown = ", ".join(f"{slot} `{'`, `'.join(names)}`" for slot, names in filled.items())
+        examples.append(f"{name} ({shown})")
+    return examples
+
+
+def _required(template: Template) -> list[str]:
+    return [slot for slot, spec in template.slots.items() if spec.required]
+
+
+def _example_slots(
+    template: Template, columns: dict[str, str], use_all: bool
+) -> dict[str, list[str]] | None:
+    unused = list(columns)
+    filled = {}
+    optional = [s for s in template.slots if s not in _required(template)] if use_all else []
+    for slot in [*_required(template), *optional]:
+        wanted = 2 if slot == "correlated_columns" else 1
+        picks = [c for c in unused if columns[c] in template.slots[slot].types][:wanted]
+        if len(picks) < wanted:
+            if slot in optional:
+                continue
+            return None
+        filled[slot] = picks
+        unused = [c for c in unused if c not in picks]
+    return filled
 
 
 class _Missing:
@@ -192,6 +260,8 @@ def fill_template(
     if "correlated_columns" in slots:
         slots["correlated_columns"] = list(dict.fromkeys(slots["correlated_columns"])) or None
     slots["aggregate"] = choice.aggregate or "mean"
+    # Labels start with `{Aggregate}`; operations need the lowercase name.
+    slots["Aggregate"] = slots["aggregate"].capitalize()
     filled = _fill(template.chart, slots)
     categories = [
         column
@@ -254,10 +324,10 @@ def _style(
     if choice.scheme and choice.scheme.lower() in SCHEMES:
         scales = _set_scale(scales, "color", scheme=choice.scheme)
     elif choice.scheme:
-        ignored.append((f"scheme {choice.scheme}", "not a known colour scheme"))
+        ignored.append((f"Colour scheme {choice.scheme}", "not a known colour scheme"))
     colour = choice.colour
     if colour is not None and not COLOUR.match(colour):
-        ignored.append((f"colour {colour}", "not a colour"))
+        ignored.append((f"Colour {colour}", "not a colour"))
         colour = None
     if choice.log_x:
         scales = _set_scale(scales, "x", type="log")
@@ -278,7 +348,8 @@ def _style(
             panels = int(table[choice.facet].nunique())
             height = choice.height or min(MAX_HEIGHT, max(height or 0, FACET_PANEL * panels))
         else:
-            ignored.append((f"facet {choice.facet}", f"a {template.name} chart has no panels"))
+            label = f"One panel per `{choice.facet}`"
+            ignored.append((label, f"a {template.name} chart has no panels"))
     styled = chart.model_copy(
         update={
             "scales": scales,

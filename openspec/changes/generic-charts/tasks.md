@@ -87,7 +87,7 @@
   it to Plot, and Validate, Clean and Join keep failing. Each drawn chart's line names its
   template and slots. Verify: pytest for the slots in words passes; the unreadable-answer
   reply is checked in the app (8.1).
-- [ ] 7.4 Suggestions under each chart not drawn and under an unreadable answer: columns that
+- [x] 7.4 Suggestions under each chart not drawn and under an unreadable answer: columns that
   fit the failing slot, and up to three templates that fit. Verify: pytest for a box plot whose
   `value` is a text column passes.
 - [ ] 7.5 Format the template files compactly. Verify: the format test passes.

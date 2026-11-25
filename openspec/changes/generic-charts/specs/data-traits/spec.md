@@ -118,6 +118,12 @@ has a valid mark, the reply SHALL say so, list what it ignored and add no compon
 - **THEN** the chart is not drawn, and the reply names the table's number columns that fit
   the slot and templates that can show `variety`
 
+#### Scenario: Named column that doesn't fit
+- **WHEN** the user asks Plotter for "a box plot of variety by site"
+- **THEN** no chart is drawn with another column in place of `variety`; the reply says
+  `variety` is a text column and the value slot needs numbers, and suggests a count bar chart
+  of `site` grouped by `variety`
+
 #### Scenario: Unreadable answer
 - **WHEN** the model answers Plot without choosing any chart
 - **THEN** the reply says the model's answer could not be used and suggests templates that

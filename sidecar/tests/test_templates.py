@@ -13,6 +13,7 @@ from mini_me_sidecar.adapters.data.templates import (
     colour_slots,
     fill_template,
     slots_text,
+    suggestions,
     unplaced_columns,
 )
 
@@ -102,6 +103,20 @@ def test_slots_the_template_does_not_have_are_ignored():
         ChartChoice.model_validate({"template": "correlation_heatmap", "title": "t", **stray})
 
 
+def test_suggestions_offer_fitting_columns_and_charts():
+    box = choose(template="box", category="site", value="variety")
+    fitting, charts = suggestions(box, TYPES)
+    assert fitting == "Columns that fit the value slot: `yield`, `height`, `block`"
+    shown = "Charts that can show `site`, `variety`: count_bars (category `site`, group `variety`)"
+    assert charts.startswith(shown)
+    assert "box (" not in charts
+
+    (unknown,) = suggestions(choose(template="pie", category="variety"), TYPES)
+    assert unknown.startswith("Charts that can show `variety`:")
+    (table,) = suggestions(None, TYPES)
+    assert table.startswith("Charts that can show this table:") and table.count("(") == 3
+
+
 def test_slots_text_names_empty_optional_slots():
     scatter = choose(template="scatter", x="blight", y="yield")
     assert slots_text(scatter) == "x blight, y yield, no group"
@@ -144,14 +159,14 @@ def test_style_slots_apply_to_any_template():
     chart, ignored = fill_template(
         choose(**bars, scheme="rainbowz", colour="red; x", height=5000), TABLE
     )
-    assert [label for label, _ in ignored] == ["scheme rainbowz", "colour red; x"]
+    assert [label for label, _ in ignored] == ["Colour scheme rainbowz", "Colour red; x"]
     assert chart.colour is None and chart.height == 800
 
     heatmap = choose(
         template="correlation_heatmap", correlated_columns=["yield", "height"], facet="site"
     )
     _, ignored = fill_template(heatmap, TABLE)
-    assert [label for label, _ in ignored] == ["facet site"]
+    assert [label for label, _ in ignored] == ["One panel per `site`"]
 
 
 def fillings(template):
@@ -171,7 +186,7 @@ def fillings(template):
 def test_every_template_loads_fills_and_draws():
     for template in TEMPLATES.values():
         text = template.model_dump_json()
-        gaps = set(re.findall(r"\{(\w+)\}", text)) - {"aggregate"}
+        gaps = set(re.findall(r"\{(\w+)\}", text)) - {"aggregate", "Aggregate"}
         assert gaps <= set(template.slots), template.name
         for mark in template.chart["marks"]:
             assert mark["mark"] in MARKS, template.name

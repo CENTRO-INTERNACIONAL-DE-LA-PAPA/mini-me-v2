@@ -58,7 +58,7 @@
     "scales": [
       {
         "scale": "y",
-        "label": "Rows"
+        "label": "Count of {category}"
       }
     ]
   }

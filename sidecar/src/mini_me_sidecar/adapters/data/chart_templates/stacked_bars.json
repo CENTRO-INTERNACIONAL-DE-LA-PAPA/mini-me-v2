@@ -75,7 +75,7 @@
     "scales": [
       {
         "scale": "y",
-        "label": "{aggregate} of {value}"
+        "label": "{Aggregate} of {value}"
       }
     ]
   }
