@@ -2,25 +2,9 @@
   "name": "grouped_bars",
   "description": "Bars of an aggregate of a value side by side for each group, within each category.",
   "slots": {
-    "category": {
-      "types": [
-        "text",
-        "boolean",
-        "number"
-      ]
-    },
-    "value": {
-      "types": [
-        "number"
-      ]
-    },
-    "group": {
-      "types": [
-        "text",
-        "boolean",
-        "number"
-      ]
-    }
+    "category": {"types": ["text", "boolean", "number"]},
+    "value": {"types": ["number"]},
+    "group": {"types": ["text", "boolean", "number"]}
   },
   "chart": {
     "datasets": [
@@ -29,16 +13,9 @@
         "operations": [
           {
             "kind": "group",
-            "by": [
-              "{category}",
-              "{group}"
-            ],
+            "by": ["{category}", "{group}"],
             "aggregates": [
-              {
-                "how": "{aggregate}",
-                "column": "{value}",
-                "name": "{aggregate}_{value}"
-              }
+              {"how": "{aggregate}", "column": "{value}", "name": "{aggregate}_{value}"}
             ]
           }
         ]
@@ -49,38 +26,17 @@
         "mark": "barY",
         "dataset": "bars",
         "channels": [
-          {
-            "name": "fx",
-            "column": "{category}"
-          },
-          {
-            "name": "x",
-            "column": "{group}"
-          },
-          {
-            "name": "y",
-            "column": "{aggregate}_{value}"
-          },
-          {
-            "name": "fill",
-            "column": "{group}"
-          }
+          {"name": "fx", "column": "{category}"},
+          {"name": "x", "column": "{group}"},
+          {"name": "y", "column": "{aggregate}_{value}"},
+          {"name": "fill", "column": "{group}"}
         ]
       }
     ],
     "scales": [
-      {
-        "scale": "fx",
-        "label": "{category}"
-      },
-      {
-        "scale": "x",
-        "label": ""
-      },
-      {
-        "scale": "y",
-        "label": "{Aggregate} of {value}"
-      }
+      {"scale": "fx", "label": "{category}"},
+      {"scale": "x", "label": ""},
+      {"scale": "y", "label": "{Aggregate} of {value}"}
     ]
   }
 }

@@ -1,15 +1,7 @@
 {
   "name": "waffle",
   "description": "How many rows each category has, as squares of units.",
-  "slots": {
-    "category": {
-      "types": [
-        "text",
-        "boolean",
-        "number"
-      ]
-    }
-  },
+  "slots": {"category": {"types": ["text", "boolean", "number"]}},
   "chart": {
     "datasets": [
       {
@@ -17,16 +9,8 @@
         "operations": [
           {
             "kind": "group",
-            "by": [
-              "{category}"
-            ],
-            "aggregates": [
-              {
-                "how": "count",
-                "column": null,
-                "name": "count"
-              }
-            ]
+            "by": ["{category}"],
+            "aggregates": [{"how": "count", "column": null, "name": "count"}]
           }
         ]
       }
@@ -35,31 +19,10 @@
       {
         "mark": "waffleY",
         "dataset": "counts",
-        "channels": [
-          {
-            "name": "x",
-            "column": "{category}"
-          },
-          {
-            "name": "y",
-            "column": "count"
-          }
-        ],
-        "options": [
-          {
-            "name": "sort",
-            "value": {
-              "x": "-y"
-            }
-          }
-        ]
+        "channels": [{"name": "x", "column": "{category}"}, {"name": "y", "column": "count"}],
+        "options": [{"name": "sort", "value": {"x": "-y"}}]
       }
     ],
-    "scales": [
-      {
-        "scale": "y",
-        "label": "Count of {category}"
-      }
-    ]
+    "scales": [{"scale": "y", "label": "Count of {category}"}]
   }
 }

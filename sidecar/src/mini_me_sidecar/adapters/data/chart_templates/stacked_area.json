@@ -2,24 +2,9 @@
   "name": "stacked_area",
   "description": "Totals of a value over a date or ordered number, stacked by group; use a sum or count.",
   "slots": {
-    "x": {
-      "types": [
-        "date",
-        "number"
-      ]
-    },
-    "y": {
-      "types": [
-        "number"
-      ]
-    },
-    "group": {
-      "types": [
-        "text",
-        "boolean",
-        "number"
-      ]
-    }
+    "x": {"types": ["date", "number"]},
+    "y": {"types": ["number"]},
+    "group": {"types": ["text", "boolean", "number"]}
   },
   "chart": {
     "datasets": [
@@ -28,24 +13,10 @@
         "operations": [
           {
             "kind": "group",
-            "by": [
-              "{x}",
-              "{group}"
-            ],
-            "aggregates": [
-              {
-                "how": "{aggregate}",
-                "column": "{y}",
-                "name": "{aggregate}_{y}"
-              }
-            ]
+            "by": ["{x}", "{group}"],
+            "aggregates": [{"how": "{aggregate}", "column": "{y}", "name": "{aggregate}_{y}"}]
           },
-          {
-            "kind": "sort",
-            "by": [
-              "{x}"
-            ]
-          }
+          {"kind": "sort", "by": ["{x}"]}
         ]
       }
     ],
@@ -54,26 +25,12 @@
         "mark": "areaY",
         "dataset": "points",
         "channels": [
-          {
-            "name": "x",
-            "column": "{x}"
-          },
-          {
-            "name": "y",
-            "column": "{aggregate}_{y}"
-          },
-          {
-            "name": "fill",
-            "column": "{group}"
-          }
+          {"name": "x", "column": "{x}"},
+          {"name": "y", "column": "{aggregate}_{y}"},
+          {"name": "fill", "column": "{group}"}
         ]
       }
     ],
-    "scales": [
-      {
-        "scale": "y",
-        "label": "{Aggregate} of {y}"
-      }
-    ]
+    "scales": [{"scale": "y", "label": "{Aggregate} of {y}"}]
   }
 }

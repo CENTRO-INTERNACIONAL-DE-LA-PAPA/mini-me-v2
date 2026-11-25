@@ -90,7 +90,7 @@
 - [x] 7.4 Suggestions under each chart not drawn and under an unreadable answer: columns that
   fit the failing slot, and up to three templates that fit. Verify: pytest for a box plot whose
   `value` is a text column passes.
-- [ ] 7.5 Format the template files compactly. Verify: the format test passes.
+- [x] 7.5 Format the template files compactly. Verify: the format test passes.
 
 ## 8. In the app
 

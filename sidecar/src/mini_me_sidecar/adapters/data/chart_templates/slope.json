@@ -2,26 +2,9 @@
   "name": "slope",
   "description": "How an aggregate of a value changes for each category between a few periods, one line per category.",
   "slots": {
-    "category": {
-      "types": [
-        "text",
-        "boolean",
-        "number"
-      ]
-    },
-    "group": {
-      "types": [
-        "text",
-        "number",
-        "date",
-        "boolean"
-      ]
-    },
-    "value": {
-      "types": [
-        "number"
-      ]
-    }
+    "category": {"types": ["text", "boolean", "number"]},
+    "group": {"types": ["text", "number", "date", "boolean"]},
+    "value": {"types": ["number"]}
   },
   "chart": {
     "datasets": [
@@ -30,24 +13,12 @@
         "operations": [
           {
             "kind": "group",
-            "by": [
-              "{group}",
-              "{category}"
-            ],
+            "by": ["{group}", "{category}"],
             "aggregates": [
-              {
-                "how": "{aggregate}",
-                "column": "{value}",
-                "name": "{aggregate}_{value}"
-              }
+              {"how": "{aggregate}", "column": "{value}", "name": "{aggregate}_{value}"}
             ]
           },
-          {
-            "kind": "sort",
-            "by": [
-              "{group}"
-            ]
-          }
+          {"kind": "sort", "by": ["{group}"]}
         ]
       }
     ],
@@ -56,53 +27,25 @@
         "mark": "lineY",
         "dataset": "points",
         "channels": [
-          {
-            "name": "x",
-            "column": "{group}"
-          },
-          {
-            "name": "y",
-            "column": "{aggregate}_{value}"
-          },
-          {
-            "name": "z",
-            "column": "{category}"
-          },
-          {
-            "name": "stroke",
-            "column": "{category}"
-          }
+          {"name": "x", "column": "{group}"},
+          {"name": "y", "column": "{aggregate}_{value}"},
+          {"name": "z", "column": "{category}"},
+          {"name": "stroke", "column": "{category}"}
         ]
       },
       {
         "mark": "dot",
         "dataset": "points",
         "channels": [
-          {
-            "name": "x",
-            "column": "{group}"
-          },
-          {
-            "name": "y",
-            "column": "{aggregate}_{value}"
-          },
-          {
-            "name": "fill",
-            "column": "{category}"
-          }
+          {"name": "x", "column": "{group}"},
+          {"name": "y", "column": "{aggregate}_{value}"},
+          {"name": "fill", "column": "{category}"}
         ]
       }
     ],
     "scales": [
-      {
-        "scale": "x",
-        "type": "point",
-        "label": "{group}"
-      },
-      {
-        "scale": "y",
-        "label": "{Aggregate} of {value}"
-      }
+      {"scale": "x", "type": "point", "label": "{group}"},
+      {"scale": "y", "label": "{Aggregate} of {value}"}
     ]
   }
 }

@@ -1,20 +1,7 @@
 {
   "name": "bar",
   "description": "One bar per category, its height an aggregate of a value.",
-  "slots": {
-    "category": {
-      "types": [
-        "text",
-        "boolean",
-        "number"
-      ]
-    },
-    "value": {
-      "types": [
-        "number"
-      ]
-    }
-  },
+  "slots": {"category": {"types": ["text", "boolean", "number"]}, "value": {"types": ["number"]}},
   "chart": {
     "datasets": [
       {
@@ -22,15 +9,9 @@
         "operations": [
           {
             "kind": "group",
-            "by": [
-              "{category}"
-            ],
+            "by": ["{category}"],
             "aggregates": [
-              {
-                "how": "{aggregate}",
-                "column": "{value}",
-                "name": "{aggregate}_{value}"
-              }
+              {"how": "{aggregate}", "column": "{value}", "name": "{aggregate}_{value}"}
             ]
           }
         ]
@@ -41,30 +22,12 @@
         "mark": "barY",
         "dataset": "bars",
         "channels": [
-          {
-            "name": "x",
-            "column": "{category}"
-          },
-          {
-            "name": "y",
-            "column": "{aggregate}_{value}"
-          }
+          {"name": "x", "column": "{category}"},
+          {"name": "y", "column": "{aggregate}_{value}"}
         ],
-        "options": [
-          {
-            "name": "sort",
-            "value": {
-              "x": "-y"
-            }
-          }
-        ]
+        "options": [{"name": "sort", "value": {"x": "-y"}}]
       }
     ],
-    "scales": [
-      {
-        "scale": "y",
-        "label": "{Aggregate} of {value}"
-      }
-    ]
+    "scales": [{"scale": "y", "label": "{Aggregate} of {value}"}]
   }
 }

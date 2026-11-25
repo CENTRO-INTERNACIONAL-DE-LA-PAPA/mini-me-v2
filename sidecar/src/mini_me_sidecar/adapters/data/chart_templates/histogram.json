@@ -2,44 +2,19 @@
   "name": "histogram",
   "description": "How the values of a number or date column are spread, as counts per bin; a group stacks its counts.",
   "slots": {
-    "value": {
-      "types": [
-        "number",
-        "date"
-      ]
-    },
-    "group": {
-      "types": [
-        "text",
-        "boolean",
-        "number"
-      ],
-      "required": false
-    }
+    "value": {"types": ["number", "date"]},
+    "group": {"types": ["text", "boolean", "number"], "required": false}
   },
   "chart": {
     "datasets": [
       {
         "name": "bins",
         "operations": [
-          {
-            "kind": "bin",
-            "column": "{value}"
-          },
+          {"kind": "bin", "column": "{value}"},
           {
             "kind": "group",
-            "by": [
-              "{value}_start",
-              "{value}_end",
-              "{group}"
-            ],
-            "aggregates": [
-              {
-                "how": "count",
-                "column": null,
-                "name": "count"
-              }
-            ]
+            "by": ["{value}_start", "{value}_end", "{group}"],
+            "aggregates": [{"how": "count", "column": null, "name": "count"}]
           }
         ]
       }
@@ -49,40 +24,14 @@
         "mark": "rectY",
         "dataset": "bins",
         "channels": [
-          {
-            "name": "x1",
-            "column": "{value}_start"
-          },
-          {
-            "name": "x2",
-            "column": "{value}_end"
-          },
-          {
-            "name": "y",
-            "column": "count"
-          },
-          {
-            "name": "fill",
-            "column": "{group}"
-          }
+          {"name": "x1", "column": "{value}_start"},
+          {"name": "x2", "column": "{value}_end"},
+          {"name": "y", "column": "count"},
+          {"name": "fill", "column": "{group}"}
         ],
-        "options": [
-          {
-            "name": "insetLeft",
-            "value": 1
-          }
-        ]
+        "options": [{"name": "insetLeft", "value": 1}]
       }
     ],
-    "scales": [
-      {
-        "scale": "x",
-        "label": "{value}"
-      },
-      {
-        "scale": "y",
-        "label": "Count of {value}"
-      }
-    ]
+    "scales": [{"scale": "x", "label": "{value}"}, {"scale": "y", "label": "Count of {value}"}]
   }
 }

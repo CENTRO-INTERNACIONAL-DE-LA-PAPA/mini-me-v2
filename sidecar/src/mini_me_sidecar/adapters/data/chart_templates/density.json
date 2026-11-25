@@ -1,72 +1,26 @@
 {
   "name": "density",
   "description": "Where many points of two number columns gather, as contours over faint dots.",
-  "slots": {
-    "x": {
-      "types": [
-        "number"
-      ]
-    },
-    "y": {
-      "types": [
-        "number"
-      ]
-    }
-  },
+  "slots": {"x": {"types": ["number"]}, "y": {"types": ["number"]}},
   "chart": {
-    "datasets": [
-      {
-        "name": "rows",
-        "operations": []
-      }
-    ],
+    "datasets": [{"name": "rows", "operations": []}],
     "marks": [
       {
         "mark": "dot",
         "dataset": "rows",
         "channels": [
-          {
-            "name": "x",
-            "column": "{x}"
-          },
-          {
-            "name": "y",
-            "column": "{y}"
-          },
-          {
-            "name": "r",
-            "value": 1.5
-          },
-          {
-            "name": "fillOpacity",
-            "value": 0.25
-          }
+          {"name": "x", "column": "{x}"},
+          {"name": "y", "column": "{y}"},
+          {"name": "r", "value": 1.5},
+          {"name": "fillOpacity", "value": 0.25}
         ]
       },
       {
         "mark": "density",
         "dataset": "rows",
-        "channels": [
-          {
-            "name": "x",
-            "column": "{x}"
-          },
-          {
-            "name": "y",
-            "column": "{y}"
-          }
-        ]
+        "channels": [{"name": "x", "column": "{x}"}, {"name": "y", "column": "{y}"}]
       }
     ],
-    "scales": [
-      {
-        "scale": "x",
-        "label": "{x}"
-      },
-      {
-        "scale": "y",
-        "label": "{y}"
-      }
-    ]
+    "scales": [{"scale": "x", "label": "{x}"}, {"scale": "y", "label": "{y}"}]
   }
 }

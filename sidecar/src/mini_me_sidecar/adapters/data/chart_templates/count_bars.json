@@ -2,21 +2,8 @@
   "name": "count_bars",
   "description": "How many rows each category has; a group stacks its counts.",
   "slots": {
-    "category": {
-      "types": [
-        "text",
-        "boolean",
-        "number"
-      ]
-    },
-    "group": {
-      "types": [
-        "text",
-        "boolean",
-        "number"
-      ],
-      "required": false
-    }
+    "category": {"types": ["text", "boolean", "number"]},
+    "group": {"types": ["text", "boolean", "number"], "required": false}
   },
   "chart": {
     "datasets": [
@@ -25,17 +12,8 @@
         "operations": [
           {
             "kind": "group",
-            "by": [
-              "{category}",
-              "{group}"
-            ],
-            "aggregates": [
-              {
-                "how": "count",
-                "column": null,
-                "name": "count"
-              }
-            ]
+            "by": ["{category}", "{group}"],
+            "aggregates": [{"how": "count", "column": null, "name": "count"}]
           }
         ]
       }
@@ -45,34 +23,13 @@
         "mark": "barY",
         "dataset": "counts",
         "channels": [
-          {
-            "name": "x",
-            "column": "{category}"
-          },
-          {
-            "name": "y",
-            "column": "count"
-          },
-          {
-            "name": "fill",
-            "column": "{group}"
-          }
+          {"name": "x", "column": "{category}"},
+          {"name": "y", "column": "count"},
+          {"name": "fill", "column": "{group}"}
         ],
-        "options": [
-          {
-            "name": "sort",
-            "value": {
-              "x": "-y"
-            }
-          }
-        ]
+        "options": [{"name": "sort", "value": {"x": "-y"}}]
       }
     ],
-    "scales": [
-      {
-        "scale": "y",
-        "label": "Count of {category}"
-      }
-    ]
+    "scales": [{"scale": "y", "label": "Count of {category}"}]
   }
 }
