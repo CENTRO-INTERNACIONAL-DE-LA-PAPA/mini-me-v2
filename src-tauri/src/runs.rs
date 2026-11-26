@@ -142,7 +142,7 @@ impl RunSpec {
 
     fn trait_of(&self, step_id: &str) -> Option<&TraitDef> {
         match self.workflow.step(step_id)?.kind {
-            StepKind::Trait { trait_id } => self.traits.iter().find(|t| t.id == trait_id),
+            StepKind::Trait { trait_id, .. } => self.traits.iter().find(|t| t.id == trait_id),
             _ => None,
         }
     }
@@ -934,10 +934,18 @@ impl Runs {
                 };
                 run.calls.insert(call_id, (step_id.clone(), kind));
             }
-            (Arc::clone(&run.project), run.message_id, step.type_name(), name)
+            let shows = matches!(step.kind, StepKind::Trait { show_results: true, .. });
+            (Arc::clone(&run.project), run.message_id, step.type_name(), name, shows)
         };
-        let (project, message_id, step_type, name) = started;
-        let _ = conversations::append_step_started(&project, message_id, &step_id, step_type, &name);
+        let (project, message_id, step_type, name, shows) = started;
+        let _ = conversations::append_step_started(
+            &project,
+            message_id,
+            &step_id,
+            step_type,
+            &name,
+            shows,
+        );
     }
 
     fn step_completed(&self, run_id: Uuid, step_id: String, output: Option<String>) {
@@ -1027,6 +1035,11 @@ impl Runs {
             }
             SidecarFrame::StepStarted { run_id, step_id, call_id } => {
                 self.step_started(run_id, step_id, call_id);
+            }
+            SidecarFrame::RunSummary { run_id, call_id } => {
+                if let Some(run) = self.lock().runs.get_mut(&run_id) {
+                    run.calls.insert(call_id, (String::new(), CallKind::Decision));
+                }
             }
             SidecarFrame::StepCompleted { run_id, step_id, output } => {
                 self.step_completed(run_id, step_id, output);
@@ -1536,7 +1549,7 @@ pub mod test_support {
         let step = Step {
             id: STEP.to_string(),
             label: None,
-            kind: StepKind::Trait { trait_id: trait_def.id },
+            kind: StepKind::Trait { trait_id: trait_def.id, show_results: false },
         };
         RunSpec {
             author: Author { kind: AuthorKind::MiniMe, id: adapter.to_string() },
@@ -2359,7 +2372,7 @@ mod tests {
             steps: vec![Step {
                 id: label.into(),
                 label: None,
-                kind: StepKind::Trait { trait_id: Uuid::nil() },
+                kind: StepKind::Trait { trait_id: Uuid::nil(), show_results: false },
             }],
         };
         run.workflow.steps = vec![Step {
@@ -2371,6 +2384,24 @@ mod tests {
             },
         }];
         run
+    }
+
+    #[test]
+    fn a_summary_call_gets_the_runs_ai_key_and_its_text_is_the_reply() {
+        let f = fixture(Box::new(MemorySecrets::dummy()), CANCEL_TIMEOUT);
+        let (run_id, reply) = f.start_spec(deciding_spec("echo"), dummy_model());
+        let summary = new_id();
+        let ask = |provider: &str| {
+            f.runs.respond("r".into(), summary, "secret.get", json!({ "provider": provider }))
+        };
+        assert_eq!(error_code(ask("dummy")).as_deref(), Some("call_not_active"));
+        f.runs.handle(SidecarFrame::RunSummary { run_id, call_id: summary });
+        assert_eq!(result(ask("dummy"))["value"], json!("sk-dummy-0123456789"));
+        assert_eq!(error_code(ask("openai")).as_deref(), Some("secret_not_allowed"));
+        f.runs.handle(SidecarFrame::RunDelta { run_id, text: "In short".into() });
+        f.runs.handle(SidecarFrame::RunDone { run_id });
+        let message = f.message(reply);
+        assert_eq!((message.content.as_str(), message.steps.len()), ("In short", 0));
     }
 
     #[test]

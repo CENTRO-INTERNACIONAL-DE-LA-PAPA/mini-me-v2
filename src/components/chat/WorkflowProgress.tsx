@@ -2,11 +2,9 @@ import { ComponentCard } from "../interactive/ComponentCard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CheckIcon } from "lucide-react";
-import { useState } from "react";
 import type { Component, MessageStatus, MessageStep } from "../../protocol/types";
 import { approvalState } from "../interactive/approval";
 import { InteractiveComponent } from "../interactive/InteractiveComponent";
-import { Markdown } from "./Markdown";
 
 type StepState = "done" | "running" | "waiting" | "pending";
 
@@ -63,9 +61,9 @@ export function approvalAnswers(
 }
 
 /** Where a reply's components go, so text still arriving never pushes one down: each shows
- * with its done Step run, under `byStep` at its index in `steps`. Once the reply ended, the last
- * Trait Step's and those no Step added are the reply's own, below its text, as is an approval
- * while the reply waits on it. */
+ * with its done Step run, under `byStep` at its index in `steps`. Once the reply ended, those no
+ * Step added, those of Step runs that show their results, and a one-Step Workflow's are also
+ * the reply's own, below its text, as is an approval while the reply waits on it. */
 export function componentPlaces(
   steps: MessageStep[],
   components: Component[],
@@ -74,15 +72,19 @@ export function componentPlaces(
   const byStep = new Map<number, Component[]>();
   const own: Component[] = [];
   const ended = replyStatus !== "streaming" && replyStatus !== "paused";
-  const last = steps.map((s) => s.type).lastIndexOf("trait");
+  const oneStep = steps.length === 1 && steps[0].type === "trait";
   for (const component of components) {
     const index = component.step_index;
     if (component.kind === "approval" && replyStatus === "paused") {
       own.push(component);
-    } else if (ended && (index == null || index === last)) {
-      own.push(component);
-    } else if (index != null && steps[index]?.done) {
+      continue;
+    }
+    const step = index == null ? undefined : steps[index];
+    if (index != null && step?.done) {
       byStep.set(index, [...(byStep.get(index) ?? []), component]);
+    }
+    if (ended && (index == null || step?.show_results || (oneStep && index === 0))) {
+      own.push(component);
     }
   }
   return { own, byStep };
@@ -92,7 +94,6 @@ interface Props {
   steps: MessageStep[];
   /** The reply's Interactive Components: its approvals' answers, and what its Steps added. */
   components: Component[];
-  messageId?: string;
   replyStatus: MessageStatus;
   /** The Mini-Me's solid colour, for the running Step's spinner. */
   color?: string;
@@ -100,26 +101,24 @@ interface Props {
   onShowSteps?: () => void;
   /** Whether that timeline is open for this reply. */
   stepsShown?: boolean;
+  selected: number | null;
+  onSelect: (index: number | null) => void;
 }
 
-/** The Steps a reply's Workflow has run, in a row. A done Trait Step opens its output and
- * the components it added. */
+/** The Steps a reply's Workflow has run, in a row. A done Trait Step with an output or
+ * components, and an answered written approval, can be selected. */
 export function WorkflowProgress({
   steps,
   components,
-  messageId,
   replyStatus,
   color,
   onShowSteps,
   stepsShown = false,
+  selected,
+  onSelect,
 }: Props) {
-  const [open, setOpen] = useState<number | null>(null);
-  const opened = open === null ? null : steps[open];
   const answers = approvalAnswers(steps, components);
-  const asked = approvalComponents(steps, components);
   const { byStep } = componentPlaces(steps, components, replyStatus);
-  const added = open === null ? [] : (byStep.get(open) ?? []);
-  const approval = open === null ? undefined : asked[open];
 
   return (
     <ComponentCard className="gap-0">
@@ -152,9 +151,9 @@ export function WorkflowProgress({
                 {openable ? (
                   <Button
                     variant="link"
-                    className={cn("gap-2", open === index && "underline")}
-                    aria-expanded={open === index}
-                    onClick={() => setOpen(open === index ? null : index)}
+                    className={cn("gap-2", selected === index && "underline")}
+                    aria-pressed={selected === index}
+                    onClick={() => onSelect(selected === index ? null : index)}
                   >
                     {label}
                   </Button>
@@ -177,27 +176,6 @@ export function WorkflowProgress({
           </Button>
         )}
       </div>
-      {opened && (opened.output || added.length > 0) && (
-        <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3">
-          {approval ? (
-            <WrittenAnswer approval={approval} />
-          ) : (
-            <>
-              {opened.output && (
-                <div className="text-ink-2">
-                  <Markdown content={opened.output} size="ui" />
-                </div>
-              )}
-              <StepComponents
-                components={added}
-                messageId={messageId}
-                replyStatus={replyStatus}
-                color={color}
-              />
-            </>
-          )}
-        </div>
-      )}
     </ComponentCard>
   );
 }
@@ -215,11 +193,13 @@ export function WrittenAnswer({ approval }: { approval: Component }) {
 /** The components a Step run added, drawn below its output. */
 export function StepComponents({
   components,
+  projectId,
   messageId,
   replyStatus,
   color,
 }: {
   components: Component[];
+  projectId?: string;
   messageId?: string;
   replyStatus: MessageStatus;
   color?: string;
@@ -228,6 +208,7 @@ export function StepComponents({
     <InteractiveComponent
       key={component.id}
       component={component}
+      projectId={projectId}
       messageId={messageId}
       replyStatus={replyStatus}
       color={color}

@@ -24,7 +24,14 @@ import { useReplyDebug } from "../../hooks/useReplyDebug";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
-import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
+import {
+  StepComponents,
+  WorkflowProgress,
+  WrittenAnswer,
+  approvalComponents,
+  componentPlaces,
+  showsProgress,
+} from "./WorkflowProgress";
 import { MetaParts } from "@/components/ui/meta-parts";
 import { ErrorText } from "../shell/ErrorText";
 
@@ -77,7 +84,12 @@ export const MessageItem = memo(function MessageItem({
   const { name, miniMe: authorMiniMe } = author(message, miniMes);
 
   const miniMe = (id: string) => miniMes.find((m) => m.id === id);
-  const { own } = componentPlaces(message.steps, message.components, message.status);
+  const [selected, setSelected] = useState<number | null>(null);
+  const { own, byStep } = componentPlaces(message.steps, message.components, message.status);
+  const selectedStep = selected === null ? undefined : message.steps[selected];
+  const selectedApproval =
+    selected === null ? undefined : approvalComponents(message.steps, message.components)[selected];
+  const selectedComponents = selected === null ? [] : (byStep.get(selected) ?? []);
   // An approval shows only while it asks; once answered, the progress card shows its answer.
   const shown = own.filter(
     (c) => c.kind !== "approval" || approvalState(c.answer, message.status) === "asking",
@@ -200,15 +212,41 @@ export const MessageItem = memo(function MessageItem({
           <WorkflowProgress
             steps={message.steps}
             components={message.components}
-            messageId={message.id}
             replyStatus={message.status}
             color={authorMiniMe?.colors.solid}
             onShowSteps={onToggleSteps && (() => onToggleSteps(message.id))}
             stepsShown={stepsShown}
+            selected={selectedStep ? selected : null}
+            onSelect={setSelected}
           />
         )}
-        {/* A reply with no text yet, or none at all, leaves no empty block to space around. */}
-        {message.author.kind === "mini_me" ? (
+        {selectedStep ? (
+          selectedApproval ? (
+            <WrittenAnswer approval={selectedApproval} />
+          ) : (
+            <>
+              {selectedStep.output && (
+                <Markdown
+                  content={selectedStep.output}
+                  miniMes={miniMes}
+                  onOpenAsset={open}
+                />
+              )}
+              {selectedComponents.length > 0 && (
+                <div className="flex min-w-0 flex-col gap-3">
+                  <StepComponents
+                    components={selectedComponents}
+                    projectId={projectId}
+                    messageId={message.id}
+                    replyStatus={message.status}
+                    color={authorMiniMe?.colors.solid}
+                  />
+                </div>
+              )}
+            </>
+          )
+        ) : /* A reply with no text yet, or none at all, leaves no empty block to space around. */
+        message.author.kind === "mini_me" ? (
           message.content.trim() !== "" && (
             <Markdown
               content={message.content}
@@ -220,7 +258,7 @@ export const MessageItem = memo(function MessageItem({
         ) : (
           text
         )}
-        {shown.length > 0 && (
+        {!selectedStep && shown.length > 0 && (
           <div className="flex min-w-0 flex-col gap-3">
             {shown.map((component) => (
               <InteractiveComponent

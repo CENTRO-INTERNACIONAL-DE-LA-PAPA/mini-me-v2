@@ -15,8 +15,9 @@ from mini_me_sidecar.debug import Parts, recording
 from mini_me_sidecar.link import Link, log
 from mini_me_sidecar.workflow import state as saved_state
 from mini_me_sidecar.workflow.decide import decide, write_questions
-from mini_me_sidecar.workflow.graph import compile_workflow, workflow_output
-from mini_me_sidecar.workflow.model import Step, later_traits, parse_steps
+from mini_me_sidecar.workflow.graph import compile_workflow, run_outputs, workflow_output
+from mini_me_sidecar.workflow.model import Step, later_traits, parse_steps, summarized
+from mini_me_sidecar.workflow.summary import summarize
 
 # How long Trait calls get to return after `run.cancel`; the core gives up after five seconds.
 CANCEL_GRACE_S = 2.0
@@ -178,8 +179,26 @@ class Run:
             )
             self.ended = True
             return
+        if summarized(self.steps) and await self._summarize(run_outputs(result)):
+            return
         if out is not None and out.output and not out.streamed:
             self.send({"type": "run.delta", "text": out.output})
+
+    async def _summarize(self, earlier: list[dict[str, Any]]) -> bool:
+        if not (self.model or {}).get("model"):
+            return False
+        call_id = str(uuid.uuid4())
+        self.send({"type": "run.summary", "call_id": call_id})
+        start = {"trait": {"name": "Summary"}, "model": self.model, "context": {"steps": earlier}}
+        ctx = self._call(call_id, start, stream=True)
+        try:
+            with recording(self.debug, self.send_debug, "Summary", None):
+                await summarize(ctx, str(self.input.get("text", "")), earlier)
+        except TraitError as error:
+            log(f"the summary failed: {error}")
+        finally:
+            self._close(ctx)
+        return bool(ctx.output.strip())
 
 
 class Runs:

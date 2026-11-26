@@ -57,6 +57,7 @@ export interface MessageStep {
   name: string;
   output: string | null;
   done: boolean;
+  show_results: boolean;
 }
 
 export interface Message {
@@ -104,7 +105,13 @@ export type KnownEvent = Envelope &
     | { type: "message.resumed"; payload: { message_id: Uuid } }
     | {
         type: "step.started";
-        payload: { message_id: Uuid; step_id: string; type: MessageStep["type"]; name: string };
+        payload: {
+          message_id: Uuid;
+          step_id: string;
+          type: MessageStep["type"];
+          name: string;
+          show_results: boolean;
+        };
       }
     | {
         type: "step.completed";
@@ -385,7 +392,7 @@ export type ApprovalAnswer = { approved: boolean } | { text: string } | { skippe
 
 /** A node of a Workflow: a Trait Step or a control Step. */
 export type WorkflowStep = { id: string; label?: string } & (
-  | { type: "trait"; trait: Uuid }
+  | { type: "trait"; trait: Uuid; show_results?: boolean }
   | { type: "approval"; prompt: string; answer?: "text"; questions_by?: "model" }
   | { type: "condition"; question: string; branches: WorkflowBranch[] }
   | { type: "loop"; question: string; max_iterations: number; steps: WorkflowStep[] }

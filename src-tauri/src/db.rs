@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 14;
+pub const SCHEMA_VERSION: i32 = 15;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -222,6 +222,9 @@ CREATE TABLE suggestions (
 CREATE INDEX suggestions_by_asset ON suggestions(asset_id);
 -- Threads are opened only by the user.
 ALTER TABLE comment_threads DROP COLUMN opened_from;
+"#,
+    r#"
+ALTER TABLE message_steps ADD COLUMN show_results INTEGER NOT NULL DEFAULT 0;
 "#,
 ];
 

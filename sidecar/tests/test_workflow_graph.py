@@ -76,8 +76,12 @@ def test_a_sequence_runs_in_order_and_later_steps_see_earlier_outputs():
     result, _, _ = run([{"id": "a", "trait": "t"}, {"id": "b", "trait": "t"}], env)
     assert traits(env) == ["a", "b"]
     assert env.seen["b"] == ["a"]
-    assert env.streamed == ["b"]
+    assert env.streamed == []
     assert output(result) == "b output"
+
+    one = FakeEnv()
+    run([{"id": "only", "trait": "t"}], one)
+    assert one.streamed == ["only"]
 
 
 def test_a_condition_runs_only_the_chosen_branch():
@@ -87,7 +91,7 @@ def test_a_condition_runs_only_the_chosen_branch():
         {"label": "no", "steps": [{"id": "n", "trait": "t"}]}]}]
     result, _, _ = run(steps, env)
     assert traits(env) == ["n"]
-    assert env.streamed == ["n"]
+    assert env.streamed == []
     assert output(result) == "n output"
 
 

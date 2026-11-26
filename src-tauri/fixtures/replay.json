@@ -110,7 +110,8 @@
         "message_id": "0199d0b0-0000-7000-8000-000000000102",
         "step_id": "refute",
         "type": "trait",
-        "name": "Refute"
+        "name": "Refute",
+        "show_results": false
       }
     },
     {
@@ -182,7 +183,8 @@
         "message_id": "0199d0b0-0000-7000-8000-000000000102",
         "step_id": "refute",
         "type": "trait",
-        "name": "Refute"
+        "name": "Refute",
+        "show_results": false
       }
     },
     {
@@ -723,14 +725,16 @@
             "type": "trait",
             "name": "Refute",
             "output": "first critique",
-            "done": true
+            "done": true,
+            "show_results": false
           },
           {
             "step_id": "refute",
             "type": "trait",
             "name": "Refute",
             "output": "second critique",
-            "done": true
+            "done": true,
+            "show_results": false
           }
         ],
         "reactions": [],

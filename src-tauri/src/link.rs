@@ -311,6 +311,8 @@ pub enum SidecarFrame {
         step_id: String,
         call_id: Option<Uuid>,
     },
+    #[serde(rename = "run.summary")]
+    RunSummary { run_id: Uuid, call_id: Uuid },
     #[serde(rename = "step.completed")]
     StepCompleted {
         run_id: Uuid,

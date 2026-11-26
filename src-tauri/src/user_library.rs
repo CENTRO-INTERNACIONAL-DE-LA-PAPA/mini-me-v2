@@ -320,7 +320,7 @@ mod tests {
                 .map(|(i, id)| Step {
                     id: format!("step-{i}"),
                     label: None,
-                    kind: StepKind::Trait { trait_id: *id },
+                    kind: StepKind::Trait { trait_id: *id, show_results: false },
                 })
                 .collect(),
         };
@@ -373,7 +373,7 @@ mod tests {
         .unwrap();
         let mut runs_chart = mini_me(&library, "Charter", &[plan]);
         runs_chart.id = Uuid::now_v7();
-        if let StepKind::Trait { trait_id } = &mut runs_chart.workflow.steps[0].kind {
+        if let StepKind::Trait { trait_id, .. } = &mut runs_chart.workflow.steps[0].kind {
             *trait_id = charts["id"].as_str().unwrap().parse().unwrap();
         }
         let mut empty = mini_me(&library, "Empty", &[plan]);

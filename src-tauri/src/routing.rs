@@ -1182,7 +1182,7 @@ mod tests {
         let step = |id: &str, trait_id: Uuid| Step {
             id: id.into(),
             label: None,
-            kind: StepKind::Trait { trait_id },
+            kind: StepKind::Trait { trait_id, show_results: false },
         };
         library.mini_mes[0].workflow.steps =
             vec![step("a", second.id), step("b", first.id), step("c", second.id)];
