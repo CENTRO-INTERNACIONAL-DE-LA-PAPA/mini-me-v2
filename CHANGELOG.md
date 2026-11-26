@@ -13,6 +13,9 @@
 - When Plotter can't draw what you asked for, it says why and suggests columns and charts that would work, and each chart says which columns it shows.
 - When a Mini-Me can't do what you asked, it says so in its own words instead of naming the AI model.
 - A more consistent look: cards, lists, fields, empty states and hover hints match across the app, and Home and the Mini-Mes sit in the navigation beside your Project.
+- A calmer, more even look: buttons, switched-on toggles, corners, spacing and icon sizes follow one style everywhere, icons line up with their text, and the buttons at the top of each page sit in the same place.
+- The navigation lists a Project's Conversations as compact rows under an expandable Conversations row, shows which Mini-Me is working on each, and ends with a Settings row.
+- The Workflow editor is easier to read: connectors run straight, every Step keeps its name on one line, and Steps look different depending on who does them.
 
 ## Fixed
 
