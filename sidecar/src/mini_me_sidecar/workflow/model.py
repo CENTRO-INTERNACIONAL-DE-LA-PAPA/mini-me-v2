@@ -22,6 +22,7 @@ class Step:
     label: str | None = None
     trait: str | None = None
     prompt: str = ""
+    questions_by: str | None = None
     question: str = ""
     max_iterations: int = 1
     steps: tuple["Step", ...] = ()
@@ -46,6 +47,7 @@ def _parse_step(raw: dict[str, Any]) -> Step:
         label=raw.get("label"),
         trait=raw.get("trait"),
         prompt=str(raw.get("prompt", "")),
+        questions_by=raw.get("questions_by"),
         question=str(raw.get("question", "")),
         max_iterations=int(raw.get("max_iterations", 1)),
         steps=parse_steps(raw.get("steps") or []),

@@ -153,6 +153,7 @@ pub struct RunResume {
     pub state: String,
     pub step_id: String,
     pub approved: bool,
+    pub text: Option<String>,
 }
 
 /// A Mini-Me as the routing request describes it to Jev.
@@ -317,13 +318,16 @@ pub enum SidecarFrame {
         output: Option<String>,
     },
     /// The run reached the approval Step `step_id` and ended in the sidecar. `output` is the
-    /// Workflow's output so far; `state` is opaque to the core.
+    /// Workflow's output so far; `state` is opaque to the core; `prompt` holds the questions
+    /// the AI model wrote, when the Step asks it to.
     #[serde(rename = "run.paused")]
     RunPaused {
         run_id: Uuid,
         step_id: String,
         output: Option<String>,
         state: String,
+        #[serde(default)]
+        prompt: Option<String>,
     },
     #[serde(rename = "run.done")]
     RunDone { run_id: Uuid },
