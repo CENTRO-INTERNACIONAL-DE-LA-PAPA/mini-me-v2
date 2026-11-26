@@ -50,12 +50,12 @@
 
 ## 5. Detect Outliers (sidecar)
 
-- [ ] 5.1 Add `adapters/data/outliers.py`: per-column bounds at 1.5 or 3 interquartile ranges
+- [x] 5.1 Add `adapters/data/outliers.py`: per-column bounds at 1.5 or 3 interquartile ranges
   with the count outside them, and, for two or more columns, an Isolation Forest over the
   complete rows (fixed random state), giving the flagged rows with their reasons. Verify:
   pytest with planted outliers checks the bounds, the counts, the multiple of 3 and the
   reasons passes.
-- [ ] 5.2 Add the plan (`columns`, `multiple`), the adapter `data-outliers` and the reply: the
+- [x] 5.2 Add the plan (`columns`, `multiple`), the adapter `data-outliers` and the reply: the
   bounds table, the flagged rows table, box plots of the columns with flagged values from the
   template, and no saved table file. Verify: `cd sidecar && uv run pytest` passes.
 

@@ -223,6 +223,13 @@ class CorrelationPlan(ColumnsPlan):
     method: Literal["pearson", "spearman"] = "pearson"
 
 
+class OutlierPlan(ColumnsPlan):
+    """The number columns to check (empty for every one), and whether the message asks only for
+    extreme outliers: three interquartile ranges beyond the quartiles instead of 1.5."""
+
+    extreme: bool = False
+
+
 def pick_columns(
     frame: pd.DataFrame, named: list[str], kinds: tuple[str, ...]
 ) -> tuple[list[str], list[tuple[str, str]]]:

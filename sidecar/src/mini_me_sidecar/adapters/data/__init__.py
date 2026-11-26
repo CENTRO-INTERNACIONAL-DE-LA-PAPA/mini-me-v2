@@ -96,6 +96,21 @@ class FindCorrelations(Adapter):
         await replies.find_correlations(ctx, str(input.get("text", "")))
 
 
+class DetectOutliers(Adapter):
+    info = AdapterInfo(
+        id="data-outliers",
+        description="Flags unusual values and rows of a table, with pandas and scikit-learn.",
+        input_schema=TEXT_INPUT,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.detect_outliers(ctx, str(input.get("text", "")))
+
+
 class PlotData(Adapter):
     info = AdapterInfo(
         id="data-plot",

@@ -12,6 +12,7 @@ from mini_me_sidecar.adapters.data.catalogue import (
     ColumnsPlan,
     CorrelationPlan,
     JoinPlan,
+    OutlierPlan,
     describe_entry,
     pick_columns,
     problem,
@@ -32,6 +33,7 @@ from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
 from mini_me_sidecar.adapters.data.correlations import compared, correlations
 from mini_me_sidecar.adapters.data.describe import describe
 from mini_me_sidecar.adapters.data.join import join, shared_key
+from mini_me_sidecar.adapters.data.outliers import detect
 from mini_me_sidecar.adapters.data.plot import ChartResult, build_chart, chart_text
 from mini_me_sidecar.adapters.data.profile import profile as profile_frame
 from mini_me_sidecar.adapters.data.profile import summary
@@ -44,7 +46,7 @@ from mini_me_sidecar.adapters.data.tables import (
     table_sources,
 )
 from mini_me_sidecar.adapters.data.validate import results_frame, run_checks
-from mini_me_sidecar.adapters.data.variables import KINDS, chart_columns, summaries
+from mini_me_sidecar.adapters.data.variables import KINDS, MAX_CHARTS, chart_columns, summaries
 from mini_me_sidecar.adapters.data.worker import WORKERS
 from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
 from mini_me_sidecar.tools.base import ToolError
@@ -259,6 +261,63 @@ async def find_correlations(ctx: CallContext, text: str) -> None:
             {"template": "scatter_trend", "title": f"{b} against {a}", "x": a, "y": b}
         )
         await _draw(ctx, table.frame, scatter, source, table.source_id)
+    _write_ignored(ctx, malformed + left_out, "I left these out:")
+
+
+async def detect_outliers(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, malformed = await choose(ctx, OutlierPlan, text, [describe(table)])
+    columns, left_out = pick_columns(table.frame, plan.columns, ("number",))
+    if not columns:
+        raise TraitError("no_columns", f"I found no number columns to check in `{table.name}`.")
+    multiple = 3 if plan.extreme else 1.5
+    ctx.progress(f"Checking {table.name} for outliers")
+    found = await WORKERS.run(ctx, detect, table.frame, columns, multiple)
+    outside = found.bounds[found.bounds["Below"] + found.bounds["Above"] > 0]
+    values = int(outside["Below"].sum() + outside["Above"].sum())
+    ctx.write(
+        _table_note(tables)
+        + f"Checked {len(columns)} number column{'s' if len(columns) != 1 else ''} of "
+        + f"`{table.name}` for values more than {multiple:g} interquartile ranges beyond the "
+        + f"quartiles: {values:,} value{'s' if values != 1 else ''} in {len(outside)} "
+        + f"column{'s' if len(outside) != 1 else ''}."
+    )
+    if len(columns) > 1 and not found.notes:
+        ctx.write(
+            f" An Isolation Forest found {found.unusual_rows:,} row"
+            + f"{'s' if found.unusual_rows != 1 else ''} unusual across the columns."
+        )
+    ctx.write(
+        f" {len(found.flagged):,} row{'s are' if len(found.flagged) != 1 else ' is'} flagged in"
+        + " all; the table is unchanged.\n\n"
+        + "".join(f"{note}\n\n" for note in found.notes)
+    )
+    await show_frame(
+        ctx,
+        found.bounds,
+        f"Outlier bounds in {table.name}",
+        results_name=f"{table.stem}-outlier-bounds.csv",
+    )
+    if len(found.flagged):
+        await show_frame(
+            ctx,
+            found.flagged,
+            f"Flagged rows of {table.name}",
+            results_name=f"{table.stem}-outliers.csv",
+        )
+    source = table.name if table.source_id else None
+    for column in list(outside["Column"])[:MAX_CHARTS]:
+        spread = pd.DataFrame({"Column": column, column: table.frame[column]})
+        box = ChartChoice.model_validate(
+            {
+                "template": "box",
+                "title": f"Spread of {column}",
+                "category": "Column",
+                "value": column,
+            }
+        )
+        await _draw(ctx, spread, box, source, table.source_id)
     _write_ignored(ctx, malformed + left_out, "I left these out:")
 
 
