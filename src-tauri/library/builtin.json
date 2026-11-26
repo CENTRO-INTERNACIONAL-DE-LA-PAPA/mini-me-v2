@@ -468,17 +468,17 @@
       "group": "data",
       "workflow": {
         "steps": [
-          { "id": "profile-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18" },
-          { "id": "describe-variables", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a23" },
-          { "id": "find-correlations", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a24" },
-          { "id": "detect-outliers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a25" },
+          { "id": "profile-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18", "show_results": true },
+          { "id": "describe-variables", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a23", "show_results": true },
+          { "id": "find-correlations", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a24", "show_results": true },
+          { "id": "detect-outliers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a25", "show_results": true },
           {
             "id": "clustering",
             "type": "condition",
             "label": "Worth clustering?",
             "question": "Do the earlier Steps show at least two number columns and enough complete rows to find groups worth reporting?",
             "branches": [
-              { "label": "cluster", "steps": [{ "id": "find-clusters", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a26" }] },
+              { "label": "cluster", "steps": [{ "id": "find-clusters", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a26", "show_results": true }] },
               { "label": "skip", "steps": [] }
             ]
           },
@@ -488,7 +488,7 @@
             "label": "Another chart?",
             "question": "Does the user's message ask for a chart that the earlier Steps did not draw?",
             "branches": [
-              { "label": "chart", "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22" }] },
+              { "label": "chart", "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22", "show_results": true }] },
               { "label": "no chart", "steps": [] }
             ]
           }
@@ -532,15 +532,15 @@
             "label": "Which question?",
             "question": "Is this a question about a difference between groups, about what goes with an outcome, or about a change over time?",
             "branches": [
-              { "label": "groups", "steps": [{ "id": "compare-groups", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a27" }] },
+              { "label": "groups", "steps": [{ "id": "compare-groups", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a27", "show_results": true }] },
               {
                 "label": "drivers",
                 "steps": [
-                  { "id": "find-drivers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a28" },
-                  { "id": "check-confounders", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a29" }
+                  { "id": "find-drivers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a28", "show_results": true },
+                  { "id": "check-confounders", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a29", "show_results": true }
                 ]
               },
-              { "label": "trend", "steps": [{ "id": "analyze-trends", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a30" }] }
+              { "label": "trend", "steps": [{ "id": "analyze-trends", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a30", "show_results": true }] }
             ]
           },
           {
@@ -549,7 +549,7 @@
             "label": "Another chart?",
             "question": "Does the user's message ask for a chart that the earlier Steps did not draw?",
             "branches": [
-              { "label": "chart", "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22" }] },
+              { "label": "chart", "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22", "show_results": true }] },
               { "label": "no chart", "steps": [] }
             ]
           }

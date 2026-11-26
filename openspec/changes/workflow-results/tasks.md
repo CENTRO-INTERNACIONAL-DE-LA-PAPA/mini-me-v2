@@ -26,21 +26,21 @@
 
 ## 3. UI
 
-- [ ] 3.1 Add `show_results` to the protocol types (`MessageStep`, the Trait Step of
+- [x] 3.1 Add `show_results` to the protocol types (`MessageStep`, the Trait Step of
   `WorkflowStep`), and change `componentPlaces` so a reply's own components are those with no
   `step_index`, those of Step runs with `show_results`, and, for a one-Step Workflow, its
   Step's. Verify: `WorkflowProgress.test.ts` cases for each rule pass (`npm test`).
-- [ ] 3.2 Move the selected Step from `WorkflowProgress` to `MessageItem`: the card takes the
+- [x] 3.2 Move the selected Step from `WorkflowProgress` to `MessageItem`: the card takes the
   selected index and `onSelect`, and no longer draws an opened Step's content; while a Step is
   selected, `MessageItem` shows that Step run's output and components (or an approval's
   `WrittenAnswer`) in place of the reply's text and own components, keeping attachments,
   reactions and notes. Verify: `npx tsc --noEmit` and `npm test` pass.
-- [ ] 3.3 Add "Show its results in the reply" to the Trait Step inspector (`StepInspector.tsx`).
+- [x] 3.3 Add "Show its results in the reply" to the Trait Step inspector (`StepInspector.tsx`).
   Verify: `npx tsc --noEmit` passes and the switch sets and clears `show_results`.
 
 ## 4. Library
 
-- [ ] 4.1 In `src-tauri/library/builtin.json`, set `show_results` on Exploratory Data
+- [x] 4.1 In `src-tauri/library/builtin.json`, set `show_results` on Exploratory Data
   Analysis' *Profile Data*, *Describe Variables*, *Find Correlations*, *Detect Outliers*, *Find
   Clusters* and *Plot* Steps, and on Diagnostic Analytics' *Compare Groups*, *Find Drivers*,
   *Check Confounders*, *Analyze Trends* and *Plot* Steps. Verify: `cd src-tauri && cargo test`
@@ -48,7 +48,7 @@
 
 ## 5. In the app
 
-- [ ] 5.1 With the app running (the user runs `npm run tauri dev`): an Exploratory Data
+- [x] 5.1 With the app running (the user runs `npm run tauri dev`): an Exploratory Data
   Analysis reply streams a summary after its Steps, with the analyses' tables and charts under
   it; selecting a Step shows only that Step's text and components, and selecting it again
   brings the summary back; an Investigator reply ends with a summary; Profiler (one Step) is

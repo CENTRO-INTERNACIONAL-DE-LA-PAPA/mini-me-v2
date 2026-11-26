@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { Component, MessageStep } from "../../protocol/types";
 import { approvalAnswers, componentPlaces } from "./WorkflowProgress";
 
-const step = (step_id: string, type: MessageStep["type"], done = true): MessageStep => ({
-  step_id,
-  type,
-  name: step_id,
-  output: null,
-  done,
-});
+const step = (
+  step_id: string,
+  type: MessageStep["type"],
+  done = true,
+  show_results = false,
+): MessageStep => ({ step_id, type, name: step_id, output: null, done, show_results });
 
 const approval = (id: string, step_id: string, answer: unknown): Component => ({
   id,
@@ -84,9 +83,15 @@ describe("componentPlaces", () => {
     expect([...paused.byStep]).toEqual([[0, [sources]]]);
   });
 
-  it("moves an earlier Step's components to that Step once the reply ends", () => {
+  it("once the reply ends, shows under it only what Steps that show their results added", () => {
     const places = componentPlaces(steps, [sources, chart, plain], "complete");
-    expect(places.own).toEqual([chart, plain]);
+    expect(places.own).toEqual([plain]);
     expect(places.byStep.get(0)).toEqual([sources]);
+    expect(places.byStep.get(2)).toEqual([chart]);
+
+    const shown = [steps[0], steps[1], step("summarize", "trait", true, true)];
+    expect(componentPlaces(shown, [sources, chart], "complete").own).toEqual([chart]);
+    const one = componentPlaces([step("plot", "trait")], [added("only", 0)], "complete");
+    expect(one.own.map((c) => c.id)).toEqual(["only"]);
   });
 });

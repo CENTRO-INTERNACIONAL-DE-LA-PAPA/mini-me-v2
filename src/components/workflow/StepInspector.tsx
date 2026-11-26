@@ -132,6 +132,23 @@ export function StepInspector({
                 }
               />
             </Field>
+            <Field orientation="horizontal">
+              <FieldContent>
+                <FieldLabel htmlFor="show-results">Show its results in the reply</FieldLabel>
+                <FieldDescription>
+                  Its tables and charts also appear under the reply.
+                </FieldDescription>
+              </FieldContent>
+              <Switch
+                id="show-results"
+                checked={step.show_results === true}
+                disabled={!editable}
+                onCheckedChange={(on) => {
+                  const { show_results: _shown, ...rest } = step;
+                  change(on ? { ...rest, show_results: true } : rest);
+                }}
+              />
+            </Field>
           </>
         )}
         {step.type === "approval" && (
