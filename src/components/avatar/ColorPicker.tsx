@@ -14,7 +14,7 @@ export function ColorPicker({ value, onChange }: ColorPickerProps) {
   const current = value ?? COLOR_FAMILIES.find((f) => f.name === "Yellow")!;
   return (
     <section className="grid gap-3">
-      <h2 className="font-serif text-subheading text-foreground">Colour</h2>
+      <h2 className="text-ui font-medium text-foreground">Colour</h2>
       <ToggleGroup
         variant="plain"
         aria-label="Colour family"

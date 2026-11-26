@@ -1,9 +1,9 @@
 import { ListRow } from "../shell/ListRow";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { BackLink, HeaderActions } from "../shell/Sheet";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { ArrowRightIcon, ChevronRightIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { MiniMe } from "../../protocol/types";
 import { count } from "../../lib/format";
@@ -40,30 +40,21 @@ export function EditorHeader({
   onBack,
 }: HeaderProps) {
   return (
-    <div className="flex flex-col gap-4 pt-6 pr-6 pl-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-3">
-          <Button
-            variant="link"
-            className="w-fit gap-2 text-control text-muted-foreground"
-            onClick={onBack}
-          >
-            <ChevronLeftIcon />
-            {back}
-          </Button>
-          <div className="flex min-w-0 items-center gap-3">
-            {icon && <span className="flex shrink-0 text-foreground">{icon}</span>}
-            <div className="grid min-w-0 gap-1">
-              <h1 className="truncate font-serif text-identity font-medium text-foreground">
-                {title}
-              </h1>
-              {subtitle && <p className="truncate text-ui text-muted-foreground">{subtitle}</p>}
-            </div>
+    <div className="flex flex-col gap-4 px-8 pt-6">
+      <header className="flex min-w-0 flex-col gap-3">
+        <BackLink label={back} onBack={onBack} />
+        <div className="flex min-w-0 items-center gap-3">
+          {icon && <span className="flex shrink-0 text-foreground">{icon}</span>}
+          <div className="grid min-w-0 gap-1">
+            <h1 className="truncate font-serif text-identity font-medium text-foreground">
+              {title}
+            </h1>
+            {subtitle && <p className="truncate text-ui text-muted-foreground">{subtitle}</p>}
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {tabs}
-          {actions}
+          <HeaderActions>
+            {tabs}
+            {actions}
+          </HeaderActions>
         </div>
       </header>
       {problems && (

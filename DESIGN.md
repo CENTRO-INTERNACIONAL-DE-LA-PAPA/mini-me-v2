@@ -87,6 +87,8 @@ Two families, bundled with the app and never loaded from the web.
 | Everything else | **Schibsted Grotesk** |
 | Wordmark | Always the wordmark artwork; never retype it |
 
+Schibsted Grotesk is declared in `index.css` with its ascent at 91% and descent at 32.5%, so text sits centred in its line box and an icon beside it lines up. Keep these when the font is updated.
+
 ### Scale
 Use the text tokens, never arbitrary pixel sizes.
 
@@ -96,10 +98,10 @@ Use the text tokens, never arbitrary pixel sizes.
 | `text-sheet-title` | serif | 34 / 500, −0.01em | Sheet titles |
 | `text-identity` | serif | 32 / 500 | An editor's identity name |
 | `text-column-title` | serif | 28 / 500 | A column page's title; a sheet title while a tool sheet is open |
-| `text-tool-title` | serif | 24 / 500 | Tool sheet titles, card names, the Project name in the navigation |
+| `text-tool-title` | serif | 24 / 500 | Tool sheet titles, card names |
 | `text-heading` | serif | 20 / 400 | Section headings |
 | `text-name` | serif | 17 / 500 | A Mini-Me's name in a reply |
-| `text-subheading` | serif | 15 / 400 | Sub-sections and groups |
+| `text-subheading` | serif | 15 / 400–500 | The Project's name in the navigation |
 | `text-body` | sans | 15 / 400, lh 1.6 | Messages and paragraphs |
 | `text-document` | sans | 14.5 / 400, lh 1.75 | Document body |
 | `text-ui` | sans | 13.5 / 400–500 | Rows, buttons, navigation items, inputs |
@@ -107,7 +109,7 @@ Use the text tokens, never arbitrary pixel sizes.
 | `text-meta` | sans | 12.5 / 400 | Timestamps, counts, captions |
 
 - The serif is never bold (max 500), never uppercase, never below 15px.
-- No uppercase labels or letter-spaced eyebrows. Section labels are serif headings in sentence case.
+- No uppercase labels or letter-spaced eyebrows. Serif names a page, a thing or a page section: page titles, names (Projects, Mini-Mes, documents), and a page's sections (`text-heading`). Anything that groups content inside a card, a tool sheet, the navigation or an editor takes the small label instead, the same as a form field's label: `text-ui` 500 in ink, sentence case.
 - Tabular numerals in tables, counts and durations.
 - Titles balance their lines; paragraphs wrap prettily.
 
@@ -171,7 +173,7 @@ Values that make room for something (a checkmark, a row's "…" button, a list i
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Navigation sheet, 256px.** The wordmark (it leads Home); the app's rows, Home and Mini-Mes (an avatar stack that hops on hover); the open Project's name as a serif group heading with a ⌄ for its menu, or a dashed placeholder when none is open, above its views; its Conversations, status lines, and a Settings row with your initials at the bottom. The selected item is a white row.
+- **Navigation sheet, 256px.** The wordmark (it leads Home); the app's rows, Home and Mini-Mes (an avatar stack that hops on hover); the open Project's name as a serif group heading with a ⌄ for its menu, or a dashed placeholder when none is open, above its views; its Conversations under a "Conversations" heading with a + for a new one, as one-line rows, a running or waiting row ending in its Mini-Me's 22px avatar; status lines, and a full-width Settings row at the bottom. The selected item is a white row.
 - **Main sheet, flexible.** The view being worked on.
 - **Tool sheet, 340–380px.** A tool beside the main sheet. Only one at a time; a well-filled close button sits top-right.
 - **Content widths.** A chat column is 820px, or 680px with a tool sheet open; its composer spans it and its messages sit 20px inside. A column page (settings, notes) is a 210px list and content up to 760px, centred together.
@@ -212,10 +214,10 @@ Inputs, text areas and selects: `--well` fill, no visible border, `rounded-xl`, 
 - **Reference chip:** one chip for every file, table and chart, wherever it appears: white, outlined, an optional 13px leading icon, and a button when it opens what it names.
 
 ### Sheets and headers
-Every sheet, tool sheet, page header, section heading and editor header comes from one shared set: a serif title, an optional meta line, actions on the right, and a close button on a tool sheet.
+Every sheet, tool sheet, page header, section heading and editor header comes from one shared set: a serif title, an optional meta line, actions on the right, and a close button on a tool sheet. A page's actions sit at the end of its title's line (`HeaderActions`), 32px from the sheet's edge, on every page.
 - **Page:** `SheetPage`, or `PageTitle` where the page sits in a column (Settings): `text-sheet-title`, a `text-ui` line under it, actions on the right.
 - **Section:** `SheetSection`: a `text-heading` serif title, short meta (a count) beside it, an optional sentence under it in `text-meta`, actions on the right.
-- **Tool sheet group:** `ToolSheetGroup`: a `text-subheading` serif heading over its rows, groups `mt-6` apart.
+- **Tool sheet group:** `ToolSheetGroup`: a small label (`text-ui` 500) over its rows, groups `mt-6` apart.
 - **Editor:** `EditorHeader`, then its content padded by `EDITOR_BODY` (`px-8 pt-6 pb-8`).
 
 ### Rows and lists
@@ -225,7 +227,7 @@ Every sheet, tool sheet, page header, section heading and editor header comes fr
 - A list of Mini-Mes is a grid of cards; a list of Traits is rows.
 
 ### Replies and messages
-- **Reply:** a Mini-Me card, `px-4.5 py-4`. Header: 28px avatar, serif name, time and status in `ink`. Body 15px. Action pills are secondary buttons; an active one is pressed in, in the Mini-Me's `tint`.
+- **Reply:** a Mini-Me card, `p-4`. Header: 28px avatar, serif name, time and status in `ink`. Body 15px. Action pills are secondary buttons; an active one is pressed in, in the Mini-Me's `tint`.
 - **Your message:** right-aligned, max 520px, `--bubble` fill without an outline, `rounded-2xl rounded-br-sm`, the time below.
 - **Reactions:** a small white outlined pill over the bubble's bottom-left corner: avatar and emoji.
 - **Composer:** floats `bottom-5.5` above the bottom of the sheet. White, 1px outline (the addressed Mini-Me's `edge`, else `--border`), `rounded-2xl`; a `size-8.5` round send button in the Mini-Me's `ink`, else ink. The list above keeps enough bottom padding for its last item to clear it.

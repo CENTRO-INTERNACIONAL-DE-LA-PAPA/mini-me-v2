@@ -15,7 +15,7 @@ import type {
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { relativeInSentence, summaryLine } from "../overview/overview";
-import { SheetSection } from "../shell/Sheet";
+import { SheetSection, HeaderActions } from "../shell/Sheet";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useLoad } from "../../hooks/useLoad";
 import { useRunningReplies } from "../../hooks/useRunningReplies";
@@ -60,19 +60,19 @@ export function HomeView({ projects, onOpen, onCreate, onOpenReply }: Props) {
   );
   return (
     <main className="flex w-full flex-col gap-6 px-8 pt-6 pb-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-2">
+      <header className="flex flex-col gap-2">
+        <div className="flex min-w-0 items-center">
           <h1 className="font-serif text-greeting font-medium text-foreground">
             {greeting(new Date(), name)}
           </h1>
-          <p className="text-body text-muted-foreground">
-            Open a project to talk to its Mini-Mes.
-          </p>
+          <HeaderActions>
+            <Button onClick={() => setCreating(true)}>
+              <PlusIcon />
+              New project
+            </Button>
+          </HeaderActions>
         </div>
-        <Button onClick={() => setCreating(true)}>
-          <PlusIcon />
-          New project
-        </Button>
+        <p className="text-body text-muted-foreground">Open a project to talk to its Mini-Mes.</p>
       </header>
 
       <NeedsYou onOpenReply={onOpenReply} />

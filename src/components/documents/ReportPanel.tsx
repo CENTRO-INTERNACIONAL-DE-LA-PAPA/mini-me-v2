@@ -91,7 +91,7 @@ export function ReportPanel({
       <div className="grid gap-3">
         <Card render={<section />} size="sm" className="gap-3">
           <div className="flex items-start gap-3">
-            <h3 className="flex-1 font-serif text-name text-foreground">
+            <h3 className="flex-1 text-ui font-medium text-foreground">
               Draft from this conversation
             </h3>
             {sources.length > 0 && (
@@ -129,7 +129,7 @@ export function ReportPanel({
         >
           <FilePlusIcon aria-hidden className="size-4 shrink-0" />
           <span className="grid">
-            <span className="font-serif text-name text-foreground">Start blank</span>
+            <span className="text-ui font-medium text-foreground">Start blank</span>
             <span className="text-meta text-muted-foreground">An empty document in Files</span>
           </span>
         </Card>
