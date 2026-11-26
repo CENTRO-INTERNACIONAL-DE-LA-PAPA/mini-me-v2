@@ -2,14 +2,14 @@
   <img src=".github/assets/mini-me-banner-peek.png" alt="Mini-Me Banner" width="100%">
 </p>
 
-Mini-Me (v2) is a local-first, customizable desktop research tool for scientists at the
-[International Potato Center (CIP)](https://cipotato.org), building on its predecessor,
+Mini-Me (v2) is a local-first desktop app that helps you think, research, analyse data and
+write, building on its predecessor,
 [Mini-Me Desktop](https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-desktop).
 
-Instead of asking scientists to adopt a new way of working, Mini-Me lets them build
-**Mini-Mes**: small versions of themselves that carry out research the way they already
-would without AI. A Mini-Me helps gather everything a project needs, from ideas and
-hypothesis validation to experiments and results.
+Instead of asking you to adopt a new way of working, Mini-Me lets you build **Mini-Mes**:
+small versions of yourself, each with its own skills and its own way of working, that take on
+parts of your work the way you would. They help a project from its first ideas to its data,
+its results and the documents that report them.
 
 ## Core concepts
 
@@ -17,7 +17,7 @@ hypothesis validation to experiments and results.
 |---|---|
 | **Project** | Where your work lives: its Conversations and files, with an overview of progress. |
 | **Conversation** | A chat inside a Project, where you ask Mini-Mes for help. |
-| **Mini-Me** | Your "little scientist", defined by its **Traits** and its **Workflow**. Use the predefined ones, or build your own in a visual editor. |
+| **Mini-Me** | Your helper, defined by its **Traits** and its **Workflow**. Use the predefined ones, or build your own in a visual editor. |
 | **Trait** | One thing a Mini-Me can do, such as *Find Papers* or *Summarize*. |
 | **Workflow** | The order a Mini-Me uses its Traits in, with points where it stops for your approval. |
 
@@ -51,51 +51,26 @@ Mini-Me Data/
 - **You stay in control.** A Workflow can stop for your approval before it continues, and
   Mini-Me asks before any action that would cost extra.
 - **Some Traits use other services:** Ai2's Asta to find papers and build theories, with your
-  own Ai2 account, and Typesafe's Jev to choose a Mini-Me for you.
+  own Ai2 account, CIP's Dataverse to find datasets, and Typesafe's Jev to choose a Mini-Me
+  for you.
 
 ## Installation
 
 Download the file for your system from the latest
-[release](https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2/releases/latest).
-The installers are not code-signed, so each system warns the first time:
+[release](https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2/releases/latest):
+the `.exe` for Windows, the `.dmg` for macOS (Apple silicon), or the `.AppImage` or `.deb`
+for Linux. Mini-Me updates itself after that.
 
-- **Windows:** `Mini-Me_<version>_x64-setup.exe`. It installs Mini-Me for your Windows user
-  only, into `%LOCALAPPDATA%\Mini-Me`, and needs no administrator rights. When SmartScreen
-  warns "Windows protected your PC", click **More info**, then **Run anyway**.
-- **macOS** (Apple silicon): `Mini-Me_<version>_aarch64.dmg`. Open it and drag Mini-Me into
-  Applications. If macOS says Mini-Me "is damaged" or can't be verified, run
-  `xattr -dr com.apple.quarantine /Applications/Mini-Me.app` in Terminal once, then open it.
-- **Linux** (x86-64): `Mini-Me_<version>_amd64.AppImage` runs on most distributions; make it
-  executable (`chmod +x Mini-Me_*.AppImage`) and run it. On Ubuntu and Debian you can install
-  `Mini-Me_<version>_amd64.deb` instead, with `sudo apt install ./Mini-Me_<version>_amd64.deb`
-  so that its dependencies come with it. Mini-Me keeps your API keys in the desktop's keyring
-  (GNOME Keyring or KWallet), which Ubuntu's desktop already runs; without one, keys cannot be
-  saved.
-
-Mini-Me updates itself: it downloads new versions in the background, shows the progress in
-the sidebar and offers **Restart**, or installs the update when you close it. Your Projects
-and settings are kept. The Linux `.deb` does not update itself; install the new `.deb` from
-each release.
-
-You bring your own API key for the AI provider you choose. [docs/using.md](docs/using.md) walks
-through adding it, and explains how to work with Mini-Mes.
+You bring your own API key for the AI provider you choose; [docs/using.md](docs/using.md)
+shows how to add it and how to work with Mini-Mes.
 
 ### Mini-Me Canary
 
-Mini-Me Canary is the build for beta testers. It gets every change as soon as it is merged, before
-it is released, so it can break. It installs next to Mini-Me as a separate app, with its own
-Projects (`Documents/Mini-Me Data (Canary)`), settings and API keys. Keep work that matters in
-Mini-Me.
-
-Download it from the newest "Mini-Me Canary" pre-release on the
-[releases page](https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2/releases), not from
-the one called "Mini-Me Canary update feed". The files and the first-launch warnings are the ones
-described above, under the name "Mini-Me Canary". It updates itself to each new build.
-
-- **Windows:** it installs into `%LOCALAPPDATA%\Mini-Me Canary`. On a CIP computer, IT has to
-  allow `%LOCALAPPDATA%\Mini-Me Canary\sidecar\python\python.exe`, as it does for Mini-Me's.
-- **Reporting a problem:** Settings → About shows the commit the build was made from, such as
-  "Mini-Me Canary a1b2c3d". Include it.
+Mini-Me Canary is the build for beta testers: it gets every change as soon as it is merged, so
+it can break. It installs as a separate app with its own Projects and settings. Download it from
+the newest "Mini-Me Canary" pre-release on the
+[releases page](https://github.com/CENTRO-INTERNACIONAL-DE-LA-PAPA/mini-me-v2/releases), and
+include the build shown in Settings → About when you report a problem.
 
 ## Development
 
@@ -123,7 +98,7 @@ International Potato Center (CIP).
 
 ## Acknowledgements
 
-**Mini-Me** is developed by and for the
+**Mini-Me** is developed at the
 [International Potato Center (CIP)](https://cipotato.org).
 
 ### Asta

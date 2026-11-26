@@ -11,6 +11,7 @@
 
 ## Improved
 
+- Mini-Me installs faster: the files it installs went from about 22,000 to about 14,000.
 - Mini-Mes read large tables much more cheaply: they look at a table's description and a few rows, and read more rows only when needed.
 - A Mini-Me that works in several steps now ends its reply with a summary of what it found, and shows the tables and charts of its main steps under it. Select a step to see only that step's text and results; select it again to go back to the summary.
 - The Mini-Me editor opens on Appearance, offers 16 colours and a Random button that rolls a new look.
