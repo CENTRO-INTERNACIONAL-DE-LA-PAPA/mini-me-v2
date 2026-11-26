@@ -11,6 +11,7 @@
 
 ## Improved
 
+- A Mini-Me that works in several steps now ends its reply with a summary of what it found, and shows the tables and charts of its main steps under it. Select a step to see only that step's text and results; select it again to go back to the summary.
 - The Mini-Me editor opens on Appearance, offers 16 colours and a Random button that rolls a new look.
 - Lists no longer shift sideways when a scrollbar appears.
 - When Plotter can't draw what you asked for, it says why and suggests columns and charts that would work, and each chart says which columns it shows.

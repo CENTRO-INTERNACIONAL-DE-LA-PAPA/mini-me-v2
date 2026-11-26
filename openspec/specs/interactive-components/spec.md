@@ -77,8 +77,9 @@ Trait Step added.
 The UI SHALL show a message's Interactive Components only once the Step that added each one has
 finished, whatever the reply's status, so that text still arriving does not push them down.
 Until the reply ends, each SHALL show with its Step in the Workflow progress. Once it has
-ended, those without a `step_index` and those of the last Trait Step run SHALL show below its
-text and above its attachments, in order; the others SHALL stay with their Step. An approval
+ended, those without a `step_index` and those of the Steps whose `show_results` is set SHALL
+show below its text and above its attachments, in order, and so SHALL those of the last Trait
+Step run of a one-Step Workflow; every Step's components SHALL also stay with their Step. An approval
 SHALL show below the text while the reply waits on it. Each component SHALL be drawn by its
 kind's renderer for its version, with the app's theme tokens.
 
@@ -99,8 +100,18 @@ kind's renderer for its version, with the app's theme tokens.
   opens *Find Papers* in the reply's Workflow progress card
 
 #### Scenario: Last Step's component stays
-- **WHEN** a Workflow's last Trait Step adds a chart and the reply completes
+- **WHEN** a one-Step Workflow's Trait Step adds a chart and the reply completes
 - **THEN** the chart shows under the reply's text
+
+#### Scenario: Results shown in the reply
+- **WHEN** an Exploratory Data Analysis run ends, its *Describe Variables* Step having
+  `show_results` set
+- **THEN** *Describe Variables*' tables and charts show under the summary, and also when the
+  user selects *Describe Variables*
+
+#### Scenario: Last Step without show_results
+- **WHEN** a multi-Step Workflow's last Trait Step, without `show_results`, adds a chart
+- **THEN** the chart shows only with its Step
 
 #### Scenario: Earlier Step's component while running
 - **WHEN** *Find Papers* has added paper sources and finished, and a later Step is still

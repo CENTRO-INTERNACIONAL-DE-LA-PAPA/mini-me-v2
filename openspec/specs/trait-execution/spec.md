@@ -339,8 +339,8 @@ model, input, context, resume }`:
 ### Requirement: Step frames
 The sidecar SHALL send `step.started` (`{ run_id, step_id, call_id }`) and `step.completed`
 (`{ run_id, step_id, output }`) for each Step it runs. `call_id` is a new UUID for each
-Trait call and each model decision of a condition or loop, and `null` for other Steps. An
-approval Step SHALL get `step.started` only.
+Trait call, each model decision of a condition or loop and each approval whose questions the
+model writes, and `null` for other Steps. An approval Step SHALL get `step.started` only.
 
 #### Scenario: Trait Step
 - **WHEN** a run's *Plan* Step runs
@@ -402,3 +402,13 @@ open.
 #### Scenario: Debugging off
 - **WHEN** the core starts a run with all three `context.debug` values `false`
 - **THEN** the sidecar sends no `run.debug` for that run
+
+### Requirement: Summary frame
+Before asking the model for a multi-Step run's summary, the sidecar SHALL send `run.summary`,
+payload `{ run_id, call_id }`, with a new `call_id`. The core SHALL let that call get the run's
+AI key, as for a condition's decision, and SHALL persist no event for it. The summary's text
+SHALL then arrive as `run.delta` frames.
+
+#### Scenario: Summary call
+- **WHEN** a run of Investigator ends in the sidecar
+- **THEN** the core receives `run.summary`, then the summary as `run.delta`, then `run.done`
