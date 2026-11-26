@@ -70,6 +70,8 @@ pub enum StepKind {
     Trait {
         #[serde(rename = "trait")]
         trait_id: Uuid,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        show_results: bool,
     },
     Approval {
         prompt: String,
@@ -172,7 +174,7 @@ impl Workflow {
     pub fn trait_ids(&self) -> Vec<Uuid> {
         let mut ids = Vec::new();
         for step in self.all_steps() {
-            if let StepKind::Trait { trait_id } = step.kind {
+            if let StepKind::Trait { trait_id, .. } = step.kind {
                 if !ids.contains(&trait_id) {
                     ids.push(trait_id);
                 }
@@ -380,7 +382,7 @@ impl Library {
                 problems.push(format!("{at}: the label is empty"));
             }
             match &step.kind {
-                StepKind::Trait { trait_id } => match self.trait_def(*trait_id) {
+                StepKind::Trait { trait_id, .. } => match self.trait_def(*trait_id) {
                     None => problems.push(format!("{at} runs an unknown Trait {trait_id}")),
                     // Placeholder Traits run on `echo` until they are built, so no Mini-Me
                     // may offer them.
@@ -472,7 +474,8 @@ mod tests {
         library.traits[0].name = "summarize".into();
         library.mini_mes[0].workflow.steps.clear();
         let code = library.traits.iter().find(|t| t.name == "Code").unwrap().id;
-        library.mini_mes[1].workflow.steps[0].kind = StepKind::Trait { trait_id: code };
+        library.mini_mes[1].workflow.steps[0].kind =
+            StepKind::Trait { trait_id: code, show_results: false };
         let problems = library.problems();
         assert!(problems.iter().any(|p| p.contains("share an ID")));
         assert!(problems.iter().any(|p| p.contains("Title Case")));
@@ -564,7 +567,7 @@ mod tests {
             serde_json::from_value(serde_json::json!({ "steps": [{ "id": "scout", "trait": SCOUT }] }))
                 .unwrap();
         let trait_id = SCOUT.parse().unwrap();
-        assert_eq!(workflow.steps[0].kind, StepKind::Trait { trait_id });
+        assert_eq!(workflow.steps[0].kind, StepKind::Trait { trait_id, show_results: false });
         let sent = serde_json::to_value(&workflow).unwrap();
         assert_eq!(sent["steps"][0]["type"], "trait");
     }

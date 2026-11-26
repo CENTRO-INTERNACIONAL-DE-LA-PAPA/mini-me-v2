@@ -58,6 +58,10 @@ def _parse_step(raw: dict[str, Any]) -> Step:
     )
 
 
+def summarized(steps: tuple[Step, ...]) -> bool:
+    return not (len(steps) == 1 and steps[0].type == "trait")
+
+
 def final_steps(steps: tuple[Step, ...]) -> set[str]:
     """IDs of the Trait Steps no other Step can follow, whose text streams into the reply. Steps
     in loops and parallel branches never are, as a rerun or the join follows them."""

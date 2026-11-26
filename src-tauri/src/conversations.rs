@@ -300,12 +300,14 @@ pub fn append_step_started(
     step_id: &str,
     step_type: &str,
     name: &str,
+    show_results: bool,
 ) -> AppResult<()> {
     let kind = EventKind::StepStarted {
         message_id,
         step_id: step_id.to_string(),
         step_type: step_type.to_string(),
         name: name.to_string(),
+        show_results,
     };
     reply_event(project, message_id, kind)
 }

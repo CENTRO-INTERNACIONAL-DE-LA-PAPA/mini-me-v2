@@ -335,7 +335,7 @@
       "installation_id": "0199d0a0-0000-7000-8000-0000000000f1",
       "user_id": "0199d0a0-0000-7000-8000-0000000000e1"
     },
-    "payload": { "message_id": "0199d0a0-0000-7000-8000-000000000106", "step_id": "plan", "type": "trait", "name": "Plan" }
+    "payload": { "message_id": "0199d0a0-0000-7000-8000-000000000106", "step_id": "plan", "type": "trait", "name": "Plan", "show_results": false }
   },
   {
     "id": "0199d0a0-0000-7000-8000-000000000016",

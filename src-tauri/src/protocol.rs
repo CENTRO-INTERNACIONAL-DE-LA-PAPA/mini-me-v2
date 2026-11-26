@@ -84,6 +84,8 @@ pub enum EventKind {
         #[serde(rename = "type")]
         step_type: String,
         name: String,
+        #[serde(default)]
+        show_results: bool,
     },
     /// The latest started run of `step_id` ended. `output` is a Trait Step's text, a
     /// condition's chosen branch, a loop's `repeat` or `stop`, or `null`.
@@ -221,6 +223,7 @@ pub struct MessageStep {
     pub name: String,
     pub output: Option<String>,
     pub done: bool,
+    pub show_results: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

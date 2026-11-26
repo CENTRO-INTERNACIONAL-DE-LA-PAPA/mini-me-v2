@@ -211,6 +211,11 @@
       "state": "eyJmb3JtYXQiOjF9",
       "prompt": "Which column is the outcome?"
     },
+    {
+      "type": "run.summary",
+      "run_id": "0199d0a0-0000-7000-8000-000000000301",
+      "call_id": "0199d0a0-0000-7000-8000-000000000401"
+    },
     { "type": "run.done", "run_id": "0199d0a0-0000-7000-8000-000000000301" },
     {
       "type": "run.error",

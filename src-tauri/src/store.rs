@@ -395,7 +395,7 @@ impl ProjectState {
     /// Started Steps by message, in order.
     fn steps_in(&self, scope: Scope) -> AppResult<HashMap<Uuid, Vec<MessageStep>>> {
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT s.message_id, s.step_id, s.type, s.name, s.output, s.done \
+            "SELECT s.message_id, s.step_id, s.type, s.name, s.output, s.done, s.show_results \
              FROM message_steps s JOIN messages m ON m.id = s.message_id WHERE {} \
              ORDER BY s.message_id, s.position",
             scope.condition()
@@ -409,6 +409,7 @@ impl ProjectState {
                     name: row.get(3)?,
                     output: row.get(4)?,
                     done: row.get(5)?,
+                    show_results: row.get(6)?,
                 },
             ))
         })?;
@@ -860,12 +861,12 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
                 params![message_id.to_string()],
             )?;
         }
-        EventKind::StepStarted { message_id, step_id, step_type, name } => {
+        EventKind::StepStarted { message_id, step_id, step_type, name, show_results } => {
             tx.execute(
-                "INSERT INTO message_steps (message_id, position, step_id, type, name) \
-                 SELECT ?1, COALESCE(MAX(position), 0) + 1, ?2, ?3, ?4 FROM message_steps \
-                 WHERE message_id = ?1",
-                params![message_id.to_string(), step_id, step_type, name],
+                "INSERT INTO message_steps (message_id, position, step_id, type, name, \
+                 show_results) SELECT ?1, COALESCE(MAX(position), 0) + 1, ?2, ?3, ?4, ?5 \
+                 FROM message_steps WHERE message_id = ?1",
+                params![message_id.to_string(), step_id, step_type, name, show_results],
             )?;
         }
         // A Step inside a loop starts once per iteration, so the latest run is completed.
@@ -1280,11 +1281,12 @@ mod tests {
         };
         let reply =
             conversations::start_reply(&project, conversation, question.id, author).unwrap();
-        let started = |step_id: &str| EventKind::StepStarted {
+        let started = |step_id: &str, show_results: bool| EventKind::StepStarted {
             message_id: reply,
             step_id: step_id.into(),
             step_type: "trait".into(),
             name: "Refute".into(),
+            show_results,
         };
         let completed = |step_id: &str, output: &str| EventKind::StepCompleted {
             message_id: reply,
@@ -1308,9 +1310,9 @@ mod tests {
         };
         let mut state = project.lock();
         let kinds = vec![
-            started("refute"),
+            started("refute", false),
             completed("refute", "first critique"),
-            started("refute"),
+            started("refute", true),
             completed("refute", "second critique"),
             EventKind::ComponentAdded { message_id: reply, component: approval.clone() },
             EventKind::MessagePaused { message_id: reply },
@@ -1328,6 +1330,8 @@ mod tests {
             message.steps.iter().map(|s| s.output.as_deref()).collect();
         assert_eq!(outputs, [Some("first critique"), Some("second critique")]);
         assert!(message.steps.iter().all(|s| s.done));
+        let shown: Vec<bool> = message.steps.iter().map(|s| s.show_results).collect();
+        assert_eq!(shown, [false, true]);
         assert_eq!(message.components[0].answer, serde_json::json!({ "approved": true }));
     }
 }

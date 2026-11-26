@@ -13,6 +13,7 @@ from mini_me_sidecar.workflow.model import (
     final_steps,
     list_output,
     parallel_output,
+    summarized,
     visible_outputs,
 )
 
@@ -74,7 +75,7 @@ class _Builder:
     def __init__(self, env: Env, trait_names: dict[str, str], steps: tuple[Step, ...]) -> None:
         self.env = env
         self.names = trait_names
-        self.finals = final_steps(steps)
+        self.finals = set() if summarized(steps) else final_steps(steps)
         self.graph = StateGraph(RunState)
 
     def node(self, name: str, fn: Node) -> str:
@@ -291,6 +292,10 @@ def compile_workflow(
     builder.graph.add_edge(START, first)
     link(END)
     return builder.graph.compile(checkpointer=checkpointer)
+
+
+def run_outputs(state: RunState) -> list[dict[str, Any]]:
+    return visible_outputs(_log(state), {})
 
 
 def workflow_output(state: RunState) -> Entry | None:
