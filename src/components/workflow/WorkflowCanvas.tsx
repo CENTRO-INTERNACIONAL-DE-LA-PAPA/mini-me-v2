@@ -1,3 +1,10 @@
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -6,7 +13,6 @@ import {
   BaseEdge,
   Controls,
   EdgeLabelRenderer,
-  getSmoothStepPath,
   Handle,
   Position,
   ReactFlow,
@@ -26,12 +32,12 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { traitIcon } from "../../lib/traitIcons";
 import type { MiniMe, TraitSummary, WorkflowStep } from "../../protocol/types";
 import { surfaceStyle } from "../minime/miniMeColors";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
@@ -46,6 +52,7 @@ import {
 } from "./workflowEdit";
 import {
   EMPTY_SLOT,
+  GAP_Y,
   layoutWorkflow,
   type LayoutEdge,
   type LayoutNode,
@@ -139,7 +146,7 @@ export function WorkflowCanvas({
     <CanvasContext.Provider value={state}>
       <div
         style={surfaceStyle(miniMe.colors)}
-        className="relative h-full w-full overflow-hidden rounded-card bg-muted"
+        className="relative h-full w-full overflow-hidden rounded-2xl bg-muted"
       >
         <ReactFlow<LayoutNode, LayoutEdge>
           nodes={nodes}
@@ -194,7 +201,7 @@ function Toolbar() {
           key={kind}
           variant="ghost"
           size="xs"
-          className="cursor-grab justify-start gap-[7px] rounded-lg px-2.5 py-1.5 font-normal text-foreground select-none active:cursor-grabbing"
+          className="cursor-grab justify-start gap-2 rounded-lg px-2.5 py-1.5 font-normal text-foreground select-none active:cursor-grabbing"
           onPointerDown={start({ kind: "new", step: kind, label })}
         >
           <Icon className="size-4" />
@@ -217,8 +224,6 @@ function Ghost({ label, at }: { label: string; at: { x: number; y: number } }) {
   );
 }
 
-const MENU = { width: 240, maxHeight: 288, margin: 8 };
-
 function TraitMenu({
   traits,
   at,
@@ -230,43 +235,23 @@ function TraitMenu({
   onPick: (t: TraitSummary) => void;
   onCancel: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-  // Opens at the drop point, moved in so it stays inside the window.
-  const left = Math.max(MENU.margin, Math.min(at.x, window.innerWidth - MENU.width - MENU.margin));
-  const top = Math.max(
-    MENU.margin,
-    Math.min(at.y, window.innerHeight - MENU.maxHeight - MENU.margin),
-  );
+  // Opens at the drop point; the menu keeps itself inside the window.
+  const anchor = { getBoundingClientRect: () => new DOMRect(at.x, at.y, 0, 0) };
   return (
-    <>
-      <div className="fixed inset-0 z-40" onPointerDown={onCancel} />
-      <div
-        role="menu"
-        aria-label="Pick the Trait this Step runs"
-        className="fixed z-50 overflow-y-auto rounded-lg border border-border bg-card p-1"
-        style={{ left, top, width: MENU.width, maxHeight: MENU.maxHeight }}
-      >
-        <p className="px-2 py-1.5 text-meta text-muted-foreground">
-          {traits.length > 0 ? "Which Trait does it run?" : "There are no Traits to run."}
-        </p>
-        {traits.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="menuitem"
-            autoFocus={t === traits[0]}
-            className="block w-full rounded-md px-2 py-1.5 text-left text-ui outline-none hover:bg-accent focus-visible:bg-accent"
-            onClick={() => onPick(t)}
-          >
-            {t.name}
-          </button>
-        ))}
-      </div>
-    </>
+    <DropdownMenu open onOpenChange={(open) => !open && onCancel()}>
+      <DropdownMenuContent anchor={anchor} className="max-h-72 w-60">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            {traits.length > 0 ? "Which Trait does it run?" : "There are no Traits to run."}
+          </DropdownMenuLabel>
+          {traits.map((t) => (
+            <DropdownMenuItem key={t.id} onClick={() => onPick(t)}>
+              {t.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -312,22 +297,22 @@ function StepCard({
       {...press}
       className={cn(
         press.className,
-        "group/step flex items-center gap-2.5 rounded-2xl px-3.5",
+        "flex items-center gap-3 rounded-xl px-4",
         step.type === "trait"
-          ? "h-10 w-[180px] justify-center border border-edge bg-wash"
-          : "h-14 w-[220px] border border-transparent bg-card",
+          ? "h-10 w-[220px] justify-center border border-edge bg-wash"
+          : "h-14 w-[220px] border border-border bg-card",
         editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
-        selectedId === step.id && "border-foreground outline-4 outline-tint",
+        selectedId === step.id &&
+          (step.type === "trait" ? "border-(--mm-solid)" : "border-foreground"),
       )}
-      data-selected={selectedId === step.id || undefined}
     >
       <Ends />
       <Icon
         aria-hidden
-        className="size-4 shrink-0 text-foreground group-data-selected/step:text-(--mm-ink,var(--foreground))"
+        className="size-4.5 shrink-0 text-foreground"
       />
       <span className="grid min-w-0 gap-px">
-        <span className="truncate text-ui font-semibold">{name}</span>
+        <span className="truncate text-ui font-medium">{name}</span>
         {meta && <span className="truncate text-meta text-muted-foreground">{meta}</span>}
       </span>
     </div>
@@ -341,7 +326,7 @@ function TraitNode({ data }: NodeProps<LayoutNode>) {
   return (
     <StepCard
       step={step}
-      icon={PuzzleIcon}
+      icon={traitIcon(t?.icon ?? null)}
       name={t?.name ?? "Unknown Trait"}
     />
   );
@@ -369,9 +354,9 @@ function Pill({
       {...press}
       className={cn(
         press.className,
-        "flex h-8 w-[180px] items-center justify-center gap-[7px] rounded-full bg-card px-3 text-control font-medium",
+        "flex h-8 w-[220px] items-center justify-center gap-2 rounded-full border border-border-strong px-3 text-control font-medium whitespace-nowrap",
         step && (editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"),
-        step && selectedId === step.id && "border-foreground outline-4 outline-tint",
+        step && selectedId === step.id && "border-foreground",
         className,
       )}
     >
@@ -394,8 +379,8 @@ function EndPill({ text }: { text: string }) {
   const { miniMe } = useCanvas();
   return (
     <Pill>
-      <MiniMeAvatar miniMe={miniMe} size={18} />
-      {text}
+      <MiniMeAvatar miniMe={miniMe} size={24} />
+      <span className="truncate">{text}</span>
     </Pill>
   );
 }
@@ -407,7 +392,7 @@ function ControlNode({ data }: NodeProps<LayoutNode>) {
     step.type === "loop" ? RepeatIcon : step.type === "parallel" ? SplitIcon : GitForkIcon;
   return (
     <Pill step={step}>
-      <Icon className="size-3.5 shrink-0" strokeWidth={1.4} />
+      <Icon className="size-4 shrink-0" />
       <span className="truncate">{pillText(step)}</span>
     </Pill>
   );
@@ -416,7 +401,7 @@ function ControlNode({ data }: NodeProps<LayoutNode>) {
 function FrameNode({ width, height }: NodeProps<LayoutNode>) {
   return (
     <div
-      className="rounded-card border border-dashed border-dash"
+      className="rounded-2xl border border-dashed border-dash"
       style={{ width, height }}
     />
   );
@@ -439,7 +424,7 @@ function SlotNode({ data }: NodeProps<LayoutNode>) {
     <div
       data-slot={editable && !blocked ? key : undefined}
       className={cn(
-        "grid place-items-center rounded-[10px] border border-dashed border-border-strong text-meta text-muted-foreground",
+        "grid place-items-center rounded-xl border border-dashed border-border-strong text-meta text-muted-foreground",
         drag?.over === key && "border-primary bg-card text-foreground",
       )}
       style={EMPTY_SLOT}
@@ -466,7 +451,14 @@ const NODE_TYPES = {
 function ConnectorEdge(props: EdgeProps<LayoutEdge>) {
   const { drag, editable, steps } = useCanvas();
   const data: LayoutEdgeData = props.data ?? {};
-  const [path, labelX, labelY] = getSmoothStepPath({ ...props, borderRadius: 0 });
+  const { sourceX, sourceY, targetX, targetY } = props;
+  const turnY = targetY - GAP_Y / 2;
+  const path = `M ${sourceX} ${sourceY} V ${turnY} H ${targetX} V ${targetY}`;
+  const labelY = (turnY + targetY) / 2;
+  const intoJoin = props.target.endsWith(":join");
+  const plusX = intoJoin ? sourceX : targetX;
+  const plusY =
+    sourceX === targetX ? (sourceY + targetY) / 2 : intoJoin ? (sourceY + turnY) / 2 : labelY;
   const key = data.slot ? JSON.stringify(data.slot) : null;
   const blocked =
     drag?.payload.kind === "move" && data.slot && isSlotInside(steps, drag.payload.id, data.slot);
@@ -477,9 +469,9 @@ function ConnectorEdge(props: EdgeProps<LayoutEdge>) {
       <EdgeLabelRenderer>
         {data.label && (
           <span
-            className="absolute text-[11.5px] text-muted-foreground"
+            className="absolute text-meta text-muted-foreground"
             style={{
-              transform: `translate(-50%, -100%) translate(${props.targetX}px, ${props.targetY - 6}px)`,
+              transform: `translate(6px, -50%) translate(${targetX}px, ${labelY}px)`,
             }}
           >
             {data.label}
@@ -493,7 +485,7 @@ function ConnectorEdge(props: EdgeProps<LayoutEdge>) {
               drag.over === key && "size-6 border-primary bg-primary text-primary-foreground",
             )}
             style={{
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              transform: `translate(-50%, -50%) translate(${plusX}px, ${plusY}px)`,
               pointerEvents: "all",
             }}
           >

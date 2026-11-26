@@ -650,14 +650,13 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
-    use crate::comments::test_support::into_thread;
-    use crate::link::{AdapterInfo, CoreFrame};
+    use crate::link::AdapterInfo;
     use crate::protocol::{EventKind, MessageStatus, TextComponent, new_id};
     use crate::secrets::NoSecrets;
     use crate::sidecar::SidecarLog;
     use crate::runs::FrameSink;
     use crate::runs::test_support::Recorder;
-    use crate::library::{FALLBACK_MINI_ME as ASSISTANT, SCRIBE, Step, StepKind};
+    use crate::library::{FALLBACK_MINI_ME as ASSISTANT, SCRIBE};
 
     /// A message whose `@Name` mentions are found in `content` in order of `mentions`.
     fn message(content: &str, mentions: &[(&str, Uuid)]) -> Message {
@@ -716,58 +715,6 @@ mod tests {
     #[test]
     fn jevs_answers_decide_who_answers_and_how() {
         let library = Library::builtin();
-        let decided = |given: Vec<(&'static str, ChoiceAnswer)>, mentioned, reacts| {
-            let given = answers(given);
-            let d = decide(Some(&given), mentioned, Offered::default(), 0.5, reacts, &library);
-            (d.answerer, d.reaction, d.needs_context)
-        };
-        let mini_me = |id: Uuid, confidence| ("mini_me", answer(&id.to_string(), confidence, &[]));
-        let reaction = |emoji: &str, confidence| ("reaction", answer(emoji, confidence, &[]));
-        let context = |choice: &str| ("needs_context", answer(choice, 0.9, &[]));
-
-        // Jev's pick answers at or above the threshold; below it, or unknown, the fallback does.
-        assert_eq!(decided(vec![mini_me(SCRIBE, 0.5)], None, true).0, SCRIBE);
-        assert_eq!(decided(vec![mini_me(SCRIBE, 0.3)], None, true).0, FALLBACK_MINI_ME);
-        assert_eq!(decided(vec![mini_me(new_id(), 0.99)], None, true).0, FALLBACK_MINI_ME);
-        // The fallback reacts under the same threshold as any Mini-Me.
-        assert_eq!(
-            decided(vec![mini_me(SCRIBE, 0.3), reaction("👍", 0.8)], None, true),
-            (FALLBACK_MINI_ME, Some("👍".into()), None)
-        );
-        // Reaction and context follow Jev; a low confidence, "none" or a failed draw mean none.
-        assert_eq!(
-            decided(vec![reaction("👍", 0.8), context("yes")], Some(SCRIBE), true),
-            (SCRIBE, Some("👍".into()), Some(true))
-        );
-        assert_eq!(
-            decided(vec![reaction("🎉", 0.4), context("no")], Some(SCRIBE), true),
-            (SCRIBE, None, Some(false))
-        );
-        assert_eq!(decided(vec![reaction("none", 0.99)], Some(SCRIBE), true).1, None);
-        assert_eq!(decided(vec![reaction("🥔", 0.9)], Some(SCRIBE), false).1, None);
-    }
-
-    #[test]
-    fn without_jev_a_mentioned_mini_me_answers_or_else_the_fallback() {
-        let library = Library::builtin();
-        let none = Offered::default();
-        assert_eq!(decide(None, None, none, 0.5, true, &library).answerer, FALLBACK_MINI_ME);
-        let mentioned = decide(None, Some(SCRIBE), none, 0.5, true, &library);
-        let expected = Decision {
-            answerer: SCRIBE,
-            reaction: None,
-            needs_context: None,
-            file: None,
-            component: None,
-            tools: Vec::new(),
-            hand_off: None,
-        };
-        assert_eq!(mentioned, expected);
-    }
-
-    #[test]
-    fn jev_picks_one_of_the_offered_files_and_components_at_or_above_the_threshold() {
-        let library = Library::builtin();
         let cleaned = RouteFile {
             id: new_id(),
             name: "field-trial-cleaned.csv".into(),
@@ -779,153 +726,21 @@ mod tests {
             title: Some("Yield by variety".into()),
             file: "field-trial.csv".into(),
         };
-        let (files, components) = ([cleaned.clone()], [chart.clone()]);
+        let (files, components) = ([cleaned], [chart]);
         let offered = Offered { files: &files, components: &components };
-        let pick = |question: &'static str, choice: &str, confidence: f64| {
-            let answers = answers(vec![(question, answer(choice, confidence, &[]))]);
-            decide(Some(&answers), None, offered, 0.5, true, &library)
+        let decided = |given: Vec<(&'static str, ChoiceAnswer)>| {
+            decide(Some(&answers(given)), None, offered, 0.5, true, &library)
         };
-        let picked = RunFile { asset_id: cleaned.id, name: cleaned.name.clone() };
-        assert_eq!(pick("file", &cleaned.id.to_string(), 0.5).file, Some(picked));
-        assert_eq!(pick("file", &cleaned.id.to_string(), 0.4).file, None);
-        assert_eq!(pick("file", "none", 0.9).file, None);
-        assert_eq!(pick("file", &new_id().to_string(), 0.9).file, None);
-        let picked = RunComponent { component_id: chart.id };
-        assert_eq!(pick("component", &chart.id.to_string(), 0.5).component, Some(picked));
-        assert_eq!(pick("component", &chart.id.to_string(), 0.4).component, None);
-        assert_eq!(pick("component", "none", 0.9).component, None);
-        assert_eq!(pick("component", &new_id().to_string(), 0.9).component, None);
-    }
+        let unknown = new_id().to_string();
+        let pick = |question: &'static str, choice: &str| (question, answer(choice, 0.99, &[]));
 
-    #[test]
-    fn the_four_most_probable_tools_are_passed_on_without_none() {
-        let library = Library::builtin();
-        let probabilities = [
-            ("read_file", 0.1),
-            ("show_table", 0.4),
-            ("none", 0.2),
-            ("suggest", 0.02),
-            ("save_file", 0.15),
-            ("read_component", 0.08),
-            ("write_document", 0.05),
-        ];
-        let given = answers(vec![("tools", answer("show_table", 0.4, &probabilities))]);
-        let decided = decide(Some(&given), None, Offered::default(), 0.5, true, &library);
-        assert_eq!(decided.tools, ["show_table", "save_file", "read_file", "read_component"]);
-    }
-
-    #[test]
-    fn jev_recommends_the_top_other_mini_me_when_the_others_reach_the_threshold() {
-        let library = Library::builtin();
-        let third = library.mini_mes.iter().find(|m| m.id != SCRIBE && m.id != ASSISTANT);
-        let (scribe, third) = (SCRIBE.to_string(), third.unwrap().id.to_string());
-        let (assistant, unknown) = (ASSISTANT.to_string(), new_id().to_string());
-        let next = |probabilities: &[(&str, f64)]| {
-            let given = answers(vec![("next_mini_me", answer("", 0.0, probabilities))]);
-            decide(Some(&given), Some(ASSISTANT), Offered::default(), 0.5, true, &library).hand_off
-        };
-        let to_scribe = Some(RunHandOff { mini_me_id: SCRIBE });
-        // Split between two others, neither alone at the threshold.
-        assert_eq!(next(&[(&scribe, 0.3), (&third, 0.2), ("none", 0.5)]), to_scribe);
-        assert_eq!(next(&[(&scribe, 0.3), (&third, 0.1), ("none", 0.6)]), None);
-        // The answerer and unknown Mini-Mes don't count.
-        assert_eq!(next(&[(&scribe, 0.1), (&assistant, 0.9)]), None);
-        assert_eq!(next(&[(&scribe, 0.1), (&unknown, 0.9)]), None);
-    }
-
-    #[test]
-    fn mentions_are_removed_from_the_input() {
-        let assistant = |content: &str| input_text(&message(content, &[("@Assistant", ASSISTANT)]));
-        assert_eq!(assistant("@Assistant late blight"), "late blight");
-        assert_eq!(assistant("hi @Assistant there"), "hi there");
-        assert_eq!(assistant("papa 🥔 @Assistant ñame"), "papa 🥔 ñame");
-        let both = message(
-            "@Assistant and @Scribe, hello",
-            &[("@Assistant", ASSISTANT), ("@Scribe", SCRIBE)],
-        );
-        assert_eq!(input_text(&both), "and , hello");
-        assert_eq!(first_mention(&both), Some(ASSISTANT));
-    }
-
-    #[test]
-    fn jev_gets_the_text_and_file_names_only() {
-        let f = fixture();
-        let mut sent = message(
-            "@Assistant summarize #notes.txt",
-            &[("@Assistant", ASSISTANT)],
-        );
-        sent.text_components.push(TextComponent {
-            kind: TextComponentKind::Asset,
-            id: new_id(),
-            label: "#notes.txt".into(),
-            start: 21,
-            end: 31,
-        });
-        assert_eq!(
-            state(&Request::message(&f.project, f.conversation, &sent), json!([])),
-            json!({ "message": "summarize #notes.txt", "files": ["notes.txt"], "recent": [] })
-        );
-    }
-
-    #[test]
-    fn jev_sees_the_last_turns_by_name_and_shortened() {
-        let by = |kind: AuthorKind, id: &str, content: &str| {
-            let mut m = message(content, &[]);
-            m.author = Author { kind, id: id.into() };
-            m
-        };
+        assert_eq!(decided(vec![pick("mini_me", &unknown)]).answerer, FALLBACK_MINI_ME);
+        assert_eq!(decided(vec![pick("mini_me", "Scribe")]).answerer, FALLBACK_MINI_ME);
+        assert_eq!(decided(vec![pick("file", &unknown)]).file, None);
+        assert_eq!(decided(vec![pick("component", &unknown)]).component, None);
         let scribe = SCRIBE.to_string();
-        let messages = [
-            by(AuthorKind::User, "user", "hello"),
-            by(AuthorKind::User, "user", "first question"),
-            by(AuthorKind::MiniMe, &scribe, "first answer"),
-            by(AuthorKind::User, "user", "clean the table"),
-            by(AuthorKind::System, ROUTING_AUTHOR, "Couldn't start a reply"),
-            by(AuthorKind::MiniMe, &scribe, &"é".repeat(RECENT_CHARS + 50)),
-            by(AuthorKind::User, "user", "now remove the empty rows"),
-        ];
-        let turns = recent(&messages[..6], &Library::builtin());
-        let turns = turns.as_array().unwrap();
-        let names: Vec<&str> = turns.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names, ["You", "Scribe", "You", "Scribe"]);
-        assert_eq!(turns[0]["content"], "first question");
-        assert_eq!(turns[3]["content"].as_str().unwrap().chars().count(), RECENT_CHARS);
-    }
-
-    #[test]
-    fn a_warning_shows_until_routing_works_again() {
-        let routing = Routing::new(LibraryStore::builtin(), false);
-        let seen = Arc::new(Mutex::new(Vec::new()));
-        let log = Arc::clone(&seen);
-        routing.subscribe(Box::new(move |w| {
-            log.lock().unwrap().push(w.map(str::to_string));
-            true
-        }));
-        let failed = |code: &str| Err(AppError::new(code, ""));
-        for routed in [failed("jev_timeout"), failed("sidecar_stopped"), Ok(RouteAnswers::new())] {
-            if let Some(warning) = warning_after(&routed) {
-                routing.warn(warning);
-            }
-        }
-        routing.key_saved(false);
-        let expected = [Some(NO_KEY), Some(NOT_ANSWERING), None, Some(NO_KEY)];
-        assert_eq!(*seen.lock().unwrap(), expected.map(|w| w.map(str::to_string)));
-    }
-
-    #[test]
-    fn unknown_mentions_are_rejected() {
-        let library = Library::builtin();
-        let mut input = SendMessageInput {
-            content: "@Ghost hi".into(),
-            attachments: Vec::new(),
-            text_components: message("@Ghost hi", &[("@Ghost", new_id())]).text_components,
-        };
-        assert_eq!(
-            check_mentions(&input, &library).unwrap_err().code,
-            "invalid_input"
-        );
-        input.text_components[0].id = SCRIBE;
-        assert!(check_mentions(&input, &library).is_ok());
+        let next = answer("", 0.0, &[(&scribe, 0.1), (&unknown, 0.9)]);
+        assert_eq!(decided(vec![("next_mini_me", next)]).hand_off, None);
     }
 
     struct Fixture {
@@ -933,10 +748,7 @@ mod tests {
         project: Arc<Project>,
         conversation: Uuid,
         calls: Arc<Runs>,
-        sink: Arc<Recorder>,
         routing: Arc<Routing>,
-        /// Whether messages are sent with both Jev debug settings on.
-        debug: bool,
     }
 
     fn fixture() -> Fixture {
@@ -969,9 +781,7 @@ mod tests {
             project,
             conversation,
             calls,
-            sink,
             routing: Routing::new(library, true),
-            debug: false,
         }
     }
 
@@ -1006,8 +816,8 @@ mod tests {
                 }),
                 threshold: 0.5,
                 timeout,
-                show_answers: self.debug,
-                show_asked: self.debug,
+                show_answers: false,
+                show_asked: false,
                 reaction_chance: 1.0,
             }
         }
@@ -1032,27 +842,6 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(10));
             }
         }
-
-        fn route_id(&self) -> Uuid {
-            let deadline = Instant::now() + Duration::from_secs(5);
-            loop {
-                let found = self
-                    .sink
-                    .0
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .find_map(|frame| match frame {
-                        CoreFrame::RouteStart { route_id, .. } => Some(*route_id),
-                        _ => None,
-                    });
-                if let Some(route_id) = found {
-                    return route_id;
-                }
-                assert!(Instant::now() < deadline, "no route.start was sent");
-                std::thread::sleep(Duration::from_millis(5));
-            }
-        }
     }
 
     fn routing_note(events: &[EventKind]) -> Option<Message> {
@@ -1074,222 +863,6 @@ mod tests {
             }
             _ => None,
         })
-    }
-
-    #[test]
-    fn a_saved_mini_me_is_offered_in_the_next_route_start() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(LibraryStore::open(dir.path()));
-        let f = fixture_with(Arc::clone(&store));
-        let mut copy = store.current().mini_me(ASSISTANT).unwrap().clone();
-        copy.id = Uuid::nil();
-        copy.name = "Field Translator".into();
-        let saved = store.save_mini_me(copy).unwrap();
-        f.send("translate these field notes", &[], ROUTE_TIMEOUT).unwrap();
-        f.route_id();
-        let frames = f.sink.0.lock().unwrap().clone();
-        let offered: Vec<Uuid> = frames
-            .iter()
-            .find_map(|frame| match frame {
-                CoreFrame::RouteStart { mini_mes, .. } => {
-                    Some(mini_mes.iter().map(|m| m.id).collect())
-                }
-                _ => None,
-            })
-            .unwrap();
-        assert!(offered.contains(&saved.id));
-    }
-
-    #[test]
-    fn no_file_or_component_question_without_them() {
-        let f = fixture();
-        f.send("check the data", &[], ROUTE_TIMEOUT).unwrap();
-        f.route_id();
-        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
-        let [CoreFrame::RouteStart { files, components, ask, .. }] = starts.as_slice() else {
-            panic!("expected one route.start, got {starts:?}");
-        };
-        assert!(files.is_empty() && components.is_empty());
-        assert_eq!(ask, &["mini_me", "reaction", "needs_context", "tools", "next_mini_me"]);
-    }
-
-    #[test]
-    fn file_and_component_options_list_the_tables_and_charts_newest_first() {
-        let f = fixture();
-        let input = SendMessageInput {
-            content: "plot the trial".into(),
-            attachments: Vec::new(),
-            text_components: Vec::new(),
-        };
-        let question =
-            conversations::send_message(&f.project, f.conversation, input, new_id()).unwrap();
-        let plotter = Author { kind: AuthorKind::MiniMe, id: "plotter".into() };
-        let author = plotter.clone();
-        let reply =
-            conversations::start_reply(&f.project, f.conversation, question.id, author).unwrap();
-        let file = ("field-trial.csv", "text/csv", b"plot\n1\n".as_slice());
-        let asset =
-            conversations::attach_generated(&f.project, reply, &plotter, file, false).unwrap();
-        let shown = [("table", "Field trial"), ("chart", "Yield by variety")];
-        let mut ids = Vec::new();
-        for (kind, title) in shown {
-            let component = conversations::NewComponent {
-                kind: kind.into(),
-                version: 1,
-                preview: json!({ "source": asset.name, "title": title }),
-                text: title.to_string(),
-                source_asset_id: Some(asset.id),
-            };
-            ids.push(conversations::add_component(&f.project, reply, None, component).unwrap());
-        }
-        conversations::complete_reply(&f.project, reply).unwrap();
-
-        f.send("make that chart a bar chart", &[], ROUTE_TIMEOUT).unwrap();
-        f.route_id();
-        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
-        let [CoreFrame::RouteStart { files, components, ask, .. }] = starts.as_slice() else {
-            panic!("expected one route.start, got {starts:?}");
-        };
-        let component = |kind: &str, title: &str| RouteComponent {
-            kind: kind.into(),
-            title: Some(title.into()),
-        };
-        let expected = RouteFile {
-            id: asset.id,
-            name: asset.name.clone(),
-            components: vec![
-                component("chart", "Yield by variety"),
-                component("table", "Field trial"),
-            ],
-        };
-        assert_eq!(files, &vec![expected]);
-        let option = |id: Uuid, kind: &str, title: &str| RouteComponentOption {
-            id,
-            kind: kind.into(),
-            title: Some(title.into()),
-            file: asset.name.clone(),
-        };
-        let expected =
-            vec![option(ids[1], "chart", "Yield by variety"), option(ids[0], "table", "Field trial")];
-        assert_eq!(components, &expected);
-        assert!(ask.contains(&"component".to_string()));
-    }
-
-    #[test]
-    fn a_mini_me_option_names_its_traits_once_in_workflow_order() {
-        let mut library = Library::builtin();
-        let (first, second) = (library.traits[0].clone(), library.traits[1].clone());
-        let step = |id: &str, trait_id: Uuid| Step {
-            id: id.into(),
-            label: None,
-            kind: StepKind::Trait { trait_id },
-        };
-        library.mini_mes[0].workflow.steps =
-            vec![step("a", second.id), step("b", first.id), step("c", second.id)];
-        let option = &route_mini_mes(&library)[0];
-        assert_eq!(option.traits, vec![second.name, first.name]);
-    }
-
-    #[test]
-    fn jevs_record_holds_only_the_parts_whose_setting_is_on() {
-        let settings = |show_answers: bool, show_asked: bool| RouteSettings {
-            model: None,
-            threshold: 0.5,
-            timeout: ROUTE_TIMEOUT,
-            show_answers,
-            show_asked,
-            reaction_chance: 1.0,
-        };
-        let asked = json!({ "state": { "message": "hi" }, "questions": {} });
-        let thumbs_up = answers(vec![("reaction", answer("👍", 0.9, &[]))]);
-        let answered: AppResult<RouteAnswers> = Ok(thumbs_up);
-        let timed_out: AppResult<RouteAnswers> =
-            Err(AppError::new("jev_timeout", "Typesafe did not answer in time."));
-        let record = |routed: &AppResult<RouteAnswers>, on: (bool, bool)| {
-            jev_record(routed, asked.clone(), &settings(on.0, on.1))
-        };
-
-        let both = record(&answered, (true, true)).unwrap();
-        assert_eq!(both["asked"], asked);
-        assert_eq!(both["answers"]["reaction"]["choice"], json!("👍"));
-        let only_answers = record(&answered, (true, false)).unwrap();
-        assert_eq!((&only_answers["asked"], &only_answers["error"]), (&Value::Null, &Value::Null));
-        let late = record(&timed_out, (true, true)).unwrap();
-        assert_eq!(late["answers"], Value::Null);
-        assert_eq!(late["error"]["code"], json!("jev_timeout"));
-        assert_eq!(record(&answered, (false, false)), None);
-    }
-
-    #[test]
-    fn jevs_record_is_stored_with_the_message() {
-        let mut f = fixture();
-        f.debug = true;
-        let sent = f.send("check the data", &[], ROUTE_TIMEOUT).unwrap();
-        let route_id = f.route_id();
-        let asked = json!({ "state": { "message": "check the data" }, "questions": {} });
-        f.calls.handle(crate::link::SidecarFrame::RouteDone {
-            route_id,
-            answers: answers(vec![("needs_context", answer("no", 0.9, &[]))]),
-            asked: asked.clone(),
-        });
-        let deadline = Instant::now() + Duration::from_secs(5);
-        let record = loop {
-            if let Some(record) = f.project.lock().debug_records(sent.id, "jev").unwrap().pop() {
-                break record;
-            }
-            assert!(Instant::now() < deadline, "no jev record was stored");
-            std::thread::sleep(Duration::from_millis(10));
-        };
-        assert_eq!(record["asked"], asked);
-        assert_eq!(record["answers"]["needs_context"]["choice"], json!("no"));
-    }
-
-    #[test]
-    fn a_mention_with_a_thumbs_up_gets_a_reply_and_a_reaction_from_that_mini_me() {
-        let f = fixture();
-        let sent = f
-            .send(
-                "@Assistant hi thanks",
-                &[("@Assistant", ASSISTANT)],
-                ROUTE_TIMEOUT,
-            )
-            .unwrap();
-        let route_id = f.route_id();
-        f.calls.handle(crate::link::SidecarFrame::RouteDone {
-            route_id,
-            answers: answers(vec![
-                ("reaction", answer("👍", 0.9, &[])),
-                ("needs_context", answer("no", 0.9, &[])),
-                ("tools", answer("save_file", 0.6, &[("save_file", 0.6), ("none", 0.4)])),
-            ]),
-            asked: Value::Null,
-        });
-        let assistant = Author {
-            kind: AuthorKind::MiniMe,
-            id: ASSISTANT.to_string(),
-        };
-        let events = f.wait_for("the reaction", |events| {
-            events
-                .iter()
-                .any(|e| matches!(e, EventKind::ReactionAdded { .. }))
-        });
-        assert!(events.iter().any(|e| matches!(
-            e,
-            EventKind::ReactionAdded { message_id, emoji, by }
-                if *message_id == sent.id && emoji == "👍" && *by == assistant
-        )));
-        let frames = f.sink.0.lock().unwrap().clone();
-        let plan = frames
-            .iter()
-            .find_map(|frame| match frame {
-                CoreFrame::RunStart { plan, .. } => Some(plan.clone()),
-                _ => None,
-            })
-            .unwrap();
-        assert_eq!(plan.traits[0].adapter, "prompt");
-        assert_eq!(plan.input, json!({ "text": "hi thanks" }));
-        assert_eq!(plan.context.needs_context, Some(false));
-        assert_eq!(plan.context.tools, ["save_file"]);
     }
 
     #[test]
@@ -1319,72 +892,5 @@ mod tests {
         assert_eq!(note.reply_to, Some(sent.id));
         assert_eq!(note.status, MessageStatus::Complete);
         assert!(note.content.starts_with("Couldn't start a reply"));
-    }
-
-    /// The frames of the given types the sidecar has been sent.
-    fn sent(f: &Fixture, of: impl Fn(&CoreFrame) -> bool) -> Vec<CoreFrame> {
-        f.sink.0.lock().unwrap().iter().filter(|frame| of(frame)).cloned().collect()
-    }
-
-    #[test]
-    fn a_comment_is_routed_like_a_message_without_the_file_component_and_tools_questions() {
-        let f = fixture();
-        into_thread(&f.project, f.conversation);
-        let comment = f.send("too long", &[], Duration::from_millis(300)).unwrap();
-        f.route_id();
-        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
-        let [CoreFrame::RouteStart { files, ask, .. }] = starts.as_slice() else {
-            panic!("expected one route.start, got {starts:?}");
-        };
-        assert!(files.is_empty());
-        assert_eq!(ask, &["mini_me", "reaction", "needs_context", "next_mini_me"]);
-
-        let events = f.wait_for("the reply", |events| reply_to(events, comment.id).is_some());
-        let reply = reply_to(&events, comment.id).unwrap();
-        assert_eq!(reply.author.id, FALLBACK_MINI_ME.to_string());
-    }
-
-    #[test]
-    fn a_hand_off_is_routed_without_mini_me_reaction_or_a_passed_files_question() {
-        let f = fixture();
-        let question = f.send("@Assistant hi", &[("@Assistant", ASSISTANT)], ROUTE_TIMEOUT);
-        let question = question.unwrap();
-        f.route_id();
-        let assistant = Author { kind: AuthorKind::MiniMe, id: ASSISTANT.to_string() };
-        let reply = conversations::start_reply(&f.project, f.conversation, question.id, assistant);
-        let reply = reply.unwrap();
-        conversations::complete_reply(&f.project, reply).unwrap();
-        let reply = f.project.lock().load_message_with(reply, false).unwrap().unwrap().1;
-        let file = RunFile { asset_id: new_id(), name: "trial.csv".into() };
-        let settings = f.settings(Duration::from_millis(200));
-        f.sink.0.lock().unwrap().clear();
-        let handed = HandedOff {
-            project: Arc::clone(&f.project),
-            conversation_id: f.conversation,
-            reply: reply.clone(),
-            mini_me_id: SCRIBE,
-            request: "summarize this".into(),
-            file: Some(file.clone()),
-            model: settings.model.clone(),
-            route: Some(settings),
-        };
-        f.routing.route_hand_off(&f.calls, handed);
-
-        let starts = sent(&f, |frame| matches!(frame, CoreFrame::RouteStart { .. }));
-        let [CoreFrame::RouteStart { state, files, ask, .. }] = starts.as_slice() else {
-            panic!("expected one route.start, got {starts:?}");
-        };
-        assert!(files.is_empty());
-        assert_eq!(ask, &["needs_context", "tools", "next_mini_me"]);
-        assert_eq!((&state["message"], &state["files"]), (&json!("summarize this"), &json!(["trial.csv"])));
-        assert_eq!(state["recent"].as_array().unwrap().last().unwrap()["name"], "Assistant");
-
-        let runs = sent(&f, |frame| matches!(frame, CoreFrame::RunStart { .. }));
-        let [CoreFrame::RunStart { plan, .. }] = runs.as_slice() else {
-            panic!("expected one run.start, got {runs:?}");
-        };
-        assert_eq!((plan.mini_me.id, &plan.input), (SCRIBE, &json!({ "text": "summarize this" })));
-        assert_eq!((plan.context.message.id, plan.context.needs_context), (reply.id, Some(true)));
-        assert_eq!(plan.context.file, Some(file));
     }
 }

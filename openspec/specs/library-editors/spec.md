@@ -84,6 +84,29 @@ choice of tools: every tool is offered to it as to every prompt-based Trait.
 - **WHEN** a Mini-Me running *Translate* answers a message that references a document
 - **THEN** its model can suggest edits to that document, with no setting in the editor
 
+### Requirement: Picking a Trait's icon
+In the editor of a user-made Trait, the icon in the header SHALL open a grid of the UI's Trait
+icons; picking one SHALL set the Trait's icon, which is saved with the Trait. A new Trait SHALL
+start without an icon, and the grid SHALL offer the puzzle piece to remove it. The editor of a
+built-in Trait SHALL show its icon without offering the grid. A copy made with Duplicate SHALL
+start with the original's icon.
+
+#### Scenario: Picking an icon
+- **WHEN** the user opens *Translate*, picks an icon from the grid and saves
+- **THEN** *Translate* shows that icon in the Library, and still does after the app restarts
+
+#### Scenario: Back to the puzzle piece
+- **WHEN** the user picks the puzzle piece in *Translate*'s grid and saves
+- **THEN** *Translate* has no icon and shows the puzzle piece
+
+#### Scenario: Built-in Trait
+- **WHEN** the user opens *Plan*
+- **THEN** its icon is shown and clicking it opens no grid
+
+#### Scenario: Duplicated Trait
+- **WHEN** the user duplicates *Plan* and saves
+- **THEN** "Plan Copy" shows *Plan*'s icon
+
 ### Requirement: Editing a Trait affects every Mini-Me that uses it
 Saving a user-made Trait SHALL change it for every Mini-Me whose Workflow references it. The
 Trait editor SHALL list the Mini-Mes that use the Trait.
@@ -103,16 +126,17 @@ first.
 - **THEN** *Translate* is kept, and the editor says "Field Translator" still uses it
 
 ### Requirement: Editing a user-made Mini-Me
-The Mini-Me editor SHALL show three tabs: Workflow, Traits (with how many Traits the
-Workflow runs) and Appearance. The Appearance tab SHALL let the user set the name, the
-description and the group (`thinking`, `literature` or `data`), and pick the avatar's base,
-face and optional accessory from the avatar parts, showing a live preview. The description
-SHALL be required, because routing uses it to choose a Mini-Me. The Traits tab SHALL list
-the Traits the Workflow runs, each opening its Trait editor. Save SHALL save every tab.
+The Mini-Me editor SHALL show three tabs, in this order: Appearance, Workflow and Traits (with
+how many Traits the Workflow runs), and SHALL open on Appearance. The Appearance tab SHALL let
+the user set the name, the description and the group (`thinking`, `literature` or `data`), and
+pick one part for each avatar layer that has parts (none allowed for the optional ones),
+showing a live preview. The description SHALL be required, because routing uses it to choose a
+Mini-Me. The Traits tab SHALL list the Traits the Workflow runs, each opening its Trait editor.
+Save SHALL save every tab.
 
 #### Scenario: New Mini-Me
-- **WHEN** the user creates "Field Translator" in the Thinking group with a base, a face, no
-  accessory and a description, and saves
+- **WHEN** the user creates "Field Translator" in the Thinking group with a base, eyes, a
+  mouth, no accessory and a description, and saves
 - **THEN** "Field Translator" is listed under Thinking in the `@` list with that avatar
 
 #### Scenario: Traits tab
@@ -120,11 +144,15 @@ the Traits the Workflow runs, each opening its Trait editor. Save SHALL save eve
 - **THEN** it reads "Traits 5" and lists *Scout*, *Wonder*, *Plan*, *Refute* and
   *Experiment*, each opening its Trait editor
 
+#### Scenario: Opening the editor
+- **WHEN** the user opens Skeptic or starts a new Mini-Me
+- **THEN** the editor shows the Appearance tab, first in the row
+
 ### Requirement: Picking a Mini-Me's colour
-The Mini-Me editor SHALL offer the colour families as swatches and a hue slider. The chosen
-hue SHALL set the Mini-Me's `solid` and `ink` as the avatar palette does, and its `tint` as
-the tint of the same hue (oklch lightness 0.94, chroma 0.04). A family with fixed `solid` and
-`ink` values SHALL keep them.
+The Mini-Me editor SHALL offer sixteen colour families as swatches, ordered by hue, and a hue
+slider. The chosen hue SHALL set the Mini-Me's `solid` and `ink` as the avatar palette does,
+and its `tint` as the tint of the same hue (oklch lightness 0.94, chroma 0.04). A family with
+fixed `solid` and `ink` values SHALL keep them.
 
 #### Scenario: Custom hue
 - **WHEN** the user moves the hue slider to 120 and saves
@@ -134,6 +162,16 @@ the tint of the same hue (oklch lightness 0.94, chroma 0.04). A family with fixe
 #### Scenario: Colour family
 - **WHEN** the user picks the Purple swatch
 - **THEN** the `solid` is `#6E5BFF` and the `ink` is `#4A3AE0`
+
+### Requirement: A random look
+The Appearance tab of a user-made Mini-Me SHALL offer a Random button, marked with a dice,
+that picks a random part for each avatar layer that has parts (sometimes none for an optional
+layer) and a random colour family. It SHALL NOT change the name, description or group.
+
+#### Scenario: Rolling the dice
+- **WHEN** the user presses Random while creating "Field Translator"
+- **THEN** the preview shows a new avatar in a colour family, and the name, description and
+  group are unchanged
 
 ### Requirement: Names are unique
 A save SHALL be refused when the name is empty, or when another Mini-Me (for a Mini-Me) or

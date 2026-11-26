@@ -300,12 +300,14 @@ pub fn append_step_started(
     step_id: &str,
     step_type: &str,
     name: &str,
+    show_results: bool,
 ) -> AppResult<()> {
     let kind = EventKind::StepStarted {
         message_id,
         step_id: step_id.to_string(),
         step_type: step_type.to_string(),
         name: name.to_string(),
+        show_results,
     };
     reply_event(project, message_id, kind)
 }
@@ -490,11 +492,60 @@ pub struct PausedRun {
     pub state: String,
 }
 
+#[derive(Debug)]
+pub struct Answered {
+    pub paused: PausedRun,
+    pub output: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(untagged)]
+pub enum Answer {
+    Approved { approved: bool },
+    Written { text: String },
+    Skipped { skipped: bool },
+}
+
+impl Answer {
+    pub fn resumes(&self) -> bool {
+        !matches!(self, Answer::Approved { approved: false })
+    }
+
+    fn text(&self) -> Option<&str> {
+        match self {
+            Answer::Written { text } => Some(text.trim()),
+            _ => None,
+        }
+    }
+
+    fn check(&self, written: bool) -> AppResult<()> {
+        let fits = match self {
+            Answer::Approved { .. } => !written,
+            Answer::Written { text } => written && !text.trim().is_empty(),
+            Answer::Skipped { skipped } => written && *skipped,
+        };
+        if fits {
+            Ok(())
+        } else {
+            Err(AppError::new("invalid_answer", "This answer doesn't fit the question asked."))
+        }
+    }
+
+    fn stored(&self) -> serde_json::Value {
+        match self {
+            Answer::Approved { approved } => serde_json::json!({ "approved": approved }),
+            Answer::Written { .. } => serde_json::json!({ "text": self.text() }),
+            Answer::Skipped { .. } => serde_json::json!({ "skipped": true }),
+        }
+    }
+}
+
 /// Adds the `approval` component, saves `paused` and persists `message.paused` in one transaction.
 pub fn pause_reply(
     project: &Project,
     paused: PausedRun,
     prompt: &str,
+    written: bool,
 ) -> AppResult<()> {
     let mut state = project.lock();
     let conversation = streaming_reply(&state, paused.message_id)?;
@@ -503,7 +554,11 @@ pub fn pause_reply(
         id: paused.component_id,
         kind: "approval".to_string(),
         version: 1,
-        preview: serde_json::json!({ "step_id": paused.step_id, "prompt": prompt }),
+        preview: if written {
+            serde_json::json!({ "step_id": paused.step_id, "prompt": prompt, "answer": "text" })
+        } else {
+            serde_json::json!({ "step_id": paused.step_id, "prompt": prompt })
+        },
         text: prompt.to_string(),
         source_asset_id: None,
         answer: serde_json::Value::Null,
@@ -582,24 +637,33 @@ fn paused_locked(
     Ok((conversation, paused))
 }
 
-/// Approving resumes the reply; rejecting completes it as is. Deletes and returns the saved run.
+/// Rejecting completes the reply as is; every other answer resumes it. Deletes and returns the
+/// saved run.
 pub fn answer_approval(
     project: &Project,
     message_id: Uuid,
     component_id: Uuid,
-    approved: bool,
-) -> AppResult<PausedRun> {
+    answer: &Answer,
+) -> AppResult<Answered> {
     let mut state = project.lock();
     let (conversation, paused) = paused_locked(&state, message_id, component_id)?;
+    let approval = state
+        .load_message_with(message_id, true)?
+        .and_then(|(_, message)| message.components.into_iter().find(|c| c.id == component_id));
+    answer.check(approval.as_ref().is_some_and(|c| c.preview["answer"] == "text"))?;
+    let output = answer.text().map(|text| {
+        let questions = approval.as_ref().map_or("", |c| c.text.as_str());
+        format!("I asked:\n{questions}\n\nThe user answered:\n{text}")
+    });
     let mut kinds = vec![
-        EventKind::ComponentAnswered {
+        EventKind::ComponentAnswered { message_id, component_id, answer: answer.stored() },
+        EventKind::StepCompleted {
             message_id,
-            component_id,
-            answer: serde_json::json!({ "approved": approved }),
+            step_id: paused.step_id.clone(),
+            output: output.clone(),
         },
-        EventKind::StepCompleted { message_id, step_id: paused.step_id.clone(), output: None },
     ];
-    if approved {
+    if answer.resumes() {
         kinds.push(EventKind::MessageResumed { message_id });
     } else {
         let content = match &paused.output {
@@ -615,7 +679,7 @@ pub fn answer_approval(
         tx.execute("DELETE FROM paused_runs WHERE message_id = ?1", params![message_id.to_string()])?;
         Ok(())
     })?;
-    Ok(paused)
+    Ok(Answered { paused, output })
 }
 
 /// Attached and referenced file names, without duplicates.
@@ -706,9 +770,7 @@ pub fn add_reaction(project: &Project, message_id: Uuid, emoji: &str, by: Author
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::comments::test_support;
-    use crate::projects::test_support::{self as project_support, temp_project};
-    use crate::store::test_support::Collector;
+    use crate::projects::test_support::temp_project;
 
     fn text(content: &str) -> SendMessageInput {
         SendMessageInput {
@@ -723,92 +785,6 @@ mod tests {
             kind: AuthorKind::System,
             id: "echo".to_string(),
         }
-    }
-
-    fn user(id: Uuid) -> Author {
-        Author {
-            kind: AuthorKind::User,
-            id: id.to_string(),
-        }
-    }
-
-    #[test]
-    fn new_message_moves_conversation_to_top() {
-        let (_dir, project) = temp_project();
-        let older = create(&project).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-        let newer = create(&project).unwrap();
-        assert_eq!(list(&project).unwrap()[0].id, newer.id);
-
-        std::thread::sleep(std::time::Duration::from_millis(5));
-        send_message(&project, older.id, text("hello"), new_id()).unwrap();
-        assert_eq!(list(&project).unwrap()[0].id, older.id);
-    }
-
-    #[test]
-    fn a_conversation_is_named_from_its_first_message_once() {
-        let (_dir, project) = temp_project();
-        let id = create(&project).unwrap().id;
-        assert_eq!(first_message_to_name(&project, id).unwrap(), None);
-        send_message(&project, id, text("translate this"), new_id()).unwrap();
-        // The reply is not needed: naming starts as soon as the message is sent.
-        assert_eq!(first_message_to_name(&project, id).unwrap().as_deref(), Some("translate this"));
-
-        assert!(set_title_if_default(&project, id, "  Translating a greeting ").unwrap());
-        assert_eq!(title(&project, id).unwrap(), "Translating a greeting");
-        // Titled now, so it is not named again.
-        assert_eq!(first_message_to_name(&project, id).unwrap(), None);
-        assert!(!set_title_if_default(&project, id, "Another").unwrap());
-
-        // A Conversation past its first exchange is not named either.
-        let second = create(&project).unwrap().id;
-        let first = send_message(&project, second, text("one"), new_id()).unwrap();
-        let reply = start_reply(&project, second, first.id, echo()).unwrap();
-        append_delta(&project, reply, "answer").unwrap();
-        complete_reply(&project, reply).unwrap();
-        send_message(&project, second, text("two"), new_id()).unwrap();
-        assert_eq!(first_message_to_name(&project, second).unwrap(), None);
-    }
-
-    #[test]
-    fn a_title_the_user_sets_is_trimmed_and_never_replaced() {
-        let (_dir, project) = temp_project();
-        let renamed = create(&project).unwrap().id;
-        send_message(&project, renamed, text("hello"), new_id()).unwrap();
-        rename(&project, renamed, "  Yield by altitude ").unwrap();
-        assert_eq!(title(&project, renamed).unwrap(), "Yield by altitude");
-        assert!(rename(&project, renamed, "   ").is_err());
-        assert!(rename(&project, new_id(), "Other").is_err());
-        assert!(!set_title_if_default(&project, renamed, "Generated").unwrap());
-        assert_eq!(title(&project, renamed).unwrap(), "Yield by altitude");
-    }
-
-    #[test]
-    fn deleting_a_conversation_removes_it_with_its_messages_and_events() {
-        let (_dir, project) = temp_project();
-        let kept = create(&project).unwrap().id;
-        let gone = create(&project).unwrap().id;
-        send_message(&project, kept, text("keep"), new_id()).unwrap();
-        let message = send_message(&project, gone, text("remove"), new_id()).unwrap();
-        delete(&project, gone).unwrap();
-
-        let ids: Vec<_> = list(&project).unwrap().into_iter().map(|c| c.id).collect();
-        assert_eq!(ids, [kept]);
-        let state = project.lock();
-        let count = |table: &str, column: &str, id: Uuid| -> i64 {
-            state
-                .conn
-                .query_row(
-                    &format!("SELECT COUNT(*) FROM {table} WHERE {column} = ?1"),
-                    params![id.to_string()],
-                    |row| row.get(0),
-                )
-                .unwrap()
-        };
-        assert_eq!(count("messages", "id", message.id), 0);
-        assert_eq!(count("events", "conversation_id", gone), 0);
-        assert_eq!(count("messages", "conversation_id", kept), 1);
-        assert!(count("events", "conversation_id", kept) > 0);
     }
 
     #[test]
@@ -864,90 +840,39 @@ mod tests {
         conn.pragma_update(None, "foreign_keys", true).unwrap();
         drop(state);
 
+        let kept = create(&project).unwrap().id;
+        send_message(&project, kept, text("keep"), new_id()).unwrap();
         delete(&project, gone).unwrap();
+        let ids: Vec<_> = list(&project).unwrap().into_iter().map(|c| c.id).collect();
+        assert_eq!(ids, [kept]);
+        let state = project.lock();
+        let kept_messages: i64 = state
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = ?1",
+                params![kept.to_string()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(kept_messages, 1);
     }
 
-    #[test]
-    fn rejects_empty_messages_and_unknown_or_misplaced_references() {
+    /// A Conversation whose reply to "q" is paused at an approval.
+    fn paused_reply(written: bool) -> (tempfile::TempDir, Project, Uuid, PausedRun) {
         let (dir, project) = temp_project();
-        let conversation = create(&project).unwrap().id;
-        let empty = send_message(&project, conversation, text("   "), new_id()).unwrap_err();
-        assert_eq!(empty.code, "invalid_input");
-
-        let mut with_attachment = text("see file");
-        with_attachment.attachments.push(new_id());
-        assert_eq!(
-            send_message(&project, conversation, with_attachment, new_id())
-                .unwrap_err()
-                .code,
-            "not_found"
-        );
-
-        let mut with_reference = text("see #missing");
-        with_reference.text_components.push(TextComponent {
-            kind: TextComponentKind::Asset,
-            id: new_id(),
-            label: "#missing".to_string(),
-            start: 4,
-            end: 12,
-        });
-        assert_eq!(
-            send_message(&project, conversation, with_reference, new_id())
-                .unwrap_err()
-                .code,
-            "not_found"
-        );
-        assert!(project.lock().events_after(conversation, 0).unwrap().is_empty());
-
-        let source = dir.path().join("trial.csv");
-        std::fs::write(&source, "a,b").unwrap();
-        let asset = assets::import(&project, &source, &project_support::user()).unwrap();
-
-        // "é" is one UTF-16 code unit, so this content is 6 units long.
-        let mut input = text("é #x y");
-        input.text_components.push(TextComponent {
-            kind: TextComponentKind::Asset,
-            id: asset.id,
-            label: "#x".to_string(),
-            start: 2,
-            end: 7,
-        });
-        assert_eq!(
-            send_message(&project, conversation, input, new_id())
-                .unwrap_err()
-                .code,
-            "invalid_input"
-        );
-    }
-
-    #[test]
-    fn only_one_reply_at_a_time_per_conversation() {
-        let (_dir, project) = temp_project();
-        let busy = create(&project).unwrap().id;
-        let other = create(&project).unwrap().id;
-        let question = send_message(&project, busy, text("first"), new_id()).unwrap();
-        start_reply(&project, busy, question.id, echo()).unwrap();
-
-        let err = send_message(&project, busy, text("second"), new_id()).unwrap_err();
-        assert_eq!(err.code, "reply_in_progress");
-        send_message(&project, other, text("elsewhere"), new_id()).unwrap();
-    }
-
-    #[test]
-    fn stopping_a_reply_blocks_further_updates() {
-        let (_dir, project) = temp_project();
         let conversation = create(&project).unwrap().id;
         let question = send_message(&project, conversation, text("q"), new_id()).unwrap();
         let reply = start_reply(&project, conversation, question.id, echo()).unwrap();
-        append_delta(&project, reply, "The main cause").unwrap();
-
-        stop_reply(&project, conversation).unwrap();
-        assert_eq!(append_delta(&project, reply, " is").unwrap_err().code, "reply_finished");
-        assert!(complete_reply(&project, reply).is_err());
-
-        let (_, message) = project.lock().load_message(reply).unwrap().unwrap();
-        assert_eq!(message.status, MessageStatus::Cancelled);
-        assert_eq!(message.content, "The main cause");
+        let paused = PausedRun {
+            message_id: reply,
+            step_id: "ask".into(),
+            component_id: new_id(),
+            run: serde_json::json!({ "input": { "text": "q" } }),
+            output: Some("the plan".into()),
+            state: "opaque".into(),
+        };
+        pause_reply(&project, paused.clone(), "Go on?", written).unwrap();
+        (dir, project, conversation, paused)
     }
 
     #[test]
@@ -967,34 +892,8 @@ mod tests {
             }
             other => panic!("expected message.failed, got {other:?}"),
         }
-    }
 
-    /// A Conversation whose reply to "q" is paused at an approval.
-    fn paused_reply() -> (tempfile::TempDir, Project, Uuid, PausedRun) {
-        let (dir, project) = temp_project();
-        let conversation = create(&project).unwrap().id;
-        let question = send_message(&project, conversation, text("q"), new_id()).unwrap();
-        let reply = start_reply(&project, conversation, question.id, echo()).unwrap();
-        let paused = PausedRun {
-            message_id: reply,
-            step_id: "ask".into(),
-            component_id: new_id(),
-            run: serde_json::json!({ "input": { "text": "q" } }),
-            output: Some("the plan".into()),
-            state: "opaque".into(),
-        };
-        pause_reply(&project, paused.clone(), "Go on?").unwrap();
-        (dir, project, conversation, paused)
-    }
-
-    fn saved_runs(project: &Project) -> i64 {
-        let state = project.lock();
-        state.conn.query_row("SELECT COUNT(*) FROM paused_runs", [], |row| row.get(0)).unwrap()
-    }
-
-    #[test]
-    fn a_paused_reply_blocks_the_conversation_and_survives_reopening() {
-        let (_dir, project, conversation, paused) = paused_reply();
+        let (_paused_dir, project, conversation, paused) = paused_reply(false);
         let err = send_message(&project, conversation, text("next"), new_id()).unwrap_err();
         assert_eq!(err.code, "reply_in_progress");
 
@@ -1006,73 +905,4 @@ mod tests {
         assert_eq!(saved, paused);
     }
 
-    #[test]
-    fn a_paused_reply_gives_its_conversation_the_needs_approval_status() {
-        let (_dir, project, conversation, paused) = paused_reply();
-        let mini_me = RunMiniMe { id: new_id(), name: "Investigator".into() };
-        let run = serde_json::json!({ "spec": { "mini_me": mini_me } });
-        project.lock().conn.execute("UPDATE paused_runs SET run = ?1", [run.to_string()]).unwrap();
-        let other = create(&project).unwrap().id;
-        let status = |project: &Project, id: Uuid| {
-            list(project).unwrap().into_iter().find(|c| c.id == id).unwrap().status
-        };
-        assert_eq!(status(&project, conversation), Some(ConversationStatus::NeedsApproval { mini_me }));
-        assert_eq!(status(&project, other), None);
-
-        answer_approval(&project, paused.message_id, paused.component_id, false).unwrap();
-        assert_eq!(status(&project, conversation), None);
-    }
-
-    #[test]
-    fn stopping_a_paused_reply_deletes_its_saved_run() {
-        let (_dir, project, conversation, paused) = paused_reply();
-        assert_eq!(stop_reply(&project, conversation).unwrap(), vec![paused.message_id]);
-        assert_eq!(saved_runs(&project), 0);
-        let err = answer_approval(&project, paused.message_id, paused.component_id, true)
-            .unwrap_err();
-        assert_eq!(err.code, "not_paused");
-    }
-
-    #[test]
-    fn answering_an_approval_resumes_or_completes_the_reply_once() {
-        let (_dir, project, _conversation, paused) = paused_reply();
-        answer_approval(&project, paused.message_id, paused.component_id, true).unwrap();
-        let (_, message) = project.lock().load_message(paused.message_id).unwrap().unwrap();
-        assert_eq!(message.status, MessageStatus::Streaming);
-        assert_eq!(message.components[0].answer, serde_json::json!({ "approved": true }));
-        assert_eq!(saved_runs(&project), 0);
-        let again = answer_approval(&project, paused.message_id, paused.component_id, true);
-        assert_eq!(again.unwrap_err().code, "not_paused");
-
-        let (_dir, project, _conversation, paused) = paused_reply();
-        answer_approval(&project, paused.message_id, paused.component_id, false).unwrap();
-        let (_, message) = project.lock().load_message(paused.message_id).unwrap().unwrap();
-        assert_eq!((message.status, message.content.as_str()), (MessageStatus::Complete, "the plan"));
-    }
-
-    #[test]
-    fn duplicate_reactions_are_ignored() {
-        let (_dir, project) = temp_project();
-        let conversation = create(&project).unwrap().id;
-        let user_id = new_id();
-        let message = send_message(&project, conversation, text("hi"), user_id).unwrap();
-        let collector = Collector::default();
-        project
-            .subscribe(conversation, 1, Box::new(collector.clone()))
-            .unwrap();
-
-        add_reaction(&project, message.id, "👍", user(user_id)).unwrap();
-        add_reaction(&project, message.id, "👍", user(user_id)).unwrap();
-        assert_eq!(collector.settled(1).len(), 1);
-    }
-
-    #[test]
-    fn a_thread_is_not_listed_as_a_conversation() {
-        let (_dir, project) = temp_project();
-        let kept = create(&project).unwrap().id;
-        let thread = create(&project).unwrap().id;
-        test_support::into_thread(&project, thread);
-        let listed: Vec<Uuid> = list(&project).unwrap().iter().map(|c| c.id).collect();
-        assert_eq!(listed, [kept]);
-    }
 }

@@ -1,3 +1,4 @@
+import { ComponentCard } from "./ComponentCard";
 import { lazy, Suspense, useMemo, useReducer } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -6,11 +7,11 @@ import { FeatureButton } from "./featuring";
 import {
   chartReducer,
   initialState,
+  legendOf,
   parseChart,
   SERIES_TOKENS,
+  sampleOf,
   seriesColour,
-  seriesOf,
-  VIEW_NAMES,
 } from "./chart-model";
 
 // Plot and D3 load only when a chart is shown.
@@ -20,50 +21,41 @@ const numberFormat = new Intl.NumberFormat();
 
 const PALETTE = SERIES_TOKENS.map((name) => `var(${name})`);
 
-/** A chart card: title, view toggle, figure, and a legend that hides and shows series. */
-export function ChartView({
+/** A chart card: title, figure, sample note, and a legend that hides and shows values. */
+function ChartView({
   preview,
   color,
   componentId,
 }: Pick<RendererProps, "preview" | "color" | "componentId">) {
   const chart = useMemo(() => parseChart(preview), [preview]);
-  const [state, dispatch] = useReducer(chartReducer(chart), initialState);
-  const view = chart.views[state.view];
-  const series = seriesOf(view);
-  const sample = "sample" in view ? view.sample : undefined;
+  const legend = useMemo(() => legendOf(chart), [chart]);
+  const [state, dispatch] = useReducer(chartReducer(legend), initialState);
+  const sample = sampleOf(chart);
+  const first = chart.description.colour ?? color ?? "var(--primary)";
 
   return (
-    <section
+    <ComponentCard
+      render={<section />}
       aria-label={chart.title || "Chart"}
-      className="w-full min-w-0 overflow-hidden rounded-xl border border-card-edge bg-card"
+      title={chart.title}
+      actions={<FeatureButton componentId={componentId} />}
+      footer={
+        sample && (
+          <p>
+            Sample of {numberFormat.format(sample.shown)} of {numberFormat.format(sample.total)}{" "}
+            points
+          </p>
+        )
+      }
     >
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-2.5">
-        <h3 className="mr-auto text-ui font-semibold">{chart.title}</h3>
-        {chart.views.length > 1 && (
-          <div role="group" aria-label="Chart type" className="flex gap-1">
-            {chart.views.map((v, index) => (
-              <Button
-                key={index}
-                variant="ghost"
-                size="xs"
-                aria-pressed={state.view === index}
-                onClick={() => dispatch({ type: "chooseView", view: index })}
-              >
-                {VIEW_NAMES[v.type]}
-              </Button>
-            ))}
-          </div>
-        )}
-        <FeatureButton componentId={componentId} />
-      </header>
       <div className="px-4 pt-3 pb-2">
         <Suspense fallback={<div className="min-h-[300px]" />}>
           <ChartFigure chart={chart} state={state} color={color} />
         </Suspense>
       </div>
-      {series.length > 0 && (
-        <ul aria-label="Series" className="flex flex-wrap gap-1 px-3 pb-3">
-          {series.map((name, index) => {
+      {legend && (
+        <ul aria-label={legend.column} className="flex flex-wrap gap-1 px-3 pb-3">
+          {legend.values.map((name, index) => {
             const hidden = state.hidden.includes(name);
             return (
               <li key={name}>
@@ -75,12 +67,12 @@ export function ChartView({
                     "aria-pressed:bg-transparent aria-pressed:text-ink-2",
                     hidden && "text-muted-foreground line-through",
                   )}
-                  onClick={() => dispatch({ type: "toggleSeries", series: name })}
+                  onClick={() => dispatch({ type: "toggleValue", value: name })}
                 >
                   <span
                     aria-hidden
                     className={cn("size-2.5 rounded-full", hidden && "opacity-30")}
-                    style={{ background: seriesColour(index, color ?? "var(--primary)", PALETTE) }}
+                    style={{ background: seriesColour(index, first, PALETTE) }}
                   />
                   {name}
                 </Button>
@@ -89,18 +81,12 @@ export function ChartView({
           })}
         </ul>
       )}
-      {sample && (
-        <p className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
-          Sample of {numberFormat.format(sample.shown)} of {numberFormat.format(sample.total)}{" "}
-          points
-        </p>
-      )}
-    </section>
+    </ComponentCard>
   );
 }
 
 export const renderers: Renderers = {
-  1: ({ preview, color, componentId }) => (
+  2: ({ preview, color, componentId }) => (
     <ChartView preview={preview} color={color} componentId={componentId} />
   ),
 };

@@ -1,0 +1,32 @@
+{
+  "name": "correlation_heatmap",
+  "description": "How strongly each pair of number columns moves together, from -1 to 1.",
+  "slots": {"correlated_columns": {"types": ["number"]}},
+  "facets": false,
+  "chart": {
+    "datasets": [
+      {"name": "pairs", "operations": [{"kind": "correlate", "columns": ["{correlated_columns}"]}]}
+    ],
+    "marks": [
+      {
+        "mark": "cell",
+        "dataset": "pairs",
+        "channels": [
+          {"name": "x", "column": "x"},
+          {"name": "y", "column": "y"},
+          {"name": "fill", "column": "correlation"}
+        ]
+      },
+      {
+        "mark": "text",
+        "dataset": "pairs",
+        "channels": [
+          {"name": "x", "column": "x"},
+          {"name": "y", "column": "y"},
+          {"name": "text", "column": "correlation"}
+        ]
+      }
+    ],
+    "scales": [{"scale": "x", "label": "", "tick_rotate": -30}, {"scale": "y", "label": ""}]
+  }
+}

@@ -1,18 +1,30 @@
-# Mini-Me 0.8.0
+# Mini-Me 0.8.1
 
 ## New
 
-- Use your own AI server, such as LM Studio, Ollama or vLLM: choose Custom in Settings → Models & keys and type its address.
-- Mini-Mes come alive: they blink, breathe, look toward your pointer, hop when clicked and bounce while they work on a reply. They stay still if your system is set to reduce motion.
+- Each Trait has its own icon, and you choose one for your own Traits by clicking the icon in the Trait editor.
+- More ways to draw a Mini-Me: new bodies, eyes, mouths and accessories, with eyes and mouth picked separately.
+- Plotter draws many more kinds of chart, such as dumbbells, stacked areas, ridgelines and one panel per group, and changes a chart when you ask, for example to use a log scale or colour by a column.
+- A new Mini-Me, Exploratory Data Analysis, explores a data table for you: it describes each column, finds correlations and outliers, and groups similar rows when that helps, with tables and charts for each, and saves the groups as a new file.
+- A new Mini-Me, Diagnostic Analytics, looks into why something happened in your data: it compares groups, finds which columns go with an outcome and whether that link holds once other columns are accounted for, or follows a trend over time. When your question leaves something unclear, it asks you first.
+- A Workflow can stop to ask you a question and wait for your written answer, which its next Steps then use. The questions can be written by you in the Workflow editor, or by the AI model from what you asked.
 
 ## Improved
 
-- Mini-Mes suggest changes to a document the same way from a comment or a Conversation: each suggestion shows in the document's source, where you accept or discard it. Every comment now gets a reply, as a message does.
-- Mini-Mes are chosen better, since Jev now sees each Mini-Me's Traits, and they understand which table or chart you mean when you say "that chart".
-- Requests that need several Mini-Mes are passed along: a Mini-Me hands off the part it doesn't cover, even one without a model, such as Researcher, and the next Mini-Me can hand off again.
-- Every Mini-Me can use every tool: Traits no longer list the tools they may use, so there is nothing to tick when you build one.
-- Mini-Mes answer follow-up questions about earlier tables, charts, papers and datasets from their full data. To point at one, describe it in your message; `$` references and the reference button are gone.
-- A table a Mini-Me shows is also saved as a CSV file in Files, so you can open it in Excel or point a Mini-Me at it later.
-- Files stay tidy: the papers, theories, data profiles and dataset results Mini-Mes keep for themselves no longer show in Files, the `#` list or a reply's attachments.
-- A file you edit in another app, such as Excel, now shows its new size in Mini-Me.
-- The Workflow editor shows each Trait as a smaller node with just its name, in the Mini-Me's colour.
+- Mini-Me installs faster: the files it installs went from about 22,000 to about 14,000.
+- Mini-Mes read large tables much more cheaply: they look at a table's description and a few rows, and read more rows only when needed.
+- A Mini-Me that works in several steps now ends its reply with a summary of what it found, and shows the tables and charts of its main steps under it. Select a step to see only that step's text and results; select it again to go back to the summary.
+- The Mini-Me editor opens on Appearance, offers 16 colours and a Random button that rolls a new look.
+- Lists no longer shift sideways when a scrollbar appears.
+- When Plotter can't draw what you asked for, it says why and suggests columns and charts that would work, and each chart says which columns it shows.
+- When a Mini-Me can't do what you asked, it says so in its own words instead of naming the AI model.
+- A more consistent look: cards, lists, fields, empty states and hover hints match across the app, and Home and the Mini-Mes sit in the navigation beside your Project.
+- A calmer, more even look: buttons, switched-on toggles, corners, spacing and icon sizes follow one style everywhere, icons line up with their text, and the buttons at the top of each page sit in the same place.
+- The navigation lists a Project's Conversations as compact rows under an expandable Conversations row, shows which Mini-Me is working on each, and ends with a Settings row.
+- The Workflow editor is easier to read: connectors run straight, every Step keeps its name on one line, and Steps look different depending on who does them.
+- A Workflow's branch can be left empty, so a condition can skip a Step.
+
+## Fixed
+
+- A Mini-Me can hand a request to another Mini-Me again; the hand-off used to fail silently, so the other Mini-Me never answered.
+- Stopping a reply while a Mini-Me works through its Workflow ends it as stopped, not as failed.

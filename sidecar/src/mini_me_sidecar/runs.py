@@ -14,15 +14,20 @@ from mini_me_sidecar.context import CallContext, Requests, TraitError
 from mini_me_sidecar.debug import Parts, recording
 from mini_me_sidecar.link import Link, log
 from mini_me_sidecar.workflow import state as saved_state
-from mini_me_sidecar.workflow.decide import decide
-from mini_me_sidecar.workflow.graph import compile_workflow, workflow_output
-from mini_me_sidecar.workflow.model import Step, later_traits, parse_steps
+from mini_me_sidecar.workflow.decide import decide, write_questions
+from mini_me_sidecar.workflow.graph import compile_workflow, run_outputs, workflow_output
+from mini_me_sidecar.workflow.model import Step, later_traits, parse_steps, summarized
+from mini_me_sidecar.workflow.summary import summarize
 
 # How long Trait calls get to return after `run.cancel`; the core gives up after five seconds.
 CANCEL_GRACE_S = 2.0
 
 # Each run has a graph of its own, so one checkpoint thread per graph is enough.
 THREAD = "run"
+
+
+class RunCancelled(Exception):
+    """Ends a cancelled run's Step; LangGraph reports a node's own `CancelledError` as a failure."""
 
 
 class Run:
@@ -80,7 +85,7 @@ class Run:
         ctx.ended = True
         self._calls.discard(ctx)
         if self.cancelled:
-            raise asyncio.CancelledError
+            raise RunCancelled
 
     async def trait(self, step: Step, earlier: list[dict[str, Any]], stream: bool) -> str:
         definition = self.traits[str(step.trait)]
@@ -119,6 +124,19 @@ class Run:
         self.send({"type": "step.completed", "step_id": step.id, "output": choice})
         return choice
 
+    async def questions(self, step: Step, earlier: list[dict[str, Any]]) -> str:
+        call_id = str(uuid.uuid4())
+        self.send({"type": "step.started", "step_id": step.id, "call_id": call_id})
+        name = step.name(self.trait_names())
+        start = {"trait": {"name": name}, "model": self.model, "context": {"steps": earlier}}
+        ctx = self._call(call_id, start, stream=False)
+        try:
+            message = str(self.input.get("text", ""))
+            with recording(self.debug, self.send_debug, name, None):
+                return await write_questions(ctx, step.prompt, message, earlier)
+        finally:
+            self._close(ctx)
+
     def started(self, step: Step) -> None:
         self.send({"type": "step.started", "step_id": step.id, "call_id": None})
 
@@ -140,7 +158,7 @@ class Run:
         """Runs from the start or from `resume`; returns once ended or paused, else raises."""
         if self.resume is not None:
             saver = await saved_state.restore(str(self.resume.get("state", "")), THREAD)
-            start: Any = Command(resume=True)
+            start: Any = Command(resume={"text": self.resume.get("text")})
         else:
             saver = saved_state.new_saver()
             start = {}
@@ -156,12 +174,31 @@ class Run:
                     "step_id": interrupts[0].value["step_id"],
                     "output": out.output if out else None,
                     "state": state,
+                    "prompt": interrupts[0].value.get("prompt"),
                 }
             )
             self.ended = True
             return
+        if summarized(self.steps) and await self._summarize(run_outputs(result)):
+            return
         if out is not None and out.output and not out.streamed:
             self.send({"type": "run.delta", "text": out.output})
+
+    async def _summarize(self, earlier: list[dict[str, Any]]) -> bool:
+        if not (self.model or {}).get("model"):
+            return False
+        call_id = str(uuid.uuid4())
+        self.send({"type": "run.summary", "call_id": call_id})
+        start = {"trait": {"name": "Summary"}, "model": self.model, "context": {"steps": earlier}}
+        ctx = self._call(call_id, start, stream=True)
+        try:
+            with recording(self.debug, self.send_debug, "Summary", None):
+                await summarize(ctx, str(self.input.get("text", "")), earlier)
+        except TraitError as error:
+            log(f"the summary failed: {error}")
+        finally:
+            self._close(ctx)
+        return bool(ctx.output.strip())
 
 
 class Runs:
@@ -187,7 +224,7 @@ class Runs:
     async def _run(self, run: Run) -> None:
         try:
             await run.execute()
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, RunCancelled):
             outcome: dict[str, str] = {"kind": "cancelled"}
         except TraitError as error:
             outcome = {"kind": "error", "code": error.code, "message": str(error)}

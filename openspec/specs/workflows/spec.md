@@ -10,8 +10,11 @@ output appear in its reply.
 ### Requirement: Steps of a Workflow
 A Workflow SHALL be a non-empty list of Steps, each with an `id` unique within the Workflow
 and a `type`:
-- `trait`: `{ trait }`, a Trait ID from the library;
-- `approval`: `{ prompt }`, non-empty text;
+- `trait`: `{ trait, show_results? }`, a Trait ID from the library, and `show_results` `true`
+  for a Step whose results show in the reply;
+- `approval`: `{ prompt, answer?, questions_by? }`, with `prompt` non-empty text, `answer`
+  `"text"` for a written answer, and `questions_by` `"model"` for questions the AI model
+  writes;
 - `condition`: `{ question, branches }`;
 - `loop`: `{ question, max_iterations, steps }`;
 - `parallel`: `{ branches }`.
@@ -26,10 +29,17 @@ A branch is `{ label, steps }`. A Step without `type` is a Trait Step.
 - **WHEN** a loop Step's `steps` hold a Trait Step and a condition Step
 - **THEN** both are Steps of the Workflow, and their IDs must differ from every other Step's
 
+#### Scenario: Approval asking for a written answer
+- **WHEN** a Step is `{ "id": "ask", "type": "approval", "prompt": "Which season?", "answer":
+  "text" }`
+- **THEN** it is an approval Step that asks for a written answer, with "Which season?" shown
+  as written
+
 ### Requirement: Workflows are checked when the library loads
 The Rust core SHALL refuse a library whose Workflows break a rule:
 - Step IDs are not unique, or a Trait ID is missing from the library or is a placeholder;
-- a list of Steps is empty, or a Workflow has no Trait Step;
+- a Workflow's or loop's list of Steps is empty, or a Workflow has no Trait Step (a branch of
+  a condition or parallel Step may have no Steps);
 - a condition or parallel Step has fewer than two branches, or two with the same label;
 - `max_iterations` is not from 1 to 10;
 - a question, prompt or label is empty.
@@ -51,6 +61,16 @@ refusing means that Mini-Me is skipped when the library loads, and a save of it 
 - **THEN** the app starts without that Mini-Me, and the Library view names it with the
   problem
 
+#### Scenario: Condition with an empty branch
+- **WHEN** a condition Step has the branches "cluster", running *Find Clusters*, and "skip",
+  with no Steps
+- **THEN** the library is accepted
+
+#### Scenario: Parallel Step with an empty branch
+- **WHEN** a parallel Step has the branches "A", running *Scout*, and "B", with no Steps
+- **THEN** the library is accepted, and the parallel Step's output is *Scout*'s under
+  "## A"
+
 ### Requirement: A run executes Steps in order
 A run SHALL execute a Workflow's Steps one after another, each starting after the previous
 one finished, and end after its last Step. A Trait Step SHALL run its Trait as one Trait
@@ -64,16 +84,30 @@ two Steps, or one Step run twice, SHALL make separate calls.
 ### Requirement: Step outputs
 Each Step SHALL have an output, used by later Steps and by the reply:
 - a Trait Step's output is the text its call wrote;
-- a condition's output is that of the last Step with an output in the chosen branch;
+- a condition's output is that of the last Step with an output in the chosen branch, and
+  none when that branch has no Steps;
 - a loop's output is that of its last iteration;
 - a parallel Step's output is each branch's output under a `## <label>` line, in branch
   order;
-- an approval has no output.
+- an approval's output, when a written answer was sent to it, is its questions and that answer,
+  as "I asked:", the questions, a blank line, "The user answered:" and the answer; none for a
+  yes-or-no approval or a skipped one.
 
 #### Scenario: Parallel output
 - **WHEN** a parallel Step's branches "Directions" and "Questions" end with outputs A and B
 - **THEN** the parallel Step's output is "## Directions", A, "## Questions" and B, in that
   order
+
+#### Scenario: Empty branch chosen
+- **WHEN** a condition's model picks the "skip" branch, which has no Steps
+- **THEN** the condition has no output, the run goes on with the Step after the condition, and
+  the reply's text is the output of the last top-level Step before it that has one
+
+#### Scenario: Answer passed on
+- **WHEN** the user sends "outcome is yield; check rainfall and variety" to a written-answer
+  approval, and a *Plan* Step follows it
+- **THEN** *Plan*'s call receives the approval's questions and that text as the approval
+  Step's output among the earlier outputs
 
 ### Requirement: Trait Steps see earlier outputs
 A Trait call in a run SHALL receive the earlier Step outputs, as `{ step_id, name,
@@ -127,14 +161,20 @@ If a branch fails, the run SHALL fail with that error and cancel the other branc
   after both have ended
 
 ### Requirement: The reply's text is the Workflow's output
-The reply's text SHALL be the output of the last top-level Step with an output. A Trait
-Step's text SHALL stream into the reply when it is a final Step, one that no other Step can
-follow and that is in no loop or parallel branch. Otherwise the output SHALL be written to
-the reply when the run ends.
+The reply's text of a one-Step Workflow SHALL be its Step's output, streamed. The reply's text
+of a Workflow with more than one Step SHALL be the run's summary (see "A multi-Step reply ends
+with a summary"); when there is none, it SHALL be the output of the last top-level Step with an
+output, written when the run ends. No Step's text streams into the reply of a multi-Step
+Workflow.
 
 #### Scenario: One-Step Workflow streams
 - **WHEN** Scribe's one-Step Workflow runs
 - **THEN** the summary streams into the reply as before
+
+#### Scenario: Multi-Step reply
+- **WHEN** Investigator's run ends
+- **THEN** the reply's text is the summary of its run, and each Step's own text is in its
+  Step
 
 #### Scenario: Earlier Step doesn't stream
 - **WHEN** Investigator's *Plan* Step runs before its loop
@@ -143,8 +183,9 @@ the reply when the run ends.
 
 ### Requirement: Step events
 The Rust core SHALL persist, for each Step that a run starts:
-- `step.started`: `{ message_id, step_id, type, name }`, where `name` is the Trait's name for
-  a Trait Step, or the Step's `label` or its type name;
+- `step.started`: `{ message_id, step_id, type, name, show_results }`, where `name` is the
+  Trait's name for a Trait Step, or the Step's `label` or its type name, and `show_results` is
+  the Step's setting, `false` for other Steps;
 - `step.completed`: `{ message_id, step_id, output }`, where `output` is text or `null`, and
   is the chosen branch label for a condition and `repeat` or `stop` for a loop's decision.
 
@@ -159,9 +200,13 @@ A reply whose Workflow has more than one Step SHALL show a Workflow progress car
 text. The card SHALL list the Steps started so far, in order: each running Step as running,
 each completed Step as done, and the Step paused at an approval as waiting. A completed
 condition or loop Step SHALL show its outcome after its name, and a completed approval Step
-its answer, "approved" or "rejected", taken from the approval it asked. A done Trait Step
-with an output or with Interactive Components SHALL open, showing its output followed by
-the components that run of the Step added. A one-Step reply SHALL show no card.
+its answer, taken from the approval it asked: "approved" or "rejected", or for a written
+answer "answered" or "skipped". A done written-answer approval SHALL open, showing its
+questions and the answer sent. A done Trait Step
+with an output or with Interactive Components, and a done written-answer approval, SHALL be
+selectable. While one is selected, the reply SHALL show in place of its text and of its
+own components only that Step run's output and components (an approval's questions and
+answer), and selecting it again or another Step SHALL change or clear that. A one-Step reply SHALL show no card.
 
 #### Scenario: Run in progress
 - **WHEN** Investigator has finished its parallel Step and *Plan* is running
@@ -182,9 +227,14 @@ the components that run of the Step added. A one-Step reply SHALL show no card.
 - **THEN** the card shows the approval Step as done, followed by "Approved", also after
   the Conversation is reopened
 
+#### Scenario: Reading a written answer
+- **WHEN** the user opens a done written-answer approval in the card of an ended reply
+- **THEN** the card shows its questions followed by the answer the user sent
+
 ### Requirement: An approval pauses the run
 When a run reaches an approval Step, the core SHALL add an `approval` Interactive Component
-with the Step's `prompt` to the reply. It SHALL save the run's state in the Project's
+to the reply with the Step's questions: its `prompt`, or the questions the AI model wrote when
+`questions_by` is `"model"`. It SHALL save the run's state in the Project's
 `project.sqlite` and persist `message.paused`. The run SHALL use no sidecar resources while
 it is paused. No file outside the Project folder SHALL be written.
 
@@ -197,12 +247,22 @@ it is paused. No file outside the Project folder SHALL be written.
 - **THEN** the reply is still `paused` with its approval, and approving it resumes the run
 
 ### Requirement: Answering an approval
-The user SHALL answer a paused reply's approval with Approve or Reject. The core SHALL
-persist `component.answered` with `{ approved: true|false }`, then delete the saved state:
+The user SHALL answer a paused reply's approval with Approve or Reject, or, for a written
+answer, with Send or Skip. The core SHALL persist `component.answered` with `{ approved:
+true|false }`, `{ text }` for Send or `{ skipped: true }` for Skip, then delete the saved
+state:
 - **Approve:** persist `message.resumed` and resume the run after the approval Step, with
   the earlier outputs it had.
+- **Send:** persist `message.resumed` and resume the run after the approval Step, with the
+  questions and the sent text as that Step's output. Send needs text that is not blank.
+- **Skip:** persist `message.resumed` and resume the run after the approval Step, which has
+  no output.
 - **Reject:** end the reply with `message.completed`, with the Workflow's output so far as
   its text.
+
+An answer that does not fit the approval (a written answer or Skip to a yes-or-no approval,
+Approve or Reject to a written-answer one, or blank text) SHALL be refused with
+`invalid_answer`, persisting nothing.
 
 #### Scenario: Approved
 - **WHEN** the user approves Investigator's approval
@@ -213,6 +273,15 @@ persist `component.answered` with `{ approved: true|false }`, then delete the sa
 - **WHEN** the user rejects it
 - **THEN** the reply completes with the latest *Plan* output as its text, and *Experiment*
   does not run
+
+#### Scenario: Sent
+- **WHEN** the user sends "yield, by rainfall and variety" to a waiting written-answer approval
+- **THEN** the reply is `streaming` again, and the next Step receives the questions and that
+  text among the earlier outputs
+
+#### Scenario: Skipped
+- **WHEN** the user skips a written-answer approval
+- **THEN** the reply is `streaming` again, the next Step runs, and the approval has no output
 
 ### Requirement: Answers are accepted once
 An answer SHALL be refused, persisting nothing:
@@ -229,3 +298,73 @@ code `resume_failed`.
 #### Scenario: Saved state from an incompatible version
 - **WHEN** a paused reply's saved state can't be read by the sidecar
 - **THEN** the reply fails with `resume_failed`
+
+### Requirement: The AI model writes an approval's questions
+When a written-answer approval has `questions_by` `"model"`, the run SHALL, before pausing,
+ask the AI model chosen in Settings to write the questions the Step's `prompt` describes,
+from the user's message and the earlier outputs, and the approval SHALL show them. The
+`prompt` is then an instruction that the user does not see.
+
+#### Scenario: Questions from the message
+- **WHEN** an approval with the prompt "Ask for the outcome and the possible drivers the
+  message leaves unclear" and `questions_by` `"model"` is reached after "why did yield drop?
+  #trial.csv"
+- **THEN** the approval shows questions the model wrote about the outcome and the drivers, and
+  not the prompt itself
+
+#### Scenario: No model set
+- **WHEN** no AI model is set in Settings and a Mini-Me's Workflow holds an approval with
+  `questions_by` `"model"`
+- **THEN** the reply fails with `model_not_set` before the run starts
+
+#### Scenario: The model writes no questions
+- **WHEN** the model answers the call for the questions with no text
+- **THEN** the reply fails with code `questions_failed` and the message "I couldn't write my
+  questions; send your message again." A call the provider refuses fails as other model calls
+  do.
+
+### Requirement: Written-answer approvals are checked
+The Rust core SHALL refuse, as it refuses other broken Workflows, an approval Step whose
+`answer` is set to anything but `"text"`, or whose `questions_by` is set to anything but
+`"model"` or is set without `answer` `"text"`.
+
+#### Scenario: Model questions without a written answer
+- **WHEN** an approval Step has `questions_by` `"model"` and no `answer`
+- **THEN** the library is refused, naming the Mini-Me and the Step ID
+
+### Requirement: A multi-Step reply ends with a summary
+When a Workflow with more than one Step ends, other than by a rejected approval, the run SHALL
+ask the AI model chosen in Settings for a summary of what its Steps found, from the user's
+message and the Steps' outputs, and SHALL stream it into the reply as the reply's text. The
+summary SHALL restate only what the outputs say, and SHALL NOT recommend next steps.
+
+#### Scenario: Exploratory Data Analysis summary
+- **WHEN** an Exploratory Data Analysis run ends after *Detect Outliers*
+- **THEN** the reply's text streams a summary of the profile, the columns, the correlations
+  and the outliers, written from those Steps' outputs
+
+#### Scenario: Rejected approval
+- **WHEN** the user rejects Investigator's approval
+- **THEN** the reply completes with the Workflow's output so far, and no summary is written
+
+### Requirement: A reply without a summary
+With no AI model set, or when the summary call fails or writes nothing, the reply's text SHALL
+be the last top-level Step's output, and the reply SHALL NOT fail for it.
+
+#### Scenario: Summary fails
+- **WHEN** the provider refuses the summary call
+- **THEN** the reply completes with the last Step's output as its text
+
+### Requirement: Selecting a Step shows only that Step
+Selecting a Step in a reply's Workflow progress SHALL replace the reply's text and its own
+components with the selected Step run's output and components, until the Step is selected
+again or another Step is selected. The reply's attachments, reactions and notes SHALL stay.
+
+#### Scenario: Looking at one Step
+- **WHEN** the user selects *Describe Variables* in an ended Exploratory Data Analysis reply
+- **THEN** the reply shows *Describe Variables*' text, tables and charts, and not the summary
+  or the other Steps' charts
+
+#### Scenario: Back to the summary
+- **WHEN** the user selects *Describe Variables* again
+- **THEN** the reply shows the summary and its own components again

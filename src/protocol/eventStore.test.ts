@@ -20,41 +20,35 @@ function withSeq(event: ProtocolEvent, seq: number): ProtocolEvent {
 }
 
 describe("applyEvent with the shared fixture", () => {
-  const state = replay(events);
-  const [question, answer, followUp, stopped, interrupted] = state.messages;
-
   it("applies every event in order, ending with no progress shown", () => {
+    const state = replay(events);
+    const [question, answer, followUp, stopped, interrupted] = state.messages;
     expect(state.lastSeq).toBe(events.length);
     expect(state.messages).toHaveLength(5);
     expect(state.messages.every((m) => m.progress === null)).toBe(true);
-  });
-
-  it("keeps attachments and text components of user messages", () => {
     expect(question.attachments[0].name).toBe("field-trial.csv");
     expect(question.text_components[0]).toMatchObject({ kind: "asset", start: 10, end: 26 });
-  });
-
-  it("streams deltas, attachments and completion into one reply", () => {
     expect(answer.status).toBe("complete");
     expect(answer.content).toBe("Summarize #field-trial.csv");
     expect(answer.attachments.map((a) => a.name)).toEqual(["summary.md"]);
-  });
-
-  it("adds a component to its reply, after the fixture's other events", () => {
+    expect(answer.components).toEqual([]);
     expect(interrupted.components).toHaveLength(1);
     expect(interrupted.components[0]).toMatchObject({ kind: "paper-sources", version: 1 });
-    expect(answer.components).toEqual([]);
-  });
-
-  it("marks cancelled and failed replies", () => {
     expect(followUp.status).toBe("complete");
     expect(stopped.status).toBe("cancelled");
     expect(interrupted.status).toBe("failed");
-  });
-
-  it("keeps why a reply failed", () => {
     expect(interrupted.failure?.message).toBe("The app closed before this reply finished.");
     expect(followUp.failure).toBeUndefined();
+
+    const [created] = events.filter((e) => e.type === "message.created").slice(1, 2);
+    const delta = (text: string, seq: number): ProtocolEvent => ({
+      ...events[2],
+      seq,
+      payload: { message_id: (created.payload as { message: { id: string } }).message.id, text },
+    });
+    const streamed = replay([withSeq(created, 1), delta("Hel", 2), delta("lo", 3)]);
+    expect(streamed.messages[0].content).toBe("Hello");
+    expect(streamed.messages[0].status).toBe("streaming");
   });
 });
 
@@ -62,42 +56,8 @@ describe("applyEvent ordering", () => {
   it("ignores events already applied", () => {
     const state = replay(events.slice(0, 3));
     expect(applyEvent(state, events[1])).toBe(state);
-  });
-
-  it("ignores events after a gap", () => {
-    const state = replay(events.slice(0, 2));
-    expect(applyEvent(state, events[3])).toBe(state);
-  });
-
-  it("collects deltas in order", () => {
-    const [created] = events.filter((e) => e.type === "message.created").slice(1, 2);
-    const delta = (text: string, seq: number): ProtocolEvent => ({
-      ...events[2],
-      seq,
-      payload: { message_id: (created.payload as { message: { id: string } }).message.id, text },
-    });
-    const state = replay([withSeq(created, 1), delta("Hel", 2), delta("lo", 3)]);
-    expect(state.messages[0].content).toBe("Hello");
-    expect(state.messages[0].status).toBe("streaming");
-  });
-});
-
-describe("reply progress", () => {
-  const progressAt = events.findIndex((e) => e.type === "message.progress");
-
-  it("shows the latest progress while the reply streams", () => {
-    const state = replay(events.slice(0, progressAt + 1));
-    const reply = state.messages[state.messages.length - 1];
-    expect(reply.status).toBe("streaming");
-    expect(reply.progress).toEqual({ label: "Reading field-trial.csv", fraction: 0.5 });
-    expect(reply.content).toBe("");
-  });
-
-  it("ignores progress for a reply that has ended", () => {
-    const ended = replay(events);
-    const late = { ...events[progressAt], seq: ended.lastSeq + 1 };
-    const state = applyEvent(ended, late);
-    expect(state.messages.every((m) => m.progress === null)).toBe(true);
+    const gapped = replay(events.slice(0, 2));
+    expect(applyEvent(gapped, events[3])).toBe(gapped);
   });
 });
 

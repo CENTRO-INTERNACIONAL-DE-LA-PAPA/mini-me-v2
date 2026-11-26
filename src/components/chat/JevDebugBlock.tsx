@@ -112,7 +112,7 @@ export function JevDebugBlock({
             </div>
           )}
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="xs" onClick={copy}>
+            <Button variant="secondary" size="xs" onClick={copy}>
               Copy as JSON
             </Button>
           </div>

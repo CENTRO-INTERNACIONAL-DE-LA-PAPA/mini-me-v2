@@ -2,6 +2,8 @@
 //! built-in ones are embedded from `library/builtin.json`, and user-made ones are added by
 //! `user_library`.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -20,6 +22,9 @@ pub struct TraitDef {
     pub name: String,
     pub description: String,
     pub color: String,
+    /// The name of one of the UI's Trait icons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// The sidecar adapter that runs this Trait.
     pub adapter: String,
     pub instructions: Option<String>,
@@ -41,15 +46,9 @@ pub struct MiniMeColors {
     pub ink: String,
 }
 
-/// The parts a Mini-Me's avatar is drawn from, named by the UI's avatar part files. The body
-/// takes the Mini-Me's `solid` colour and the freckles its `ink`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MiniMeAvatar {
-    pub base: String,
-    pub face: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub accessory: Option<String>,
-}
+/// The part a Mini-Me's avatar draws for each layer, by layer name; the UI owns the layers and
+/// the part files. The body takes the Mini-Me's `solid` colour and the freckles its `ink`.
+pub type MiniMeAvatar = BTreeMap<String, String>;
 
 /// A node in a Workflow: a Trait Step or a control Step. In JSON a Step without `type` is a
 /// Trait Step.
@@ -71,9 +70,15 @@ pub enum StepKind {
     Trait {
         #[serde(rename = "trait")]
         trait_id: Uuid,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        show_results: bool,
     },
     Approval {
         prompt: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        answer: Option<ApprovalAnswer>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        questions_by: Option<QuestionsBy>,
     },
     Condition {
         question: String,
@@ -87,6 +92,18 @@ pub enum StepKind {
     Parallel {
         branches: Vec<Branch>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalAnswer {
+    Text,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuestionsBy {
+    Model,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -157,7 +174,7 @@ impl Workflow {
     pub fn trait_ids(&self) -> Vec<Uuid> {
         let mut ids = Vec::new();
         for step in self.all_steps() {
-            if let StepKind::Trait { trait_id } = step.kind {
+            if let StepKind::Trait { trait_id, .. } = step.kind {
                 if !ids.contains(&trait_id) {
                     ids.push(trait_id);
                 }
@@ -170,11 +187,16 @@ impl Workflow {
         self.all_steps().into_iter().find(|s| s.id == id)
     }
 
-    /// Whether running this Workflow asks the AI model for decisions.
+    /// Whether running this Workflow asks the AI model for decisions or for questions.
     pub fn has_decisions(&self) -> bool {
-        self.all_steps()
-            .iter()
-            .any(|s| matches!(s.kind, StepKind::Condition { .. } | StepKind::Loop { .. }))
+        self.all_steps().iter().any(|s| {
+            matches!(
+                s.kind,
+                StepKind::Condition { .. }
+                    | StepKind::Loop { .. }
+                    | StepKind::Approval { questions_by: Some(QuestionsBy::Model), .. }
+            )
+        })
     }
 }
 
@@ -207,6 +229,7 @@ pub struct TraitSummary {
     pub id: Uuid,
     pub name: String,
     pub description: String,
+    pub icon: Option<String>,
     pub instructions: Option<String>,
     pub built_in: bool,
     /// Whether it runs on the prompt adapter, the only kind a duplicate can be made of.
@@ -276,6 +299,7 @@ impl Library {
                 id: t.id,
                 name: t.name.clone(),
                 description: t.description.clone(),
+                icon: t.icon.clone(),
                 instructions: t.instructions.clone(),
                 built_in: self.is_built_in(t.id),
                 prompt_based: t.adapter == PROMPT_ADAPTER,
@@ -358,7 +382,7 @@ impl Library {
                 problems.push(format!("{at}: the label is empty"));
             }
             match &step.kind {
-                StepKind::Trait { trait_id } => match self.trait_def(*trait_id) {
+                StepKind::Trait { trait_id, .. } => match self.trait_def(*trait_id) {
                     None => problems.push(format!("{at} runs an unknown Trait {trait_id}")),
                     // Placeholder Traits run on `echo` until they are built, so no Mini-Me
                     // may offer them.
@@ -367,9 +391,14 @@ impl Library {
                     }
                     Some(_) => {}
                 },
-                StepKind::Approval { prompt } => {
+                StepKind::Approval { prompt, answer, questions_by } => {
                     if prompt.trim().is_empty() {
                         problems.push(format!("{at}: the prompt is empty"));
+                    }
+                    if questions_by.is_some() && answer.is_none() {
+                        problems.push(format!(
+                            "{at}: the AI model writes questions only for a written answer"
+                        ));
                     }
                 }
                 StepKind::Loop { question, max_iterations, steps } => {
@@ -412,9 +441,6 @@ fn branch_problems(at: &str, branches: &[Branch]) -> Vec<String> {
         } else if branches[..i].iter().any(|b| b.label == branch.label) {
             problems.push(format!("{at}: two branches are labelled {:?}", branch.label));
         }
-        if branch.steps.is_empty() {
-            problems.push(format!("{at}: branch {:?} has no Steps", branch.label));
-        }
     }
     problems
 }
@@ -428,43 +454,6 @@ mod tests {
         assert_eq!(Library::builtin().problems(), Vec::<String>::new());
     }
 
-    #[test]
-    fn summaries_mark_built_ins_and_list_the_users_of_a_trait() {
-        let library = Library::builtin();
-        let skeptic = library.summaries().into_iter().find(|m| m.name == "Skeptic").unwrap();
-        assert!(skeptic.built_in);
-        let traits = library.trait_summaries();
-        let refute = traits.iter().find(|t| t.name == "Refute").unwrap();
-        assert!(refute.built_in && refute.prompt_based);
-        assert!(refute.used_by.contains(&skeptic.id));
-        assert!(!traits.iter().find(|t| t.name == "Find Papers").unwrap().prompt_based);
-        assert!(!traits.iter().any(|t| t.name == "Code"));
-    }
-
-    #[test]
-    fn inconsistent_definitions_are_reported() {
-        let mut library = Library::builtin();
-        library.traits[1].id = library.traits[0].id;
-        library.traits[0].name = "summarize".into();
-        library.mini_mes[0].workflow.steps.clear();
-        let code = library.traits.iter().find(|t| t.name == "Code").unwrap().id;
-        library.mini_mes[1].workflow.steps[0].kind = StepKind::Trait { trait_id: code };
-        let problems = library.problems();
-        assert!(problems.iter().any(|p| p.contains("share an ID")));
-        assert!(problems.iter().any(|p| p.contains("Title Case")));
-        assert!(problems.iter().any(|p| p.contains("has no Steps")));
-        assert!(problems.iter().any(|p| p.contains("placeholder Trait Code")));
-    }
-
-    #[test]
-    fn the_fallback_is_assistant_and_must_exist() {
-        let mut library = Library::builtin();
-        assert_eq!(library.mini_me(FALLBACK_MINI_ME).unwrap().name, "Assistant");
-        assert_eq!(library.mini_me(SCRIBE).unwrap().name, "Scribe");
-        library.mini_mes.retain(|m| m.id != FALLBACK_MINI_ME);
-        assert!(library.problems().iter().any(|p| p.contains("fallback Mini-Me is missing")));
-    }
-
     /// A valid user-made Trait named `name`.
     pub(crate) fn user_trait(name: &str) -> TraitDef {
         TraitDef {
@@ -472,42 +461,10 @@ mod tests {
             name: name.into(),
             description: "Translates text.".into(),
             color: "oklch(0.8 0 0)".into(),
+            icon: None,
             adapter: PROMPT_ADAPTER.into(),
             instructions: Some("Translate the message.".into()),
         }
-    }
-
-    #[test]
-    fn names_are_unique_and_in_title_case_with_digits() {
-        let mut library = Library::builtin();
-        library.traits.push(user_trait("Plan Copy 2"));
-        assert_eq!(library.problems(), Vec::<String>::new());
-
-        library.traits.push(user_trait("translate text"));
-        library.traits.push(user_trait("plan"));
-        let mut skeptic = library.mini_mes.iter().find(|m| m.name == "Skeptic").unwrap().clone();
-        skeptic.id = Uuid::now_v7();
-        skeptic.name = "skeptic".into();
-        library.mini_mes.push(skeptic);
-        let problems = library.problems();
-        assert!(problems.iter().any(|p| p.contains("\"translate text\" is not in Title Case")));
-        assert!(problems.iter().any(|p| p.contains("two Traits are named \"plan\"")));
-        assert!(problems.iter().any(|p| p.contains("two Mini-Mes are named \"skeptic\"")));
-    }
-
-    #[test]
-    fn user_made_traits_run_on_prompt_with_instructions() {
-        let mut library = Library::builtin();
-        let mut plot = user_trait("My Plot");
-        plot.adapter = "data-plot".into();
-        let mut empty = user_trait("Empty");
-        empty.instructions = Some(" ".into());
-        library.traits.extend([plot, empty]);
-        let problems = library.problems();
-        assert!(problems.iter().any(|p| p.contains("My Plot is user-made and must run on prompt")));
-        assert!(problems.iter().any(|p| p.contains("Empty has no instructions")));
-        // Built-in Traits on other adapters stay valid.
-        assert_eq!(problems.len(), 2, "{problems:?}");
     }
 
     const SCOUT: &str = "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06";
@@ -517,36 +474,6 @@ mod tests {
         let mut library = Library::builtin();
         library.mini_mes[0].workflow = serde_json::from_value(workflow).unwrap();
         library
-    }
-
-    #[test]
-    fn a_step_without_type_is_a_trait_step() {
-        let workflow: Workflow =
-            serde_json::from_value(serde_json::json!({ "steps": [{ "id": "scout", "trait": SCOUT }] }))
-                .unwrap();
-        let trait_id = SCOUT.parse().unwrap();
-        assert_eq!(workflow.steps[0].kind, StepKind::Trait { trait_id });
-        let sent = serde_json::to_value(&workflow).unwrap();
-        assert_eq!(sent["steps"][0]["type"], "trait");
-    }
-
-    #[test]
-    fn nested_steps_are_parsed_and_listed_in_order() {
-        let library = with_workflow(serde_json::json!({ "steps": [
-            { "id": "open-up", "type": "parallel", "branches": [
-                { "label": "Directions", "steps": [{ "id": "scout", "trait": SCOUT }] },
-                { "label": "Questions", "steps": [{ "id": "wonder", "trait": WONDER }] } ] },
-            { "id": "again", "type": "loop", "question": "Again?", "max_iterations": 2,
-              "steps": [{ "id": "ask", "type": "approval", "prompt": "Go on?" },
-                        { "id": "scout-again", "trait": SCOUT }] } ] }));
-        assert_eq!(library.problems(), Vec::<String>::new());
-        let workflow = &library.mini_mes[0].workflow;
-        let ids: Vec<&str> = workflow.all_steps().iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, ["open-up", "scout", "wonder", "again", "ask", "scout-again"]);
-        let names: Vec<&str> =
-            library.workflow_traits(workflow).iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(names, ["Scout", "Wonder"]);
-        assert!(workflow.has_decisions());
     }
 
     #[test]
@@ -570,5 +497,55 @@ mod tests {
             { "id": "pick", "type": "condition", "question": "Which?",
               "branches": [{ "label": "only", "steps": [{ "id": "scout", "trait": SCOUT }] }] } ] }));
         assert!(lonely.problems().iter().any(|p| p.contains("at least two branches")));
+
+        let ask = |fields: serde_json::Value| {
+            let mut step = serde_json::json!({ "id": "ask", "type": "approval", "prompt": "Ask" });
+            step.as_object_mut().unwrap().extend(fields.as_object().unwrap().clone());
+            with_workflow(serde_json::json!({ "steps": [step, { "id": "scout", "trait": SCOUT }] }))
+        };
+        let written = ask(serde_json::json!({ "answer": "text", "questions_by": "model" }));
+        assert_eq!(written.problems(), Vec::<String>::new());
+        let unanswerable = ask(serde_json::json!({ "questions_by": "model" }));
+        assert!(unanswerable.problems().iter().any(|p| p.contains("only for a written answer")));
+
+        let mut library = Library::builtin();
+        library.traits[1].id = library.traits[0].id;
+        library.traits[0].name = "summarize".into();
+        library.mini_mes[0].workflow.steps.clear();
+        let code = library.traits.iter().find(|t| t.name == "Code").unwrap().id;
+        library.mini_mes[1].workflow.steps[0].kind =
+            StepKind::Trait { trait_id: code, show_results: false };
+        let problems = library.problems();
+        assert!(problems.iter().any(|p| p.contains("share an ID")));
+        assert!(problems.iter().any(|p| p.contains("Title Case")));
+        assert!(problems.iter().any(|p| p.contains("has no Steps")));
+        assert!(problems.iter().any(|p| p.contains("placeholder Trait Code")));
+
+        let mut library = Library::builtin();
+        library.traits.push(user_trait("Plan Copy 2"));
+        assert_eq!(library.problems(), Vec::<String>::new());
+
+        library.traits.push(user_trait("translate text"));
+        library.traits.push(user_trait("plan"));
+        let mut skeptic = library.mini_mes.iter().find(|m| m.name == "Skeptic").unwrap().clone();
+        skeptic.id = Uuid::now_v7();
+        skeptic.name = "skeptic".into();
+        library.mini_mes.push(skeptic);
+        let problems = library.problems();
+        assert!(problems.iter().any(|p| p.contains("\"translate text\" is not in Title Case")));
+        assert!(problems.iter().any(|p| p.contains("two Traits are named \"plan\"")));
+        assert!(problems.iter().any(|p| p.contains("two Mini-Mes are named \"skeptic\"")));
+
+        let mut library = Library::builtin();
+        let mut plot = user_trait("My Plot");
+        plot.adapter = "data-plot".into();
+        let mut empty = user_trait("Empty");
+        empty.instructions = Some(" ".into());
+        library.traits.extend([plot, empty]);
+        let problems = library.problems();
+        assert!(problems.iter().any(|p| p.contains("My Plot is user-made and must run on prompt")));
+        assert!(problems.iter().any(|p| p.contains("Empty has no instructions")));
+        // Built-in Traits on other adapters stay valid.
+        assert_eq!(problems.len(), 2, "{problems:?}");
     }
 }

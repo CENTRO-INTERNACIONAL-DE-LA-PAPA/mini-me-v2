@@ -1,0 +1,69 @@
+{
+  "name": "dumbbell",
+  "description": "Two aggregates of a value per category, such as two seasons, joined by a line; the group has the two values.",
+  "slots": {
+    "category": {"types": ["text", "boolean", "number"]},
+    "group": {"types": ["text", "boolean", "number"]},
+    "value": {"types": ["number"]}
+  },
+  "chart": {
+    "datasets": [
+      {
+        "name": "values",
+        "operations": [
+          {
+            "kind": "group",
+            "by": ["{category}", "{group}"],
+            "aggregates": [
+              {"how": "{aggregate}", "column": "{value}", "name": "{aggregate}_{value}"}
+            ]
+          }
+        ]
+      },
+      {
+        "name": "ranges",
+        "operations": [
+          {
+            "kind": "group",
+            "by": ["{category}", "{group}"],
+            "aggregates": [
+              {"how": "{aggregate}", "column": "{value}", "name": "{aggregate}_{value}"}
+            ]
+          },
+          {
+            "kind": "group",
+            "by": ["{category}"],
+            "aggregates": [
+              {"how": "min", "column": "{aggregate}_{value}", "name": "low"},
+              {"how": "max", "column": "{aggregate}_{value}", "name": "high"}
+            ]
+          }
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "ruleX",
+        "dataset": "ranges",
+        "channels": [
+          {"name": "x", "column": "{category}"},
+          {"name": "y1", "column": "low"},
+          {"name": "y2", "column": "high"},
+          {"name": "stroke", "value": "currentColor"}
+        ]
+      },
+      {
+        "mark": "dot",
+        "dataset": "values",
+        "channels": [
+          {"name": "x", "column": "{category}"},
+          {"name": "y", "column": "{aggregate}_{value}"},
+          {"name": "fill", "column": "{group}"},
+          {"name": "r", "value": 5}
+        ],
+        "options": [{"name": "sort", "value": {"x": "-y"}}]
+      }
+    ],
+    "scales": [{"scale": "y", "label": "{Aggregate} of {value}"}]
+  }
+}

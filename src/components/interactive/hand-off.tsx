@@ -1,3 +1,4 @@
+import { ComponentCard } from "./ComponentCard";
 import { ArrowRightIcon } from "lucide-react";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import type { MiniMe } from "../../protocol/types";
@@ -15,7 +16,7 @@ interface HandOffData {
 }
 
 /** A reply's hand-off: the Mini-Me it went to, what it was asked, and the file it was given. */
-export function HandOffCard({
+function HandOffCard({
   miniMe,
   name,
   request,
@@ -29,8 +30,8 @@ export function HandOffCard({
   onOpenFile?: () => void;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-card border border-card-edge bg-card px-4 py-3">
-      <ArrowRightIcon aria-hidden className="mt-0.5 size-[18px] shrink-0 text-mm-ink" />
+    <ComponentCard className="flex-row items-start gap-3">
+      <ArrowRightIcon aria-hidden className="mt-0.5 size-4.5 shrink-0 text-mm-ink" />
       <span className="grid min-w-0 flex-1 gap-1">
         <span className="text-meta text-muted-foreground">
           Handed to <MiniMePill miniMe={miniMe}>@{name}</MiniMePill>
@@ -44,7 +45,7 @@ export function HandOffCard({
           </span>
         )}
       </span>
-    </div>
+    </ComponentCard>
   );
 }
 

@@ -1,10 +1,12 @@
+import { Hint } from "../shell/Hint";
+import { ListRow } from "../shell/ListRow";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   BookOpenIcon,
   ChartColumnIcon,
-  ChevronRightIcon,
   DatabaseIcon,
   FileIcon,
   LightbulbIcon,
@@ -30,7 +32,7 @@ import { DOTS_HOVER } from "../shell/ItemMenu";
 import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import { MiniMePill } from "../minime/MiniMePill";
-import { ItemMenu } from "../shell/ItemMenu";
+import { ProjectMenu } from "../shell/ItemMenu";
 import { SheetPage, SheetSection } from "../shell/Sheet";
 import {
   findNamed,
@@ -40,11 +42,11 @@ import {
   summaryParts,
 } from "./overview";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { ErrorText } from "../shell/ErrorText";
 
 interface Props {
   project: ProjectSummary;
   onOpenConversation: (conversationId: string, messageId: string) => void;
-  onOpenFiles: () => void;
   /** Called after a file was renamed, copied or deleted, so counts elsewhere can refresh. */
   onChanged: () => void;
   onOpenDocument: (assetId: string) => void;
@@ -68,7 +70,6 @@ const kindOf = (kind: string) =>
 export function OverviewView({
   project,
   onOpenConversation,
-  onOpenFiles,
   onChanged,
   onOpenDocument,
   onRenameProject,
@@ -118,7 +119,7 @@ export function OverviewView({
   }
 
   if (!overview) {
-    return error ? <p className="px-8 pt-14 text-meta text-destructive">{error}</p> : null;
+    return error ? <ErrorText className="px-8 pt-6">{error}</ErrorText> : null;
   }
 
   const miniMeOf = (id: string) => miniMes.find((m) => m.id === id);
@@ -131,21 +132,14 @@ export function OverviewView({
     <SheetPage
       title={project.name}
       titleAction={
-        <ItemMenu
-          name={project.name}
-          rename={{ current: project.name, onRename: onRenameProject }}
-          remove={{
-            question: `Delete "${project.name}"? Its Conversations and files are removed for good. This can't be undone.`,
-            onDelete: onDeleteProject,
-          }}
-        />
+        <ProjectMenu name={project.name} onRename={onRenameProject} onDelete={onDeleteProject} />
       }
       description={headerLine(overview)}
     >
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-start gap-4 max-lg:grid-cols-1">
         <div className="flex flex-col gap-4">
-          <Card aria-label="Summary" className="gap-2.5 px-[22px] py-5">
-            <h2 className="font-serif text-heading text-foreground">Where things stand</h2>
+          <Card aria-label="Summary" className="gap-3">
+            <h2 className="text-ui font-medium text-foreground">Where things stand</h2>
             {overview.summary ? (
               <p className="text-body whitespace-pre-line text-document-ink">
                 {summaryParts(overview.summary).map((part, index) => {
@@ -166,24 +160,28 @@ export function OverviewView({
                 No summary yet. Mini-Me can write one from this Project's Conversations.
               </p>
             )}
-            <div className="mt-1 flex items-center gap-3">
-              <Button
-                variant="mini-me"
-                size="sm"
-                disabled={writing || overview.conversations === 0}
-                title="Sends the text of this Project's messages, not its files, to the AI model chosen in Settings."
-                onClick={updateSummary}
+            <div className="mt-1 flex items-center gap-2">
+              <Hint
+                label="Sends the text of this Project's messages, not its files, to the AI model chosen in Settings."
+                disabled
               >
-                <RefreshCwIcon className={cn(writing && "animate-spin")} />
-                {writing ? "Writing summary…" : "Update summary"}
-              </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={writing || overview.conversations === 0}
+                  onClick={updateSummary}
+                >
+                  <RefreshCwIcon className={cn(writing && "animate-spin")} />
+                  {writing ? "Writing summary…" : "Update summary"}
+                </Button>
+              </Hint>
               {overview.summary_at !== null && !writing && (
                 <span className="text-meta text-muted-foreground">
                   Written {relativeInSentence(overview.summary_at)}
                 </span>
               )}
             </div>
-            {error && <p className="text-meta text-destructive">{error}</p>}
+            {error && <ErrorText>{error}</ErrorText>}
           </Card>
 
           {featured && (
@@ -192,15 +190,16 @@ export function OverviewView({
               actions={
                 <span className="flex items-center gap-2">
                   <MiniMePill miniMe={featuredBy}>{featuredBy?.name ?? "Mini-Me"}</MiniMePill>
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    aria-label="Remove from Overview"
-                    title="Remove from Overview"
-                    onClick={unfeature}
-                  >
-                    <XIcon />
-                  </Button>
+                  <Hint label="Remove from Overview">
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      aria-label="Remove from Overview"
+                      onClick={unfeature}
+                    >
+                      <XIcon />
+                    </Button>
+                  </Hint>
                 </span>
               }
             >
@@ -217,17 +216,14 @@ export function OverviewView({
 
         <SheetSection
           title="Latest outputs"
-          actions={
-            <Button variant="link" className="text-meta text-muted-foreground" onClick={onOpenFiles}>
-              Open Files
-              <ChevronRightIcon />
-            </Button>
-          }
         >
           {shown.length === 0 ? (
-            <p className="text-muted-foreground">
-              Tables, charts, papers and files that Mini-Mes make in this Project will appear here.
-            </p>
+            <Empty>
+              <EmptyDescription>
+                Tables, charts, papers and files that Mini-Mes make in this Project will appear
+                here.
+              </EmptyDescription>
+            </Empty>
           ) : (
             <ul className="grid gap-0.5">
               {shown.map((output) => (
@@ -279,19 +275,12 @@ function OutputRow({
 }) {
   const { icon: Icon } = kindOf(output.kind);
   return (
-    <Button
-      variant="ghost"
-      onClick={onOpen}
-      className="h-auto w-full justify-start gap-2.5 rounded-xl px-1.5 py-2 text-left font-normal text-foreground"
-    >
-      <FileMark miniMe={miniMe} icon={Icon} />
-      <span className="grid min-w-0 flex-1">
-        <span className="truncate text-ui">{output.title}</span>
-        <span className="truncate text-meta text-muted-foreground">
-          From {output.conversation_title}
-        </span>
-      </span>
-    </Button>
+    <ListRow
+      leading={<FileMark miniMe={miniMe} icon={Icon} />}
+      name={output.title}
+      meta={`From ${output.conversation_title}`}
+      onOpen={onOpen}
+    />
   );
 }
 

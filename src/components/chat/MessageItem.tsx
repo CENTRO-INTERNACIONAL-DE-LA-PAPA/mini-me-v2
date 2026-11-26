@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { memo, useCallback, useState } from "react";
@@ -23,8 +24,16 @@ import { useReplyDebug } from "../../hooks/useReplyDebug";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
-import { WorkflowProgress, componentPlaces, showsProgress } from "./WorkflowProgress";
+import {
+  StepComponents,
+  WorkflowProgress,
+  WrittenAnswer,
+  approvalComponents,
+  componentPlaces,
+  showsProgress,
+} from "./WorkflowProgress";
 import { MetaParts } from "@/components/ui/meta-parts";
+import { ErrorText } from "../shell/ErrorText";
 
 const STATUS_LABEL: Record<string, string | undefined> = {
   streaming: "Replying…",
@@ -75,7 +84,12 @@ export const MessageItem = memo(function MessageItem({
   const { name, miniMe: authorMiniMe } = author(message, miniMes);
 
   const miniMe = (id: string) => miniMes.find((m) => m.id === id);
-  const { own } = componentPlaces(message.steps, message.components, message.status);
+  const [selected, setSelected] = useState<number | null>(null);
+  const { own, byStep } = componentPlaces(message.steps, message.components, message.status);
+  const selectedStep = selected === null ? undefined : message.steps[selected];
+  const selectedApproval =
+    selected === null ? undefined : approvalComponents(message.steps, message.components)[selected];
+  const selectedComponents = selected === null ? [] : (byStep.get(selected) ?? []);
   // An approval shows only while it asks; once answered, the progress card shows its answer.
   const shown = own.filter(
     (c) => c.kind !== "approval" || approvalState(c.answer, message.status) === "asking",
@@ -116,7 +130,7 @@ export const MessageItem = memo(function MessageItem({
   );
 
   const attachments = message.attachments.length > 0 && (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-2">
       {message.attachments.map((asset) => (
         <AttachmentChip key={asset.id} asset={asset} onOpen={() => open(asset.id)} />
       ))}
@@ -133,9 +147,9 @@ export const MessageItem = memo(function MessageItem({
         />
       )}
       {message.failure && (
-        <p className="text-meta text-destructive">{message.failure.message}</p>
+        <ErrorText>{message.failure.message}</ErrorText>
       )}
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
     </>
   );
 
@@ -154,8 +168,8 @@ export const MessageItem = memo(function MessageItem({
 
   if (fromUser) {
     return (
-      <article data-message-id={message.id} className="flex max-w-[520px] flex-col items-end gap-1.5 self-end">
-        <div className="relative flex flex-col gap-2 rounded-[14px_14px_4px_14px] bg-bubble [--card-edge:transparent] px-[15px] py-[11px] text-foreground">
+      <article data-message-id={message.id} className="flex max-w-[520px] flex-col items-end gap-1 self-end">
+        <div className="relative flex flex-col gap-2 rounded-2xl rounded-br-sm bg-bubble [--card-edge:transparent] px-4 py-3 text-foreground">
           {text}
           {attachments}
           <ReactionPills reactions={message.reactions} miniMe={miniMe} />
@@ -172,17 +186,17 @@ export const MessageItem = memo(function MessageItem({
     (replyDebug.reply_input || replyDebug.reply_details || replyDebug.reply_tools);
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <MiniMeSurface
         miniMe={authorMiniMe}
         render={<article />}
         data-message-id={message.id}
         className={cn(
           "relative flex flex-col text-foreground",
-          compact ? "gap-2.5 px-3 py-2.5" : "gap-3.5 px-[18px] py-4",
+          compact ? "gap-3 p-3" : "gap-3 p-4",
         )}
       >
-        <header className="flex items-center gap-[9px] text-meta">
+        <header className="flex items-center gap-3 text-meta">
           <MiniMeAvatar
             miniMe={authorMiniMe}
             size={compact ? 20 : 40}
@@ -198,15 +212,41 @@ export const MessageItem = memo(function MessageItem({
           <WorkflowProgress
             steps={message.steps}
             components={message.components}
-            messageId={message.id}
             replyStatus={message.status}
             color={authorMiniMe?.colors.solid}
             onShowSteps={onToggleSteps && (() => onToggleSteps(message.id))}
             stepsShown={stepsShown}
+            selected={selectedStep ? selected : null}
+            onSelect={setSelected}
           />
         )}
-        {/* A reply with no text yet, or none at all, leaves no empty block to space around. */}
-        {message.author.kind === "mini_me" ? (
+        {selectedStep ? (
+          selectedApproval ? (
+            <WrittenAnswer approval={selectedApproval} />
+          ) : (
+            <>
+              {selectedStep.output && (
+                <Markdown
+                  content={selectedStep.output}
+                  miniMes={miniMes}
+                  onOpenAsset={open}
+                />
+              )}
+              {selectedComponents.length > 0 && (
+                <div className="flex min-w-0 flex-col gap-3">
+                  <StepComponents
+                    components={selectedComponents}
+                    projectId={projectId}
+                    messageId={message.id}
+                    replyStatus={message.status}
+                    color={authorMiniMe?.colors.solid}
+                  />
+                </div>
+              )}
+            </>
+          )
+        ) : /* A reply with no text yet, or none at all, leaves no empty block to space around. */
+        message.author.kind === "mini_me" ? (
           message.content.trim() !== "" && (
             <Markdown
               content={message.content}
@@ -218,7 +258,7 @@ export const MessageItem = memo(function MessageItem({
         ) : (
           text
         )}
-        {shown.length > 0 && (
+        {!selectedStep && shown.length > 0 && (
           <div className="flex min-w-0 flex-col gap-3">
             {shown.map((component) => (
               <InteractiveComponent
@@ -269,8 +309,7 @@ function ReactionPills({
           <li key={emoji} className="pointer-events-auto">
             <Tooltip>
               <TooltipTrigger
-                render={<span />}
-                className="flex h-6 items-center gap-1 rounded-full border border-border bg-card px-1.5 text-meta"
+                render={<Badge variant="outline" className="gap-1 px-1.5 text-meta" />}
               >
                 {byMiniMes.slice(0, 3).map((reaction, index) => (
                   <MiniMeAvatar

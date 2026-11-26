@@ -1,0 +1,28 @@
+{
+  "name": "waffle",
+  "description": "How many rows each category has, as squares of units.",
+  "slots": {"category": {"types": ["text", "boolean", "number"]}},
+  "chart": {
+    "datasets": [
+      {
+        "name": "counts",
+        "operations": [
+          {
+            "kind": "group",
+            "by": ["{category}"],
+            "aggregates": [{"how": "count", "column": null, "name": "count"}]
+          }
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "waffleY",
+        "dataset": "counts",
+        "channels": [{"name": "x", "column": "{category}"}, {"name": "y", "column": "count"}],
+        "options": [{"name": "sort", "value": {"x": "-y"}}]
+      }
+    ],
+    "scales": [{"scale": "y", "label": "Count of {category}"}]
+  }
+}

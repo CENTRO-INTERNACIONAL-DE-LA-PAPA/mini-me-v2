@@ -1,7 +1,8 @@
+import { Hint } from "./Hint";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { XIcon, type LucideIcon } from "lucide-react";
+import { ChevronLeftIcon, XIcon, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCollapseSidebar } from "../../hooks/useCollapseSidebar";
 
@@ -10,7 +11,7 @@ export function MainSheet({ className, children }: { className?: string; childre
   return (
     <div
       className={cn(
-        "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-sheet bg-background",
+        "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-background",
         className,
       )}
     >
@@ -38,11 +39,11 @@ export function ToolSheet({
   return (
     <aside
       className={cn(
-        "flex min-h-0 w-[380px] shrink-0 flex-col overflow-hidden rounded-sheet bg-background",
+        "flex min-h-0 w-[380px] shrink-0 flex-col overflow-hidden rounded-2xl bg-background",
         className,
       )}
     >
-      <header className="flex items-start gap-3 pt-[22px] pr-[18px] pb-4 pl-6">
+      <header className="flex items-start gap-4 px-6 pt-6 pb-4">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-tool-title font-medium text-foreground">{title}</h2>
           {meta && <p className="mt-1 text-meta text-muted-foreground">{meta}</p>}
@@ -54,12 +55,29 @@ export function ToolSheet({
   );
 }
 
+/** A group in a tool sheet: its serif heading, then its content. */
+export function ToolSheetGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <section className="mt-6 first:mt-0">
+      <ToolSheetHeading>{label}</ToolSheetHeading>
+      {children}
+    </section>
+  );
+}
+
+/** A group's heading in a tool sheet, for a group that is not its own section. */
+export function ToolSheetHeading({ children }: { children: ReactNode }) {
+  return <h3 className="mb-2 text-ui font-medium text-foreground">{children}</h3>;
+}
+
 /** The well-filled square close button at the top right of a sheet. */
 function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Button variant="secondary" size="icon" aria-label={label} title={label} onClick={onClick}>
-      <XIcon />
-    </Button>
+    <Hint label={label}>
+      <Button variant="secondary" size="icon" aria-label={label} onClick={onClick}>
+        <XIcon />
+      </Button>
+    </Hint>
   );
 }
 
@@ -81,22 +99,20 @@ export function SheetHeader({
   compact?: boolean;
 }) {
   return (
-    <header className="flex items-start justify-between gap-4 pt-6 pr-6 pl-8">
-      <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <h1
-            className={cn(
-              "truncate font-serif font-medium text-foreground",
-              compact ? "text-column-title" : "text-sheet-title",
-            )}
-          >
-            {title}
-          </h1>
-          {titleAction}
-        </div>
-        {children}
+    <header className="flex flex-col gap-3 px-8 pt-6">
+      <div className="flex min-w-0 items-center gap-2">
+        <h1
+          className={cn(
+            "truncate font-serif font-medium text-foreground",
+            compact ? "text-column-title" : "text-sheet-title",
+          )}
+        >
+          {title}
+        </h1>
+        {titleAction}
+        {actions && <HeaderActions>{actions}</HeaderActions>}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      {children}
     </header>
   );
 }
@@ -123,9 +139,6 @@ export function ToolSwitch<Id extends string>({
   return (
     <ToggleGroup
       aria-label={label}
-      variant="switch"
-      size="switch"
-      spacing={1}
       value={value === null ? [] : [value]}
     >
       {options.map(({ id, label, icon: Icon }) => (
@@ -157,49 +170,89 @@ export function SheetPage({
   children: ReactNode;
 }) {
   return (
-    <main className={cn("flex w-full flex-col gap-6 px-8 pt-7 pb-10", className)}>
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <h1 className="font-serif text-sheet-title font-medium text-foreground">{title}</h1>
-            {titleAction}
-          </div>
-          {description && (
-            <p className="max-w-[560px] text-ui text-pretty text-muted-foreground">{description}</p>
-          )}
-        </div>
-        {actions && <div className="flex shrink-0 items-center gap-2.5">{actions}</div>}
-      </header>
+    <main className={cn("flex w-full flex-col gap-6 px-8 pt-6 pb-8", className)}>
+      <PageTitle
+        title={title}
+        titleAction={titleAction}
+        description={description}
+        actions={actions}
+      />
       {children}
     </main>
   );
 }
 
-/** A titled part of a sheet: a serif heading in sentence case, optional meta beside it and
- * actions such as a tab switch on the right, then its content. */
+/** A page's serif title, with anything right after it (its "…" menu) and a line under it. */
+export function PageTitle({
+  title,
+  titleAction,
+  description,
+  actions,
+  className,
+}: {
+  title: ReactNode;
+  titleAction?: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
+      <div className="flex min-w-0 items-center gap-2">
+        <h1 className="font-serif text-sheet-title font-medium text-foreground">{title}</h1>
+        {titleAction}
+        {actions && <HeaderActions>{actions}</HeaderActions>}
+      </div>
+      {description && (
+        <p className="max-w-[560px] text-ui text-pretty text-muted-foreground">{description}</p>
+      )}
+    </div>
+  );
+}
+
+/** A titled part of a sheet: a serif heading in sentence case, short meta (a count) beside it,
+ * a sentence about it under it, actions such as a tab switch on the right, then its content. */
 export function SheetSection({
   title,
   meta,
+  description,
   actions,
   className,
   children,
 }: {
   title: ReactNode;
   meta?: ReactNode;
+  description?: ReactNode;
   actions?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
   return (
-    <section className={cn("flex flex-col gap-3.5", className)}>
+    <section className={cn("flex flex-col gap-3", className)}>
       <header className="flex items-center justify-between gap-4">
-        <h2 className="flex items-baseline gap-2.5">
-          <span className="font-serif text-heading text-foreground">{title}</span>
-          {meta && <span className="text-meta text-muted-foreground">{meta}</span>}
-        </h2>
+        <div className="grid gap-1">
+          <h2 className="flex items-baseline gap-2">
+            <span className="font-serif text-heading text-foreground">{title}</span>
+            {meta && <span className="text-meta text-muted-foreground">{meta}</span>}
+          </h2>
+          {description && <p className="text-meta text-muted-foreground">{description}</p>}
+        </div>
         {actions}
       </header>
       {children}
     </section>
   );
+}
+
+export function BackLink({ label, onBack }: { label: string; onBack: () => void }) {
+  return (
+    <Button variant="link" className="w-fit gap-2 text-control text-muted-foreground" onClick={onBack}>
+      <ChevronLeftIcon />
+      {label}
+    </Button>
+  );
+}
+
+export function HeaderActions({ children }: { children: ReactNode }) {
+  return <div className="ml-auto flex shrink-0 items-center gap-2 pl-4">{children}</div>;
 }

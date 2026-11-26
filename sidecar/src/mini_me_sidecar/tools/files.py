@@ -68,7 +68,9 @@ async def save_text_file(ctx: CallContext, name: str, content: str) -> dict[str,
     return await save_file(ctx, name, media_type, data)
 
 
-async def read_file(ctx: CallContext, asset_id: str, start: int = 0) -> dict[str, Any]:
+async def read_file(
+    ctx: CallContext, asset_id: str, start: int = 0, rows: int | None = None
+) -> dict[str, Any]:
     """Part of one of the Conversation's files: a table's rows from row `start`, or a text
     file's characters from character `start`, with the totals to read the rest."""
     if start < 0:
@@ -82,7 +84,7 @@ async def read_file(ctx: CallContext, asset_id: str, start: int = 0) -> dict[str
         table = ctx.reads.get(("table", asset_id))
         if table is None:
             table = ctx.reads[("table", asset_id)] = await read_table(ctx, asset_id, name)
-        return {"name": name, **table_result(table.frame, start)}
+        return {"name": name, **table_result(table, start, rows)}
     text = ctx.reads.get(("text", asset_id))
     if text is None:
         ctx.progress(f"Reading {name}")

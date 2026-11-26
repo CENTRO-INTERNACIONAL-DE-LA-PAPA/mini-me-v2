@@ -1,3 +1,4 @@
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api, errorMessage } from "./api";
@@ -6,6 +7,7 @@ import { useFilesChanged } from "./hooks/useFilesChanged";
 import { useReplyNotifications } from "./hooks/useReplyNotifications";
 import { useRunningKey } from "./hooks/useRunningReplies";
 import { AvatarDebugView } from "./components/avatar/AvatarDebugView";
+import { ComponentsDebugView } from "./components/shell/ComponentsDebugView";
 import { ChatView } from "./components/chat/ChatView";
 import { DocumentView } from "./components/documents/DocumentView";
 import { FilesView } from "./components/files/FilesView";
@@ -164,48 +166,49 @@ export default function App() {
   }
 
   return (
-    <SidebarProvider>
-      <AppSidebar
-        view={view}
-        project={project}
-        projects={projects}
-        conversations={conversations}
-        unseen={unseen}
-        fileCount={fileCount}
-        onOpenProject={openProject}
-        onNavigate={navigate}
-        onNewConversation={newConversation}
-        onOpenConversation={openConversation}
-        onRenameConversation={renameConversation}
-        onDeleteConversation={deleteConversation}
-      />
-      {/* The desk: the open view's sheets float on it, 12px from the window and each other. */}
-      <SidebarInset className="h-svh min-w-0 flex-row gap-3 overflow-hidden bg-transparent p-3">
-        {error && (
-          <p
-            role="alert"
-            className="absolute top-5 left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-card px-4 py-2 text-meta text-destructive"
-          >
-            {error}
-          </p>
-        )}
-        <Main
+    <TooltipProvider>
+      <SidebarProvider>
+        <AppSidebar
           view={view}
           project={project}
           projects={projects}
           conversations={conversations}
+          unseen={unseen}
+          fileCount={fileCount}
           onOpenProject={openProject}
-          onCreateProject={createProject}
-          onConversationActivity={refreshConversations}
+          onNavigate={navigate}
+          onNewConversation={newConversation}
           onRenameConversation={renameConversation}
           onDeleteConversation={deleteConversation}
-          onRenameProject={renameProject}
-          onDeleteProject={deleteProject}
-          onNavigate={navigate}
-          onOpenReply={openConversation}
         />
-      </SidebarInset>
-    </SidebarProvider>
+        {/* The desk: the open view's sheets float on it, 12px from the window and each other. */}
+        <SidebarInset className="h-svh min-w-0 flex-row gap-3 overflow-hidden bg-transparent p-3">
+          {error && (
+            <p
+              role="alert"
+              className="absolute top-5 left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-card px-4 py-2 text-meta text-destructive"
+            >
+              {error}
+            </p>
+          )}
+          <Main
+            view={view}
+            project={project}
+            projects={projects}
+            conversations={conversations}
+            onOpenProject={openProject}
+            onCreateProject={createProject}
+            onConversationActivity={refreshConversations}
+            onRenameConversation={renameConversation}
+            onDeleteConversation={deleteConversation}
+            onRenameProject={renameProject}
+            onDeleteProject={deleteProject}
+            onNavigate={navigate}
+            onOpenReply={openConversation}
+          />
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }
 
@@ -251,6 +254,7 @@ function Main({
           initialPage={view.page}
           projectId={project?.id}
           onOpenAvatars={() => onNavigate({ kind: "avatars" })}
+          onOpenComponents={() => onNavigate({ kind: "components" })}
           onOpenWhatsNew={() =>
             onNavigate({ kind: "whats-new", from: { kind: "settings", page: "about" } })
           }
@@ -271,6 +275,12 @@ function Main({
     case "avatars":
       // Opened from Settings → General, so closing it goes back there.
       return scrolling(<AvatarDebugView onClose={() => onNavigate({ kind: "settings" })} />);
+    case "components":
+      return scrolling(
+        <ComponentsDebugView
+          onClose={() => onNavigate({ kind: "settings", page: "developer" })}
+        />,
+      );
     case "library":
       return scrolling(<LibraryView tab={view.tab ?? "mini-mes"} onOpen={onNavigate} />);
     case "mini-me":
@@ -302,7 +312,6 @@ function Main({
               onOpenConversation={(id, messageId) =>
                 onNavigate({ kind: "conversation", id, messageId })
               }
-              onOpenFiles={() => onNavigate({ kind: "files" })}
               onChanged={onConversationActivity}
               onOpenDocument={(assetId) => onNavigate({ kind: "document", assetId, from: view })}
               onRenameProject={(name) => onRenameProject(project, name)}

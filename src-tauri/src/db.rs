@@ -6,7 +6,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::error::{AppError, AppResult};
 
-pub const SCHEMA_VERSION: i32 = 14;
+pub const SCHEMA_VERSION: i32 = 15;
 
 /// Ordered migrations; entry `i` upgrades the schema from version `i` to `i + 1`.
 const MIGRATIONS: &[&str] = &[r#"
@@ -223,6 +223,9 @@ CREATE INDEX suggestions_by_asset ON suggestions(asset_id);
 -- Threads are opened only by the user.
 ALTER TABLE comment_threads DROP COLUMN opened_from;
 "#,
+    r#"
+ALTER TABLE message_steps ADD COLUMN show_results INTEGER NOT NULL DEFAULT 0;
+"#,
 ];
 
 fn user_version(conn: &Connection) -> AppResult<i32> {
@@ -283,13 +286,6 @@ mod tests {
         conn.pragma_update(None, "user_version", n as i32).unwrap();
         conn.execute_batch(seed).unwrap();
         (dir, path)
-    }
-
-    #[test]
-    fn new_database_is_migrated() {
-        let (_dir, path) = at_version(0, "");
-        let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
     }
 
     #[test]

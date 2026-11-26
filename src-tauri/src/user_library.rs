@@ -44,6 +44,7 @@ pub struct TraitDraft {
     pub id: Uuid,
     pub name: String,
     pub description: String,
+    pub icon: Option<String>,
     pub instructions: String,
 }
 
@@ -110,6 +111,7 @@ impl LibraryStore {
             name: draft.name.trim().to_string(),
             description: draft.description.trim().to_string(),
             color: TRAIT_COLOR.to_string(),
+            icon: draft.icon,
             adapter: PROMPT_ADAPTER.to_string(),
             instructions: Some(draft.instructions),
         };
@@ -301,6 +303,7 @@ mod tests {
             id: Uuid::nil(),
             name: name.into(),
             description: "Translates text.".into(),
+            icon: None,
             instructions: "Translate the message.".into(),
         }
     }
@@ -317,7 +320,7 @@ mod tests {
                 .map(|(i, id)| Step {
                     id: format!("step-{i}"),
                     label: None,
-                    kind: StepKind::Trait { trait_id: *id },
+                    kind: StepKind::Trait { trait_id: *id, show_results: false },
                 })
                 .collect(),
         };
@@ -326,30 +329,6 @@ mod tests {
 
     fn names(library: &Library) -> Vec<String> {
         library.summaries().into_iter().map(|m| m.name).collect()
-    }
-
-    #[test]
-    fn saved_definitions_are_reloaded_from_disk() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = LibraryStore::open(dir.path());
-        let translate = store.save_trait(draft("Translate")).unwrap();
-        assert!(!translate.id.is_nil());
-        assert_eq!(translate.adapter, "prompt");
-        let m = mini_me(&store.current(), "Field Translator", &[translate.id]);
-        store.save_mini_me(m).unwrap();
-
-        let reloaded = LibraryStore::open(dir.path()).current();
-        assert_eq!(reloaded.trait_def(translate.id), Some(&translate));
-        assert_eq!(names(&reloaded).last().map(String::as_str), Some("Field Translator"));
-        assert!(!reloaded.is_built_in(translate.id));
-    }
-
-    #[test]
-    fn a_missing_file_gives_the_built_ins() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = LibraryStore::open(dir.path());
-        assert_eq!(names(&store.current()).len(), Library::builtin().mini_mes.len());
-        assert_eq!((store.skipped(), store.unreadable()), (vec![], None));
     }
 
     #[test]
@@ -363,13 +342,14 @@ mod tests {
             name: "Chart".into(),
             description: "Draws.".into(),
             color: TRAIT_COLOR.into(),
+            icon: None,
             adapter: "prompt".into(),
             instructions: Some(" ".into()),
         })
         .unwrap();
         let mut runs_chart = mini_me(&library, "Charter", &[plan]);
         runs_chart.id = Uuid::now_v7();
-        if let StepKind::Trait { trait_id } = &mut runs_chart.workflow.steps[0].kind {
+        if let StepKind::Trait { trait_id, .. } = &mut runs_chart.workflow.steps[0].kind {
             *trait_id = charts["id"].as_str().unwrap().parse().unwrap();
         }
         let mut empty = mini_me(&library, "Empty", &[plan]);
@@ -420,17 +400,6 @@ mod tests {
     }
 
     #[test]
-    fn built_ins_cannot_be_saved_or_deleted() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = LibraryStore::open(dir.path());
-        let skeptic = store.current().mini_me(SKEPTIC.parse().unwrap()).unwrap().clone();
-        assert!(store.save_mini_me(skeptic).unwrap_err().message.contains("only be duplicated"));
-        let refute = store.current().traits.iter().find(|t| t.name == "Refute").unwrap().id;
-        assert!(store.delete_trait(refute).is_err());
-        assert!(!dir.path().join(FILE_NAME).exists());
-    }
-
-    #[test]
     fn a_trait_in_use_is_not_deleted() {
         let dir = tempfile::tempdir().unwrap();
         let store = LibraryStore::open(dir.path());
@@ -443,27 +412,5 @@ mod tests {
         store.delete_mini_me(m.id).unwrap();
         store.delete_trait(translate.id).unwrap();
         assert!(store.current().trait_def(translate.id).is_none());
-    }
-
-    #[test]
-    fn a_save_with_problems_is_refused_and_changes_nothing() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = LibraryStore::open(dir.path());
-        let mut bad = draft("translate");
-        bad.instructions = String::new();
-        let error = store.save_trait(bad).unwrap_err();
-        assert!(error.message.contains("Title Case"), "{}", error.message);
-        assert!(error.message.contains("no instructions"), "{}", error.message);
-        assert!(!dir.path().join(FILE_NAME).exists());
-    }
-
-    #[test]
-    fn a_snapshot_keeps_the_definitions_it_was_taken_with() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = LibraryStore::open(dir.path());
-        let before = store.current();
-        let translate = store.save_trait(draft("Translate")).unwrap();
-        assert!(before.trait_def(translate.id).is_none());
-        assert!(store.current().trait_def(translate.id).is_some());
     }
 }

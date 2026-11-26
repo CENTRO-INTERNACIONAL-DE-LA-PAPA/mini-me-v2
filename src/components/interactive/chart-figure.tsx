@@ -12,7 +12,7 @@ function readColours(element: Element, color: string | undefined): ChartColours 
   return {
     first: color ?? token(element, "--primary"),
     palette: SERIES_TOKENS.map((name) => token(element, name)),
-    negative: token(element, "--chart-2"),
+    negative: token(element, "--ink-2"),
     card: token(element, "--card"),
     grid: token(element, "--line-soft"),
     axis: token(element, "--foreground"),
@@ -70,7 +70,7 @@ export default function ChartFigure({
     if (!element || width === 0) return;
     let figure: Element | undefined;
     try {
-      spec.current = chartSpec(chart, state.view, state.hidden, readColours(element, color), width);
+      spec.current = chartSpec(chart, state.hidden, readColours(element, color), width);
       figure = Plot.plot(spec.current.options);
       element.replaceChildren(figure);
       setTip(null);
@@ -93,7 +93,7 @@ export default function ChartFigure({
       {tip && (
         <div
           role="tooltip"
-          className="pointer-events-none absolute z-10 grid max-w-64 gap-0.5 rounded-[10px] border border-border bg-popover px-2.5 py-1.5 text-meta whitespace-nowrap"
+          className="pointer-events-none absolute z-10 grid max-w-64 gap-0.5 rounded-xl border border-border bg-popover px-2.5 py-1.5 text-meta whitespace-nowrap"
           style={{
             left: tip.left,
             top: tip.top,

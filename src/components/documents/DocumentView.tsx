@@ -1,3 +1,6 @@
+import { Hint } from "../shell/Hint";
+import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -58,7 +61,7 @@ const SAVE_DELAY_MS = 1000;
 const DRAFT_REFRESH_MS = 250;
 
 /** The bar over the source and the preview: the formatting buttons, and the preview's state. */
-const BAR = "mt-5 flex h-11 shrink-0 items-center gap-0.5 border-y border-border bg-background px-4";
+const BAR = "mt-5 flex h-11 shrink-0 items-center gap-1 border-y border-border bg-background px-4";
 
 interface Props {
   projectId: Uuid;
@@ -534,7 +537,7 @@ export function DocumentView({
             actions={
               <>
                 <Button
-                  variant={showComments ? "default" : "secondary"}
+                  variant="secondary"
                   aria-pressed={showComments}
                   disabled={blocked}
                   onClick={() => (showComments ? hideComments() : setShowComments(true))}
@@ -624,7 +627,7 @@ export function DocumentView({
             >
               <ListIcon />
             </SourceButton>
-            <span aria-hidden className="mx-1 h-5 w-px bg-border" />
+            <Separator orientation="vertical" className="mx-1 h-5 self-center" />
             <SourceButton
               label="Comment on the selection"
               disabled={drafting || !hasSelection}
@@ -642,37 +645,41 @@ export function DocumentView({
               className="flex min-h-0 min-w-0 flex-col border-r border-border bg-muted"
             >
               {drafting && (
-                <div
+                <Card
                   role="status"
-                  className="mx-6 mt-4 flex items-center gap-3 rounded-card bg-card px-4 py-2.5"
+                  variant="outline"
+                  size="sm"
+                  className="mx-6 mt-4 flex-row items-center gap-3"
                 >
-                  <MiniMeAvatar miniMe={scribe} size={26} />
+                  <MiniMeAvatar miniMe={scribe} size={28} />
                   <span className="flex-1 text-ui text-foreground">Scribe is drafting…</span>
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
                     onClick={() => draftId.current && void api.stopDraft(draftId.current)}
                   >
                     Stop
                   </Button>
-                </div>
+                </Card>
               )}
               {detached.map((suggestion) => (
-                <button
+                <Card
                   key={suggestion.id}
-                  type="button"
-                  onClick={(event) => {
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setChosen({ id: suggestion.id, anchor: at(rect) });
-                  }}
-                  className={cn(
-                    "mx-6 mt-4 truncate rounded-card bg-card px-4 py-2.5 text-left text-ui",
-                    "text-muted-foreground hover:bg-accent focus-visible:outline-2",
-                    "focus-visible:outline-ring",
-                  )}
+                  variant="outline"
+                  size="sm"
+                  render={
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        setChosen({ id: suggestion.id, anchor: at(rect) });
+                      }}
+                    />
+                  }
+                  className="mx-6 mt-4 block cursor-pointer truncate text-left text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   A suggestion by {authorName(suggestion)} lost its passage: “{suggestion.text}”
-                </button>
+                </Card>
               ))}
               <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
                 {/* The source as a page, like the preview's: clicking anywhere on it, even below
@@ -680,7 +687,7 @@ export function DocumentView({
                 <div
                   ref={host}
                   onClick={() => view.current?.focus()}
-                  className="flex min-h-full flex-col rounded-control bg-card"
+                  className="flex min-h-full flex-col rounded-xl bg-card"
                 />
               </div>
             </section>
@@ -746,7 +753,7 @@ function PreviewPages({ pages }: { pages: string[] }) {
             key={url}
             src={url}
             alt={`Page ${index + 1}`}
-            className="w-full rounded-control bg-card"
+            className="w-full rounded-xl bg-card"
           />
         ))}
       </div>
@@ -766,16 +773,17 @@ function SourceButton({
   children: ReactNode;
 }) {
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="text-ink-2"
-    >
-      {children}
-    </Button>
+    <Hint label={label}>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={label}
+        disabled={disabled}
+        onClick={onClick}
+        className="text-ink-2"
+      >
+        {children}
+      </Button>
+    </Hint>
   );
 }

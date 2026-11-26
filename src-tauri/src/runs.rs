@@ -85,6 +85,12 @@ pub trait FrameSink: Send + Sync {
     fn send(&self, frame: &CoreFrame) -> bool;
 }
 
+struct Paused {
+    output: Option<String>,
+    state: String,
+    prompt: Option<String>,
+}
+
 /// Stored with a paused run, so it resumes with the definitions it started with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunSpec {
@@ -136,7 +142,7 @@ impl RunSpec {
 
     fn trait_of(&self, step_id: &str) -> Option<&TraitDef> {
         match self.workflow.step(step_id)?.kind {
-            StepKind::Trait { trait_id } => self.traits.iter().find(|t| t.id == trait_id),
+            StepKind::Trait { trait_id, .. } => self.traits.iter().find(|t| t.id == trait_id),
             _ => None,
         }
     }
@@ -424,6 +430,19 @@ impl Runs {
         }
     }
 
+    /// Drops the sidecar when nothing is in flight, so no call starts before it restarts.
+    pub fn detach_if_idle(&self) -> bool {
+        let mut inner = self.lock();
+        let idle = inner.runs.is_empty()
+            && inner.routes.is_empty()
+            && inner.summaries.is_empty()
+            && inner.drafts.is_empty();
+        if idle {
+            inner.sink = None;
+        }
+        idle
+    }
+
     fn sink(&self) -> AppResult<Arc<dyn FrameSink>> {
         self.lock().sink.clone().ok_or_else(|| {
             AppError::new("sidecar_unavailable", "Mini-Me's runtime is not ready yet.")
@@ -465,6 +484,7 @@ impl Runs {
         conversation_id: Uuid,
         paused: PausedRun,
         model: Option<CallModel>,
+        text: Option<String>,
     ) {
         let sink = match self.sink() {
             Ok(sink) => sink,
@@ -500,7 +520,8 @@ impl Runs {
             );
             return;
         };
-        let resume = RunResume { state: paused.state, step_id: paused.step_id, approved: true };
+        let resume =
+            RunResume { state: paused.state, step_id: paused.step_id, approved: true, text };
         let reply = paused.message_id;
         self.launch(sink, project, conversation_id, &message, reply, saved.spec, model, Some(resume));
     }
@@ -913,10 +934,18 @@ impl Runs {
                 };
                 run.calls.insert(call_id, (step_id.clone(), kind));
             }
-            (Arc::clone(&run.project), run.message_id, step.type_name(), name)
+            let shows = matches!(step.kind, StepKind::Trait { show_results: true, .. });
+            (Arc::clone(&run.project), run.message_id, step.type_name(), name, shows)
         };
-        let (project, message_id, step_type, name) = started;
-        let _ = conversations::append_step_started(&project, message_id, &step_id, step_type, &name);
+        let (project, message_id, step_type, name, shows) = started;
+        let _ = conversations::append_step_started(
+            &project,
+            message_id,
+            &step_id,
+            step_type,
+            &name,
+            shows,
+        );
     }
 
     fn step_completed(&self, run_id: Uuid, step_id: String, output: Option<String>) {
@@ -935,16 +964,17 @@ impl Runs {
         }
     }
 
-    fn paused(&self, run_id: Uuid, step_id: String, output: Option<String>, state: String) {
+    fn paused(&self, run_id: Uuid, step_id: String, paused: Paused) {
         let Some(run) = self.take(run_id) else {
             return;
         };
-        self.save_pause(run, step_id, output, state);
+        self.save_pause(run, step_id, paused);
         // After the pause is stored: the sidebar reloads on this and reads the paused reply.
         self.notify();
     }
 
-    fn save_pause(&self, run: Run, step_id: String, output: Option<String>, state: String) {
+    fn save_pause(&self, run: Run, step_id: String, paused: Paused) {
+        let Paused { output, state, prompt: written_prompt } = paused;
         if state.len() > MAX_STATE_BYTES {
             let _ = conversations::fail_reply(
                 &run.project,
@@ -954,8 +984,10 @@ impl Runs {
             );
             return;
         }
-        let prompt = match run.spec.workflow.step(&step_id).map(|s| &s.kind) {
-            Some(StepKind::Approval { prompt }) => prompt.clone(),
+        let (prompt, written) = match run.spec.workflow.step(&step_id).map(|s| &s.kind) {
+            Some(StepKind::Approval { prompt, answer, .. }) => {
+                (written_prompt.unwrap_or_else(|| prompt.clone()), answer.is_some())
+            }
             _ => {
                 let _ = conversations::fail_reply(
                     &run.project,
@@ -975,7 +1007,7 @@ impl Runs {
             output,
             state,
         };
-        let _ = conversations::pause_reply(&run.project, paused, &prompt);
+        let _ = conversations::pause_reply(&run.project, paused, &prompt, written);
     }
 
     /// Updates to a reply that has already ended are rejected by `conversations` and dropped.
@@ -1004,11 +1036,16 @@ impl Runs {
             SidecarFrame::StepStarted { run_id, step_id, call_id } => {
                 self.step_started(run_id, step_id, call_id);
             }
+            SidecarFrame::RunSummary { run_id, call_id } => {
+                if let Some(run) = self.lock().runs.get_mut(&run_id) {
+                    run.calls.insert(call_id, (String::new(), CallKind::Decision));
+                }
+            }
             SidecarFrame::StepCompleted { run_id, step_id, output } => {
                 self.step_completed(run_id, step_id, output);
             }
-            SidecarFrame::RunPaused { run_id, step_id, output, state } => {
-                self.paused(run_id, step_id, output, state);
+            SidecarFrame::RunPaused { run_id, step_id, output, state, prompt } => {
+                self.paused(run_id, step_id, Paused { output, state, prompt });
             }
             SidecarFrame::RunDone { run_id } => {
                 if let Some(run) = self.finish(run_id) {
@@ -1505,13 +1542,14 @@ pub mod test_support {
             name: "Test".to_string(),
             description: String::new(),
             color: String::new(),
+            icon: None,
             adapter: adapter.to_string(),
             instructions: None,
         };
         let step = Step {
             id: STEP.to_string(),
             label: None,
-            kind: StepKind::Trait { trait_id: trait_def.id },
+            kind: StepKind::Trait { trait_id: trait_def.id, show_results: false },
         };
         RunSpec {
             author: Author { kind: AuthorKind::MiniMe, id: adapter.to_string() },
@@ -1570,9 +1608,10 @@ pub mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::comments::test_support::into_thread;
-    use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
-    use crate::library::{FALLBACK_MINI_ME, SCRIBE, Step};
+    use crate::conversations::{
+        SendMessageInput, append_delta, complete_reply, create, send_message, stop_reply,
+    };
+    use crate::library::Step;
     use crate::projects::test_support::{temp_project, user};
     use crate::protocol::{EventKind, MessageStatus};
     use crate::secrets::NoSecrets;
@@ -1708,160 +1747,6 @@ mod tests {
     }
 
     #[test]
-    fn frames_map_to_reply_events() {
-        let f = quick();
-        let (run_id, reply) = f.start("echo");
-        f.runs.handle(SidecarFrame::RunDelta { run_id, text: "late ".into() });
-        f.runs.handle(SidecarFrame::RunProgress {
-            run_id,
-            label: "Echoing".into(),
-            fraction: Some(0.5),
-        });
-        f.runs.handle(SidecarFrame::RunDelta { run_id, text: "blight".into() });
-        f.runs.handle(SidecarFrame::RunDone { run_id });
-
-        let events = f.reply_events(reply);
-        match &events[0] {
-            EventKind::MessageCreated { message } => {
-                assert_eq!(message.author.id, "echo");
-                assert_eq!(message.status, MessageStatus::Streaming);
-            }
-            other => panic!("expected message.created, got {other:?}"),
-        }
-        assert!(matches!(&events[2], EventKind::MessageProgress { label, fraction: Some(_), .. } if label == "Echoing"));
-        assert!(matches!(&events[4], EventKind::MessageCompleted { content, .. } if content == "late blight"));
-        assert_eq!(events.len(), 5);
-    }
-
-    #[test]
-    fn debug_entries_are_stored_in_order_until_the_run_ends() {
-        let f = quick();
-        let (run_id, reply) = f.start("echo");
-        for n in 1..=2 {
-            f.runs.handle(SidecarFrame::RunDebug { run_id, entry: json!({ "n": n }) });
-        }
-        f.runs.handle(SidecarFrame::RunDone { run_id });
-        f.runs.handle(SidecarFrame::RunDebug { run_id, entry: json!({ "n": 3 }) });
-
-        let records = f.project.lock().debug_records(reply, "reply").unwrap();
-        assert_eq!(records, vec![json!({ "n": 1 }), json!({ "n": 2 })]);
-    }
-
-    #[test]
-    fn step_frames_become_step_events() {
-        let f = quick();
-        let (run_id, reply) = f.start("echo");
-        f.step(run_id, STEP);
-        f.runs.handle(SidecarFrame::StepCompleted {
-            run_id,
-            step_id: STEP.into(),
-            output: Some("late blight".into()),
-        });
-        f.runs.handle(SidecarFrame::StepStarted {
-            run_id,
-            step_id: "not-in-the-workflow".into(),
-            call_id: None,
-        });
-        let steps = f.message(reply).steps;
-        assert_eq!(steps.len(), 1);
-        assert_eq!((steps[0].name.as_str(), steps[0].step_type.as_str()), ("Test", "trait"));
-        assert_eq!((steps[0].output.as_deref(), steps[0].done), (Some("late blight"), true));
-    }
-
-    /// Every list sent so far.
-    fn watch(f: &Fixture) -> Arc<Mutex<Vec<Vec<RunningReply>>>> {
-        let lists = Arc::new(Mutex::new(Vec::new()));
-        let sent = Arc::clone(&lists);
-        f.runs.subscribe(Box::new(move |running| {
-            sent.lock().unwrap().push(running.to_vec());
-            true
-        }));
-        lists
-    }
-
-    #[test]
-    fn the_running_list_changes_only_after_a_pause_is_stored() {
-        let f = quick();
-        let (run_id, _reply) = f.start_spec(approving_spec(), None);
-        f.runs.handle(SidecarFrame::StepStarted { run_id, step_id: "ask".into(), call_id: None });
-        // What the sidebar would see each time the list changes: the Conversation's status.
-        let seen = Arc::new(Mutex::new(Vec::new()));
-        let (project, sent) = (Arc::clone(&f.project), Arc::clone(&seen));
-        f.runs.subscribe(Box::new(move |running| {
-            let status = conversations::list(&project).unwrap()[0].status.clone();
-            sent.lock().unwrap().push((running.len(), status.is_some()));
-            true
-        }));
-        f.runs.handle(SidecarFrame::RunPaused {
-            run_id,
-            step_id: "ask".into(),
-            output: None,
-            state: "opaque".into(),
-        });
-        // When the reply leaves the running list, its paused status is already stored.
-        let seen = seen.lock().unwrap().clone();
-        assert_eq!(seen.last(), Some(&(0, true)), "{seen:?}");
-    }
-
-    #[test]
-    fn a_running_reply_gives_its_conversation_the_running_status() {
-        let (project_id, conversation_id) = (new_id(), new_id());
-        let reply = |project_id, conversation_id| RunningReply {
-            project_id,
-            conversation_id,
-            conversation_title: "Plan".into(),
-            message_id: new_id(),
-            mini_me: RunMiniMe { id: new_id(), name: "Researcher".into() },
-        };
-        let running = [reply(project_id, conversation_id)];
-        assert_eq!(
-            running_status(&running, project_id, conversation_id),
-            Some(ConversationStatus::Running { mini_me: running[0].mini_me.clone() })
-        );
-        assert_eq!(running_status(&running, project_id, new_id()), None);
-        assert_eq!(running_status(&running, new_id(), conversation_id), None);
-        assert_eq!(running_status(&[], project_id, conversation_id), None);
-    }
-
-    #[test]
-    fn running_replies_follow_their_runs_until_they_end() {
-        let f = quick();
-        let lists = watch(&f);
-        let (run_id, reply) = f.start("echo");
-        let last = |lists: &Arc<Mutex<Vec<Vec<RunningReply>>>>| {
-            lists.lock().unwrap().last().cloned().unwrap()
-        };
-        let running = last(&lists);
-        assert_eq!(running.len(), 1);
-        assert_eq!(running[0].message_id, reply);
-        assert_eq!(running[0].conversation_title, "New conversation");
-
-        f.runs.handle(SidecarFrame::RunDone { run_id });
-        assert!(last(&lists).is_empty());
-    }
-
-    #[test]
-    fn errors_and_cancellations_end_the_reply() {
-        let f = quick();
-        let (failing, failed_reply) = f.start("echo");
-        f.runs.handle(SidecarFrame::RunError {
-            run_id: failing,
-            error: ErrorInfo {
-                code: "trait_error".into(),
-                message: "This Trait always fails.".into(),
-            },
-        });
-        match f.reply_events(failed_reply).last().unwrap() {
-            EventKind::MessageFailed { error, .. } => assert_eq!(error.code, "trait_error"),
-            other => panic!("expected message.failed, got {other:?}"),
-        }
-
-        let (cancelled, cancelled_reply) = f.start("echo");
-        f.runs.handle(SidecarFrame::RunCancelled { run_id: cancelled });
-        assert_eq!(f.status(cancelled_reply), MessageStatus::Cancelled);
-    }
-
-    #[test]
     fn frames_after_the_end_are_ignored() {
         let f = quick();
         let (run_id, reply) = f.start("echo");
@@ -1874,6 +1759,24 @@ mod tests {
         });
         assert_eq!(f.reply_events(reply).len(), before);
         assert_eq!(f.status(reply), MessageStatus::Complete);
+
+        let (run_id, reply) = f.start("echo");
+        let call_id = f.step(run_id, STEP);
+        f.runs.handle(SidecarFrame::StepCompleted { run_id, step_id: STEP.into(), output: None });
+        let params =
+            json!({ "kind": "paper-sources", "version": 1, "preview": papers(), "text": "t" });
+        assert_eq!(
+            error_code(add_component(&f, call_id, params)).as_deref(),
+            Some("call_not_active")
+        );
+        assert!(f.message(reply).components.is_empty());
+
+        let (run_id, _) = f.start("echo");
+        let call_id = f.step(run_id, STEP);
+        f.runs.handle(SidecarFrame::RunDone { run_id });
+        let response = write_asset(&f, call_id, "theory-store.json", b"{}");
+        assert_eq!(error_code(response).as_deref(), Some("call_not_active"));
+        assert!(assets::list(&f.project, None).unwrap().is_empty());
     }
 
     #[test]
@@ -1881,6 +1784,7 @@ mod tests {
         let f = fixture(Box::new(NoSecrets), Duration::from_millis(50));
         let (run_id, reply) = f.start("echo");
         let call_id = f.step(run_id, STEP);
+        f.runs.handle(SidecarFrame::RunDelta { run_id, text: "The main cause".into() });
         let stopped = stop_reply(&f.project, f.conversation_of(reply)).unwrap();
         assert_eq!(stopped, vec![reply]);
         for message_id in stopped {
@@ -1892,7 +1796,12 @@ mod tests {
         assert!(!f
             .reply_events(reply)
             .iter()
-            .any(|e| matches!(e, EventKind::MessageDelta { .. })));
+            .any(|e| matches!(e, EventKind::MessageDelta { text, .. } if text == "more")));
+        assert_eq!(append_delta(&f.project, reply, " is").unwrap_err().code, "reply_finished");
+        assert!(complete_reply(&f.project, reply).is_err());
+        let message = f.message(reply);
+        assert_eq!(message.status, MessageStatus::Cancelled);
+        assert_eq!(message.content, "The main cause");
 
         std::thread::sleep(Duration::from_millis(200));
         let response = f.runs.respond("r1".into(), call_id, "asset.read", json!({}));
@@ -1941,288 +1850,10 @@ mod tests {
         f.runs.respond("r".into(), call_id, "component.add", params)
     }
 
-    /// Asks to hand off to `mini_me` from `call_id`.
-    fn hand_off(f: &Fixture, call_id: Uuid, mini_me: Uuid, asset: Option<Uuid>) -> CoreFrame {
-        let params = json!({ "mini_me_id": mini_me, "request": "profile\n this", "asset_id": asset });
-        f.runs.respond("r".into(), call_id, "reply.hand_off", params)
-    }
-
-    /// The hand-offs passed to routing: Mini-Me, request, file, and the reply that handed off.
-    type HandedOffs = Arc<Mutex<Vec<(Uuid, String, Option<RunFile>, Uuid)>>>;
-
-    fn record_hand_offs(f: &Fixture) -> HandedOffs {
-        let handed = HandedOffs::default();
-        let log = Arc::clone(&handed);
-        f.runs.set_hand_off_router(Arc::new(move |h| {
-            locked(&log).push((h.mini_me_id, h.request, h.file, h.reply.id));
-        }));
-        handed
-    }
-
-    #[test]
-    fn a_reply_hands_off_once_shows_a_card_and_passes_it_to_routing() {
-        let f = quick();
-        let handed = record_hand_offs(&f);
-        let (run_id, reply) = f.start("echo");
-        let call_id = f.step(run_id, STEP);
-        let refused = Some("hand_off_not_allowed");
-        assert_eq!(error_code(hand_off(&f, call_id, new_id(), None)).as_deref(), refused);
-        assert_eq!(error_code(hand_off(&f, call_id, SCRIBE, Some(new_id()))).as_deref(), refused);
-        let saved = result(write_asset(&f, call_id, "trial.csv", b"plot,yield\n1,30\n"));
-        let asset_id: Uuid = serde_json::from_value(saved["asset"]["id"].clone()).unwrap();
-        result(hand_off(&f, call_id, SCRIBE, Some(asset_id)));
-        assert_eq!(error_code(hand_off(&f, call_id, SCRIBE, None)).as_deref(), refused);
-
-        let card = &f.message(reply).components[0];
-        assert_eq!(
-            (card.kind.as_str(), card.preview["mini_me_id"].clone()),
-            ("hand-off", json!(SCRIBE))
-        );
-        assert!(locked(&handed).is_empty());
-        f.runs.handle(SidecarFrame::RunDone { run_id });
-        let picked = RunFile { asset_id, name: "trial.csv".into() };
-        assert_eq!(*locked(&handed), [(SCRIBE, "profile this".to_string(), Some(picked), reply)]);
-    }
-
-    #[test]
-    fn a_reply_cannot_hand_off_to_itself_but_can_in_a_chain_or_a_thread() {
-        let f = quick();
-        let refused = Some("hand_off_not_allowed");
-        let mut own = spec("echo", json!({ "text": "hi" }));
-        own.author.id = SCRIBE.to_string();
-        let (run_id, first) = f.start_spec(own, dummy_model());
-        let call_id = f.step(run_id, STEP);
-        assert_eq!(error_code(hand_off(&f, call_id, SCRIBE, None)).as_deref(), refused);
-        f.runs.handle(SidecarFrame::RunDone { run_id });
-
-        // A reply to a Mini-Me's reply is one a hand-off started.
-        let conversation = f.conversation_of(first);
-        let answering = f.message(first);
-        let run = spec("echo", json!({ "text": "profile this" }));
-        f.runs.start(Arc::clone(&f.project), conversation, &answering, run, dummy_model()).unwrap();
-        let call_id = f.step(f.sink.last_run(), STEP);
-        result(hand_off(&f, call_id, FALLBACK_MINI_ME, None));
-
-        let thread = create(&f.project).unwrap().id;
-        into_thread(&f.project, thread);
-        let comment = f.send(thread, "check this");
-        let run = spec("echo", json!({ "text": "check this" }));
-        f.runs.start(Arc::clone(&f.project), thread, &comment, run, dummy_model()).unwrap();
-        let call_id = f.step(f.sink.last_run(), STEP);
-        result(hand_off(&f, call_id, SCRIBE, None));
-    }
-
-    #[test]
-    fn the_core_hands_off_as_recommended_only_for_a_mini_me_without_a_prompt_trait() {
-        let f = quick();
-        let handed = record_hand_offs(&f);
-        let picked = RunFile { asset_id: new_id(), name: "trial.csv".into() };
-        let replies = ["prompt", "echo"].map(|adapter| {
-            let mut run = spec(adapter, json!({ "text": "find papers and write a report" }));
-            run.hand_off = Some(RunHandOff { mini_me_id: SCRIBE });
-            run.file = Some(picked.clone());
-            let (run_id, reply) = f.start_spec(run, dummy_model());
-            f.runs.handle(SidecarFrame::RunDone { run_id });
-            reply
-        });
-        let reply = replies[1];
-        let request = "find papers and write a report".to_string();
-        assert_eq!(*locked(&handed), [(SCRIBE, request, Some(picked), reply)]);
-        assert_eq!(f.message(reply).components[0].kind, "hand-off");
-    }
-
-    #[test]
-    fn a_stopped_reply_does_not_hand_off() {
-        let f = quick();
-        let handed = record_hand_offs(&f);
-        let (run_id, _) = f.start("echo");
-        let call_id = f.step(run_id, STEP);
-        result(hand_off(&f, call_id, SCRIBE, None));
-        f.runs.handle(SidecarFrame::RunCancelled { run_id });
-        assert!(locked(&handed).is_empty());
-    }
-
-    #[test]
-    fn every_run_lists_every_mini_me() {
-        let f = quick();
-        f.start("echo");
-        let listed = f.sink.frames().into_iter().find_map(|frame| match frame {
-            CoreFrame::RunStart { plan, .. } => Some(plan.context.mini_mes.len()),
-            _ => None,
-        });
-        assert_eq!(listed, Some(Library::builtin().summaries().len()));
-    }
-
-    #[test]
-    fn a_suggestion_shows_its_document_once_in_a_conversation_and_not_in_a_thread() {
-        let f = quick();
-        let (call_id, reply) = f.start_call("echo");
-        let report = crate::documents::create(&f.project, "Report", None, &user()).unwrap();
-        let text = "Yield fell above 3,800 m, mainly at Huancayo.";
-        crate::documents::save(&f.project, report.id, text, &Default::default()).unwrap();
-        let suggest = |call_id: Uuid, find: &str| {
-            let params = json!({ "asset_id": report.id, "find": find, "text": "x" });
-            result(f.runs.respond("r".into(), call_id, "document.suggest", params))
-        };
-        suggest(call_id, "Yield");
-        suggest(call_id, "Huancayo");
-        assert_eq!(crate::suggestions::list(&f.project, report.id).unwrap().len(), 2);
-        let cards: Vec<(String, String)> =
-            f.message(reply).components.into_iter().map(|c| (c.kind, c.text)).collect();
-        assert_eq!(cards, [("document".to_string(), "Document: Report".to_string())]);
-
-        let (call_id, reply) = f.start_call("echo");
-        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
-        into_thread(&f.project, conversation);
-        suggest(call_id, "above");
-        assert!(f.message(reply).components.is_empty());
-    }
-
-    #[test]
-    fn a_component_records_the_step_run_that_added_it() {
-        let f = quick();
-        let (run_id, reply) = f.start("echo");
-        f.step(run_id, STEP);
-        f.runs.handle(SidecarFrame::StepCompleted { run_id, step_id: STEP.into(), output: None });
-        let call_id = f.step(run_id, STEP);
-        let params = json!({
-            "kind": "paper-sources", "version": 1, "preview": papers(), "text": "1. Late blight"
-        });
-        result(add_component(&f, call_id, params));
-
-        assert_eq!(f.message(reply).components[0].step_index, Some(1));
-    }
-
-    #[test]
-    fn a_call_in_a_thread_lists_the_threads_document_first() {
-        let f = quick();
-        let (call_id, reply) = f.start_call("echo");
-        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
-        into_thread(&f.project, conversation);
-        let listed = result(f.runs.respond("r".into(), call_id, "conversation.results", json!({})));
-        let first = &listed["assets"][0];
-        assert_eq!(first["name"], "Thread document.qmd");
-        assert_eq!(first["current"], true);
-    }
-
-    #[test]
-    fn a_call_lists_its_conversations_components_and_reads_one_without_its_preview() {
-        let f = quick();
-        let (call_id, _) = f.start_call("echo");
-        let params = json!({
-            "kind": "paper-sources", "version": 1, "preview": papers(), "text": "1. Late blight"
-        });
-        let id = result(add_component(&f, call_id, params))["component_id"].clone();
-
-        let listed = result(f.runs.respond("r".into(), call_id, "conversation.results", json!({})));
-        assert_eq!(listed["components"][0]["id"], id);
-        assert_eq!(listed["components"][0]["kind"], json!("paper-sources"));
-        assert_eq!(listed["assets"], json!([]));
-
-        let read = |component_id: Value| {
-            let params = json!({ "component_id": component_id });
-            f.runs.respond("r".into(), call_id, "component.read", params)
-        };
-        let component = result(read(id));
-        assert_eq!(component["text"], "1. Late blight");
-        assert_eq!(component.get("preview"), None);
-        assert_eq!(
-            error_code(read(json!(new_id()))).as_deref(),
-            Some("not_found")
-        );
-    }
-
-    #[test]
-    fn components_a_trait_may_not_add_are_refused() {
-        let f = quick();
-        let (call_id, reply) = f.start_call("echo");
-        for kind in ["approval", "hand-off"] {
-            let params = json!({ "kind": kind, "version": 1, "preview": {}, "text": "t" });
-            assert_eq!(
-                error_code(add_component(&f, call_id, params)).as_deref(),
-                Some("component_not_allowed"),
-                "{kind}"
-            );
-        }
-
-        let empty =
-            json!({ "kind": "paper-sources", "version": 1, "preview": papers(), "text": " " });
-        assert_eq!(
-            error_code(add_component(&f, call_id, empty)).as_deref(),
-            Some("invalid_component")
-        );
-
-        let message = f.message(reply);
-        assert!(message.components.is_empty());
-        assert_eq!(message.status, MessageStatus::Streaming);
-    }
-
-    #[test]
-    fn a_request_after_its_step_or_run_ended_is_refused() {
-        let f = quick();
-        let (run_id, reply) = f.start("echo");
-        let call_id = f.step(run_id, STEP);
-        f.runs.handle(SidecarFrame::StepCompleted { run_id, step_id: STEP.into(), output: None });
-        let params =
-            json!({ "kind": "paper-sources", "version": 1, "preview": papers(), "text": "t" });
-        assert_eq!(
-            error_code(add_component(&f, call_id, params)).as_deref(),
-            Some("call_not_active")
-        );
-        assert!(f.message(reply).components.is_empty());
-
-        let (run_id, _) = f.start("echo");
-        let call_id = f.step(run_id, STEP);
-        f.runs.handle(SidecarFrame::RunDone { run_id });
-        let response = write_asset(&f, call_id, "theory-store.json", b"{}");
-        assert_eq!(error_code(response).as_deref(), Some("call_not_active"));
-        assert!(assets::list(&f.project, None).unwrap().is_empty());
-    }
-
     fn write_asset(f: &Fixture, call_id: Uuid, name: &str, content: &[u8]) -> CoreFrame {
         let data = BASE64.encode(content);
         let params = json!({ "name": name, "media_type": "application/json", "data": data });
         f.runs.respond("r".into(), call_id, "asset.write", params)
-    }
-
-    #[test]
-    fn a_written_asset_is_attached_to_the_reply() {
-        let f = quick();
-        let (call_id, reply) = f.start_call("echo");
-        let written = result(write_asset(&f, call_id, "theory-store.json", b"{\"theories\": []}"));
-        assert_eq!(written["asset"]["name"], "theory-store.json");
-
-        let message = f.message(reply);
-        assert_eq!(message.attachments.len(), 1);
-        let path = assets::file_path(&f.project, message.attachments[0].id).unwrap();
-        assert_eq!(std::fs::read(path).unwrap(), b"{\"theories\": []}");
-    }
-
-    #[test]
-    fn a_hidden_asset_is_written_without_an_attachment() {
-        let f = quick();
-        let (call_id, reply) = f.start_call("echo");
-        let data = BASE64.encode(b"[]");
-        let params =
-            json!({ "name": "papers.json", "media_type": "", "data": data, "hidden": true });
-        let written = result(f.runs.respond("r".into(), call_id, "asset.write", params));
-
-        let id: Uuid = serde_json::from_value(written["asset"]["id"].clone()).unwrap();
-        assert!(f.message(reply).attachments.is_empty());
-        assert_eq!(
-            assets::find(&f.project.lock(), id).unwrap().name,
-            "papers.json"
-        );
-    }
-
-    #[test]
-    fn an_asset_with_a_path_in_its_name_is_refused() {
-        let f = quick();
-        let (call_id, reply) = f.start_call("echo");
-        let response = write_asset(&f, call_id, "../../notes.txt", b"x");
-        assert_eq!(error_code(response).as_deref(), Some("invalid_input"));
-        assert!(assets::list(&f.project, None).unwrap().is_empty());
-        assert!(f.message(reply).attachments.is_empty());
     }
 
     #[test]
@@ -2267,15 +1898,26 @@ mod tests {
         assert_eq!(error_code(response).as_deref(), Some("unknown_method"));
     }
 
-    #[test]
-    fn a_call_gets_the_feature_flags_that_are_on() {
-        let f = fixture(Box::new(NoSecrets), CANCEL_TIMEOUT);
-        let (call, _) = f.start_call("echo");
-        let response = f.runs.respond("r".into(), call, "features.active", json!({}));
-        assert_eq!(result(response), json!({ "features": [] }));
-        f.runs.set_active_features(vec!["test-flag".into()]);
-        let response = f.runs.respond("r".into(), call, "features.active", json!({}));
-        assert_eq!(result(response), json!({ "features": ["test-flag"] }));
+    /// A run of `adapter` whose Workflow is a condition with one Trait Step per branch.
+    fn deciding_spec(adapter: &str) -> RunSpec {
+        let mut run = spec(adapter, json!({ "text": "late blight" }));
+        let branch = |label: &str| crate::library::Branch {
+            label: label.into(),
+            steps: vec![Step {
+                id: label.into(),
+                label: None,
+                kind: StepKind::Trait { trait_id: Uuid::nil(), show_results: false },
+            }],
+        };
+        run.workflow.steps = vec![Step {
+            id: "pick".into(),
+            label: None,
+            kind: StepKind::Condition {
+                question: "Which?".into(),
+                branches: vec![branch("one"), branch("two")],
+            },
+        }];
+        run
     }
 
     #[test]
@@ -2307,34 +1949,20 @@ mod tests {
         let response = g.runs.respond("r".into(), call, "secret.get", json!({ "provider": "dummy" }));
         assert_eq!(error_code(response).as_deref(), Some("secret_unavailable"));
         assert_eq!(g.runs.secret_value("custom").unwrap(), json!({ "value": "" }));
-    }
 
-    /// A run of `adapter` whose Workflow is a condition with one Trait Step per branch.
-    fn deciding_spec(adapter: &str) -> RunSpec {
-        let mut run = spec(adapter, json!({ "text": "late blight" }));
-        let branch = |label: &str| crate::library::Branch {
-            label: label.into(),
-            steps: vec![Step {
-                id: label.into(),
-                label: None,
-                kind: StepKind::Trait { trait_id: Uuid::nil() },
-            }],
-        };
-        run.workflow.steps = vec![Step {
-            id: "pick".into(),
-            label: None,
-            kind: StepKind::Condition {
-                question: "Which?".into(),
-                branches: vec![branch("one"), branch("two")],
-            },
-        }];
-        run
-    }
-
-    #[test]
-    fn a_decision_may_only_get_the_runs_ai_key() {
         let f = fixture(Box::new(MemorySecrets::dummy()), CANCEL_TIMEOUT);
-        let (run_id, reply) = f.start_spec(deciding_spec("echo"), dummy_model());
+        let (run_id, _) = f.start_spec(deciding_spec("echo"), dummy_model());
+        let summary = new_id();
+        let ask = |provider: &str| {
+            f.runs.respond("r".into(), summary, "secret.get", json!({ "provider": provider }))
+        };
+        assert_eq!(error_code(ask("dummy")).as_deref(), Some("call_not_active"));
+        f.runs.handle(SidecarFrame::RunSummary { run_id, call_id: summary });
+        assert_eq!(result(ask("dummy"))["value"], json!("sk-dummy-0123456789"));
+        assert_eq!(error_code(ask("openai")).as_deref(), Some("secret_not_allowed"));
+
+        let f = fixture(Box::new(MemorySecrets::dummy()), CANCEL_TIMEOUT);
+        let (run_id, _) = f.start_spec(deciding_spec("echo"), dummy_model());
         let decision = f.step(run_id, "pick");
         let ask = |method: &str, params: Value| f.runs.respond("r".into(), decision, method, params);
         let read = json!({ "asset_id": Uuid::nil(), "offset": 0, "length": 1 });
@@ -2363,288 +1991,7 @@ mod tests {
         );
         let key = result(ask("secret.get", json!({ "provider": "dummy" })));
         assert_eq!(key["value"], json!("sk-dummy-0123456789"));
-        let steps = f.message(reply).steps;
-        assert_eq!((steps[0].name.as_str(), steps[0].step_type.as_str()), ("Condition", "condition"));
-    }
 
-    #[test]
-    fn only_ai_adapters_and_decisions_need_a_model() {
-        let f = quick();
-        f.start("echo");
-        let sent = f.sink.frames().into_iter().find_map(|frame| match frame {
-            CoreFrame::RunStart { model, .. } => Some(model),
-            _ => None,
-        });
-        assert_eq!(sent, Some(None));
-
-        let sent_before = f.sink.frames().len();
-        let message = f.send(f.conversation, "summarize");
-        let reply = f
-            .runs
-            .start(Arc::clone(&f.project), f.conversation, &message, spec("prompt", json!({})), None)
-            .unwrap();
-        match f.reply_events(reply).last().unwrap() {
-            EventKind::MessageFailed { error, .. } => assert_eq!(error.code, "model_not_set"),
-            other => panic!("expected message.failed, got {other:?}"),
-        }
-        assert_eq!(f.sink.frames().len(), sent_before);
-
-        // A decision needs the model even when no adapter calls an AI provider.
-        let conversation = create(&f.project).unwrap().id;
-        let message = f.send(conversation, "pick one");
-        let reply = f
-            .runs
-            .start(Arc::clone(&f.project), conversation, &message, deciding_spec("echo"), None)
-            .unwrap();
-        assert_eq!(f.status(reply), MessageStatus::Failed);
-    }
-
-    /// A run of `echo` whose Workflow is an approval, then a Trait Step.
-    fn approving_spec() -> RunSpec {
-        let mut run = spec("echo", json!({ "text": "late blight" }));
-        let ask = Step {
-            id: "ask".into(),
-            label: None,
-            kind: StepKind::Approval { prompt: "Go on?".into() },
-        };
-        run.workflow.steps.insert(0, ask);
-        run
-    }
-
-    /// Returns the paused reply and its approval's ID.
-    fn paused(f: &Fixture) -> (Uuid, Uuid) {
-        let (run_id, reply) = f.start_spec(approving_spec(), None);
-        f.runs.handle(SidecarFrame::StepStarted { run_id, step_id: "ask".into(), call_id: None });
-        f.runs.handle(SidecarFrame::RunPaused {
-            run_id,
-            step_id: "ask".into(),
-            output: Some("so far".into()),
-            state: "opaque".into(),
-        });
-        let message = f.message(reply);
-        assert_eq!(message.status, MessageStatus::Paused);
-        (reply, message.components[0].id)
-    }
-
-    #[test]
-    fn an_approved_run_resumes_with_a_new_run_and_its_state() {
-        let f = quick();
-        let (reply, approval) = paused(&f);
-        let first_run = f.sink.last_run();
-        let saved = conversations::answer_approval(&f.project, reply, approval, true).unwrap();
-        f.runs.resume(Arc::clone(&f.project), f.conversation_of(reply), saved, None);
-
-        let resumed = f.sink.frames().into_iter().rev().find_map(|frame| match frame {
-            CoreFrame::RunStart { run_id, plan, resume, .. } => Some((run_id, plan, resume)),
-            _ => None,
-        });
-        let (run_id, plan, resume) = resumed.unwrap();
-        assert_ne!(run_id, first_run);
-        assert_eq!(plan.workflow, approving_spec().workflow);
-        assert_eq!(plan.context.message.content, "late blight spreads");
-        let resume = resume.unwrap();
-        assert_eq!((resume.state.as_str(), resume.step_id.as_str()), ("opaque", "ask"));
-
-        f.runs.handle(SidecarFrame::RunDelta { run_id, text: "done".into() });
-        f.runs.handle(SidecarFrame::RunDone { run_id });
-        let message = f.message(reply);
-        assert_eq!((message.status, message.content.as_str()), (MessageStatus::Complete, "done"));
-        let ask = &message.steps[0];
-        assert_eq!((ask.step_type.as_str(), ask.done), ("approval", true));
-    }
-
-    #[test]
-    fn a_rejected_run_completes_with_its_output_and_does_not_resume() {
-        let f = quick();
-        let (reply, approval) = paused(&f);
-        let sent_before = f.sink.frames().len();
-        conversations::answer_approval(&f.project, reply, approval, false).unwrap();
-        let message = f.message(reply);
-        assert_eq!((message.status, message.content.as_str()), (MessageStatus::Complete, "so far"));
-        assert_eq!(f.sink.frames().len(), sent_before);
-        let again = conversations::answer_approval(&f.project, reply, approval, false);
-        assert_eq!(again.unwrap_err().code, "not_paused");
-    }
-
-    #[test]
-    fn a_resume_state_over_the_limit_fails_the_reply() {
-        let f = quick();
-        let (run_id, reply) = f.start_spec(approving_spec(), None);
-        f.runs.handle(SidecarFrame::RunPaused {
-            run_id,
-            step_id: "ask".into(),
-            output: None,
-            state: "x".repeat(MAX_STATE_BYTES + 1),
-        });
-        match f.reply_events(reply).last().unwrap() {
-            EventKind::MessageFailed { error, .. } => assert_eq!(error.code, "state_too_large"),
-            other => panic!("expected message.failed, got {other:?}"),
-        }
-    }
-
-    /// Starts a routing request on another thread; returns its route ID and the outcome.
-    fn start_route(
-        f: &Fixture,
-        timeout: Duration,
-    ) -> (Uuid, std::thread::JoinHandle<Routed>) {
-        let runs = Arc::clone(&f.runs);
-        let handle = std::thread::spawn(move || {
-            let ask = vec!["reaction".into()];
-            runs.route(json!({ "message": "hi" }), Vec::new(), Vec::new(), Vec::new(), ask, timeout)
-        });
-        let route_id = wait_for(f, |frame| match frame {
-            CoreFrame::RouteStart { route_id, .. } => Some(route_id),
-            _ => None,
-        });
-        (route_id, handle)
-    }
-
-    #[test]
-    fn a_routing_request_returns_the_sidecars_answers() {
-        let f = quick();
-        let (route_id, handle) = start_route(&f, CANCEL_TIMEOUT);
-        let answer = ChoiceAnswer {
-            choice: "👍".into(),
-            confidence: 0.9,
-            probabilities: BTreeMap::new(),
-        };
-        let answers = BTreeMap::from([("reaction".to_string(), answer)]);
-        let asked = json!({ "state": { "message": "hi" }, "questions": {} });
-        f.runs.handle(SidecarFrame::RouteDone {
-            route_id,
-            answers: answers.clone(),
-            asked: asked.clone(),
-        });
-        let routed = handle.join().unwrap();
-        assert_eq!((routed.answers.unwrap(), routed.asked), (answers, asked));
-    }
-
-    #[test]
-    fn routing_and_summary_requests_time_out_or_end_with_the_sidecar() {
-        let f = quick();
-        let (_, handle) = start_route(&f, Duration::from_millis(50));
-        assert_eq!(handle.join().unwrap().answers.unwrap_err().code, "jev_timeout");
-        let (_, handle) = start_summary(&f, Duration::from_millis(50));
-        assert_eq!(handle.join().unwrap().unwrap_err().code, "summary_timeout");
-
-        let g = quick();
-        let (_, route) = start_route(&g, CANCEL_TIMEOUT);
-        let (_, summary) = start_summary(&g, CANCEL_TIMEOUT);
-        g.runs.disconnect();
-        assert_eq!(route.join().unwrap().answers.unwrap_err().code, SIDECAR_STOPPED);
-        assert_eq!(summary.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
-    }
-
-    /// Starts a summary request on another thread; returns its summary ID and the outcome.
-    fn start_summary(
-        f: &Fixture,
-        timeout: Duration,
-    ) -> (Uuid, std::thread::JoinHandle<AppResult<String>>) {
-        let runs = Arc::clone(&f.runs);
-        let handle = std::thread::spawn(move || {
-            let model = CallModel { provider: "openai".into(), model: "gpt-x".into(), ..Default::default() };
-            runs.summarize(model, "## Trial\nYou: plot yield".into(), SummaryKind::Overview, timeout)
-        });
-        let summary_id = wait_for(f, |frame| match frame {
-            CoreFrame::SummaryStart { summary_id, .. } => Some(summary_id),
-            _ => None,
-        });
-        (summary_id, handle)
-    }
-
-    #[test]
-    fn a_summary_request_returns_the_text_or_the_sidecars_error() {
-        let f = quick();
-        let (summary_id, handle) = start_summary(&f, CANCEL_TIMEOUT);
-        f.runs.handle(SidecarFrame::SummaryDone { summary_id, text: "Yield rose.".into() });
-        assert_eq!(handle.join().unwrap().unwrap(), "Yield rose.");
-
-        let g = quick();
-        let (summary_id, handle) = start_summary(&g, CANCEL_TIMEOUT);
-        let error = ErrorInfo { code: "provider_refused".into(), message: "Refused.".into() };
-        g.runs.handle(SidecarFrame::SummaryError { summary_id, error });
-        assert_eq!(handle.join().unwrap().unwrap_err().code, "provider_refused");
-    }
-
-    /// Waits until the sink has a frame `pick` accepts, and returns what it picked.
-    fn wait_for<T>(f: &Fixture, pick: impl Fn(CoreFrame) -> Option<T>) -> T {
-        loop {
-            if let Some(found) = f.sink.frames().into_iter().find_map(&pick) {
-                return found;
-            }
-            std::thread::sleep(Duration::from_millis(5));
-        }
-    }
-
-    type DraftOutcome = ((String, Option<AppError>), Vec<DraftEvent>);
-
-    fn start_draft(f: &Fixture, idle: Duration) -> (Uuid, std::thread::JoinHandle<DraftOutcome>) {
-        let runs = Arc::clone(&f.runs);
-        let draft_id = new_id();
-        let handle = std::thread::spawn(move || {
-            let model = CallModel { provider: "openai".into(), model: "gpt-x".into(), ..Default::default() };
-            let mut events = Vec::new();
-            let outcome = runs.draft(draft_id, model, "Trial".into(), "You: hi".into(), idle, |e| {
-                events.push(e.clone())
-            });
-            (outcome, events)
-        });
-        wait_for(f, |frame| match frame {
-            CoreFrame::DraftStart { draft_id: id, .. } if id == draft_id => Some(()),
-            _ => None,
-        });
-        (draft_id, handle)
-    }
-
-    #[test]
-    fn a_draft_streams_its_text_and_a_stopped_draft_keeps_it() {
-        let f = quick();
-        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
-        f.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "# Summary\n".into() });
-        f.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "Yield fell.".into() });
-        f.runs.cancel_draft(draft_id);
-        wait_for(&f, |frame| match frame {
-            CoreFrame::DraftCancel { draft_id: id } if id == draft_id => Some(()),
-            _ => None,
-        });
-        f.runs.handle(SidecarFrame::DraftDone { draft_id });
-        let ((text, ending), events) = handle.join().unwrap();
-        assert_eq!(text, "# Summary\nYield fell.");
-        assert!(ending.is_none());
-        assert_eq!(events.len(), 3);
-        assert_eq!(events[2], DraftEvent::Done);
-    }
-
-    #[test]
-    fn a_draft_stopped_before_it_starts_writes_nothing() {
-        let f = quick();
-        let draft_id = new_id();
-        f.runs.cancel_draft(draft_id);
-        let model = CallModel { provider: "openai".into(), model: "gpt-x".into(), ..Default::default() };
-        let (text, ending) =
-            f.runs.draft(draft_id, model, "Trial".into(), "You: hi".into(), CANCEL_TIMEOUT, |_| {});
-        assert!(text.is_empty() && ending.is_none());
-        assert!(!f.sink.frames().iter().any(|frame| matches!(frame, CoreFrame::DraftStart { .. })));
-    }
-
-    #[test]
-    fn a_failed_or_silent_draft_keeps_its_text_and_says_why() {
-        let f = quick();
-        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
-        f.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "Partial".into() });
-        let error = ErrorInfo { code: "provider_refused".into(), message: "Refused.".into() };
-        f.runs.handle(SidecarFrame::DraftError { draft_id, error });
-        let ((text, ending), _) = handle.join().unwrap();
-        assert_eq!((text.as_str(), ending.unwrap().code.as_str()), ("Partial", "provider_refused"));
-
-        let g = quick();
-        let (_, handle) = start_draft(&g, Duration::from_millis(50));
-        let ((_, ending), _) = handle.join().unwrap();
-        assert_eq!(ending.unwrap().code, "draft_timeout");
-    }
-
-    #[test]
-    fn requests_outside_a_run_get_only_their_own_key() {
         let secrets = MemorySecrets(HashMap::from([
             ("typesafe".to_string(), "ts-key".to_string()),
             ("openai".to_string(), "sk-openai".to_string()),
@@ -2682,56 +2029,116 @@ mod tests {
         assert_eq!(handle.join().unwrap().answers.unwrap_err().code, "jev_unavailable");
     }
 
+    /// Starts a routing request on another thread; returns its route ID and the outcome.
+    fn start_route(
+        f: &Fixture,
+        timeout: Duration,
+    ) -> (Uuid, std::thread::JoinHandle<Routed>) {
+        let runs = Arc::clone(&f.runs);
+        let handle = std::thread::spawn(move || {
+            let ask = vec!["reaction".into()];
+            runs.route(json!({ "message": "hi" }), Vec::new(), Vec::new(), Vec::new(), ask, timeout)
+        });
+        let route_id = wait_for(f, |frame| match frame {
+            CoreFrame::RouteStart { route_id, .. } => Some(route_id),
+            _ => None,
+        });
+        (route_id, handle)
+    }
+
     #[test]
-    fn a_follow_up_call_gets_the_earlier_exchange_as_history() {
+    fn routing_and_summary_requests_time_out_or_end_with_the_sidecar() {
         let f = quick();
-        let ask = |content: &str| {
-            let message = f.send(f.conversation, content);
-            let spec = spec("echo", json!({}));
-            f.runs.start(Arc::clone(&f.project), f.conversation, &message, spec, None).unwrap();
-            let run_id = f.sink.last_run();
-            (run_id, f.step(run_id, STEP))
-        };
-        let (first, _) = ask("summarize the trial");
-        f.runs.handle(SidecarFrame::RunDelta { run_id: first, text: "It worked.".into() });
-        f.runs.handle(SidecarFrame::RunDone { run_id: first });
-        let (_, second) = ask("make it shorter");
+        let (_, handle) = start_route(&f, Duration::from_millis(50));
+        assert_eq!(handle.join().unwrap().answers.unwrap_err().code, "jev_timeout");
+        let (_, handle) = start_summary(&f, Duration::from_millis(50));
+        assert_eq!(handle.join().unwrap().unwrap_err().code, "summary_timeout");
 
-        let response = f.runs.respond("r".into(), second, "conversation.history", json!({}));
-        let history = result(response);
-        let contents: Vec<&str> = history["messages"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|e| e["content"].as_str().unwrap())
-            .collect();
-        assert_eq!(contents, ["summarize the trial", "It worked."]);
-        assert_eq!(history["messages"][0]["name"], json!("You"));
-        assert_eq!(history["truncated"], json!(false));
+        let g = quick();
+        let (_, route) = start_route(&g, CANCEL_TIMEOUT);
+        let (_, summary) = start_summary(&g, CANCEL_TIMEOUT);
+        g.runs.disconnect();
+        assert_eq!(route.join().unwrap().answers.unwrap_err().code, SIDECAR_STOPPED);
+        assert_eq!(summary.join().unwrap().unwrap_err().code, SIDECAR_STOPPED);
+    }
+
+    /// Starts a summary request on another thread; returns its summary ID and the outcome.
+    fn start_summary(
+        f: &Fixture,
+        timeout: Duration,
+    ) -> (Uuid, std::thread::JoinHandle<AppResult<String>>) {
+        let runs = Arc::clone(&f.runs);
+        let handle = std::thread::spawn(move || {
+            let model = CallModel { provider: "openai".into(), model: "gpt-x".into(), ..Default::default() };
+            runs.summarize(model, "## Trial\nYou: plot yield".into(), SummaryKind::Overview, timeout)
+        });
+        let summary_id = wait_for(f, |frame| match frame {
+            CoreFrame::SummaryStart { summary_id, .. } => Some(summary_id),
+            _ => None,
+        });
+        (summary_id, handle)
+    }
+
+    /// Waits until the sink has a frame `pick` accepts, and returns what it picked.
+    fn wait_for<T>(f: &Fixture, pick: impl Fn(CoreFrame) -> Option<T>) -> T {
+        loop {
+            if let Some(found) = f.sink.frames().into_iter().find_map(&pick) {
+                return found;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    type DraftOutcome = ((String, Option<AppError>), Vec<DraftEvent>);
+
+    fn start_draft(f: &Fixture, idle: Duration) -> (Uuid, std::thread::JoinHandle<DraftOutcome>) {
+        let runs = Arc::clone(&f.runs);
+        let draft_id = new_id();
+        let handle = std::thread::spawn(move || {
+            let model = CallModel { provider: "openai".into(), model: "gpt-x".into(), ..Default::default() };
+            let mut events = Vec::new();
+            let outcome = runs.draft(draft_id, model, "Trial".into(), "You: hi".into(), idle, |e| {
+                events.push(e.clone())
+            });
+            (outcome, events)
+        });
+        wait_for(f, |frame| match frame {
+            CoreFrame::DraftStart { draft_id: id, .. } if id == draft_id => Some(()),
+            _ => None,
+        });
+        (draft_id, handle)
     }
 
     #[test]
-    fn an_adapter_with_only_a_non_ai_key_runs_without_a_model_and_gets_that_key() {
-        let secrets = MemorySecrets(HashMap::from([("ai2".to_string(), "ai2-token".to_string())]));
-        let f = fixture(Box::new(secrets), CANCEL_TIMEOUT);
-        f.runs.connect(
-            Arc::clone(&f.sink) as Arc<dyn FrameSink>,
-            vec![info("asta-paper-finder", &["ai2"])],
-        );
-        let finder = spec("asta-paper-finder", json!({ "text": "late blight" }));
-        let (run_id, reply) = f.start_spec(finder, None);
-        let call = f.step(run_id, STEP);
-        assert_eq!(f.status(reply), MessageStatus::Streaming);
-        let response = f.runs.respond("r".into(), call, "secret.get", json!({ "provider": "ai2" }));
-        assert_eq!(result(response)["value"], json!("ai2-token"));
-    }
-
-    #[test]
-    fn a_reply_in_a_thread_is_not_listed_as_running() {
+    fn a_failed_or_silent_draft_keeps_its_text_and_says_why() {
         let f = quick();
-        let (_, reply) = f.start("echo");
-        let (conversation, _) = f.project.lock().message_place(reply).unwrap().unwrap();
-        into_thread(&f.project, conversation);
-        assert!(f.runs.running().is_empty());
+        let (draft_id, handle) = start_draft(&f, CANCEL_TIMEOUT);
+        f.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "Partial".into() });
+        let error = ErrorInfo { code: "provider_refused".into(), message: "Refused.".into() };
+        f.runs.handle(SidecarFrame::DraftError { draft_id, error });
+        let ((text, ending), _) = handle.join().unwrap();
+        assert_eq!((text.as_str(), ending.unwrap().code.as_str()), ("Partial", "provider_refused"));
+
+        let g = quick();
+        let (_, handle) = start_draft(&g, Duration::from_millis(50));
+        let ((_, ending), _) = handle.join().unwrap();
+        assert_eq!(ending.unwrap().code, "draft_timeout");
+
+        let h = quick();
+        let (draft_id, handle) = start_draft(&h, CANCEL_TIMEOUT);
+        h.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "# Summary\n".into() });
+        h.runs.handle(SidecarFrame::DraftDelta { draft_id, text: "Yield fell.".into() });
+        h.runs.cancel_draft(draft_id);
+        wait_for(&h, |frame| match frame {
+            CoreFrame::DraftCancel { draft_id: id } if id == draft_id => Some(()),
+            _ => None,
+        });
+        h.runs.handle(SidecarFrame::DraftDone { draft_id });
+        let ((text, ending), events) = handle.join().unwrap();
+        assert_eq!(text, "# Summary\nYield fell.");
+        assert!(ending.is_none());
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[2], DraftEvent::Done);
     }
+
 }

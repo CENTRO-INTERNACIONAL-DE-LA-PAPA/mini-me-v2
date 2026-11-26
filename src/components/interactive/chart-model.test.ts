@@ -1,150 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { type ChartData, chartReducer, initialState, parseChart } from "./chart-model";
-import { type ChartColours, chartSpec } from "./chart-plot";
+import { parseChart } from "./chart-model";
 
-const chart: ChartData = parseChart({
-  title: "Yield by treatment",
-  views: [
-    {
-      type: "histogram",
-      x: { name: "yield", type: "number" },
-      series: ["Control", "Fungicide"],
-      series_column: "treatment",
-      bins: [
-        { x0: 0, x1: 10, count: 3, series: "Control" },
-        { x0: 0, x1: 10, count: 5, series: "Fungicide" },
-      ],
-    },
-    {
-      type: "box",
-      x: { name: "treatment", type: "text" },
-      y: { name: "yield", type: "number" },
-      groups: [
-        { group: "Control", q1: 3, median: 5, q3: 7, low: 1, high: 8, count: 9, outliers: [20] },
-      ],
-    },
-    {
-      type: "heatmap",
-      columns: ["yield", "height"],
-      cells: [{ x: "yield", y: "height", value: 0.6 }],
-    },
-  ],
-});
-
-const colours: ChartColours = {
-  first: "#9769DC",
-  palette: ["#eb6834", "#1baf7a", "#2a78d6", "#eda100", "#e87ba4", "#008300", "#e34948"],
-  negative: "#3d3d3d",
-  card: "#ffffff",
-  grid: "#f1f0eb",
-  axis: "#0a0a0a",
-  muted: "#8a8a8a",
-};
-
-const reduce = chartReducer(chart);
-
-function markData(view: number, hidden: string[] = []) {
-  const marks = (chartSpec(chart, view, hidden, colours, 600).options.marks ?? []) as {
-    data?: unknown;
-  }[];
-  return marks.map((m) => m.data);
+function channel(name: string, column: string) {
+  return { name, column, value: null };
 }
 
-describe("chart version 1", () => {
-  it("refuses data with no view it can draw", () => {
-    expect(() => parseChart({ title: "x", views: [{ type: "map" }] })).toThrow();
-    expect(() => parseChart(null)).toThrow();
-  });
+function mark(name: string, dataset: string | null, ...channels: [string, string][]) {
+  return {
+    mark: name,
+    dataset,
+    values: [],
+    channels: channels.map(([c, column]) => channel(c, column)),
+    options: [],
+  };
+}
 
-  it("hides and shows series, but never the last visible one", () => {
-    const hidden = reduce(initialState, { type: "toggleSeries", series: "Control" });
-    expect(hidden.hidden).toEqual(["Control"]);
-    expect(reduce(hidden, { type: "toggleSeries", series: "Fungicide" })).toBe(hidden);
-    expect(reduce(hidden, { type: "toggleSeries", series: "Control" }).hidden).toEqual([]);
-  });
-
-  it("switches only to views the chart has", () => {
-    expect(reduce(initialState, { type: "chooseView", view: 1 }).view).toBe(1);
-    expect(reduce(initialState, { type: "chooseView", view: 7 })).toBe(initialState);
-  });
-
-  it("leaves hidden series out of the drawn data", () => {
-    const [, bars] = markData(0, ["Control"]);
-    expect((bars as { series: string }[]).map((b) => b.series)).toEqual(["Fungicide"]);
-  });
-
-  it("draws a box plot from its statistics, with outliers as dots", () => {
-    const data = markData(1);
-    expect(data[2]).toBe(chart.views[1].type === "box" ? chart.views[1].groups : null);
-    expect(data[4]).toEqual([{ group: "Control", value: 20 }]);
-  });
-
-  it("colours correlations on a fixed scale from −1 to 1", () => {
-    const { options } = chartSpec(chart, 2, [], colours, 600);
-    expect((options.color as { domain: number[] }).domain).toEqual([-1, 0, 1]);
-  });
-
-  it("gives every series its own colour, generating more past the palette", () => {
-    const series = Array.from({ length: 30 }, (_, i) => `v${i}`);
-    const many = parseChart({
+describe("chart version 2", () => {
+  it("reads rows as objects, dates as UTC days, and refuses data with no mark", () => {
+    const harvest = parseChart({
       title: "",
-      views: [{ type: "histogram", x: { name: "v", type: "number" }, series, bins: [] }],
+      description: { title: "", height: null, marks: [mark("dot", "d")], scales: [] },
+      datasets: { d: { columns: [{ name: "day", type: "date" }], rows: [["2024-03-01"]] } },
     });
-    const range = (chartSpec(many, 0, [], colours, 600).options.color as { range: string[] }).range;
-    expect(range.slice(0, 8)).toEqual([colours.first, ...colours.palette]);
-    expect(new Set(range).size).toBe(30);
-    expect(range[8]).toMatch(/^#[0-9a-f]{6}$/);
-  });
-
-  it("describes the hovered box with its statistics", () => {
-    const [boxes, outliers] = chartSpec(chart, 1, [], colours, 600).tips;
-    expect(boxes.lines(boxes.data[0] as never)).toContainEqual(["Median", "5"]);
-    expect(outliers.lines(outliers.data[0] as never)).toEqual([
-      ["treatment", "Control"],
-      ["yield (outlier)", "20"],
-    ]);
-  });
-});
-
-function tipLines(chart: ChartData, row: unknown) {
-  return chartSpec(chart, 0, [], colours, 600).tips[0].lines(row as never);
-}
-
-describe("chart tooltips", () => {
-  it("label a count bar chart's bars as rows, even with a y column", () => {
-    const bar = { x: "Yungay", y: 3 };
-    const chart: ChartData = {
-      title: "Plots by variety",
-      views: [
-        {
-          type: "bar",
-          x: { name: "variety", type: "text" },
-          y: { name: "yield", type: "number" },
-          aggregate: "count",
-          bars: [bar],
-        },
-      ],
-    };
-    expect(tipLines(chart, bar)).toEqual([
-      ["variety", "Yungay"],
-      ["Rows", "3"],
-    ]);
-  });
-
-  it("show a date on its own day in any time zone", () => {
-    const chart: ChartData = {
-      title: "Harvests",
-      views: [
-        {
-          type: "histogram",
-          x: { name: "harvest", type: "date" },
-          bins: [{ x0: "2024-03-01", x1: "2024-03-08", count: 2 }],
-        },
-      ],
-    };
-    const spec = chartSpec(chart, 0, [], colours, 600);
-    const [[, range]] = spec.tips[0].lines(spec.tips[0].data[0] as never);
-    const day = (d: number) => new Date(2024, 2, d).toLocaleDateString();
-    expect(range).toBe(`${day(1)} – ${day(8)}`);
+    expect(harvest.datasets.d.rows[0].day).toEqual(new Date("2024-03-01T00:00:00Z"));
+    expect(() => parseChart({ title: "x", description: { marks: [] }, datasets: {} })).toThrow();
+    expect(() => parseChart(null)).toThrow();
   });
 });

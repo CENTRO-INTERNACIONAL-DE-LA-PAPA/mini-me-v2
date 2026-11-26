@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import type { Renderers } from "./catalogue";
-import { openLink, webUrl } from "./links";
+import { webUrl } from "./links";
+import { ResultCard } from "./ResultCard";
 
 /** A paper in `paper-sources` version 1 preview, `{ papers }`, as *Find Papers* builds it. */
 interface Paper {
@@ -14,38 +15,13 @@ interface Paper {
 }
 
 /** How many sources show before "Show all sources". */
-export const SHOWN_SOURCES = 5;
+const SHOWN_SOURCES = 5;
 
 function byline(paper: Paper): string {
   const authors = paper.authors ?? [];
   const names = authors.slice(0, 3).join(", ") + (authors.length > 3 ? " et al." : "");
   const year = paper.year ? ` (${paper.year})` : "";
   return [names, paper.venue].filter(Boolean).join(", ") + year;
-}
-
-function SourceCard({ paper }: { paper: Paper }) {
-  const url = webUrl(paper.url);
-  const body = (
-    <>
-      <span className="line-clamp-2 text-ui font-semibold text-foreground">{paper.title}</span>
-      {byline(paper) && <span className="text-meta text-muted-foreground">{byline(paper)}</span>}
-      {paper.reason && <span className="line-clamp-3 text-meta text-ink-2">{paper.reason}</span>}
-    </>
-  );
-  const card = "flex w-full flex-col gap-1 rounded-xl border border-card-edge bg-card px-4 py-3 text-left";
-  if (!url) {
-    return <div className={card}>{body}</div>;
-  }
-  return (
-    <button
-      type="button"
-      title={url}
-      className={`${card} cursor-pointer transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring`}
-      onClick={() => openLink(url)}
-    >
-      {body}
-    </button>
-  );
 }
 
 function PaperSources({ preview }: { preview: unknown }) {
@@ -55,10 +31,16 @@ function PaperSources({ preview }: { preview: unknown }) {
   return (
     <section aria-label="Sources" className="flex flex-col gap-2">
       {shown.map((paper, index) => (
-        <SourceCard key={index} paper={paper} />
+        <ResultCard
+          key={index}
+          title={paper.title}
+          url={webUrl(paper.url)}
+          byline={byline(paper)}
+          description={paper.reason}
+        />
       ))}
       {papers.length > SHOWN_SOURCES && (
-        <Button variant="outline" className="self-start" onClick={() => setAll(!all)}>
+        <Button variant="secondary" className="self-start" onClick={() => setAll(!all)}>
           {all ? "Show fewer" : `Show all sources (${papers.length})`}
         </Button>
       )}

@@ -10,7 +10,6 @@ from mini_me_sidecar.adapters.base import (
     Adapter,
     AdapterInfo,
     component_or_text,
-    require_model,
 )
 from mini_me_sidecar.adapters.providers import PROVIDER_NAMES, ask_structured
 from mini_me_sidecar.context import CallContext, TraitError
@@ -59,14 +58,13 @@ def datasets_text(datasets: list[dict[str, Any]]) -> str:
 
 
 async def _write_search(ctx: CallContext, text: str) -> DataverseSearch:
-    model = require_model(ctx)
     turns = [("system", ctx.trait.instructions or ""), ("human", text)]
     answer = await ask_structured(ctx, DataverseSearch, turns)
     if not isinstance(answer, DataverseSearch):
         raise TraitError(
             "provider_empty",
-            f"{model.model} gave no usable answer. Try again, or choose another model in "
-            "Settings.",
+            "I couldn't turn this request into a Dataverse search. Try again, perhaps naming "
+            "what you're looking for.",
         )
     return answer
 

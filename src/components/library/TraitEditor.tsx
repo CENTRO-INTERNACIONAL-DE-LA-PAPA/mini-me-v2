@@ -1,23 +1,29 @@
+import { cn } from "@/lib/utils";
+import { LabelledField } from "../shell/LabelledField";
+import { ConfirmButton } from "../shell/Confirm";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { PuzzleIcon } from "lucide-react";
 import { api } from "../../api";
 import type { MiniMe, TraitDraft, TraitSummary } from "../../protocol/types";
+import { traitIcon } from "../../lib/traitIcons";
 import { NIL_ID } from "./library";
-import { DeleteButton, EditorHeader, EditorPage, Field } from "./LibraryParts";
+import { EDITOR_BODY, EditorHeader, EditorPage } from "./LibraryParts";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { MiniMeSurface } from "../minime/MiniMeSurface";
 import { SheetSection } from "../shell/Sheet";
 import type { View } from "../shell/view";
+import { TraitIconPicker } from "./TraitIconPicker";
 import { useDefinitionDraft } from "./useDefinitionDraft";
 
-const EMPTY: TraitDraft = { id: NIL_ID, name: "", description: "", instructions: "" };
+const EMPTY: TraitDraft = { id: NIL_ID, name: "", description: "", icon: null, instructions: "" };
 
 const draftOf = (t: TraitSummary): TraitDraft => ({
   id: t.id,
   name: t.name,
   description: t.description,
+  icon: t.icon,
   instructions: t.instructions ?? "",
 });
 
@@ -67,6 +73,7 @@ export function TraitEditor({
   const readOnly = builtIn || !!library.unreadable;
   const users = (saved?.used_by ?? []).map((m) => library.mini_mes.find((x) => x.id === m));
   const update = (change: Partial<TraitDraft>) => setDraft({ ...draft, ...change });
+  const HeaderIcon = traitIcon(draft.icon);
 
   const actions = builtIn ? (
     promptBased && (
@@ -77,7 +84,13 @@ export function TraitEditor({
   ) : (
     <>
       {saved && !library.unreadable && (
-        <DeleteButton question={`Delete ${draft.name}? This can't be undone.`} onDelete={remove} />
+        <ConfirmButton
+                    trigger={<Button variant="secondary" />}
+                    question={`Delete ${draft.name}? This can't be undone.`}
+                    onConfirm={remove}
+                  >
+                    Delete
+                  </ConfirmButton>
       )}
       <Button disabled={readOnly} onClick={save}>
         Save
@@ -89,17 +102,28 @@ export function TraitEditor({
     <div className="flex flex-col">
       <EditorHeader
         title={draft.name || "New Trait"}
-        icon={<PuzzleIcon className="size-6" />}
+        icon={
+          readOnly ? (
+            <HeaderIcon className="size-6" />
+          ) : (
+            <TraitIconPicker icon={draft.icon} onPick={(icon) => update({ icon })} />
+          )
+        }
         subtitle={builtIn ? "Built-in Trait" : saved ? "Your Trait" : "Not saved yet"}
         back="Traits"
         actions={actions}
         problems={problems}
         onBack={onBack}
       />
-      <div className="grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5 pt-6 pr-7 pb-8 pl-8 max-lg:grid-cols-1">
-        <div className="grid gap-[18px]">
+      <div
+        className={cn(
+          EDITOR_BODY,
+          "grid grid-cols-[minmax(0,1fr)_340px] items-start gap-8 max-lg:grid-cols-1",
+        )}
+      >
+        <div className="grid gap-6">
           {!builtIn && (
-            <Field label="Name" htmlFor="trait-name">
+            <LabelledField label="Name" htmlFor="trait-name">
               <Input
                 id="trait-name"
                 placeholder="An imperative verb in Title Case, like Translate"
@@ -107,19 +131,19 @@ export function TraitEditor({
                 disabled={readOnly}
                 onChange={(e) => update({ name: e.target.value })}
               />
-            </Field>
+            </LabelledField>
           )}
-          <Field label="What it does" htmlFor="trait-description">
+          <LabelledField label="What it does" htmlFor="trait-description">
             <Input
               id="trait-description"
               value={draft.description}
               disabled={readOnly}
               onChange={(e) => update({ description: e.target.value })}
             />
-          </Field>
+          </LabelledField>
           {promptBased ? (
             <>
-              <Field label="Instructions" htmlFor="trait-instructions">
+              <LabelledField label="Instructions" htmlFor="trait-instructions">
                 <Textarea
                   id="trait-instructions"
                   className="min-h-40"
@@ -128,7 +152,7 @@ export function TraitEditor({
                   disabled={readOnly}
                   onChange={(e) => update({ instructions: e.target.value })}
                 />
-              </Field>
+              </LabelledField>
             </>
           ) : (
             <p className="text-meta text-muted-foreground">
@@ -148,7 +172,9 @@ function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: bo
   return (
     <SheetSection title="Used by" meta={users.length > 0 ? users.length : undefined}>
       {users.length === 0 ? (
-        <p className="text-ui text-muted-foreground">No Mini-Me runs this Trait yet.</p>
+        <Empty>
+          <EmptyDescription>No Mini-Me runs this Trait yet.</EmptyDescription>
+        </Empty>
       ) : (
         <ul className="grid gap-2">
           {users.map((m, i) => (
@@ -156,9 +182,9 @@ function UsedBy({ users, builtIn }: { users: (MiniMe | undefined)[]; builtIn: bo
               key={m?.id ?? i}
               miniMe={m}
               render={<li />}
-              className="flex items-center gap-3 rounded-2xl px-3.5 py-3"
+              className="flex items-center gap-3 p-4"
             >
-              <MiniMeAvatar miniMe={m} size={32} />
+              <MiniMeAvatar miniMe={m} size={28} />
               <span className="grid min-w-0">
                 <span className="truncate font-medium text-foreground">{m?.name ?? "Mini-Me"}</span>
                 {!builtIn && (

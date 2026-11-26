@@ -9,7 +9,7 @@ import type { MessageStatus, RunningReply, Uuid } from "../protocol/types";
 import { useRunningReplies } from "./useRunningReplies";
 
 /** The notice for a reply that stopped running; null when it needs none, as when cancelled. */
-export function replyNotice(
+function replyNotice(
   reply: RunningReply,
   status: MessageStatus | null,
 ): { title: string; body: string } | null {

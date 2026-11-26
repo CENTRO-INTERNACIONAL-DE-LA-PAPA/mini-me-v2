@@ -1,11 +1,14 @@
-"""The fixed lists the AI model chooses from: data checks, cleaning actions, how to join two
-tables and which charts to draw. The model fills these schemas; entries that don't fit the
+"""The fixed lists the AI model chooses from: data checks, cleaning actions and how to join two
+tables (charts are in `charts.py`). The model fills these schemas; entries that don't fit the
 tables are dropped before anything runs."""
 
 import re
 from typing import Literal, Union
 
+import pandas as pd
 from pydantic import BaseModel
+
+from mini_me_sidecar.adapters.data.tables import column_type
 
 ColumnType = Literal["number", "text", "date", "boolean"]
 
@@ -207,90 +210,101 @@ class JoinPlan(BaseModel):
     how: Literal["inner", "left", "right", "outer"]
 
 
-ChartType = Literal["histogram", "bar", "line", "scatter", "box", "heatmap"]
+class ColumnsPlan(BaseModel):
+    """The columns the message asks about; empty when it names none."""
+
+    columns: list[str] = []
 
 
-class Chart(BaseModel):
-    """One chart of the table. Which fields a type uses:
-    - histogram: `x` (number or date), optional `series`;
-    - bar: `x` (text or boolean), `aggregate` of `y` (number), or `count` with no `y`,
-      optional `series`;
-    - line: `x` (date or number), `y` (number), `aggregate` for repeated `x` values,
-      optional `series`;
-    - scatter: `x` and `y` (numbers), optional `series`;
-    - box: `x` (text or boolean groups), `y` (number);
-    - heatmap: `columns` (two or more numbers), drawn as their correlations.
-    Unused fields are null or empty. `alternatives` names other types that show the same
-    columns well; the user can switch to them."""
+class CorrelationPlan(ColumnsPlan):
+    """The number columns to correlate (empty for every one) and the coefficient: Pearson's,
+    unless the message asks for ranks or Spearman's."""
 
-    type: ChartType
-    title: str
-    x: str | None
-    y: str | None
-    columns: list[str]
-    series: str | None
-    aggregate: Literal["count", "sum", "mean", "median"] | None
-    alternatives: list[ChartType]
+    method: Literal["pearson", "spearman"] = "pearson"
 
 
-class ChartPlan(BaseModel):
-    """The charts to draw: the fewest that answer the message."""
+class OutlierPlan(ColumnsPlan):
+    """The number columns to check (empty for every one), and whether the message asks only for
+    extreme outliers: three interquartile ranges beyond the quartiles instead of 1.5."""
 
-    charts: list[Chart]
-
-
-# The column types each axis of a chart type accepts.
-CHART_AXES: dict[str, dict[str, tuple[str, ...]]] = {
-    "histogram": {"x": ("number", "date")},
-    "bar": {"x": ("text", "boolean"), "y": ("number",)},
-    "line": {"x": ("date", "number"), "y": ("number",)},
-    "scatter": {"x": ("number",), "y": ("number",)},
-    "box": {"x": ("text", "boolean"), "y": ("number",)},
-    "heatmap": {},
-}
-
-SERIES_TYPES = ("text", "boolean")
+    extreme: bool = False
 
 
-def chart_axes(chart: Chart) -> dict[str, tuple[str, ...]]:
-    """The axes `chart` reads a column for, with the column types each accepts. A count bar
-    chart has no `y`."""
-    axes = dict(CHART_AXES[chart.type])
-    if chart.type == "bar" and (chart.aggregate or "count") == "count":
-        axes.pop("y")
-    return axes
+class ClusterPlan(ColumnsPlan):
+    """The number columns to group the rows by (empty for every one), the method, and the
+    number of clusters only when the message names one."""
+
+    method: Literal["kmeans", "hdbscan"] = "kmeans"
+    clusters: int | None = None
 
 
-def chart_problem(chart: Chart, types: dict[str, str]) -> str | None:
-    """Why `chart` can't be drawn from a table whose columns have `types`, or None when it
-    can."""
-    if chart.type == "heatmap":
-        columns = list(dict.fromkeys(chart.columns))
-        missing = [c for c in columns if c not in types]
-        if missing:
-            return "no column " + ", ".join(f"`{c}`" for c in missing)
-        if len(columns) < 2:
-            return "a heatmap needs at least 2 number columns"
-        wrong = [c for c in columns if types[c] != "number"]
-        if wrong:
-            return ", ".join(f"`{c}`" for c in wrong) + " is not a number column"
-        return None
-    for axis, allowed in chart_axes(chart).items():
-        column = getattr(chart, axis)
-        if column is None:
-            return f"no `{axis}` column given"
-        if column not in types:
-            return f"no column `{column}`"
-        if types[column] not in allowed:
-            return f"`{column}` is a {types[column]} column, and a {chart.type} needs " + (
-                " or ".join(allowed) + f" for `{axis}`"
-            )
-    if chart.series is not None and chart.type != "box":
-        if chart.series not in types:
-            return f"no column `{chart.series}`"
-        if types[chart.series] not in SERIES_TYPES:
-            return f"`{chart.series}` is a {types[chart.series]} column, and series need text"
+class GroupsPlan(BaseModel):
+    """The number column to compare (`value`), the column whose values form the groups
+    (`groups`), and the reference group only when the message names one."""
+
+    value: str
+    groups: str
+    reference: str | None = None
+
+
+class DriversPlan(BaseModel):
+    """The number column to explain (`outcome`) and the columns that might go with it
+    (`drivers`)."""
+
+    outcome: str
+    drivers: list[str]
+
+
+class ConfoundersPlan(BaseModel):
+    """The number column to explain (`outcome`), the one column whose link to it is checked
+    (`focus`), the columns to account for (`controls`), and a column to look within each value
+    of (`subgroups`) only when the message asks for it."""
+
+    outcome: str
+    focus: str
+    controls: list[str] = []
+    subgroups: str | None = None
+
+
+class TrendsPlan(BaseModel):
+    """The number column to follow (`value`), the date or number column it changes over
+    (`time`), a column to follow each value of separately (`group`) only when the message asks,
+    and `change_date`, a date or time from the message to compare before and after, only when
+    it names one."""
+
+    value: str
+    time: str
+    group: str | None = None
+    change_date: str | None = None
+
+
+def role_problem(frame: pd.DataFrame, column: str, role: str, kinds: tuple[str, ...]) -> str | None:
+    if column not in frame.columns:
+        return f"The table has no column `{column}` for the {role}."
+    kind = column_type(frame[column])
+    if kind not in kinds:
+        return f"`{column}` is a {kind} column, and the {role} needs {' or '.join(kinds)}."
     return None
+
+
+def pick_columns(
+    frame: pd.DataFrame, named: list[str], kinds: tuple[str, ...]
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """The `named` columns whose type is one of `kinds`, or every such column when none is
+    named, and the named columns left out with the reasons."""
+    types = {str(c): column_type(frame[c]) for c in frame.columns}
+    if not named:
+        return [c for c, kind in types.items() if kind in kinds], []
+    picked, left_out = [], []
+    for name in dict.fromkeys(named):
+        if name not in types:
+            left_out.append((f"Column `{name}`", "the table has no such column"))
+        elif types[name] not in kinds:
+            wanted = " or ".join(kinds)
+            left_out.append((f"Column `{name}`", f"it is a {types[name]} column, not {wanted}"))
+        else:
+            picked.append(name)
+    return picked, left_out
 
 
 def columns_of(entry: BaseModel) -> list[str]:
@@ -332,9 +346,6 @@ def problem(entry: BaseModel, columns: list[str]) -> str | None:
 
 def describe_entry(entry: BaseModel) -> str:
     """A short label for an entry, such as `in_range(yield, 0–80)`."""
-    if isinstance(entry, Chart):
-        named = entry.columns if entry.type == "heatmap" else [entry.x, entry.y, entry.series]
-        return f"{entry.type}({', '.join(c for c in named if c)})"
     fields = entry.model_dump(exclude={"kind"})
     parts = [f"{k}={v}" for k, v in fields.items() if v is not None]
     kind = getattr(entry, "kind", type(entry).__name__)

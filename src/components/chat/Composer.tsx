@@ -1,3 +1,4 @@
+import { Hint } from "../shell/Hint";
 import { Extension } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import HardBreak from "@tiptap/extension-hard-break";
@@ -34,6 +35,7 @@ import {
   SquareIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ErrorText } from "../shell/ErrorText";
 
 interface Props {
   projectId: string;
@@ -322,28 +324,30 @@ export function Composer({
     }
   }
 
-  const size = thread ? "size-7" : "size-[34px]";
+  const size = thread ? "size-7" : "size-8.5";
   const action = replying ? (
-    <Button
-      size="icon"
-      className={cn(size, "shrink-0 rounded-full", asked && "bg-(--mm-ink)")}
-      aria-label="Stop the reply"
-      title="Stop the reply"
-      onClick={stop}
-    >
-      <SquareIcon className="size-3 fill-current" />
-    </Button>
+    <Hint label="Stop the reply">
+      <Button
+        size="icon"
+        className={cn(size, "shrink-0 rounded-full", asked && "bg-(--mm-ink)")}
+        aria-label="Stop the reply"
+        onClick={stop}
+      >
+        <SquareIcon className="size-3 fill-current" />
+      </Button>
+    </Hint>
   ) : (
-    <Button
-      size="icon"
-      className={cn(size, "shrink-0 rounded-full", asked && "bg-(--mm-ink)")}
-      aria-label="Send"
-      title="Send"
-      onClick={send}
-      disabled={empty || !ready || choosing}
-    >
-      <ArrowUpIcon />
-    </Button>
+    <Hint label="Send">
+      <Button
+        size="icon"
+        className={cn(size, "shrink-0 rounded-full", asked && "bg-(--mm-ink)")}
+        aria-label="Send"
+        onClick={send}
+        disabled={empty || !ready || choosing}
+      >
+        <ArrowUpIcon />
+      </Button>
+    </Hint>
   );
 
   return (
@@ -351,7 +355,7 @@ export function Composer({
     // comment thread's card it sits in place.
     <div
       className={cn(
-        thread ? "relative" : "absolute inset-x-0 bottom-[22px] z-20",
+        thread ? "relative" : "absolute inset-x-0 bottom-5.5 z-20",
         !thread && chatColumn(narrow, "composer"),
       )}
     >
@@ -362,7 +366,7 @@ export function Composer({
             query?.kind === "mini_me" ? "Mini-Mes" : "Files"
           }
           className={cn(
-            "absolute bottom-full left-9 mb-2 max-h-80 w-80 overflow-y-auto rounded-well border",
+            "absolute bottom-full left-9 mb-2 max-h-80 w-80 overflow-y-auto rounded-xl border",
             "border-border bg-popover p-1 text-popover-foreground",
           )}
         >
@@ -385,7 +389,7 @@ export function Composer({
           ))}
         </div>
       )}
-      {error && <p className="mb-2 text-meta text-destructive">{error}</p>}
+      {error && <ErrorText className="mb-2">{error}</ErrorText>}
       {!ready && sidecar && (
         <p role="status" className="mb-2 text-meta text-muted-foreground">
           {sidecar.detail}
@@ -395,7 +399,7 @@ export function Composer({
       {thread ? (
         <div
           style={surfaceStyle(asked?.colors)}
-          className="rounded-control border border-edge bg-card p-1"
+          className="rounded-lg border border-edge bg-card p-1"
         >
           <AttachmentTray
             projectId={projectId}
@@ -410,7 +414,7 @@ export function Composer({
       ) : (
         <div
           style={surfaceStyle(asked?.colors)}
-          className="rounded-composer border border-edge bg-card px-1.5 pt-1"
+          className="rounded-2xl border border-edge bg-card px-1.5 pt-1"
         >
           <AttachmentTray
             projectId={projectId}
@@ -418,37 +422,40 @@ export function Composer({
             onRemove={(asset) => setAttachments((current) => current.filter((a) => a !== asset))}
           />
           <EditorContent editor={editor} className="composer-editor" />
-          <div className="flex items-center gap-0.5 px-1 pb-2.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Mention a Mini-Me"
-              title="Mention a Mini-Me"
-              onClick={() => startReference("@")}
-            >
-              <AtSignIcon />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Reference a file"
-              title="Reference a file"
-              onClick={() => startReference("#")}
-            >
-              <FileSearchIcon />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Attach files"
-              title="Attach files"
-              onClick={attach}
-            >
-              <PaperclipIcon />
-            </Button>
+          <div className="flex items-center gap-1 px-1 pb-2.5">
+            <Hint label="Mention a Mini-Me">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Mention a Mini-Me"
+                onClick={() => startReference("@")}
+              >
+                <AtSignIcon />
+              </Button>
+            </Hint>
+            <Hint label="Reference a file">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Reference a file"
+                onClick={() => startReference("#")}
+              >
+                <FileSearchIcon />
+              </Button>
+            </Hint>
+            <Hint label="Attach files">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Attach files"
+                onClick={attach}
+              >
+                <PaperclipIcon />
+              </Button>
+            </Hint>
             <span className="ml-2 flex-1 truncate text-meta text-muted-foreground">
               {asked ? (
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-2">
                   Asking <MiniMePill miniMe={asked}>{asked.name}</MiniMePill>
                 </span>
               ) : (
@@ -483,7 +490,7 @@ function SuggestionRow({
       aria-selected={selected}
       ref={row}
       className={cn(
-        "flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5",
+        "flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-lg px-2.5 py-2",
         "text-left",
         selected ? "bg-accent" : "hover:bg-accent",
       )}

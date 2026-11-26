@@ -2,12 +2,12 @@ import type { Edge, Node } from "@xyflow/react";
 import type { WorkflowStep } from "../../protocol/types";
 import type { ListPath, PathPart, Slot } from "./workflowEdit";
 
-const TRAIT_NODE = { width: 180, height: 40 };
+const TRAIT_NODE = { width: 220, height: 40 };
 const APPROVAL_NODE = { width: 220, height: 56 };
-const PILL = { width: 180, height: 32 };
+const PILL = { width: 220, height: 32 };
 export const EMPTY_SLOT = { width: 160, height: 40 };
 const JOIN = 8;
-const GAP_Y = 44;
+export const GAP_Y = 44;
 const GAP_X = 40;
 const LOOP_PAD = 20;
 

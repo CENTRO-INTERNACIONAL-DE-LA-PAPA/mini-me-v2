@@ -1,0 +1,45 @@
+{
+  "name": "range_bars",
+  "description": "The lowest to highest value of each category as a line, with the mean as a dot.",
+  "slots": {"category": {"types": ["text", "boolean", "number"]}, "value": {"types": ["number"]}},
+  "chart": {
+    "datasets": [
+      {
+        "name": "ranges",
+        "operations": [
+          {
+            "kind": "group",
+            "by": ["{category}"],
+            "aggregates": [
+              {"how": "min", "column": "{value}", "name": "min_{value}"},
+              {"how": "mean", "column": "{value}", "name": "mean_{value}"},
+              {"how": "max", "column": "{value}", "name": "max_{value}"}
+            ]
+          }
+        ]
+      }
+    ],
+    "marks": [
+      {
+        "mark": "ruleX",
+        "dataset": "ranges",
+        "channels": [
+          {"name": "x", "column": "{category}"},
+          {"name": "y1", "column": "min_{value}"},
+          {"name": "y2", "column": "max_{value}"}
+        ]
+      },
+      {
+        "mark": "dot",
+        "dataset": "ranges",
+        "channels": [
+          {"name": "x", "column": "{category}"},
+          {"name": "y", "column": "mean_{value}"},
+          {"name": "r", "value": 4}
+        ],
+        "options": [{"name": "sort", "value": {"x": "-y"}}]
+      }
+    ],
+    "scales": [{"scale": "y", "label": "{value}"}]
+  }
+}

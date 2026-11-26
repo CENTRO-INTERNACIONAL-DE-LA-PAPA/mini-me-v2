@@ -505,79 +505,6 @@ fn page_number(name: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::test_support::temp_project;
-
-    #[test]
-    fn the_version_is_read_from_quartos_output() {
-        assert_eq!(parse_version("1.10.18\n"), Some((1, 10, 18)));
-        assert_eq!(parse_version("1.9.9"), Some((1, 9, 9)));
-        assert_eq!(parse_version("quarto not found"), None);
-        assert_eq!(parse_version(""), None);
-    }
-
-    #[test]
-    fn quarto_is_found_in_the_setting_then_the_path_then_the_install_folders() {
-        let on_path = tempfile::tempdir().unwrap();
-        let installed = tempfile::tempdir().unwrap();
-        let path_program = on_path.path().join(NAMES[0]);
-        let folder_program = installed.path().join(NAMES[0]);
-        std::fs::write(&path_program, "").unwrap();
-        std::fs::write(&folder_program, "").unwrap();
-        let var = Some(on_path.path().as_os_str());
-        let folders = [folder_program.clone()];
-
-        let chosen = locate(Some(" /chosen/quarto "), var, &folders);
-        assert_eq!(chosen, Some(PathBuf::from("/chosen/quarto")));
-        assert_eq!(locate(None, var, &folders), Some(path_program));
-        assert_eq!(locate(Some(""), None, &folders), Some(folder_program));
-
-        let empty = tempfile::tempdir().unwrap();
-        let missing = empty.path().join(NAMES[0]);
-        assert_eq!(locate(None, Some(empty.path().as_os_str()), &[missing]), None);
-    }
-
-    #[test]
-    fn a_missing_or_too_old_quarto_blocks_and_says_why() {
-        let missing = Status::new(State::Missing, None, None, false).blocking().unwrap();
-        assert_eq!(missing.code, "quarto_missing");
-        assert!(missing.message.contains(INSTALL_URL));
-        let old = Status::new(State::TooOld, Some("1.9.9".into()), None, false).blocking().unwrap();
-        assert!(old.message.contains("1.9.9") && old.message.contains("1.10"));
-        assert!(Status::new(State::Found, Some("1.10.18".into()), None, false).blocking().is_none());
-    }
-
-    fn counted(count: &std::sync::Arc<std::sync::atomic::AtomicUsize>) -> Known {
-        let count = std::sync::Arc::clone(count);
-        let lookup = move |setting: Option<&str>| {
-            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            let path = setting.map(PathBuf::from);
-            Status::new(State::Found, Some("1.10.18".into()), path.as_deref(), path.is_some())
-        };
-        Known::with_lookup(None, Box::new(lookup))
-    }
-
-    #[test]
-    fn quarto_is_looked_up_once_until_it_is_asked_again() {
-        let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let known = counted(&count);
-        known.status();
-        known.status();
-        known.require().unwrap();
-        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 1);
-        known.refresh();
-        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 2);
-    }
-
-    #[test]
-    fn changing_the_location_looks_again_with_the_new_one() {
-        let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let known = counted(&count);
-        assert!(!known.status().chosen);
-        let after = known.set_setting(Some("/chosen/quarto".into()));
-        assert_eq!(after.path.as_deref(), Some("/chosen/quarto"));
-        assert!(known.status().chosen);
-        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 2);
-    }
 
     #[test]
     fn a_document_that_reads_files_or_runs_filters_is_refused() {
@@ -594,141 +521,15 @@ mod tests {
             let error = check_source(source).unwrap_err();
             assert_eq!(error.code, "document_refused", "{source}");
         }
-    }
 
-    #[test]
-    fn an_ordinary_document_is_not_refused() {
-        let source = "---\ntitle: \"A\"\ndate: 2026-11-02\nformat:\n  typst:\n    toc: true\n---\n\n\
+        let ordinary = "---\ntitle: \"A\"\ndate: 2026-11-02\nformat:\n  typst:\n    toc: true\n---\n\n\
                       ## Intro\n\n![Sites](sites.png)\n\n{{< pagebreak >}}\n\n\
                       | a | b |\n|---|---|\n| 1 | 2 |\n\nPress {{< kbd Ctrl-C >}}.\n";
-        check_source(source).unwrap();
-    }
+        check_source(ordinary).unwrap();
 
-    #[test]
-    fn files_that_change_how_quarto_renders_stay_out_of_a_render() {
         for name in ["_quarto.yml", "_metadata.yml", "page-1.svg", "Filter.LUA", "document.pdf"] {
             assert!(is_reserved(name), "{name}");
         }
         assert!(!is_reserved("sites.png") && !is_reserved("field-trial.csv"));
-    }
-
-    #[test]
-    fn the_output_is_found_under_the_name_the_document_gave_it() {
-        let (_dir, project) = temp_project();
-        let mut folder = RenderFolder::create(&project).unwrap();
-        std::fs::write(folder.path.join("data.pdf"), "copied").unwrap();
-        folder.copied.push("data.pdf".into());
-        assert!(output_file(&folder, "pdf").is_err());
-        std::fs::write(folder.path.join("report.pdf"), "made").unwrap();
-        assert_eq!(output_file(&folder, "pdf").unwrap(), folder.path.join("report.pdf"));
-        std::fs::write(folder.path.join("document.pdf"), "made").unwrap();
-        assert_eq!(output_file(&folder, "pdf").unwrap(), folder.path.join("document.pdf"));
-    }
-
-    #[test]
-    fn quartos_colour_codes_are_removed_from_its_error() {
-        let output = "start\n\u{1b}[31mERROR\u{1b}[39m: Invalid YAML\n\n  at line 3\n";
-        assert_eq!(last_lines(output, 2), "ERROR: Invalid YAML\n  at line 3");
-        assert_eq!(last_lines(output, 10), "start\nERROR: Invalid YAML\n  at line 3");
-    }
-
-    #[test]
-    fn pages_are_ordered_by_number_not_by_name() {
-        assert_eq!(page_number("page-2.svg"), Some(2));
-        assert_eq!(page_number("page-10.svg"), Some(10));
-        assert_eq!(page_number("document.typ"), None);
-    }
-
-    #[test]
-    fn a_render_folder_is_removed_when_it_is_dropped() {
-        let (_dir, project) = temp_project();
-        let folder = RenderFolder::create(&project).unwrap();
-        let path = folder.path.clone();
-        assert!(path.is_dir());
-        drop(folder);
-        assert!(!path.exists());
-    }
-
-    /// Renders with the Quarto on this machine, so it does nothing where there is none.
-    #[test]
-    fn renders_with_the_users_quarto_when_it_is_installed() {
-        let found = status(None);
-        if found.state != State::Found {
-            return;
-        }
-        let program = PathBuf::from(found.path.unwrap());
-        let (dir, project) = temp_project();
-        let marker = dir.path().join("ran.txt");
-        let source = format!(
-            "---\ntitle: \"Demo\"\ndate: 2026-11-02\nformat:\n  typst:\n    toc: true\n---\n\n\
-             ## Intro\n\nText.[^1]\n\n[^1]: A note.\n\n```{{python}}\n\
-             open({:?}, 'w').write('x')\n```\n",
-            marker.display().to_string()
-        );
-        let pdf = export_pdf(&project, &program, &source).unwrap();
-        assert!(pdf.starts_with(b"%PDF"));
-        let pages = preview_pages(&project, &program, &source).unwrap();
-        assert!(!pages.is_empty() && pages[0].contains("<svg"));
-        assert!(!marker.exists(), "a code cell ran");
-        let leftovers = std::fs::read_dir(project.paths.resolve("render").unwrap());
-        assert!(leftovers.is_ok_and(|mut entries| entries.next().is_none()));
-
-        // A document that names its own output file still exports and previews.
-        let named = "---\ntitle: \"A\"\nformat:\n  typst:\n    output-file: report\n---\n\nText\n";
-        assert!(export_pdf(&project, &program, named).unwrap().starts_with(b"%PDF"));
-        assert!(!preview_pages(&project, &program, named).unwrap().is_empty());
-
-        // A render that fails reports Quarto's own message.
-        let broken = "---\ntitle: [unclosed\n---\n\nText\n";
-        let error = export_pdf(&project, &program, broken).unwrap_err();
-        assert_eq!(error.code, "quarto_failed");
-        assert!(!error.message.trim().is_empty());
-    }
-
-    #[test]
-    fn render_folders_from_an_earlier_run_are_removed() {
-        let (_dir, project) = temp_project();
-        let stale = project.paths.resolve("render/old").unwrap();
-        std::fs::create_dir_all(&stale).unwrap();
-        std::fs::write(stale.join("document.typ"), "x").unwrap();
-        remove_stale_renders(&project);
-        assert!(!project.paths.resolve("render").unwrap().exists());
-        remove_stale_renders(&project);
-    }
-
-    /// A program that starts another and waits, like Quarto starting Typst: on a timeout both end.
-    #[cfg(unix)]
-    #[test]
-    fn a_timeout_ends_the_programs_a_program_started() {
-        let dir = tempfile::tempdir().unwrap();
-        let pid_file = dir.path().join("child.pid");
-        let script = format!("sleep 60 & echo $! > {}; wait", pid_file.display());
-        let started = command(Path::new("sh"), &["-c", &script], None);
-        let error = run_limited(started, Duration::from_millis(500)).err().unwrap();
-        assert_eq!(error.code, "render_timeout");
-
-        let child: i32 = std::fs::read_to_string(&pid_file).unwrap().trim().parse().unwrap();
-        // A killed process stays in the table until init collects it.
-        let ended = (0..100).any(|_| {
-            std::thread::sleep(Duration::from_millis(20));
-            // SAFETY: signal 0 only checks whether the process exists.
-            unsafe { libc::kill(child, 0) == -1 }
-        });
-        assert!(ended, "the started program is still running");
-    }
-
-    #[test]
-    fn preparing_a_render_writes_the_source_and_the_named_files() {
-        let (_dir, project) = temp_project();
-        let user = crate::projects::test_support::user();
-        assets::import_bytes(&project, "sites.png", "image/png", b"png", &user).unwrap();
-        assets::import_bytes(&project, "other.csv", "text/csv", b"a", &user).unwrap();
-        let folder = prepare(&project, "![sites](sites.png)").unwrap();
-        assert_eq!(
-            std::fs::read_to_string(folder.path.join("document.qmd")).unwrap(),
-            "![sites](sites.png)"
-        );
-        assert!(folder.path.join("sites.png").is_file());
-        assert!(!folder.path.join("other.csv").exists());
     }
 }

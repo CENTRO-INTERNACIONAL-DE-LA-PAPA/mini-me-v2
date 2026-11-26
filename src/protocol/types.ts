@@ -57,6 +57,7 @@ export interface MessageStep {
   name: string;
   output: string | null;
   done: boolean;
+  show_results: boolean;
 }
 
 export interface Message {
@@ -104,7 +105,13 @@ export type KnownEvent = Envelope &
     | { type: "message.resumed"; payload: { message_id: Uuid } }
     | {
         type: "step.started";
-        payload: { message_id: Uuid; step_id: string; type: MessageStep["type"]; name: string };
+        payload: {
+          message_id: Uuid;
+          step_id: string;
+          type: MessageStep["type"];
+          name: string;
+          show_results: boolean;
+        };
       }
     | {
         type: "step.completed";
@@ -367,12 +374,8 @@ export interface MiniMeColors {
 /** Which heading the `@` list shows a Mini-Me under. */
 export type MiniMeGroup = "thinking" | "literature" | "data";
 
-/** The avatar parts a Mini-Me is drawn with, by the ids of the avatar part files. */
-export interface MiniMeAvatar {
-  base: string;
-  face: string;
-  accessory?: string;
-}
+/** The part a Mini-Me's avatar draws for each layer, by layer name and part file id. */
+export type MiniMeAvatar = Record<string, string>;
 
 /** A Mini-Me as the UI lists and shows it. */
 export interface MiniMe {
@@ -385,10 +388,12 @@ export interface MiniMe {
   built_in: boolean;
 }
 
+export type ApprovalAnswer = { approved: boolean } | { text: string } | { skipped: true };
+
 /** A node of a Workflow: a Trait Step or a control Step. */
 export type WorkflowStep = { id: string; label?: string } & (
-  | { type: "trait"; trait: Uuid }
-  | { type: "approval"; prompt: string }
+  | { type: "trait"; trait: Uuid; show_results?: boolean }
+  | { type: "approval"; prompt: string; answer?: "text"; questions_by?: "model" }
   | { type: "condition"; question: string; branches: WorkflowBranch[] }
   | { type: "loop"; question: string; max_iterations: number; steps: WorkflowStep[] }
   | { type: "parallel"; branches: WorkflowBranch[] }
@@ -409,6 +414,7 @@ export interface TraitSummary {
   id: Uuid;
   name: string;
   description: string;
+  icon: string | null;
   instructions: string | null;
   built_in: boolean;
   /** Whether it runs on its instructions; only such Traits can be duplicated. */
@@ -422,6 +428,7 @@ export interface TraitDraft {
   id: Uuid;
   name: string;
   description: string;
+  icon: string | null;
   instructions: string;
 }
 
@@ -469,17 +476,6 @@ export interface PausedApproval {
   prompt: string;
   /** Unix ms. */
   paused_at: number;
-}
-
-/** One of the most recently active Conversations, in any Project. */
-export interface RecentConversation {
-  project_id: Uuid;
-  project_name: string;
-  conversation_id: Uuid;
-  title: string;
-  /** Unix ms. */
-  last_activity_at: number;
-  status: ConversationStatus | null;
 }
 
 /** What a Project's card on Home shows beyond its name. */

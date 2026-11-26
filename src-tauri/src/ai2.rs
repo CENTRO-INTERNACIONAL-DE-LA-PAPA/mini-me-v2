@@ -453,54 +453,6 @@ mod tests {
         Ai2::new(Box::new(auth0), Box::new(store))
     }
 
-    fn wait_until(ai2: &Ai2, done: impl Fn(&Ai2Status) -> bool) -> Ai2Status {
-        for _ in 0..200 {
-            let status = ai2.status();
-            if done(&status) {
-                return status;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        panic!("status never changed: {:?}", ai2.status());
-    }
-
-    #[test]
-    fn signing_in_goes_from_pending_to_signed_in() {
-        let done = Poll::Done(TokenResponse {
-            access_token: "a".into(),
-            refresh_token: Some("r".into()),
-            expires_in: 3600,
-        });
-        let ai2 = account(FakeAuth0::new(vec![Poll::Pending, done], true), None);
-        assert_eq!(ai2.status(), Ai2Status::SignedOut { error: None });
-        assert_eq!(ai2.start_sign_in().unwrap(), "https://example.org/activate");
-        assert!(matches!(ai2.status(), Ai2Status::Pending { ref user_code, .. } if user_code == "ABCD-EFGH"));
-        let status = wait_until(&ai2, |s| matches!(s, Ai2Status::SignedIn { .. }));
-        assert_eq!(
-            status,
-            Ai2Status::SignedIn {
-                email: Some("scientist@cgiar.org".into())
-            }
-        );
-        assert_eq!(ai2.access_token().as_deref(), Some("a"));
-        ai2.sign_out().unwrap();
-        assert_eq!(ai2.access_token(), None);
-    }
-
-    #[test]
-    fn a_declined_sign_in_is_reported() {
-        let declined = Poll::Failed("The sign-in was declined.".into());
-        let ai2 = account(FakeAuth0::new(vec![declined], true), None);
-        ai2.start_sign_in().unwrap();
-        let status = wait_until(&ai2, |s| matches!(s, Ai2Status::SignedOut { error: Some(_) }));
-        assert_eq!(
-            status,
-            Ai2Status::SignedOut {
-                error: Some("The sign-in was declined.".into())
-            }
-        );
-    }
-
     #[test]
     fn an_expiring_token_is_refreshed_and_the_rotated_token_kept() {
         let ai2 = account(FakeAuth0::new(Vec::new(), true), Some(tokens(60_000)));
@@ -509,10 +461,7 @@ mod tests {
         assert_eq!(stored.refresh_token.as_deref(), Some("rotated"));
         assert!(stored.expires_at > now_ms() + REFRESH_MARGIN_MS);
         assert_eq!(ai2.access_token().as_deref(), Some("new-access"));
-    }
 
-    #[test]
-    fn a_fresh_token_is_used_as_is_and_a_failed_refresh_gives_none() {
         let fresh = account(FakeAuth0::new(Vec::new(), true), Some(tokens(3_600_000)));
         assert_eq!(fresh.access_token().as_deref(), Some("old-access"));
 

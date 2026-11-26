@@ -13,6 +13,7 @@ The Rust core SHALL hold a shared Trait library. Each Trait definition SHALL hav
 - a `name` (imperative verb in Title Case) and a `description`;
 - a `color`: one bright fill on which a black line glyph stays legible, as DESIGN.md
   describes for Trait icons;
+- optionally an `icon`: the name of one of the UI's Trait icons;
 - the `adapter` that runs it;
 - its `instructions` (text, or none for adapters that take none).
 
@@ -22,8 +23,9 @@ offered every tool, and an adapter that runs fixed code uses the tools its code 
 The library holds built-in Traits, which are read-only, and user-made Traits, which the user
 creates, edits and deletes as the Library editors describe. The built-in Traits are
 *Summarize*, *Assist*, *Find Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*,
-*Experiment*, *Profile Data*, *Validate Data*, *Clean Data*, *Join Data* and *Plot*, and the
-placeholder Traits.
+*Experiment*, *Profile Data*, *Validate Data*, *Clean Data*, *Join Data*, *Plot*, *Describe
+Variables*, *Find Correlations*, *Detect Outliers*, *Find Clusters*, *Compare Groups*, *Find
+Drivers*, *Check Confounders* and *Analyze Trends*, and the placeholder Traits.
 
 #### Scenario: Built-in Traits
 - **WHEN** the app starts
@@ -31,8 +33,12 @@ placeholder Traits.
   *Wonder* and *Experiment* (adapter `prompt`), *Find Papers* (adapter
   `asta-paper-finder`), *Theorize* (adapter `asta-theorizer`), *Profile Data* (adapter
   `data-profile`), *Validate Data* (adapter `data-validate`), *Clean Data* (adapter
-  `data-clean`), *Join Data* (adapter `data-join`), *Plot* (adapter `data-plot`), and the
-  placeholder Traits (adapter `echo`)
+  `data-clean`), *Join Data* (adapter `data-join`), *Plot* (adapter `data-plot`), *Describe
+  Variables* (adapter `data-describe-variables`), *Find Correlations* (adapter
+  `data-correlations`), *Detect Outliers* (adapter `data-outliers`), *Find Clusters* (adapter
+  `data-clusters`), *Compare Groups* (adapter `data-compare-groups`), *Find Drivers* (adapter
+  `data-drivers`), *Check Confounders* (adapter `data-confounders`), *Analyze Trends* (adapter
+  `data-trends`), and the placeholder Traits (adapter `echo`)
 
 #### Scenario: Components of the built-in Traits
 - **WHEN** the app starts
@@ -43,13 +49,32 @@ placeholder Traits.
 - **THEN** the library contains *Translate* next to the built-in Traits, marked as
   user-made
 
+### Requirement: A Trait is shown by its icon
+Every built-in Trait SHALL carry an icon. Wherever the UI shows a Trait (the Library's Traits
+list, a Mini-Me's Traits, the Trait editor's header and the Workflow editor's Trait Steps) it
+SHALL show the Trait's icon as a plain line icon in ink, never on a filled or tinted tile. A
+Trait without an icon, or whose icon the UI does not know, SHALL show the puzzle piece.
+
+#### Scenario: Built-in Traits differ
+- **WHEN** the user opens the Library's Traits section
+- **THEN** *Summarize* and *Plot* each show their own icon, and neither shows the puzzle piece
+
+#### Scenario: Trait Step
+- **WHEN** a Workflow runs *Plot*
+- **THEN** its node shows *Plot*'s icon
+
+#### Scenario: Unknown icon
+- **WHEN** `library.json` holds a Trait whose icon is not one the UI knows
+- **THEN** the Trait is listed and shows the puzzle piece
+
 ### Requirement: Mini-Me definitions
 Each Mini-Me SHALL have:
 - an `id` (UUID, stable across installations);
 - a `name` and a `description`;
 - colours `tint`, `solid` and `ink`;
-- an avatar: a `base`, a `face` and optionally an `accessory`, each the id of one of the UI's
-  avatar part files;
+- an avatar: one part per avatar layer, by layer name: a `base`, `eyes` and a `mouth`, and
+  optionally an `accessory` and a `held` item, each the id of one of the UI's avatar part
+  files for that layer;
 - a `group`, one of `thinking`, `literature` and `data`, which the `@` list shows it under;
 - exactly one Workflow, a list of Steps as Workflows define them.
 
@@ -76,8 +101,27 @@ editors describe. The list of Mini-Mes the UI gets SHALL say for each whether it
 - **THEN** the UI's list of Mini-Mes includes it after the built-in ones, marked as not
   built-in
 
+### Requirement: Avatars are drawn from layers
+The UI SHALL draw an avatar by stacking its parts in layer order: Base, Eyes, Mouth, Accessory,
+Held item. Each part SHALL be an SVG file in its layer's folder, used as exported: its body
+and freckle placeholder colours SHALL take the Mini-Me's `solid` and `ink`. A layer without
+parts SHALL NOT be offered, and an unknown part id SHALL draw nothing for its layer.
+
+#### Scenario: Built-in Mini-Mes look as before
+- **WHEN** the app shows Scribe
+- **THEN** Scribe has the long base, round open eyes, no visible mouth and a bow tie, in
+  Scribe's colours
+
+#### Scenario: A new part
+- **WHEN** a developer adds an exported SVG to the accessories folder
+- **THEN** the next build offers it as an accessory, coloured and animated like the others
+
+#### Scenario: Held item without parts
+- **WHEN** the Held item folder is empty
+- **THEN** no Held item is offered when picking a Mini-Me's avatar
+
 ### Requirement: Predefined Mini-Mes
-Mini-Me SHALL ship with sixteen Mini-Mes:
+Mini-Me SHALL ship with eighteen Mini-Mes:
 - **Scribe:** "Summarizes your messages and the files you reference"; one Step running
   *Summarize*.
 - **Assistant:** "Answers general questions and requests that no other Mini-Me specializes
@@ -111,14 +155,20 @@ Mini-Me SHALL ship with sixteen Mini-Mes:
 - **Investigator:** "Investigates a research question in several steps: explores it, plans,
   tests the plan against criticism and, if you approve, designs an experiment"; the
   the Workflow described by the Investigator requirements below.
+- **Exploratory Data Analysis:** "Explores a data table: describes its columns, finds
+  correlations and outliers, and groups similar rows when that helps"; the Workflow
+  described by the Exploratory Data Analysis requirement below.
+- **Diagnostic Analytics:** "Looks into why something happened in a data table: compares
+  groups, finds what goes with an outcome and checks for confounders, or follows a trend over
+  time"; the Workflow described by the Diagnostic Analytics requirement below.
 
 Their colours follow DESIGN.md's Mini-Me colour family, and no two share a colour.
 
 #### Scenario: Mini-Mes available
 - **WHEN** the user types `@` in the composer
 - **THEN** Scribe, Assistant, Researcher, Theorist, Explorer, Skeptic, Planner, Inquirer,
-  Experimenter, Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist and Investigator
-  are offered
+  Experimenter, Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist, Investigator,
+  Exploratory Data Analysis and Diagnostic Analytics are offered
 
 #### Scenario: General question
 - **WHEN** the user sends "@Assistant what is late blight?"
@@ -294,9 +344,70 @@ line typed with Shift+Enter SHALL be sent as a line break.
 ### Requirement: Predefined Mini-Mes have groups
 The predefined Mini-Mes SHALL have these groups: Thinking for Assistant, Scribe, Explorer,
 Skeptic, Planner, Inquirer, Experimenter and Investigator; Literature for Researcher and
-Theorist; Data for Profiler, Validator, Curator, Linker, Plotter and CIP's Archivist.
+Theorist; Data for Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist, Exploratory Data
+Analysis and Diagnostic Analytics.
 
 #### Scenario: Data Mini-Mes
 - **WHEN** the user types "@" alone
-- **THEN** Profiler, Validator, Curator, Linker, Plotter and CIP's Archivist are listed under
-  Data
+- **THEN** Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist, Exploratory Data
+  Analysis and Diagnostic Analytics are listed under Data
+
+### Requirement: Exploratory Data Analysis explores a table in Steps
+The Exploratory Data Analysis Mini-Me's Workflow SHALL run *Profile Data*, *Describe
+Variables*, *Find Correlations* and *Detect Outliers*, in that order, then a condition asking
+whether clustering is worthwhile for the table, whose "cluster" branch runs *Find Clusters* and
+whose "skip" branch has no Steps, then a condition asking whether the message asks for a chart
+the earlier Steps did not draw, whose "chart" branch runs *Plot* and whose "no chart" branch
+has no Steps.
+
+#### Scenario: Exploring a table
+- **WHEN** the user sends "@Exploratory Data Analysis explore #field-trial.csv" for a table of
+  240 rows with five number columns
+- **THEN** the reply's progress card shows *Profile Data*, *Describe Variables*, *Find
+  Correlations* and *Detect Outliers* done, the first condition answered "cluster", *Find
+  Clusters* done, and the second condition answered "no chart"
+
+#### Scenario: Too little to cluster
+- **WHEN** the table has one number column
+- **THEN** the first condition answers "skip", and *Find Clusters* does not run
+
+#### Scenario: Extra chart asked for
+- **WHEN** the message is "explore #field-trial.csv and show mean yield by site"
+- **THEN** the second condition answers "chart", and *Plot* draws mean yield by site
+
+#### Scenario: Every Step reads the same table
+- **WHEN** the message references `field-trial.csv`
+- **THEN** every Step of the run reads `field-trial.csv`
+
+### Requirement: Diagnostic Analytics asks, then picks its method
+The Diagnostic Analytics Mini-Me's Workflow SHALL run three conditions in order: "clear"
+(no Steps) or "unclear" (a written-answer approval whose questions the AI model writes); then
+"groups" (*Compare Groups*), "drivers" (*Find Drivers*, then *Check Confounders*) or "trend"
+(*Analyze Trends*); then "chart" (*Plot*) or "no chart" (no Steps), as for Exploratory Data
+Analysis.
+
+#### Scenario: A clear groups question
+- **WHEN** the user sends "@Diagnostic Analytics #field-trial.csv does yield_t_ha differ
+  between sites?"
+- **THEN** the first condition answers "clear", the second "groups", *Compare Groups* runs, and
+  no approval is shown
+
+#### Scenario: An unclear question
+- **WHEN** the user sends "@Diagnostic Analytics why is yield low? #field-trial.csv"
+- **THEN** the first condition answers "unclear", and the reply waits at an approval with
+  questions about the outcome and the possible drivers
+
+#### Scenario: Drivers, then confounders
+- **WHEN** the user's answer says "yield_t_ha; check rainfall_mm, with altitude_m as a control"
+- **THEN** the second condition answers "drivers", and *Find Drivers* runs, then *Check
+  Confounders* with `rainfall_mm` as its focus and `altitude_m` as a control
+
+### Requirement: The data Mini-Mes show their analyses in the reply
+In the Exploratory Data Analysis Mini-Me's Workflow, the *Profile Data*, *Describe Variables*,
+*Find Correlations*, *Detect Outliers*, *Find Clusters* and *Plot* Steps, and in the
+Diagnostic Analytics Mini-Me's Workflow, the *Compare Groups*, *Find Drivers*, *Check
+Confounders*, *Analyze Trends* and *Plot* Steps, SHALL have `show_results` set.
+
+#### Scenario: An exploration's charts under the summary
+- **WHEN** an Exploratory Data Analysis run ends
+- **THEN** the reply shows the summary, then the tables and charts of the Steps that ran

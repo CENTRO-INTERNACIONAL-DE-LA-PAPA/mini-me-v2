@@ -14,7 +14,7 @@ READ_FILE_NOTE = "The component's data is in its source file; read it with read_
 async def show_chart(
     ctx: CallContext, preview: dict[str, Any], text: str, source_asset_id: str | None
 ) -> str:
-    return await add_component(ctx, "chart", preview, text, source_asset_id)
+    return await add_component(ctx, "chart", preview, text, source_asset_id, version=2)
 
 
 async def show_results(

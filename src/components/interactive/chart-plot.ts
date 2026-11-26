@@ -1,16 +1,16 @@
-/** Observable Plot options for one view of a `chart`, and each hoverable shape's tooltip. */
+/** Observable Plot options for a chart description, and each hoverable shape's tooltip. */
 
 import * as Plot from "@observablehq/plot";
-import type { Bin, BoxGroup, ChartData, Column, Point, Value, View } from "./chart-model";
-import { seriesColour, seriesOf } from "./chart-model";
+import type { ChartData, Column, Mark, Row, Scale, Value } from "./chart-model";
+import { legendOf, seriesColour } from "./chart-model";
 
 /** Theme colours, read from the CSS tokens when the figure is drawn. */
 export interface ChartColours {
-  /** The colour of the first series: the Mini-Me's solid. */
+  /** The colour of uncoloured marks and of the legend's first value: the Mini-Me's solid. */
   first: string;
-  /** The values of `SERIES_TOKENS`: the colours of series 2 to 8. */
+  /** The values of `SERIES_TOKENS`: the colours of legend values 2 to 8. */
   palette: string[];
-  /** The colour of negative correlations. */
+  /** The low end of a continuous colour scale that crosses 0. */
   negative: string;
   card: string;
   grid: string;
@@ -35,253 +35,302 @@ export interface ChartSpec {
 
 export const TIP_CLASS = "chart-tip-";
 
+type MarkFunction = (data: unknown, options: Record<string, unknown>) => Plot.Markish;
+
+// Every mark the sidecar lets a description name, by Plot function name.
+const MARKS = {
+  area: Plot.area,
+  areaX: Plot.areaX,
+  areaY: Plot.areaY,
+  arrow: Plot.arrow,
+  axisX: Plot.axisX,
+  axisY: Plot.axisY,
+  axisFx: Plot.axisFx,
+  axisFy: Plot.axisFy,
+  gridX: Plot.gridX,
+  gridY: Plot.gridY,
+  gridFx: Plot.gridFx,
+  gridFy: Plot.gridFy,
+  barX: Plot.barX,
+  barY: Plot.barY,
+  bollingerX: Plot.bollingerX,
+  bollingerY: Plot.bollingerY,
+  boxX: Plot.boxX,
+  boxY: Plot.boxY,
+  cell: Plot.cell,
+  cellX: Plot.cellX,
+  cellY: Plot.cellY,
+  contour: Plot.contour,
+  delaunayLink: Plot.delaunayLink,
+  delaunayMesh: Plot.delaunayMesh,
+  hull: Plot.hull,
+  voronoi: Plot.voronoi,
+  voronoiMesh: Plot.voronoiMesh,
+  density: Plot.density,
+  differenceX: Plot.differenceX,
+  differenceY: Plot.differenceY,
+  dot: Plot.dot,
+  dotX: Plot.dotX,
+  dotY: Plot.dotY,
+  circle: Plot.circle,
+  hexagon: Plot.hexagon,
+  frame: Plot.frame,
+  hexgrid: Plot.hexgrid,
+  line: Plot.line,
+  lineX: Plot.lineX,
+  lineY: Plot.lineY,
+  linearRegressionX: Plot.linearRegressionX,
+  linearRegressionY: Plot.linearRegressionY,
+  link: Plot.link,
+  raster: Plot.raster,
+  rect: Plot.rect,
+  rectX: Plot.rectX,
+  rectY: Plot.rectY,
+  ruleX: Plot.ruleX,
+  ruleY: Plot.ruleY,
+  text: Plot.text,
+  textX: Plot.textX,
+  textY: Plot.textY,
+  tickX: Plot.tickX,
+  tickY: Plot.tickY,
+  tree: Plot.tree,
+  cluster: Plot.cluster,
+  vector: Plot.vector,
+  vectorX: Plot.vectorX,
+  vectorY: Plot.vectorY,
+  spike: Plot.spike,
+  waffleX: Plot.waffleX,
+  waffleY: Plot.waffleY,
+} as unknown as Record<string, MarkFunction>;
+
+// Marks that draw one shape per row, so a hovered shape's index is its row.
+const ROW_MARKS = new Set([
+  "arrow",
+  "barX",
+  "barY",
+  "cell",
+  "cellX",
+  "cellY",
+  "dot",
+  "dotX",
+  "dotY",
+  "circle",
+  "hexagon",
+  "link",
+  "rect",
+  "rectX",
+  "rectY",
+  "ruleX",
+  "ruleY",
+  "text",
+  "textX",
+  "textY",
+  "tickX",
+  "tickY",
+  "vector",
+  "vectorX",
+  "vectorY",
+  "spike",
+]);
+
+// Marks drawn with a stroke; the others are filled.
+const STROKED = new Set([
+  "arrow",
+  "bollingerX",
+  "bollingerY",
+  "contour",
+  "density",
+  "delaunayLink",
+  "delaunayMesh",
+  "hull",
+  "voronoiMesh",
+  "line",
+  "lineX",
+  "lineY",
+  "linearRegressionX",
+  "linearRegressionY",
+  "link",
+  "ruleX",
+  "ruleY",
+  "tickX",
+  "tickY",
+  "tree",
+  "cluster",
+  "vector",
+  "vectorX",
+  "vectorY",
+  "spike",
+]);
+
+// Marks that draw the chart's frame rather than its data, and take no colour of their own.
+const FRAME_MARKS = new Set([
+  "axisX",
+  "axisY",
+  "axisFx",
+  "axisFy",
+  "gridX",
+  "gridY",
+  "gridFx",
+  "gridFy",
+  "frame",
+  "hexgrid",
+]);
+
+// Marks whose `x` channel is a band of categories, each kept at least `MIN_BAND` pixels wide.
+const X_BAND_MARKS = new Set(["barY", "cell", "cellX", "boxY", "tickY"]);
+
+// A chart with more bands than fit is drawn wider and scrolls sideways.
+const MIN_BAND = 24;
+
+const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
+
 function tipClass(index: number): string {
   return `${TIP_CLASS}${index}`;
 }
 
-const HEIGHT = 300;
-
-// Bars, boxes and heatmap cells keep at least this many pixels each; a chart with more of
-// them than fit is drawn wider and scrolls sideways.
-const MIN_BAND = 24;
-
-function bandWidth(width: number, bands: number, margins: number): number {
-  return Math.max(width, bands * MIN_BAND + margins);
-}
-
-const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
-
-// An ISO time of day without a time zone: "T" followed by no "Z", "+" or "-".
-const NO_ZONE = /T[^Z+-]*$/;
-
-/** Dates as the `Date`s Plot's time scale needs. Text without a zone is read as UTC, the zone
- * the axis shows; JavaScript alone would read a time of day without a zone as local. */
-function value(column: Column | undefined, v: Value): Value | Date {
-  if (column?.type !== "date" || typeof v !== "string") return v;
-  return new Date(NO_ZONE.test(v) ? `${v}Z` : v);
-}
-
 function show(v: Value | Date | undefined): string {
   if (v === null || v === undefined) return "";
-  // In UTC, like `value` reads it, so that a date is not shown as the day before.
+  // In UTC, like `cell` in chart-model reads it, so that a date is not shown as the day before.
   if (v instanceof Date) return v.toLocaleDateString(undefined, { timeZone: "UTC" });
+  if (typeof v === "boolean") return v ? "true" : "false";
   return typeof v === "number" ? numberFormat.format(v) : v;
 }
 
-function visible<T extends { series?: string }>(rows: T[], hidden: string[]): T[] {
-  return hidden.length ? rows.filter((r) => !r.series || !hidden.includes(r.series)) : rows;
+/** Each dataset's rows, less those whose legend value is hidden. */
+function visibleRows(chart: ChartData, hidden: string[]): Record<string, Row[]> {
+  const column = legendOf(chart)?.column;
+  return Object.fromEntries(
+    Object.entries(chart.datasets).map(([name, dataset]) => {
+      const filtered =
+        column && hidden.length && dataset.columns.some((c) => c.name === column)
+          ? dataset.rows.filter((r) => !hidden.includes(String(r[column])))
+          : dataset.rows;
+      return [name, filtered];
+    }),
+  );
 }
 
-/** Colours by place in the view's full series list, so a series keeps its colour as others hide. */
-function colourScale(view: View, colours: ChartColours): Plot.ScaleOptions | undefined {
-  const series = seriesOf(view);
-  if (!series.length) return undefined;
-  return {
-    domain: series,
-    range: series.map((_, i) => seriesColour(i, colours.first, colours.palette)),
+function columnOf(chart: ChartData, mark: Mark, name: string | null): Column | undefined {
+  const dataset = mark.dataset ? chart.datasets[mark.dataset] : undefined;
+  return dataset?.columns.find((c) => c.name === name);
+}
+
+/** The columns a description draws on `channels`, for its gridlines, colours and band width. */
+function columnsOn(chart: ChartData, channels: string[]): { mark: Mark; column: Column }[] {
+  return chart.description.marks.flatMap((mark) =>
+    mark.channels.flatMap((c) => {
+      const column = channels.includes(c.name) ? columnOf(chart, mark, c.column) : undefined;
+      return column ? [{ mark, column }] : [];
+    }),
+  );
+}
+
+function scaleOptions(scale: Scale): Plot.ScaleOptions {
+  const options: Record<string, unknown> = {
+    type: scale.type,
+    label: scale.label,
+    domain: scale.domain,
+    reverse: scale.reverse,
+    zero: scale.zero,
+    nice: scale.nice,
+    percent: scale.percent,
+    tickRotate: scale.tick_rotate,
+    scheme: scale.scheme,
+    legend: scale.legend,
   };
+  const set = Object.entries(options).filter(([, v]) => v !== null);
+  return Object.fromEntries(set) as Plot.ScaleOptions;
 }
 
-function seriesLine(view: View, row: { series?: string }): TipLines {
-  const column = "series_column" in view ? view.series_column : undefined;
-  return row.series === undefined ? [] : [[column ?? "Series", row.series]];
+/** The colour scale: the legend's values in the Mini-Me's colour, then the theme's series
+ * colours, or a continuous ramp from the card towards the Mini-Me's colour. A scheme the
+ * description names replaces either. */
+function colourScale(chart: ChartData, colours: ChartColours, scale?: Scale): Plot.ScaleOptions {
+  const options = scale ? scaleOptions(scale) : {};
+  const legend = legendOf(chart);
+  if (legend) {
+    const range = legend.values.map((_, i) => seriesColour(i, colours.first, colours.palette));
+    const themed = scale?.scheme ? {} : { range };
+    return { ...themed, ...options, domain: legend.values, legend: false };
+  }
+  if (scale?.scheme) return { legend: true, ...options };
+  const coloured = columnsOn(chart, ["fill", "stroke"]).filter((c) => c.column.type === "number");
+  if (!coloured.length) return options;
+  const values = coloured.flatMap(({ mark, column }) =>
+    (chart.datasets[mark.dataset ?? ""]?.rows ?? []).map((r) => r[column.name] as number),
+  );
+  if (!(values.some((v) => v < 0) && values.some((v) => v > 0))) {
+    return { type: "linear", range: [colours.card, colours.first], legend: true, ...options };
+  }
+  // Centred on 0, so equal values above and below it are equally strong.
+  const reach = Math.max(...values.map(Math.abs));
+  const range = [colours.negative, colours.card, colours.first];
+  return { type: "linear", domain: [-reach, 0, reach], range, legend: true, ...options };
+}
+
+function markOf(
+  mark: Mark,
+  rows: Record<string, Row[]>,
+  colours: ChartColours,
+  tips: TipSource[],
+): Plot.Markish {
+  const data = mark.dataset ? (rows[mark.dataset] ?? []) : mark.values;
+  const options: Record<string, unknown> = {};
+  for (const channel of mark.channels) options[channel.name] = channel.column ?? channel.value;
+  for (const option of mark.options) options[option.name] = option.value;
+  if (!("fill" in options || "stroke" in options) && !FRAME_MARKS.has(mark.mark)) {
+    if (mark.mark.startsWith("text")) options.fill = colours.axis;
+    else options[STROKED.has(mark.mark) ? "stroke" : "fill"] = colours.first;
+  }
+  const shown = [...new Set(mark.channels.flatMap((c) => (c.column ? [c.column] : [])))];
+  if (mark.dataset && ROW_MARKS.has(mark.mark) && shown.length) {
+    const lines = (row: Row): TipLines => shown.map((name) => [name, show(row[name])]);
+    tips.push({ data: data as unknown[], lines: lines as (row: never) => TipLines });
+    options.className = tipClass(tips.length - 1);
+  }
+  return MARKS[mark.mark](data, options);
+}
+
+/** Gridlines along the axis that shows numbers or dates: `y` first, as most charts read up. */
+function gridOf(chart: ChartData, colours: ChartColours): Plot.Markish[] {
+  const numeric = (channels: string[]) =>
+    columnsOn(chart, channels).some((c) => c.column.type === "number" || c.column.type === "date");
+  const style = { stroke: colours.grid, strokeOpacity: 1 };
+  if (numeric(["y", "y1", "y2"])) return [Plot.gridY(style)];
+  return numeric(["x", "x1", "x2"]) ? [Plot.gridX(style)] : [];
+}
+
+function bandCount(chart: ChartData, rows: Record<string, Row[]>): number {
+  const bands = columnsOn(chart, ["x"])
+    .filter(({ mark }) => X_BAND_MARKS.has(mark.mark))
+    .flatMap(({ mark, column }) =>
+      (rows[mark.dataset ?? ""] ?? []).map((r) => String(r[column.name])),
+    );
+  return new Set(bands).size;
 }
 
 export function chartSpec(
   chart: ChartData,
-  viewIndex: number,
   hidden: string[],
-  colours: ChartColours,
+  theme: ChartColours,
   width: number,
 ): ChartSpec {
-  const view = chart.views[viewIndex];
   const tips: TipSource[] = [];
-  // Registers a mark's tooltip and returns the class its shapes are drawn with.
-  const tip = <T,>(data: T[], lines: (row: T) => TipLines) => {
-    tips.push({ data, lines: lines as (row: never) => TipLines });
-    return tipClass(tips.length - 1);
-  };
-  const hasSeries = seriesOf(view).length > 0;
-  const fill = hasSeries ? "series" : colours.first;
-  const base: Plot.PlotOptions = {
-    width,
-    height: HEIGHT,
+  const rows = visibleRows(chart, hidden);
+  const { marks, scales, height, colour: own } = chart.description;
+  const colours = own ? { ...theme, first: own } : theme;
+  const colour = scales.find((s) => s.scale === "color");
+  const options: Plot.PlotOptions = {
+    width: Math.max(width, bandCount(chart, rows) * MIN_BAND + 96),
+    height: height ?? 300,
     marginLeft: 56,
     // Plot shrinks a figure to its container by default; wide charts scroll instead.
     style: { color: colours.muted, fontSize: "11px", background: "transparent", maxWidth: "none" },
-    color: colourScale(view, colours),
+    ...Object.fromEntries(
+      scales.filter((s) => s !== colour).map((s) => [s.scale, scaleOptions(s)]),
+    ),
+    color: colourScale(chart, colours, colour),
+    marks: [...gridOf(chart, colours), ...marks.map((m) => markOf(m, rows, colours, tips))],
   };
-  const grid = Plot.gridY({ stroke: colours.grid, strokeOpacity: 1 });
-  const baseline = Plot.ruleY([0], { stroke: colours.axis });
-  const spec = (options: Plot.PlotOptions): ChartSpec => ({ options: { ...base, ...options }, tips });
-
-  switch (view.type) {
-    case "histogram": {
-      const bins = visible(view.bins, hidden).map((b: Bin) => ({
-        ...b,
-        x0: value(view.x, b.x0),
-        x1: value(view.x, b.x1),
-      }));
-      const className = tip(bins, (b) => [
-        [view.x.name, `${show(b.x0)} – ${show(b.x1)}`],
-        ["Rows", show(b.count)],
-        ...seriesLine(view, b),
-      ]);
-      return spec({
-        x: { label: view.x.name },
-        y: { label: "Rows" },
-        marks: [
-          grid,
-          Plot.rectY(bins, { x1: "x0", x2: "x1", y: "count", fill, insetLeft: 1, className }),
-          baseline,
-        ],
-      });
-    }
-    case "bar": {
-      const bars = visible(view.bars, hidden);
-      // A count bar chart counts rows, even when its data names a `y` column.
-      const label =
-        view.y && view.aggregate !== "count" ? `${view.aggregate} of ${view.y.name}` : "Rows";
-      const categories = [...new Set(view.bars.map((b) => b.x))];
-      const className = tip(bars, (b) => [
-        [view.x.name, b.x],
-        [label, show(b.y)],
-        ...seriesLine(view, b),
-      ]);
-      // Totals stack; averages of several series stand side by side, since stacking them
-      // would add means together.
-      const grouped = hasSeries && (view.aggregate === "mean" || view.aggregate === "median");
-      if (grouped) {
-        return spec({
-          width: bandWidth(width, categories.length * seriesOf(view).length, 96),
-          fx: { label: view.x.name, domain: categories },
-          x: { axis: null, domain: seriesOf(view) },
-          y: { label },
-          marks: [
-            grid,
-            Plot.barY(bars, { fx: "x", x: "series", y: "y", fill, className }),
-            baseline,
-          ],
-        });
-      }
-      return spec({
-        width: bandWidth(width, categories.length, 96),
-        x: { label: view.x.name, domain: categories },
-        y: { label },
-        marks: [grid, Plot.barY(bars, { x: "x", y: "y", fill, className }), baseline],
-      });
-    }
-    case "line":
-    case "scatter": {
-      const points = visible(view.points, hidden).map((p: Point) => ({
-        ...p,
-        x: value(view.x, p.x),
-      }));
-      const yLabel =
-        (view.type === "line" && view.aggregate ? `${view.aggregate} of ` : "") + view.y.name;
-      const className = tip(points, (p) => [
-        [view.x.name, show(p.x)],
-        [yLabel, show(p.y)],
-        ...seriesLine(view, p),
-      ]);
-      const dots = Plot.dot(points, {
-        x: "x",
-        y: "y",
-        fill,
-        r: view.type === "line" ? 3 : 3.5,
-        fillOpacity: view.type === "line" ? 1 : 0.8,
-        className,
-      });
-      const line = Plot.lineY(points, {
-        x: "x",
-        y: "y",
-        stroke: fill,
-        z: hasSeries ? "series" : null,
-      });
-      return spec({
-        x: { label: view.x.name },
-        y: { label: yLabel },
-        marks: view.type === "line" ? [grid, line, dots] : [grid, dots],
-      });
-    }
-    case "box": {
-      const groups = view.groups;
-      const outliers = groups.flatMap((g: BoxGroup) =>
-        g.outliers.map((v) => ({ group: g.group, value: v })),
-      );
-      const boxes = tip(groups, (g) => [
-        [view.x.name, g.group],
-        ["Median", show(g.median)],
-        ["Middle half", `${show(g.q1)} – ${show(g.q3)}`],
-        ["Whiskers", `${show(g.low)} – ${show(g.high)}`],
-        ["Rows", show(g.count)],
-      ]);
-      const outlying = tip(outliers, (o) => [
-        [view.x.name, o.group],
-        [`${view.y.name} (outlier)`, show(o.value)],
-      ]);
-      return spec({
-        width: bandWidth(width, groups.length, 96),
-        x: { label: view.x.name, domain: groups.map((g) => g.group) },
-        y: { label: view.y.name },
-        marks: [
-          grid,
-          Plot.ruleX(groups, { x: "group", y1: "low", y2: "high", stroke: colours.axis }),
-          Plot.barY(groups, {
-            x: "group",
-            y1: "q1",
-            y2: "q3",
-            fill: colours.first,
-            className: boxes,
-          }),
-          Plot.tickY(groups, { x: "group", y: "median", stroke: colours.axis, strokeWidth: 2 }),
-          Plot.dot(outliers, {
-            x: "group",
-            y: "value",
-            stroke: colours.axis,
-            fill: colours.card,
-            r: 3,
-            className: outlying,
-          }),
-        ],
-      });
-    }
-    case "heatmap": {
-      const side = Math.max(
-        Math.min(width - 64, 48 * view.columns.length + 96),
-        MIN_BAND * view.columns.length + 96,
-      );
-      const className = tip(view.cells, (c) => [
-        ["Columns", `${c.y} – ${c.x}`],
-        ["Correlation", c.value === null ? "not enough values" : c.value.toFixed(2)],
-      ]);
-      return spec({
-        width: side + 64,
-        height: side,
-        marginLeft: 96,
-        marginBottom: 64,
-        x: { label: null, domain: view.columns, tickRotate: -30 },
-        y: { label: null, domain: view.columns },
-        // Negative correlations shade towards grey, positive ones towards the Mini-Me's
-        // colour, with no correlation in the card's colour.
-        color: {
-          type: "linear",
-          domain: [-1, 0, 1],
-          range: [colours.negative, colours.card, colours.first],
-          legend: true,
-          label: "Correlation",
-        },
-        marks: [
-          Plot.cell(view.cells, { x: "x", y: "y", fill: "value", inset: 0.5, className }),
-          Plot.text(view.cells, {
-            x: "x",
-            y: "y",
-            text: (c: { value: number | null }) => (c.value === null ? "" : c.value.toFixed(2)),
-            fill: colours.axis,
-            pointerEvents: "none",
-          }),
-        ],
-      });
-    }
-  }
+  return { options, tips };
 }

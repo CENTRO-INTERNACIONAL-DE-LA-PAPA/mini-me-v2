@@ -1,3 +1,5 @@
+import { ListRow } from "../shell/ListRow";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -9,9 +11,10 @@ import { Composer } from "../chat/Composer";
 import { MessageItem } from "../chat/MessageItem";
 import { useConversation } from "../chat/useConversation";
 import { ItemMenu } from "../shell/ItemMenu";
-import { ToolSheet } from "../shell/Sheet";
+import { ToolSheet, ToolSheetHeading } from "../shell/Sheet";
 import type { Placement } from "./anchors";
 import { passageLocation } from "./location";
+import { ErrorText } from "../shell/ErrorText";
 
 type Tab = "open" | "resolved";
 
@@ -98,39 +101,34 @@ export function CommentsSheet({
         </TabsList>
       </Tabs>
       {shown.length === 0 && (
-        <p className="text-body text-muted-foreground">
-          {tab === "open"
-            ? "Select text in the source and click the comment button to start a thread."
-            : "Resolved threads appear here."}
-        </p>
+        <Empty>
+          <EmptyDescription>
+            {tab === "open"
+              ? "Select text in the source and click the comment button to start a thread."
+              : "Resolved threads appear here."}
+          </EmptyDescription>
+        </Empty>
       )}
       {/* `grid-cols-1` lets rows shrink below their content, so long passages truncate. */}
       <ul className="grid grid-cols-1">
         {shown.map((t, index) => (
           <li key={t.conversation_id} className="min-w-0">
             {index === detachedFrom && (
-              <h3 className="mt-6 mb-2.5 font-serif text-subheading text-foreground">Detached</h3>
+              <div className="mt-6">
+                <ToolSheetHeading>Detached</ToolSheetHeading>
+              </div>
             )}
-            <button
-              type="button"
-              onClick={() => onOpen(t.conversation_id)}
-              className={cn(
-                "flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors",
-                "duration-150 ease-out hover:bg-muted focus-visible:outline-2",
-                "focus-visible:outline-ring",
-              )}
-            >
-              <NumberBadge number={index + 1} />
-              <span className="grid min-w-0 flex-1 gap-0.5">
-                {location(t) && (
-                  <span className="truncate text-meta text-muted-foreground">{location(t)}</span>
-                )}
-                <span className="truncate">“{t.quote}”</span>
-              </span>
-              <span className="shrink-0 text-meta text-muted-foreground tabular-nums">
-                {formatClock(t.created_at)}
-              </span>
-            </button>
+            <ListRow
+              leading={<NumberBadge number={index + 1} />}
+              name={`“${t.quote}”`}
+              meta={location(t)}
+              trailing={
+                <span className="shrink-0 text-meta text-muted-foreground tabular-nums">
+                  {formatClock(t.created_at)}
+                </span>
+              }
+              onOpen={() => onOpen(t.conversation_id)}
+            />
           </li>
         ))}
       </ul>
@@ -156,7 +154,7 @@ function NumberBadge({ number }: { number: number }) {
   return (
     <span
       className={cn(
-        "mt-px grid size-5 shrink-0 place-items-center rounded-[5px] border border-foreground",
+        "mt-px grid size-5 shrink-0 place-items-center rounded-sm border border-foreground",
         "text-meta leading-none font-semibold text-foreground tabular-nums",
       )}
     >
@@ -233,9 +231,9 @@ function ThreadView({
           <ChevronDownIcon />
         </Button>
       </nav>
-      <div className="grid grid-cols-1 gap-1.5 border-b border-border pb-3">
+      <div className="grid grid-cols-1 gap-1 border-b border-border pb-3">
         <div className="flex items-center gap-2">
-          <h3 className="flex min-w-0 flex-1 items-center gap-2 font-serif text-subheading text-foreground">
+          <h3 className="flex min-w-0 flex-1 items-center gap-2 text-ui font-medium text-foreground">
             <NumberBadge number={number} />
             <span className="min-w-0 truncate">{location ?? `“${thread.quote}”`}</span>
           </h3>
@@ -269,7 +267,7 @@ function ThreadView({
           ))}
         </div>
       )}
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
       {!detached && !thread.resolved && (
         <div className="sticky bottom-0 bg-background pt-1">
           <Composer

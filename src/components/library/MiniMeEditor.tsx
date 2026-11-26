@@ -1,23 +1,28 @@
+import { cn } from "@/lib/utils";
+import { LabelledField } from "../shell/LabelledField";
+import { ConfirmButton } from "../shell/Confirm";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { DicesIcon } from "lucide-react";
 import { useState } from "react";
 import { api } from "../../api";
 import { MINI_ME_GROUPS } from "../../protocol/references";
 import type { MiniMeDefinition, MiniMeGroup, WorkflowStep } from "../../protocol/types";
 import { Avatar } from "../avatar/Avatar";
 import { ColorPicker } from "../avatar/ColorPicker";
-import { COLOR_FAMILIES, hueOf, miniMeColors } from "../avatar/palette";
+import { COLOR_FAMILIES, hueOf, miniMeColors, randomFamily } from "../avatar/palette";
 import { PartTabs } from "../avatar/PartGrid";
+import { randomAvatar } from "../avatar/parts";
 import { NIL_ID } from "./library";
 import {
-  DeleteButton,
   EditorHeader,
+  EDITOR_BODY,
   EditorPage,
-  Field,
   List,
   OriginBadge,
   Row,
@@ -38,7 +43,7 @@ const EMPTY: MiniMeDefinition = {
   name: "",
   description: "",
   colors: miniMeColors(yellow),
-  avatar: { base: "classic", face: "cheerful" },
+  avatar: { base: "classic", eyes: "normal", mouth: "smile" },
   group: "thinking",
   built_in: false,
   workflow: { steps: [] },
@@ -76,7 +81,7 @@ export function MiniMeEditor({
     },
   });
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useState("workflow");
+  const [tab, setTab] = useState("appearance");
 
   if (!library || !draft) {
     return problems ? (
@@ -111,16 +116,16 @@ export function MiniMeEditor({
       <MainSheet>
         <EditorHeader
           title={draft.name || "New Mini-Me"}
-          icon={<Avatar {...draft.avatar} color={draft.colors} size={48} />}
+          icon={<Avatar avatar={draft.avatar} color={draft.colors} size={48} />}
           subtitle={draft.description}
           back="Mini-Mes"
           tabs={
             <TabsList aria-label="Editor">
+              <TabsTrigger value="appearance">Appearance</TabsTrigger>
               <TabsTrigger value="workflow">Workflow</TabsTrigger>
               <TabsTrigger value="traits">
                 Traits <span className="tabular-nums">{used.length}</span>
               </TabsTrigger>
-              <TabsTrigger value="appearance">Appearance</TabsTrigger>
             </TabsList>
           }
           actions={
@@ -131,10 +136,13 @@ export function MiniMeEditor({
             ) : (
               <>
                 {id && !library.unreadable && (
-                  <DeleteButton
+                  <ConfirmButton
+                    trigger={<Button variant="secondary" />}
                     question={`Delete ${draft.name}? This can't be undone.`}
-                    onDelete={remove}
-                  />
+                    onConfirm={remove}
+                  >
+                    Delete
+                  </ConfirmButton>
                 )}
                 <Button disabled={readOnly} onClick={save}>
                   Save
@@ -145,7 +153,7 @@ export function MiniMeEditor({
           problems={problems}
           onBack={onBack}
         />
-        <TabsContent value="workflow" className="flex min-h-0 flex-col pt-5 pr-5 pb-5 pl-8">
+        <TabsContent value="workflow" className={cn(EDITOR_BODY, "flex min-h-0 flex-col")}>
           <WorkflowCanvas
             steps={draft.workflow.steps}
             traits={library.traits}
@@ -157,17 +165,19 @@ export function MiniMeEditor({
           />
         </TabsContent>
         <TabsContent value="traits" className="min-h-0 overflow-y-auto">
-          <div className="mx-auto max-w-[760px] px-8 py-8">
+          <div className={cn(EDITOR_BODY, "mx-auto max-w-[760px]")}>
             {used.length === 0 ? (
-              <p className="text-ui text-muted-foreground">
-                Its Workflow runs no Traits yet. Add Trait steps on the Workflow tab.
-              </p>
+              <Empty>
+                <EmptyDescription>
+                  Its Workflow runs no Traits yet. Add Trait steps on the Workflow tab.
+                </EmptyDescription>
+              </Empty>
             ) : (
               <List>
                 {used.map((t) => (
                   <Row
                     key={t.id}
-                    icon={<TraitIcon />}
+                    icon={<TraitIcon icon={t.icon} />}
                     name={t.name}
                     description={t.description}
                     details={<OriginBadge builtIn={t.built_in} />}
@@ -179,7 +189,7 @@ export function MiniMeEditor({
           </div>
         </TabsContent>
         <TabsContent value="appearance" className="min-h-0 overflow-y-auto">
-          <div className="mx-auto grid max-w-[760px] gap-6 px-8 py-8">
+          <div className={cn(EDITOR_BODY, "mx-auto grid max-w-[760px] gap-6")}>
             <Appearance draft={draft} readOnly={readOnly} onChange={update} />
           </div>
         </TabsContent>
@@ -212,15 +222,15 @@ function Appearance({
   const hue = hueOf(draft.colors);
   return (
     <>
-      <Field label="Name" htmlFor="mini-me-name">
+      <LabelledField label="Name" htmlFor="mini-me-name">
         <Input
           id="mini-me-name"
           value={draft.name}
           disabled={readOnly}
           onChange={(e) => onChange({ name: e.target.value })}
         />
-      </Field>
-      <Field
+      </LabelledField>
+      <LabelledField
         label="Description"
         htmlFor="mini-me-description"
         hint="What it does; Mini-Me reads this to choose who answers a message"
@@ -231,13 +241,10 @@ function Appearance({
           disabled={readOnly}
           onChange={(e) => onChange({ description: e.target.value })}
         />
-      </Field>
-      <Field label="Group" hint="The heading it is listed under when you type @">
+      </LabelledField>
+      <LabelledField label="Group" hint="The heading it is listed under when you type @">
         <ToggleGroup
           aria-label="Group"
-          variant="switch"
-          size="switch"
-          spacing={1}
           disabled={readOnly}
           value={[draft.group]}
           onValueChange={(value) => value.length > 0 && onChange({ group: value[0] as MiniMeGroup })}
@@ -248,28 +255,35 @@ function Appearance({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-      </Field>
+      </LabelledField>
       {!readOnly && (
-        <Field label="Look">
+        <LabelledField label="Look">
           <div className="grid grid-cols-[200px_1fr] items-start gap-8">
             <div className="grid gap-5">
-              <Card className="items-center p-4">
-                <Avatar {...draft.avatar} color={draft.colors} size={150} />
+              <Card size="sm" className="items-center">
+                <Avatar avatar={draft.avatar} color={draft.colors} size={150} />
               </Card>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  onChange({ avatar: randomAvatar(), colors: miniMeColors(randomFamily()) })
+                }
+              >
+                <DicesIcon />
+                Random
+              </Button>
               <ColorPicker
                 value={{ hue: hue ?? yellow.hue, solid: draft.colors.solid, ink: draft.colors.ink }}
                 onChange={(color) => onChange({ colors: miniMeColors(color) })}
               />
             </div>
             <PartTabs
-              style={draft.avatar}
+              avatar={draft.avatar}
               color={draft.colors}
-              onChange={({ base, face, accessory }) =>
-                onChange({ avatar: { base, face, ...(accessory ? { accessory } : {}) } })
-              }
+              onChange={(avatar) => onChange({ avatar })}
             />
           </div>
-        </Field>
+        </LabelledField>
       )}
     </>
   );

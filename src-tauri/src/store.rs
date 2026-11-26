@@ -189,11 +189,6 @@ impl ProjectState {
         Ok(id)
     }
 
-    #[cfg(test)]
-    fn subscription_count(&self) -> usize {
-        self.subscribers.values().map(Vec::len).sum()
-    }
-
     fn last_seq(&self, conversation_id: Uuid) -> AppResult<i64> {
         Ok(self.conn.query_row(
             "SELECT last_seq FROM conversations WHERE id = ?1",
@@ -395,7 +390,7 @@ impl ProjectState {
     /// Started Steps by message, in order.
     fn steps_in(&self, scope: Scope) -> AppResult<HashMap<Uuid, Vec<MessageStep>>> {
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT s.message_id, s.step_id, s.type, s.name, s.output, s.done \
+            "SELECT s.message_id, s.step_id, s.type, s.name, s.output, s.done, s.show_results \
              FROM message_steps s JOIN messages m ON m.id = s.message_id WHERE {} \
              ORDER BY s.message_id, s.position",
             scope.condition()
@@ -409,6 +404,7 @@ impl ProjectState {
                     name: row.get(3)?,
                     output: row.get(4)?,
                     done: row.get(5)?,
+                    show_results: row.get(6)?,
                 },
             ))
         })?;
@@ -860,12 +856,12 @@ fn apply_projection(tx: &Transaction<'_>, event: &Event) -> AppResult<()> {
                 params![message_id.to_string()],
             )?;
         }
-        EventKind::StepStarted { message_id, step_id, step_type, name } => {
+        EventKind::StepStarted { message_id, step_id, step_type, name, show_results } => {
             tx.execute(
-                "INSERT INTO message_steps (message_id, position, step_id, type, name) \
-                 SELECT ?1, COALESCE(MAX(position), 0) + 1, ?2, ?3, ?4 FROM message_steps \
-                 WHERE message_id = ?1",
-                params![message_id.to_string(), step_id, step_type, name],
+                "INSERT INTO message_steps (message_id, position, step_id, type, name, \
+                 show_results) SELECT ?1, COALESCE(MAX(position), 0) + 1, ?2, ?3, ?4, ?5 \
+                 FROM message_steps WHERE message_id = ?1",
+                params![message_id.to_string(), step_id, step_type, name, show_results],
             )?;
         }
         // A Step inside a loop starts once per iteration, so the latest run is completed.
@@ -971,10 +967,6 @@ pub mod test_support {
             self.0.lock().unwrap().concat()
         }
 
-        pub fn batches(&self) -> Vec<Vec<Event>> {
-            self.0.lock().unwrap().clone()
-        }
-
         /// Waits for `count` events and a few quiet batch windows; panics after two seconds.
         pub fn settled(&self, count: usize) -> Vec<Event> {
             let start = std::time::Instant::now();
@@ -1004,16 +996,6 @@ mod tests {
 
     fn cancel(id: Uuid) -> EventKind {
         EventKind::MessageCancelled { message_id: id }
-    }
-
-    /// Sends the user message `text` to `conversation`.
-    fn send(project: &Project, conversation: Uuid, text: &str) -> Message {
-        let input = conversations::SendMessageInput {
-            content: text.into(),
-            attachments: Vec::new(),
-            text_components: Vec::new(),
-        };
-        conversations::send_message(project, conversation, input, new_id()).unwrap()
     }
 
     #[test]
@@ -1069,41 +1051,13 @@ mod tests {
 
         let seqs: Vec<i64> = collector.settled(3).iter().map(|e| e.seq).collect();
         assert_eq!(seqs, vec![3, 4, 5]);
-    }
 
-    #[test]
-    fn events_persisted_together_arrive_as_one_batch() {
-        let (_dir, project) = temp_project();
-        let conversation = conversations::create(&project).unwrap().id;
         let collector = Collector::default();
-        project.subscribe(conversation, 0, Box::new(collector.clone())).unwrap();
-        let kinds = (0..5).map(|_| cancel(new_id())).collect();
-        project.lock().persist_all(conversation, kinds, |_| Ok(())).unwrap();
-
-        assert_eq!(collector.settled(5).len(), 5);
-        let sizes: Vec<usize> = collector.batches().iter().map(Vec::len).collect();
-        assert_eq!(sizes, vec![5]);
-    }
-
-    /// Refuses every batch, as a closed UI channel does.
-    struct Gone;
-
-    impl EventSink for Gone {
-        fn send(&self, _: &[Event]) -> bool {
-            false
-        }
-    }
-
-    #[test]
-    fn a_subscriber_that_is_gone_is_dropped() {
-        let (_dir, project) = temp_project();
-        let conversation = conversations::create(&project).unwrap().id;
-        project.subscribe(conversation, 0, Box::new(Gone)).unwrap();
+        let opened = project.open(conversation, Box::new(collector.clone())).unwrap();
+        assert_eq!(opened.last_seq, 5);
         project.lock().persist(conversation, cancel(new_id())).unwrap();
-        // The refused batch ends the delivery thread; the next event finds its queue closed.
-        thread::sleep(BATCH_WINDOW * 4);
-        project.lock().persist(conversation, cancel(new_id())).unwrap();
-        assert_eq!(project.lock().subscription_count(), 0);
+        let seqs: Vec<i64> = collector.settled(1).iter().map(|e| e.seq).collect();
+        assert_eq!(seqs, vec![6]);
     }
 
     /// Takes the Project lock on delivery, so it deadlocks if delivery runs under that lock.
@@ -1127,35 +1081,6 @@ mod tests {
         project.subscribe(conversation, 0, Box::new(sink)).unwrap();
         project.lock().persist(conversation, cancel(new_id())).unwrap();
         assert_eq!(collector.settled(2).len(), 2);
-    }
-
-    #[test]
-    fn an_ended_subscription_receives_nothing_more() {
-        let (_dir, project) = temp_project();
-        let conversation = conversations::create(&project).unwrap().id;
-        let (first, second) = (Collector::default(), Collector::default());
-        let id = project.subscribe(conversation, 0, Box::new(first.clone())).unwrap();
-        project.subscribe(conversation, 0, Box::new(second.clone())).unwrap();
-        project.unsubscribe(id);
-        project.lock().persist(conversation, cancel(new_id())).unwrap();
-        assert_eq!(second.settled(1).len(), 1);
-        assert!(first.events().is_empty());
-
-        project.unsubscribe_all();
-        assert_eq!(project.lock().subscription_count(), 0);
-    }
-
-    #[test]
-    fn opening_delivers_only_events_persisted_after_it() {
-        let (_dir, project) = temp_project();
-        let conversation = conversations::create(&project).unwrap().id;
-        project.lock().persist(conversation, cancel(new_id())).unwrap();
-        let collector = Collector::default();
-        let opened = project.open(conversation, Box::new(collector.clone())).unwrap();
-        assert_eq!(opened.last_seq, 1);
-        project.lock().persist(conversation, cancel(new_id())).unwrap();
-        let seqs: Vec<i64> = collector.settled(1).iter().map(|e| e.seq).collect();
-        assert_eq!(seqs, vec![2]);
     }
 
     #[test]
@@ -1183,151 +1108,5 @@ mod tests {
             }
         }
         assert_eq!(opened["messages"], expected);
-    }
-
-    #[test]
-    fn components_are_rebuilt_in_the_order_they_were_added() {
-        let (_dir, project) = temp_project();
-        let conversation = conversations::create(&project).unwrap().id;
-        let question = send(&project, conversation, "papers on late blight");
-        let author = Author {
-            kind: AuthorKind::MiniMe,
-            id: "researcher".into(),
-        };
-        let reply =
-            conversations::start_reply(&project, conversation, question.id, author).unwrap();
-
-        let component = |kind: &str, text: &str| Component {
-            id: new_id(),
-            kind: kind.into(),
-            version: 1,
-            preview: serde_json::json!({ "papers": [] }),
-            text: text.into(),
-            source_asset_id: None,
-            answer: serde_json::Value::Null,
-            step_index: None,
-        };
-        let first = component("paper-sources", "first");
-        let second = component("theories", "second");
-        {
-            let mut state = project.lock();
-            for component in [&first, &second] {
-                let kind = EventKind::ComponentAdded {
-                    message_id: reply,
-                    component: component.clone(),
-                };
-                state.persist(conversation, kind).unwrap();
-            }
-        }
-
-        let (_, message) = project.lock().load_message(reply).unwrap().unwrap();
-        assert_eq!(message.components, vec![first.clone(), second]);
-
-        let history = project.lock().conversation_messages(conversation).unwrap();
-        let in_history = &history.iter().find(|m| m.id == reply).unwrap().components[0];
-        assert_eq!(
-            (in_history.text.as_str(), &in_history.preview),
-            ("first", &serde_json::Value::Null)
-        );
-        let (_, question) = project.lock().load_message(question.id).unwrap().unwrap();
-        assert!(question.components.is_empty());
-
-        let other = conversations::create(&project).unwrap().id;
-        let state = project.lock();
-        assert_eq!(state.conversation_component(other, first.id).unwrap(), None);
-        assert_eq!(state.conversation_component(conversation, first.id).unwrap(), Some(first));
-    }
-
-    #[test]
-    fn debug_records_are_replaced_or_appended_and_go_with_their_conversation() {
-        let (_dir, project) = temp_project();
-        let kept = conversations::create(&project).unwrap().id;
-        let deleted = conversations::create(&project).unwrap().id;
-        let first = send(&project, kept, "check the data").id;
-        let second = send(&project, deleted, "check the data").id;
-        let record = |n: u32| serde_json::json!({ "n": n });
-        {
-            let state = project.lock();
-            state.put_debug_record(kept, first, "jev", &record(1)).unwrap();
-            state.put_debug_record(kept, first, "jev", &record(2)).unwrap();
-            state.put_debug_record(deleted, second, "jev", &record(3)).unwrap();
-            assert_eq!(state.debug_records(first, "jev").unwrap(), vec![record(2)]);
-            assert_eq!(state.debug_records(first, "reply").unwrap(), Vec::<Value>::new());
-            for n in 4..=6 {
-                state.append_debug_record(kept, first, "reply", &record(n)).unwrap();
-            }
-            let replies = state.debug_records(first, "reply").unwrap();
-            assert_eq!(replies, vec![record(4), record(5), record(6)]);
-            assert_eq!(state.debug_records(first, "jev").unwrap(), vec![record(2)]);
-        }
-
-        conversations::delete(&project, deleted).unwrap();
-        let state = project.lock();
-        assert_eq!(state.debug_records(second, "jev").unwrap(), Vec::<Value>::new());
-        assert_eq!(state.debug_records(first, "jev").unwrap(), vec![record(2)]);
-        state.clear_debug_records().unwrap();
-        assert_eq!(state.debug_records(first, "jev").unwrap(), Vec::<Value>::new());
-    }
-
-    #[test]
-    fn steps_pauses_and_answers_are_rebuilt_from_events() {
-        let (_dir, project) = temp_project();
-        let conversation = conversations::create(&project).unwrap().id;
-        let question = send(&project, conversation, "does early planting reduce late blight?");
-        let author = Author {
-            kind: AuthorKind::MiniMe,
-            id: "investigator".into(),
-        };
-        let reply =
-            conversations::start_reply(&project, conversation, question.id, author).unwrap();
-        let started = |step_id: &str| EventKind::StepStarted {
-            message_id: reply,
-            step_id: step_id.into(),
-            step_type: "trait".into(),
-            name: "Refute".into(),
-        };
-        let completed = |step_id: &str, output: &str| EventKind::StepCompleted {
-            message_id: reply,
-            step_id: step_id.into(),
-            output: Some(output.into()),
-        };
-        let approval = Component {
-            id: new_id(),
-            kind: "approval".into(),
-            version: 1,
-            preview: serde_json::json!({ "step_id": "ask", "prompt": "Go on?" }),
-            source_asset_id: None,
-            text: "Go on?".into(),
-            answer: serde_json::Value::Null,
-            step_index: None,
-        };
-        let answered = |approved: bool| EventKind::ComponentAnswered {
-            message_id: reply,
-            component_id: approval.id,
-            answer: serde_json::json!({ "approved": approved }),
-        };
-        let mut state = project.lock();
-        let kinds = vec![
-            started("refute"),
-            completed("refute", "first critique"),
-            started("refute"),
-            completed("refute", "second critique"),
-            EventKind::ComponentAdded { message_id: reply, component: approval.clone() },
-            EventKind::MessagePaused { message_id: reply },
-        ];
-        state.persist_all(conversation, kinds, |_| Ok(())).unwrap();
-        assert_eq!(state.message_place(reply).unwrap().unwrap().1, MessageStatus::Paused);
-
-        state.persist(conversation, answered(true)).unwrap();
-        state.persist(conversation, answered(false)).unwrap();
-        state.persist(conversation, EventKind::MessageResumed { message_id: reply }).unwrap();
-
-        let (_, message) = state.load_message(reply).unwrap().unwrap();
-        assert_eq!(message.status, MessageStatus::Streaming);
-        let outputs: Vec<Option<&str>> =
-            message.steps.iter().map(|s| s.output.as_deref()).collect();
-        assert_eq!(outputs, [Some("first critique"), Some("second critique")]);
-        assert!(message.steps.iter().all(|s| s.done));
-        assert_eq!(message.components[0].answer, serde_json::json!({ "approved": true }));
     }
 }

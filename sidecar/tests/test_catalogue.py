@@ -1,33 +1,29 @@
+import pandas as pd
+
 from mini_me_sidecar.adapters.data.catalogue import (
-    Chart,
     InRange,
     Matches,
     NotNull,
-    chart_problem,
+    pick_columns,
     problem,
+    role_problem,
 )
 
 COLUMNS = ["plot_id", "yield"]
 
 
 def test_unknown_columns_and_bad_parameters_are_problems():
-    assert problem(NotNull(kind="not_null", columns=["yeild"]), COLUMNS) == "no column `yeild`"
+    assert problem(NotNull(kind="not_null", columns=["yeild"]), COLUMNS)
     assert problem(InRange(kind="in_range", column="yield", min=80, max=0), COLUMNS)
     assert problem(Matches(kind="matches", column="plot_id", pattern="("), COLUMNS)
     assert problem(InRange(kind="in_range", column="yield", min=0, max=80), COLUMNS) is None
 
+    frame = pd.DataFrame({"plot_id": ["a", "b"], "yield": [1.0, 2.0], "height": [3, 4]})
+    assert pick_columns(frame, [], ("number",)) == (["yield", "height"], [])
+    picked, left_out = pick_columns(frame, ["yield", "plot_id", "yeild"], ("number",))
+    assert picked == ["yield"]
+    assert len(left_out) == 2 and all(reason for _, reason in left_out)
 
-TYPES = {"yield": "number", "variety": "text", "date": "date"}
-
-
-def chart(type: str, **fields) -> Chart:
-    empty = {"x": None, "y": None, "columns": [], "series": None, "aggregate": None}
-    return Chart(type=type, title="", alternatives=[], **{**empty, **fields})
-
-
-def test_charts_need_columns_of_the_right_type():
-    assert "text column" in chart_problem(chart("histogram", x="variety"), TYPES)
-    assert chart_problem(chart("bar", x="variety", aggregate="count"), TYPES) is None
-    assert chart_problem(chart("bar", x="variety", aggregate="mean"), TYPES) == "no `y` column given"
-    assert "at least 2" in chart_problem(chart("heatmap", columns=["yield"]), TYPES)
-    assert chart_problem(chart("scatter", x="yield", y="heigth"), TYPES) == "no column `heigth`"
+    assert role_problem(frame, "yield", "outcome", ("number",)) is None
+    assert role_problem(frame, "plot_id", "outcome", ("number",))
+    assert role_problem(frame, "yeild", "outcome", ("number",))

@@ -1,16 +1,20 @@
+import { ListRow } from "../shell/ListRow";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import type { MessageView } from "../../protocol/eventStore";
 import type { Outline, OutlineEntry } from "./outline";
 import { Markdown } from "./Markdown";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
-import { ToolSheet } from "../shell/Sheet";
+import { ToolSheet, ToolSheetGroup } from "../shell/Sheet";
 import { useMiniMes } from "../../hooks/useMiniMes";
 import {
   StepComponents,
   StepMark,
+  WrittenAnswer,
   ANSWER_LABELS,
   approvalAnswers,
+  approvalComponents,
   componentPlaces,
   stepState,
 } from "./WorkflowProgress";
@@ -21,33 +25,6 @@ export type Panel =
   | { kind: "outline" }
   | { kind: "report" }
   | { kind: "steps"; messageId: string };
-
-function SidePanel({
-  title,
-  meta,
-  onClose,
-  children,
-}: {
-  title: string;
-  meta: ReactNode;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <ToolSheet title={title} meta={meta} onClose={onClose}>
-      {children}
-    </ToolSheet>
-  );
-}
-
-function Group({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="mt-6 first:mt-0">
-      <h3 className="mb-2.5 font-serif text-subheading text-foreground">{label}</h3>
-      {children}
-    </section>
-  );
-}
 
 /** What the Conversation uses: its Mini-Mes, files and tables and charts. Clicking an entry
  * scrolls to the next message it appears in, wrapping back to the first. */
@@ -73,12 +50,14 @@ export function OutlinePanel({ outline, onClose }: { outline: Outline; onClose: 
   const total = groups.reduce((sum, group) => sum + group.entries.length, 0);
 
   return (
-    <SidePanel title="Outline" meta={`${total} used`} onClose={onClose}>
+    <ToolSheet title="Outline" meta={`${total} used`} onClose={onClose}>
       {groups.length === 0 && (
-        <p className="text-body text-muted-foreground">Nothing has been used yet.</p>
+        <Empty>
+          <EmptyDescription>Nothing has been used yet.</EmptyDescription>
+        </Empty>
       )}
       {groups.map((group) => (
-        <Group key={group.label} label={group.label}>
+        <ToolSheetGroup key={group.label} label={group.label}>
           {/* `grid-cols-1` lets rows shrink below their content, so long names truncate. */}
           <ul className="grid grid-cols-1">
             {group.entries.map((entry) => {
@@ -87,35 +66,35 @@ export function OutlinePanel({ outline, onClose }: { outline: Outline; onClose: 
               const name = miniMe?.name ?? entry.label;
               return (
                 <li key={entry.id} className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => jump(entry)}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-                  >
-                    {miniMe ? (
-                      <MiniMeAvatar miniMe={miniMe} size={22} />
-                    ) : (
-                      <span aria-hidden className="w-[22px] shrink-0 text-center text-muted-foreground">
-                        {group.sign}
+                  <ListRow
+                    title={name}
+                    leading={
+                      miniMe ? (
+                        <MiniMeAvatar miniMe={miniMe} size={22} />
+                      ) : (
+                        <span aria-hidden className="w-5.5 shrink-0 text-center text-muted-foreground">
+                          {group.sign}
+                        </span>
+                      )
+                    }
+                    name={name}
+                    trailing={
+                      <span
+                        aria-label={`in ${entry.messageIds.length} messages`}
+                        className="shrink-0 text-meta text-muted-foreground tabular-nums"
+                      >
+                        {entry.messageIds.length}
                       </span>
-                    )}
-                    <span title={name} className="min-w-0 flex-1 truncate">
-                      {name}
-                    </span>
-                    <span
-                      aria-label={`in ${entry.messageIds.length} messages`}
-                      className="ml-auto shrink-0 text-right text-meta text-muted-foreground tabular-nums"
-                    >
-                      {entry.messageIds.length}
-                    </span>
-                  </button>
+                    }
+                    onOpen={() => jump(entry)}
+                  />
                 </li>
               );
             })}
           </ul>
-        </Group>
+        </ToolSheetGroup>
       ))}
-    </SidePanel>
+    </ToolSheet>
   );
 }
 
@@ -133,11 +112,12 @@ export function StepsPanel({ message, onClose }: { message: MessageView; onClose
   const miniMes = useMiniMes();
   const miniMe = miniMes.find((m) => m.id === message.author.id);
   const answers = approvalAnswers(message.steps, message.components);
+  const asked = approvalComponents(message.steps, message.components);
   const { byStep } = componentPlaces(message.steps, message.components, message.status);
   const done = message.steps.filter((s) => s.done).length;
 
   return (
-    <SidePanel
+    <ToolSheet
       title={miniMe ? `${miniMe.name}'s Workflow` : "Workflow"}
       meta={
         <MetaParts
@@ -180,6 +160,9 @@ export function StepsPanel({ message, onClose }: { message: MessageView; onClose
                     {message.progress.label}
                   </span>
                 )}
+                {answer === "answered" && asked[index] && (
+                  <WrittenAnswer approval={asked[index]} />
+                )}
                 {step.type === "trait" && step.done && step.output && (
                   <div className="text-ink-2">
                     <Markdown content={step.output} size="ui" />
@@ -200,6 +183,6 @@ export function StepsPanel({ message, onClose }: { message: MessageView; onClose
           );
         })}
       </ol>
-    </SidePanel>
+    </ToolSheet>
   );
 }

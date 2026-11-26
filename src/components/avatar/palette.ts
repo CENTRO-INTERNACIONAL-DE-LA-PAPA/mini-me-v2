@@ -28,19 +28,30 @@ interface ColorFamily extends HueColor {
 
 const family = (name: string, hue: number): ColorFamily => ({ name, hue, ...colorForHue(hue) });
 
+/** In hue order, as the colour picker shows them. */
 export const COLOR_FAMILIES: ColorFamily[] = [
+  family("Rose", 12),
   { name: "Red", hue: 34, solid: "#FF5A36", ink: "#B3300F" },
   family("Brown", 55),
+  family("Amber", 70),
   { name: "Yellow", hue: 84, solid: "#F5B800", ink: "#7A5A00" },
+  family("Lime", 120),
   { name: "Green", hue: 158, solid: "#2FA36B", ink: "#1E7A4A" },
+  family("Mint", 180),
   family("Teal", 205),
+  family("Sky", 228),
   family("Blue", 250),
+  family("Indigo", 266),
   { name: "Purple", hue: 282, solid: "#6E5BFF", ink: "#4A3AE0" },
+  family("Orchid", 305),
+  family("Magenta", 328),
   family("Pink", 350),
 ];
 
+export const randomFamily = () => COLOR_FAMILIES[Math.floor(Math.random() * COLOR_FAMILIES.length)];
+
 /** The tint of a hue: a pale background in the same tone as the families' tints. */
-export const tintForHue = (hue: number) => `oklch(${TINT.lightness} ${TINT.chroma} ${hue})`;
+const tintForHue = (hue: number) => `oklch(${TINT.lightness} ${TINT.chroma} ${hue})`;
 
 /** A Mini-Me's colours for a picked colour: its solid and ink, and the tint of its hue. */
 export const miniMeColors = ({ hue, solid, ink }: HueColor): MiniMeColors => ({

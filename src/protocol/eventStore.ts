@@ -125,8 +125,8 @@ export function applyEvent(state: ConversationState, event: ProtocolEvent): Conv
         ),
       };
     case "step.started": {
-      const { message_id, step_id, type, name } = known.payload;
-      const step = { step_id, type, name, output: null, done: false };
+      const { message_id, step_id, type, name, show_results } = known.payload;
+      const step = { step_id, type, name, output: null, done: false, show_results };
       return {
         ...next,
         messages: updateMessage(state, message_id, (m) => ({ ...m, steps: [...m.steps, step] })),

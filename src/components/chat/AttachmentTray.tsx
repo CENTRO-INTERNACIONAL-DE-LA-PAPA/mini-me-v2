@@ -1,3 +1,5 @@
+import { Hint } from "../shell/Hint";
+import { Button } from "@/components/ui/button";
 import { XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../../api";
@@ -67,12 +69,12 @@ function ImageAttachment({
 
   return (
     <figure className="relative w-20">
-      <div className="size-20 overflow-hidden rounded-lg bg-muted">
+      <div className="size-20 overflow-hidden rounded-xl bg-muted">
         {url && <img src={url} alt={asset.name} className="size-full object-cover" />}
       </div>
-      <figcaption className="mt-1 truncate text-meta text-muted-foreground" title={asset.name}>
-        {asset.name}
-      </figcaption>
+      <Hint label={asset.name}>
+        <figcaption className="mt-1 truncate text-meta text-muted-foreground">{asset.name}</figcaption>
+      </Hint>
       <span className="absolute -top-1.5 -right-1.5 flex rounded-full border border-border bg-card">
         <RemoveButton asset={asset} onRemove={onRemove} />
       </span>
@@ -88,14 +90,15 @@ function RemoveButton({
   onRemove: (asset: AssetRef) => void;
 }) {
   return (
-    <button
-      type="button"
-      className="flex cursor-pointer p-0.5 text-muted-foreground hover:text-foreground"
-      aria-label={`Remove ${asset.name}`}
-      title={`Remove ${asset.name}`}
-      onClick={() => onRemove(asset)}
-    >
-      <XIcon aria-hidden className="size-3.5" />
-    </button>
+    <Hint label={`Remove ${asset.name}`}>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={`Remove ${asset.name}`}
+        onClick={() => onRemove(asset)}
+      >
+        <XIcon aria-hidden />
+      </Button>
+    </Hint>
   );
 }

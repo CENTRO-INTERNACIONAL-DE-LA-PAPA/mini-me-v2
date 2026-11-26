@@ -1,3 +1,5 @@
+import { ResultCard } from "./ResultCard";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDownIcon, ChevronRightIcon, DownloadIcon, LockIcon } from "lucide-react";
@@ -11,7 +13,8 @@ import { ReferenceChip } from "../chat/ReferenceChip";
 import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import type { Renderers, RendererProps } from "./catalogue";
-import { openLink, webUrl } from "./links";
+import { webUrl } from "./links";
+import { ErrorText } from "../shell/ErrorText";
 
 /** `dataset-results` version 1 preview from *Search CIP Dataverse*; `datasets` is the first page. */
 interface DatasetResultsData {
@@ -23,7 +26,7 @@ interface DatasetResultsData {
 }
 
 /** The authors, three at most, and the year: "Atieno, Elly (2020)". */
-export function datasetByline(dataset: Dataset): string {
+function datasetByline(dataset: Dataset): string {
   const authors = dataset.authors ?? [];
   const names = authors.slice(0, 3).join("; ") + (authors.length > 3 ? " et al." : "");
   const year = dataset.year ? ` (${dataset.year})` : "";
@@ -75,17 +78,23 @@ function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Data
     }
   }
 
-  if (error) return <p className="text-meta text-destructive">{error}</p>;
+  if (error) return <ErrorText>{error}</ErrorText>;
   if (!files) return <p className="text-meta text-muted-foreground">Loading files…</p>;
-  if (files.length === 0) return <p className="text-meta text-muted-foreground">No files.</p>;
+  if (files.length === 0) {
+    return (
+      <Empty className="py-4">
+        <EmptyDescription>No files.</EmptyDescription>
+      </Empty>
+    );
+  }
   return (
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col">
         {files.map(({ file, error }) => (
           <li key={file.id} className="flex flex-col gap-0.5 border-t border-border py-2 first:border-t-0">
-            <div className="flex items-center gap-2.5 text-ui">
+            <div className="flex items-center gap-2 text-ui">
               {file.asset ? (
-                <span className="w-[18px] shrink-0" aria-hidden />
+                <span className="w-4.5 shrink-0" aria-hidden />
               ) : (
                 <Checkbox
                   aria-label={`Download ${file.name}`}
@@ -106,7 +115,7 @@ function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Data
                 <LockIcon
                   aria-label="Restricted"
                   role="img"
-                  className="size-[15px] shrink-0 text-muted-foreground"
+                  className="size-4 shrink-0 text-muted-foreground"
                 >
                   <title>Restricted: needs access</title>
                 </LockIcon>
@@ -117,12 +126,12 @@ function DatasetFiles({ projectId, dataset }: { projectId: string; dataset: Data
                 </ReferenceChip>
               )}
             </div>
-            {error && <p className="pl-7 text-meta text-destructive">{error}</p>}
+            {error && <ErrorText className="pl-7">{error}</ErrorText>}
           </li>
         ))}
       </ul>
       <Button
-        variant="outline"
+        variant="secondary"
         className="self-start"
         disabled={ticked.size === 0 || downloading}
         onClick={() => void download()}
@@ -139,25 +148,12 @@ function DatasetCard({ dataset, projectId }: { dataset: Dataset; projectId?: str
   const url = webUrl(dataset.url);
   const Chevron = open ? ChevronDownIcon : ChevronRightIcon;
   return (
-    <article className="flex flex-col gap-1 rounded-xl border border-card-edge bg-card px-4 py-3">
-      {url ? (
-        <button
-          type="button"
-          title={url}
-          className="line-clamp-2 cursor-pointer text-left text-ui font-semibold text-foreground hover:underline"
-          onClick={() => openLink(url)}
-        >
-          {dataset.title}
-        </button>
-      ) : (
-        <span className="line-clamp-2 text-ui font-semibold text-foreground">{dataset.title}</span>
-      )}
-      {datasetByline(dataset) && (
-        <span className="text-meta text-muted-foreground">{datasetByline(dataset)}</span>
-      )}
-      {dataset.description && (
-        <span className="line-clamp-3 text-meta text-ink-2">{dataset.description}</span>
-      )}
+    <ResultCard
+      title={dataset.title}
+      url={url}
+      byline={datasetByline(dataset)}
+      description={dataset.description}
+    >
       {projectId && dataset.files > 0 && (
         <Button
           variant="ghost"
@@ -170,7 +166,7 @@ function DatasetCard({ dataset, projectId }: { dataset: Dataset; projectId?: str
         </Button>
       )}
       {projectId && open && <DatasetFiles projectId={projectId} dataset={dataset} />}
-    </article>
+    </ResultCard>
   );
 }
 
@@ -204,9 +200,9 @@ function DatasetResults({ preview, projectId }: RendererProps) {
       {datasets.map((dataset) => (
         <DatasetCard key={dataset.id} dataset={dataset} projectId={projectId} />
       ))}
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
       {datasets.length < first.total && (
-        <Button variant="outline" className="self-start" disabled={loading} onClick={() => void showMore()}>
+        <Button variant="secondary" className="self-start" disabled={loading} onClick={() => void showMore()}>
           {loading ? "Loading…" : "Show more"}
         </Button>
       )}

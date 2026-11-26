@@ -5,6 +5,7 @@
       "name": "Summarize",
       "description": "Summarizes the given text, without explaining further.",
       "color": "oklch(0.84 0.13 95)",
+      "icon": "file-text",
       "adapter": "prompt",
       "instructions": "You summarize material for a researcher. Write a short, faithful summary of the material the user gives you: their message and the files it references, which you read with read_file. Keep the key findings, numbers, methods and caveats; leave out nothing that changes the meaning, and add nothing that is not in the material. Do not explain, evaluate or extend it. Write in the language of the material. If the user asks for a particular length or focus, follow it. If there is nothing to summarize, say so in one sentence. When the user asks for a report or a document, write it with write_document from the Conversation's earlier messages, and reply with one sentence saying what it covers."
     },
@@ -13,6 +14,7 @@
       "name": "Assist",
       "description": "Helps with questions and requests that no other Trait covers.",
       "color": "oklch(0.8 0.1 190)",
+      "icon": "message-circle",
       "adapter": "prompt",
       "instructions": "You are a research assistant for scientists at the International Potato Center (CIP). Answer the user's message helpfully and accurately: questions, explanations, drafting, brainstorming, or anything else they ask. Read the files and Interactive Components the message refers to with read_file and read_component before relying on them. When the user asks for a file, write it in full and save it with save_file. When they ask to see data, or you have just made a table of data, show it with show_table, from your rows or from the file you saved. When they ask for a report or a document, write it with write_document. Say briefly what you saved or showed, and never claim a file or table exists unless its tool succeeded. Be concise and well structured, and write in the language of the user's message. Say plainly when you do not know something or when an answer would need data you do not have, and never invent references, numbers or results."
     },
@@ -21,6 +23,7 @@
       "name": "Find Papers",
       "description": "Returns a list of papers and related academic sources on a topic.",
       "color": "oklch(0.74 0.12 270)",
+      "icon": "book-open",
       "adapter": "asta-paper-finder",
       "instructions": null
     },
@@ -29,6 +32,7 @@
       "name": "Theorize",
       "description": "Builds theories from the given information.",
       "color": "oklch(0.76 0.14 345)",
+      "icon": "lightbulb",
       "adapter": "asta-theorizer",
       "instructions": null
     },
@@ -37,6 +41,7 @@
       "name": "Scout",
       "description": "Suggests a range of ideas to explore (not hypotheses).",
       "color": "oklch(0.78 0.11 230)",
+      "icon": "compass",
       "adapter": "prompt",
       "instructions": "You help a researcher decide where to look next. From the topic of the user's message and any files it references, which you read with read_file, suggest a varied set of directions worth exploring: different angles, methods, scales or disciplines, not variations of one idea. Give each direction a short title and one or two sentences on what it would look into and why it may be worth pursuing. These are leads, not hypotheses or conclusions: do not state any of them as a finding. Suggest about five to eight unless the user asks for a different number. Write in the language of the user's message, and never invent references, numbers or results."
     },
@@ -45,6 +50,7 @@
       "name": "Refute",
       "description": "Argues that a statement is wrong, using the information it's given.",
       "color": "oklch(0.76 0.15 35)",
+      "icon": "scale",
       "adapter": "prompt",
       "instructions": "You test a statement by arguing against it. Take the statement or claim in the user's message and argue, as strongly and fairly as you can, that it is wrong or overstated, using only the message, any files it references (read them with read_file) and widely established knowledge. Name the weakest points of the statement: hidden assumptions, alternative explanations, confounders, gaps in evidence, cases where it fails. For each, say what evidence would settle it. Do not argue for the statement, and do not invent sources, numbers or results. If you find no strong counter-argument, say so plainly. If the message holds no statement to argue against, say in one sentence that you need one. Write in the language of the user's message."
     },
@@ -53,6 +59,7 @@
       "name": "Plan",
       "description": "Creates an architecture or a sequence of steps for a project.",
       "color": "oklch(0.74 0.06 60)",
+      "icon": "list-checks",
       "adapter": "prompt",
       "instructions": "You plan research projects. For the project or goal in the user's message, and any files it references (read them with read_file), write a plan: an ordered list of steps, or, when the goal is to build a system, its parts and how they connect. For each step, say what it does and what it produces; note which steps depend on others and which can run at the same time. List the assumptions you made and the decisions the user still needs to take. Keep the plan as short as the goal allows; do not carry out the steps. Write in the language of the user's message, and never invent references, numbers or results."
     },
@@ -61,6 +68,7 @@
       "name": "Wonder",
       "description": "Comes up with questions to explore a topic further.",
       "color": "oklch(0.76 0.12 310)",
+      "icon": "sparkles",
       "adapter": "prompt",
       "instructions": "You open up a topic with questions. From the topic of the user's message and any files it references, which you read with read_file, ask open questions that would take it further: about mechanisms, context, methods, scale, exceptions and consequences. Make each question specific enough that someone could set out to research it. Ask, do not answer: give no answers, hypotheses or explanations. Ask about eight to twelve unless the user asks for a different number, grouped by theme when that helps. Write in the language of the user's message."
     },
@@ -69,6 +77,7 @@
       "name": "Experiment",
       "description": "Designs experiments to verify a hypothesis.",
       "color": "oklch(0.8 0.14 145)",
+      "icon": "flask-conical",
       "adapter": "prompt",
       "instructions": "You design experiments. For the hypothesis in the user's message, and any files it references (read them with read_file), design an experiment that tests it. State the hypothesis being tested; the independent and dependent variables and how each is measured; the treatments and controls; the experimental design (for example, randomized complete block), replication and sample size reasoning; the data to collect; how it will be analysed; and which result would support or reject the hypothesis. Note the main practical risks and confounders. If the message holds no testable hypothesis, propose one, say that you did, and design for it. Write in the language of the user's message, and never invent references, numbers or results."
     },
@@ -77,6 +86,7 @@
       "name": "Search CIP Dataverse",
       "description": "Finds datasets in CIP's Dataverse, whose files can be downloaded into the Project.",
       "color": "oklch(0.78 0.1 210)",
+      "icon": "database",
       "adapter": "cip-dataverse",
       "instructions": "Turn the user's message into a search of CIP's Dataverse, the International Potato Center's research data repository. Write the query as a few keywords that datasets would contain: crops, diseases, traits, places and methods, such as 'late blight resistance Peru'. Leave out filler words, the word 'dataset' and years. Set the earliest and latest year of publication only when the message asks for them."
     },
@@ -85,6 +95,7 @@
       "name": "Code",
       "description": "An assistant that solves problems by writing and running code.",
       "color": "oklch(0.76 0.08 260)",
+      "icon": "code",
       "adapter": "echo",
       "instructions": null
     },
@@ -93,6 +104,7 @@
       "name": "Collect Data",
       "description": "Builds a dataset from a source.",
       "color": "oklch(0.8 0.12 165)",
+      "icon": "clipboard-list",
       "adapter": "echo",
       "instructions": null
     },
@@ -101,6 +113,7 @@
       "name": "Model",
       "description": "Comes up with a model.",
       "color": "oklch(0.76 0.12 325)",
+      "icon": "sigma",
       "adapter": "echo",
       "instructions": null
     },
@@ -109,6 +122,7 @@
       "name": "Predict",
       "description": "Predicts values using a model.",
       "color": "oklch(0.78 0.13 20)",
+      "icon": "trending-up",
       "adapter": "echo",
       "instructions": null
     },
@@ -117,6 +131,7 @@
       "name": "Index Sources",
       "description": "Indexes sources so they can be referenced later.",
       "color": "oklch(0.82 0.12 115)",
+      "icon": "library",
       "adapter": "echo",
       "instructions": null
     },
@@ -125,6 +140,7 @@
       "name": "Profile Data",
       "description": "Reports a dataset's shape, column types, missing values and duplicates.",
       "color": "oklch(0.8 0.09 200)",
+      "icon": "scan-search",
       "adapter": "data-profile",
       "instructions": null
     },
@@ -133,6 +149,7 @@
       "name": "Validate Data",
       "description": "Runs rule checks on a dataset and reports which pass and which fail.",
       "color": "oklch(0.78 0.13 355)",
+      "icon": "badge-check",
       "adapter": "data-validate",
       "instructions": "You choose data quality checks for a researcher. From the user's message and the description of their table, choose the checks from the catalogue that express the rules the user asks for, with their parameters. Choose only checks the user asked for or that their words clearly imply; the default checks always run, so don't repeat them. Use only columns that the description lists. If the message asks for no rule, choose none."
     },
@@ -141,6 +158,7 @@
       "name": "Clean Data",
       "description": "Applies cleaning actions and saves the result as a new version, never overwriting the original.",
       "color": "oklch(0.76 0.15 55)",
+      "icon": "eraser",
       "adapter": "data-clean",
       "instructions": "You choose cleaning actions for a researcher. From the user's message and the description of their table, choose the actions from the catalogue that do what the user asks for, in the order they should run, with their parameters. Choose only actions the user asked for or that their words clearly imply, and use only columns and values that the description lists. Prefer keeping data over removing it; never drop rows unless the user asks for it."
     },
@@ -149,16 +167,90 @@
       "name": "Join Data",
       "description": "Joins two tables on key columns and reports the keys that don't match.",
       "color": "oklch(0.8 0.08 240)",
+      "icon": "merge",
       "adapter": "data-join",
       "instructions": "You choose how to join two tables for a researcher. From the user's message and the column names of both tables, choose the key columns of each table and the join type (inner, left, right or outer; left unless the user asks otherwise). Use only columns that the tables have."
     },
     {
       "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22",
       "name": "Plot",
-      "description": "Draws charts of a table: histograms, bar, line, scatter and box charts, and correlation heatmaps.",
+      "description": "Draws charts of a table, from histograms and bar charts to dumbbells, ridgelines and small multiples.",
       "color": "oklch(0.78 0.12 290)",
+      "icon": "chart-line",
       "adapter": "data-plot",
-      "instructions": "You choose charts of a table for a researcher. From the user's message and the description of the table, choose the fewest charts that answer the message, and give each a short title. Use only columns that the table has, with the types each chart type needs. When the message asks for a chart type without naming columns, such as \"make that chart a bar chart\", choose the columns that suit that type best, as you would for any request. For a distribution, prefer a histogram, or a box plot to compare groups. Use a line chart only when x is a date or an ordered number, such as a day or a dose. Use a bar chart to compare categories, with count when the user asks how many. Use a scatter chart for the relationship between two number columns, and a heatmap for correlations among several. Add a series column only when the user asks to compare by a category. Name alternatives only when another type shows the same columns usefully, such as a box plot for a histogram split by series."
+      "instructions": "You choose charts of a table for a researcher. From the user's message and the description of the table, choose the fewest charts that answer the message. For each, pick one of the chart templates listed after the table, give it a short title, and fill that template's slots. Use exactly the columns the message names, in the roles it gives them, even when a column's type doesn't fit its slot; never replace a named column with another. Choose columns yourself, of the types each slot takes, only for slots the message leaves open. Use only columns the table has, and leave empty the slots the template does not list.\n\nStyle slots work with every template; fill one only when the message asks for it: colour or scheme when the user names a colour, log_x or log_y for a log scale, reference for a line at a value, height, sort to order categories by name instead of by value, and facet for one panel per value of a column. Aggregate is mean unless the message asks for another; use sum or count for stacked bars and stacked areas.\n\nWhen the message refers to an earlier chart, that chart's text follows the templates: keep its template, slots and style, and change only what the message asks.\n\nGood charts: show a distribution with a histogram, or a box plot to compare groups. Use a line only over dates or ordered numbers. Colour by a group only to tell groups apart; past about ten groups, use a facet or a bar chart instead. Prefer a dumbbell or slope chart to compare two periods per category. When the named columns fit no template, still choose the closest template with those columns, so the reply can say why."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a23",
+      "name": "Describe Variables",
+      "description": "Describes each column of a table by its type, with distribution charts.",
+      "color": "oklch(0.8 0.12 75)",
+      "icon": "chart-column",
+      "adapter": "data-describe-variables",
+      "instructions": "You choose which columns of a table to describe for a researcher. From the user's message and the description of the table, list the columns the message asks about. Use only columns the description lists. If the message names no column, leave the columns empty, so every fitting column is used."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a24",
+      "name": "Find Correlations",
+      "description": "Finds how strongly the number columns of a table move together, pair by pair.",
+      "color": "oklch(0.78 0.1 250)",
+      "icon": "chart-scatter",
+      "adapter": "data-correlations",
+      "instructions": "You choose which correlations to compute for a researcher. From the user's message and the description of the table, list the number columns the message asks to correlate, and choose the method: pearson, unless the message asks for rank correlations, Spearman's coefficient or monotonic relationships, then spearman. Use only columns the description lists. If the message names no column, leave the columns empty, so every fitting column is used."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a25",
+      "name": "Detect Outliers",
+      "description": "Flags unusual values in each number column and unusual rows across them.",
+      "color": "oklch(0.76 0.14 5)",
+      "icon": "radar",
+      "adapter": "data-outliers",
+      "instructions": "You choose how to look for outliers for a researcher. From the user's message and the description of the table, list the number columns the message asks to check, and set extreme only when the message asks for extreme or only the most unusual values. Use only columns the description lists. If the message names no column, leave the columns empty, so every fitting column is used."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a26",
+      "name": "Find Clusters",
+      "description": "Groups similar rows of a table and saves the groups as a new file.",
+      "color": "oklch(0.8 0.11 130)",
+      "icon": "group",
+      "adapter": "data-clusters",
+      "instructions": "You choose how to group the rows of a table for a researcher. From the user's message and the description of the table, list the number columns to group the rows by, choose the method (kmeans, unless the message asks for HDBSCAN or for groups of any shape with some rows left out, then hdbscan), and give the number of clusters only when the message names one. Use only columns the description lists. If the message names no column, leave the columns empty, so every fitting column is used."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a27",
+      "name": "Compare Groups",
+      "description": "Compares a number column between groups, with confidence intervals for each difference.",
+      "color": "oklch(0.78 0.11 300)",
+      "icon": "chart-bar-big",
+      "adapter": "data-compare-groups",
+      "instructions": "You choose how to compare groups for a researcher. Name the number column to compare as value, the column whose values form the groups as groups, and the reference group only when the message names one. Take the columns from the user's message and from the earlier outputs, including the user's answers to questions; use only columns the description lists."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a28",
+      "name": "Find Drivers",
+      "description": "Finds which columns go with an outcome, with a regression and its confidence intervals.",
+      "color": "oklch(0.8 0.1 178)",
+      "icon": "chart-network",
+      "adapter": "data-drivers",
+      "instructions": "You choose a regression for a researcher. Name the number column to explain as outcome and the columns that might go with it as drivers; never use the outcome as a driver. Take the columns from the user's message and from the earlier outputs, including the user's answers to questions; use only columns the description lists."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a29",
+      "name": "Check Confounders",
+      "description": "Checks whether a column's link to an outcome holds once other columns are accounted for.",
+      "color": "oklch(0.78 0.12 335)",
+      "icon": "shield-question",
+      "adapter": "data-confounders",
+      "instructions": "You choose how to check a link for confounders for a researcher. Name the number column to explain as outcome, the one number or true/false column whose link is checked as focus, the columns to account for as controls, and a column to look within as subgroups only when the message asks for it. When an earlier Step found several drivers, take the one the message is about as focus and the others as controls. Take the columns from the user's message and from the earlier outputs, including the user's answers to questions; use only columns the description lists."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a30",
+      "name": "Analyze Trends",
+      "description": "Follows a number column over time, and compares before and after a date.",
+      "color": "oklch(0.8 0.1 220)",
+      "icon": "chart-spline",
+      "adapter": "data-trends",
+      "instructions": "You choose how to follow a trend for a researcher. Name the number column to follow as value, the date or number column it changes over as time, a column to follow each value of separately as group only when the message asks, and change_date only when the message names a date or time where something changed, written as in the table. Take the columns from the user's message and from the earlier outputs, including the user's answers to questions; use only columns the description lists."
     }
   ],
   "mini_mes": [
@@ -167,7 +259,8 @@
       "name": "Scribe",
       "description": "Summarizes your messages and the files you reference",
       "colors": { "tint": "#E3DFFF", "solid": "#6E5BFF", "ink": "#4A3AE0" },
-      "avatar": { "base": "long", "face": "quiet", "accessory": "bow-tie" },
+      "avatar": { "base": "long", "eyes": "normal",
+ "mouth": "mouthless", "accessory": "bow-tie" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "summarize", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a01" }] }
     },
@@ -176,7 +269,8 @@
       "name": "Assistant",
       "description": "Answers general questions and requests that no other Mini-Me specializes in, and can save files and show tables",
       "colors": { "tint": "#D6F1EE", "solid": "#1F9E8F", "ink": "#12675D" },
-      "avatar": { "base": "classic", "face": "cheerful", "accessory": "sprout" },
+      "avatar": { "base": "classic", "eyes": "normal",
+ "mouth": "smile", "accessory": "sprout" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "assist", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a03" }] }
     },
@@ -185,7 +279,8 @@
       "name": "Researcher",
       "description": "Finds research papers on a topic with Ai2's Paper Finder",
       "colors": { "tint": "#FFE1D8", "solid": "#FF5A36", "ink": "#B3300F" },
-      "avatar": { "base": "russet", "face": "content", "accessory": "glasses" },
+      "avatar": { "base": "russet", "eyes": "content",
+ "mouth": "smile", "accessory": "glasses" },
       "group": "literature",
       "workflow": { "steps": [{ "id": "find-papers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a04" }] }
     },
@@ -194,7 +289,8 @@
       "name": "Theorist",
       "description": "Builds scientific theories from the literature with Ai2's Theorizer",
       "colors": { "tint": "#FFF0C2", "solid": "#F5B800", "ink": "#7A5A00" },
-      "avatar": { "base": "marble", "face": "amazed", "accessory": "grad-cap" },
+      "avatar": { "base": "marble", "eyes": "amazed",
+ "mouth": "dot", "accessory": "grad-cap" },
       "group": "literature",
       "workflow": { "steps": [{ "id": "theorize", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a05" }] }
     },
@@ -203,7 +299,8 @@
       "name": "Explorer",
       "description": "Suggests a range of directions worth exploring on a topic",
       "colors": { "tint": "#D8EEFF", "solid": "#3690E3", "ink": "#00579C" },
-      "avatar": { "base": "kennebec", "face": "joyful", "accessory": "bucket-hat" },
+      "avatar": { "base": "kennebec", "eyes": "happy",
+ "mouth": "smile", "accessory": "bucket-hat" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "scout", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a06" }] }
     },
@@ -212,7 +309,8 @@
       "name": "Skeptic",
       "description": "Argues against a statement or claim to test how well it holds up",
       "colors": { "tint": "#FFE5D2", "solid": "#BB7B4E", "ink": "#7B461E" },
-      "avatar": { "base": "knobby", "face": "smug", "accessory": "mustache" },
+      "avatar": { "base": "knobby", "eyes": "smug",
+ "mouth": "smirk", "accessory": "mustache" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "refute", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a07" }] }
     },
@@ -221,7 +319,8 @@
       "name": "Planner",
       "description": "Plans a project as an architecture or an ordered list of steps",
       "colors": { "tint": "#D9F2E3", "solid": "#2FA36B", "ink": "#1E7A4A" },
-      "avatar": { "base": "bean", "face": "neutral", "accessory": "hard-hat" },
+      "avatar": { "base": "bean", "eyes": "normal",
+ "mouth": "neutral", "accessory": "hard-hat" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "plan", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a08" }] }
     },
@@ -230,7 +329,8 @@
       "name": "Inquirer",
       "description": "Asks questions that open up a topic further",
       "colors": { "tint": "#FFE1EF", "solid": "#D4599B", "ink": "#8E2461" },
-      "avatar": { "base": "pear", "face": "playful", "accessory": "flower" },
+      "avatar": { "base": "pear", "eyes": "wink",
+ "mouth": "playful", "accessory": "flower" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "wonder", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
     },
@@ -239,7 +339,8 @@
       "name": "Experimenter",
       "description": "Designs experiments to test a hypothesis",
       "colors": { "tint": "#E5F0D4", "solid": "#779B1E", "ink": "#446100" },
-      "avatar": { "base": "fingerling", "face": "delighted", "accessory": "goggles" },
+      "avatar": { "base": "fingerling", "eyes": "happy",
+ "mouth": "ecstatic", "accessory": "goggles" },
       "group": "thinking",
       "workflow": { "steps": [{ "id": "experiment", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a10" }] }
     },
@@ -248,7 +349,8 @@
       "name": "Profiler",
       "description": "Describes what is in a data table: its columns, types, missing values and duplicates",
       "colors": { "tint": "#CEF3FC", "solid": "#0096AF", "ink": "#006277" },
-      "avatar": { "base": "pebble", "face": "neutral", "accessory": "cap" },
+      "avatar": { "base": "pebble", "eyes": "normal",
+ "mouth": "neutral", "accessory": "cap" },
       "group": "data",
       "workflow": { "steps": [{ "id": "profile-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18" }] }
     },
@@ -257,7 +359,8 @@
       "name": "Validator",
       "description": "Checks a data table against rules and reports which checks fail",
       "colors": { "tint": "#FFE1E0", "solid": "#DD4D57", "ink": "#9B1B2D" },
-      "avatar": { "base": "wide", "face": "grumpy" },
+      "avatar": { "base": "wide", "eyes": "grumpy",
+ "mouth": "sad" },
       "group": "data",
       "workflow": { "steps": [{ "id": "validate-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a19" }] }
     },
@@ -266,7 +369,8 @@
       "name": "Curator",
       "description": "Cleans a data table and saves the result as a new file",
       "colors": { "tint": "#F8E3FC", "solid": "#B25EC5", "ink": "#793089" },
-      "avatar": { "base": "mochi", "face": "smitten", "accessory": "bow" },
+      "avatar": { "base": "mochi", "eyes": "heart",
+ "mouth": "smitten", "accessory": "bow" },
       "group": "data",
       "workflow": { "steps": [{ "id": "clean-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a20" }] }
     },
@@ -275,7 +379,8 @@
       "name": "Linker",
       "description": "Joins two data tables on their key columns",
       "colors": { "tint": "#E1EDF8", "solid": "#688AA8", "ink": "#3B5972" },
-      "avatar": { "base": "peanut", "face": "ecstatic", "accessory": "beanie" },
+      "avatar": { "base": "peanut", "eyes": "nervous",
+ "mouth": "ecstatic", "accessory": "beanie" },
       "group": "data",
       "workflow": { "steps": [{ "id": "join-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a21" }] }
     },
@@ -284,7 +389,8 @@
       "name": "Plotter",
       "description": "Draws charts of a data table",
       "colors": { "tint": "#EFE6FF", "solid": "#9769DC", "ink": "#623E96" },
-      "avatar": { "base": "sweet-potato", "face": "determined", "accessory": "party-hat" },
+      "avatar": { "base": "sweet-potato", "eyes": "grumpy",
+ "mouth": "neutral", "accessory": "party-hat" },
       "group": "data",
       "workflow": { "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22" }] }
     },
@@ -293,7 +399,8 @@
       "name": "CIP's Archivist",
       "description": "Finds datasets in CIP's Dataverse and downloads their files into the Project",
       "colors": { "tint": "#FDE7CF", "solid": "#C17A00", "ink": "#784900" },
-      "avatar": { "base": "peruanita", "face": "content", "accessory": "crown" },
+      "avatar": { "base": "peruanita", "eyes": "content",
+ "mouth": "smile", "accessory": "crown" },
       "group": "data",
       "workflow": { "steps": [{ "id": "search", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a12" }] }
     },
@@ -302,7 +409,8 @@
       "name": "Investigator",
       "description": "Investigates a research question in several steps: explores it, plans, tests the plan against criticism and, if you approve, designs an experiment",
       "colors": { "tint": "#EFEDCF", "solid": "#A19500", "ink": "#5F5700" },
-      "avatar": { "base": "purple-peruvian", "face": "determined", "accessory": "sun-hat" },
+      "avatar": { "base": "purple-peruvian", "eyes": "grumpy",
+ "mouth": "neutral", "accessory": "sun-hat" },
       "group": "thinking",
       "workflow": {
         "steps": [
@@ -346,6 +454,103 @@
                 ]
               },
               { "label": "not testable", "steps": [{ "id": "more-questions", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a09" }] }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b18",
+      "name": "Exploratory Data Analysis",
+      "description": "Explores a data table: describes its columns, finds correlations and outliers, and groups similar rows when that helps",
+      "colors": { "tint": "#E0F2D7", "solid": "#629F39", "ink": "#39621C" },
+      "avatar": { "base": "huayro", "eyes": "starry-eyed", "mouth": "open", "accessory": "headlamp" },
+      "group": "data",
+      "workflow": {
+        "steps": [
+          { "id": "profile-data", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a18", "show_results": true },
+          { "id": "describe-variables", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a23", "show_results": true },
+          { "id": "find-correlations", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a24", "show_results": true },
+          { "id": "detect-outliers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a25", "show_results": true },
+          {
+            "id": "clustering",
+            "type": "condition",
+            "label": "Worth clustering?",
+            "question": "Do the earlier Steps show at least two number columns and enough complete rows to find groups worth reporting?",
+            "branches": [
+              { "label": "cluster", "steps": [{ "id": "find-clusters", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a26", "show_results": true }] },
+              { "label": "skip", "steps": [] }
+            ]
+          },
+          {
+            "id": "extra-chart",
+            "type": "condition",
+            "label": "Another chart?",
+            "question": "Does the user's message ask for a chart that the earlier Steps did not draw?",
+            "branches": [
+              { "label": "chart", "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22", "show_results": true }] },
+              { "label": "no chart", "steps": [] }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b19",
+      "name": "Diagnostic Analytics",
+      "description": "Looks into why something happened in a data table: compares groups, finds what goes with an outcome and checks for confounders, or follows a trend over time",
+      "colors": { "tint": "#DFEBFF", "solid": "#5B81E0", "ink": "#334F9D" },
+      "avatar": { "base": "yukon-gold", "eyes": "raised-eyebrow", "mouth": "shy-smile", "accessory": "monocle" },
+      "group": "data",
+      "workflow": {
+        "steps": [
+          {
+            "id": "clear",
+            "type": "condition",
+            "label": "Clear enough?",
+            "question": "Do the user's message and the earlier outputs name the outcome and what might explain it clearly enough to analyse?",
+            "branches": [
+              { "label": "clear", "steps": [] },
+              {
+                "label": "unclear",
+                "steps": [
+                  {
+                    "id": "ask",
+                    "type": "approval",
+                    "label": "Questions",
+                    "prompt": "Ask only about what is unclear: which column is the outcome, which columns might explain it or which groups to compare, the time column and any date of a change, which columns to control for, and whether the user wants an association or a cause. Name the table's columns in the questions.",
+                    "answer": "text",
+                    "questions_by": "model"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "method",
+            "type": "condition",
+            "label": "Which question?",
+            "question": "Is this a question about a difference between groups, about what goes with an outcome, or about a change over time?",
+            "branches": [
+              { "label": "groups", "steps": [{ "id": "compare-groups", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a27", "show_results": true }] },
+              {
+                "label": "drivers",
+                "steps": [
+                  { "id": "find-drivers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a28", "show_results": true },
+                  { "id": "check-confounders", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a29", "show_results": true }
+                ]
+              },
+              { "label": "trend", "steps": [{ "id": "analyze-trends", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a30", "show_results": true }] }
+            ]
+          },
+          {
+            "id": "extra-chart",
+            "type": "condition",
+            "label": "Another chart?",
+            "question": "Does the user's message ask for a chart that the earlier Steps did not draw?",
+            "branches": [
+              { "label": "chart", "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22", "show_results": true }] },
+              { "label": "no chart", "steps": [] }
             ]
           }
         ]

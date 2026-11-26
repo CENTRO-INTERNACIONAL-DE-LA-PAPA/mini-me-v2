@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 
+from mini_me_sidecar.adapters.data.describe import describe
 from mini_me_sidecar.adapters.data.preview import MAX_ROWS, table_data, table_text
 from mini_me_sidecar.adapters.data.tables import (
     MAX_TABLE_BYTES,
@@ -179,16 +180,29 @@ def given_table(
     return data
 
 
-def table_result(frame: pd.DataFrame, start: int) -> dict[str, Any]:
-    """Up to `MAX_ROWS` rows from `start` as CSV, with the columns and total, for a model."""
-    part = frame.iloc[start : start + MAX_ROWS]
-    return {
-        "columns": [{"name": str(n), "type": column_type(frame[n])} for n in frame.columns],
+SAMPLE_ROWS = 20
+
+SHOWING_NOTE = (
+    "To show this table to the user, use show_table with this file's ID; never copy its rows. "
+    "Read again with `rows` only when the answer needs specific rows."
+)
+
+
+def table_result(table: Table, start: int, rows: int | None = None) -> dict[str, Any]:
+    """For a model: without `rows`, the table's description and a sample of rows from `start`;
+    with `rows`, the columns and up to that many rows from `start` (at most `MAX_ROWS`)."""
+    frame = table.frame
+    part = frame.iloc[start : start + (SAMPLE_ROWS if rows is None else min(rows, MAX_ROWS))]
+    found: dict[str, Any] = {
         "start": start,
         "total_rows": len(frame),
         "more": start + len(part) < len(frame),
         "csv": part.to_csv(index=False),
     }
+    if rows is None:
+        return {"description": describe(table), **found, "note": SHOWING_NOTE}
+    columns = [{"name": str(n), "type": column_type(frame[n])} for n in frame.columns]
+    return {"columns": columns, **found}
 
 
 def _fits(value: Any, kind: str) -> bool:

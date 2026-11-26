@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { OpenedConversation } from "./protocol/eventStore";
 import type {
+  ApprovalAnswer,
   AppError,
   Ai2Status,
   AcceptedSuggestion,
@@ -35,7 +36,6 @@ import type {
   ProtocolEvent,
   ProviderId,
   ProjectActivity,
-  RecentConversation,
   RunningReply,
   SavedDefinition,
   SendMessageInput,
@@ -81,16 +81,20 @@ export const api = {
     invoke<Message>("send_message", { project_id, conversation_id, input }),
   stopReply: (project_id: Uuid, conversation_id: Uuid) =>
     invoke<void>("stop_reply", { project_id, conversation_id }),
-  /** Answers the approval a paused reply waits for; approving resumes its Workflow. */
-  answerApproval: (project_id: Uuid, message_id: Uuid, component_id: Uuid, approved: boolean) =>
-    invoke<void>("answer_approval", { project_id, message_id, component_id, approved }),
+  /** Answers the approval a paused reply waits for; every answer but a rejection resumes its
+   * Workflow. */
+  answerApproval: (
+    project_id: Uuid,
+    message_id: Uuid,
+    component_id: Uuid,
+    answer: ApprovalAnswer,
+  ) => invoke<void>("answer_approval", { project_id, message_id, component_id, answer }),
   /** Every reply paused at an approval, across all Projects, newest first. */
   listPausedApprovals: () => invoke<PausedApproval[]>("list_paused_approvals"),
   /** The status of a message; null once it no longer exists. */
   getMessageStatus: (project_id: Uuid, message_id: Uuid) =>
     invoke<MessageStatus | null>("get_message_status", { project_id, message_id }),
   /** The most recently active Conversations across all Projects, newest first. */
-  listRecentConversations: () => invoke<RecentConversation[]>("list_recent_conversations"),
   listProjectActivity: () => invoke<ProjectActivity[]>("list_project_activity"),
 
 

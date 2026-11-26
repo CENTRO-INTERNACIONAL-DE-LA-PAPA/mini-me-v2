@@ -18,20 +18,24 @@ class FakeEnv:
         self.answers = list(answers or [])
         self.events: list[tuple[str, str]] = []
         self.seen: dict[str, list[str]] = {}
-        self.streamed: list[str] = []
+        self.outputs: dict[str, dict[str, str]] = {}
+        self.asked = 0
         self.resuming: str | None = None
 
     async def trait(self, step: Step, earlier: list[dict[str, Any]], stream: bool) -> str:
         self.events.append(("trait", step.id))
         self.seen[step.id] = [e["step_id"] for e in earlier]
-        if stream:
-            self.streamed.append(step.id)
+        self.outputs[step.id] = {e["step_id"]: e["output"] for e in earlier}
         await asyncio.sleep(0)
         return f"{step.id} output"
 
     async def decide(self, step: Step, choices: list[str], earlier: list[dict[str, Any]]) -> str:
         self.events.append(("decide", step.id))
         return self.answers.pop(0)
+
+    async def questions(self, step: Step, earlier: list[dict[str, Any]]) -> str:
+        self.asked += 1
+        return f"questions after {[e['step_id'] for e in earlier]}"
 
     def started(self, step: Step) -> None:
         self.events.append(("started", step.id))
@@ -64,24 +68,28 @@ def traits(env: FakeEnv) -> list[str]:
     return [step for kind, step in env.events if kind == "trait"]
 
 
-def test_a_sequence_runs_in_order_and_later_steps_see_earlier_outputs():
-    env = FakeEnv()
-    result, _, _ = run([{"id": "a", "trait": "t"}, {"id": "b", "trait": "t"}], env)
+def test_an_empty_branch_skips_to_the_next_step_and_leaves_the_earlier_output():
+    env = FakeEnv(["skip", "skip"])
+    steps = [{"id": "a", "trait": "t"},
+             {"id": "middle", "type": "condition", "question": "?", "branches": [
+                 {"label": "run", "steps": [{"id": "m", "trait": "t"}]},
+                 {"label": "skip", "steps": []}]},
+             {"id": "b", "trait": "t"},
+             {"id": "last", "type": "condition", "question": "?", "branches": [
+                 {"label": "run", "steps": [{"id": "l", "trait": "t"}]},
+                 {"label": "skip", "steps": []}]}]
+    result, _, _ = run(steps, env)
     assert traits(env) == ["a", "b"]
     assert env.seen["b"] == ["a"]
-    assert env.streamed == ["b"]
     assert output(result) == "b output"
 
-
-def test_a_condition_runs_only_the_chosen_branch():
-    env = FakeEnv(["no"])
-    steps = [{"id": "pick", "type": "condition", "question": "?", "branches": [
-        {"label": "yes", "steps": [{"id": "y", "trait": "t"}]},
-        {"label": "no", "steps": [{"id": "n", "trait": "t"}]}]}]
+    env = FakeEnv()
+    steps = [{"id": "split", "type": "parallel", "branches": [
+        {"label": "A", "steps": [{"id": "a", "trait": "t"}]},
+        {"label": "B", "steps": []}]}]
     result, _, _ = run(steps, env)
-    assert traits(env) == ["n"]
-    assert env.streamed == ["n"]
-    assert output(result) == "n output"
+    assert traits(env) == ["a"]
+    assert output(result) == "## A\n\na output"
 
 
 def test_a_loop_stops_at_its_limit_without_asking_again():
@@ -96,17 +104,20 @@ def test_a_loop_stops_at_its_limit_without_asking_again():
     assert output(result) == "after output"
 
 
-def test_a_parallel_step_runs_both_branches_then_joins_them():
-    env = FakeEnv()
-    steps = [{"id": "split", "type": "parallel", "branches": [
-        {"label": "A", "steps": [{"id": "a", "trait": "t"}, {"id": "a2", "trait": "t"}]},
-        {"label": "B", "steps": [{"id": "b", "trait": "t"}]}]}]
-    result, _, _ = run(steps, env)
-    assert sorted(traits(env)) == ["a", "a2", "b"]
-    assert env.seen["a2"] == ["a"] and env.seen["b"] == []
-    assert env.streamed == []
-    assert output(result) == "## A\n\na2 output\n\n## B\n\nb output"
-    assert ("completed", "split") in env.events
+def resumed(
+    steps: list[dict[str, Any]], saver: Any, thread: str, answer: dict[str, Any]
+) -> tuple[dict[str, Any], FakeEnv]:
+    async def go() -> tuple[dict[str, Any], FakeEnv]:
+        state = await saved_state.save(saver, thread)
+        later = FakeEnv()
+        later.resuming = "ask"
+        restored = await saved_state.restore(state, thread)
+        graph = compile_workflow(parse_steps(steps), later, {}, restored)
+        config = {"configurable": {"thread_id": thread}}
+        done = await graph.ainvoke(Command(resume=answer), config, durability="sync")
+        return done, later
+
+    return asyncio.run(go())
 
 
 def test_a_run_paused_at_an_approval_resumes_from_its_saved_state():
@@ -117,24 +128,30 @@ def test_a_run_paused_at_an_approval_resumes_from_its_saved_state():
                  {"label": "stop", "steps": [{"id": "other", "trait": "t"}]}]}]
     env = FakeEnv(["go"])
     result, saver, thread = run(steps, env)
-    assert result["__interrupt__"][0].value == {"step_id": "ask"}
+    assert result["__interrupt__"][0].value == {"step_id": "ask", "prompt": None}
     assert output(result) == "plan output"
     assert ("started", "ask") in env.events
 
-    async def resume() -> tuple[dict[str, Any], FakeEnv]:
-        state = await saved_state.save(saver, thread)
-        later = FakeEnv()
-        later.resuming = "ask"
-        restored = await saved_state.restore(state, thread)
-        graph = compile_workflow(parse_steps(steps), later, {}, restored)
-        config = {"configurable": {"thread_id": thread}}
-        done = await graph.ainvoke(Command(resume=True), config, durability="sync")
-        return done, later
-
-    done, later = asyncio.run(resume())
+    done, later = resumed(steps, saver, thread, {"text": None})
     assert later.events == [("trait", "experiment")]
     assert later.seen["experiment"] == ["plan"]
     assert output(done) == "experiment output"
+
+    steps = [{"id": "plan", "trait": "t"},
+             {"id": "ask", "type": "approval", "prompt": "Ask what is unclear",
+              "questions_by": "model"},
+             {"id": "after", "trait": "t"}]
+    env = FakeEnv()
+    result, saver, thread = run(steps, env)
+    assert result["__interrupt__"][0].value["prompt"] == "questions after ['plan']"
+    assert env.asked == 1
+
+    _, later = resumed(steps, saver, thread, {"text": "yield, by rainfall"})
+    assert later.asked == 0
+    assert later.outputs["after"] == {"plan": "plan output", "ask": "yield, by rainfall"}
+
+    _, skipped = resumed(steps, saver, thread, {"text": None})
+    assert skipped.seen["after"] == ["plan"]
 
 
 def test_a_state_that_cannot_be_read_fails_to_resume():

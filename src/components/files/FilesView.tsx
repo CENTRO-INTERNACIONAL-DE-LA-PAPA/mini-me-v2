@@ -1,5 +1,7 @@
+import { Hint } from "../shell/Hint";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -9,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileIcon, FileTextIcon, ImageIcon, SearchIcon, Table2Icon, UploadIcon } from "lucide-react";
+import { FileIcon, FileTextIcon, ImageIcon, Table2Icon, UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { DOTS_HOVER } from "../shell/ItemMenu";
 import { useOpenFile } from "../documents/openDocument";
@@ -26,6 +28,8 @@ import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { openLink, webUrl } from "../interactive/links";
 import { SheetPage } from "../shell/Sheet";
 import { useMiniMes } from "../../hooks/useMiniMes";
+import { ErrorText } from "../shell/ErrorText";
+import { SearchInput } from "../shell/SearchInput";
 
 type Tab = "all" | "data" | "document" | "outputs";
 
@@ -120,19 +124,10 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
             ))}
           </TabsList>
         </Tabs>
-        <div className="relative w-64">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label="Search files"
-            placeholder="Search files"
-            className="pl-9"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+        <SearchInput label="Search files" value={query} onChange={setQuery} />
       </div>
 
-      {error && <p className="text-meta text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
 
       <div>
         <Table>
@@ -162,10 +157,14 @@ export function FilesView({ project, onOpenConversation, onOpenDocument, onChang
             ))}
             {shown.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                  {entries.length === 0
-                    ? "No files yet. Upload one, or attach it to a message."
-                    : "No files match."}
+                <TableCell colSpan={6}>
+                  <Empty>
+                    <EmptyDescription>
+                      {entries.length === 0
+                        ? "No files yet. Upload one, or attach it to a message."
+                        : "No files match."}
+                    </EmptyDescription>
+                  </Empty>
                 </TableCell>
               </TableRow>
             )}
@@ -198,39 +197,41 @@ function FileRow({
   return (
     <TableRow className="cursor-pointer" onClick={onOpen}>
       <TableCell className="max-w-80">
-        <span className="flex items-center gap-3">
+        <span className="flex items-center gap-2">
           <FileMark miniMe={miniMe} icon={Icon} />
           <span className="truncate font-medium">{entry.name}</span>
         </span>
       </TableCell>
       <TableCell>
         {entry.origin?.kind === "dataverse" ? (
-          <button
-            title={entry.origin.title}
-            className="cursor-pointer truncate hover:opacity-70"
-            onClick={(e) => {
-              e.stopPropagation();
-              const url = webUrl(entry.origin?.url);
-              if (url) openLink(url);
-            }}
-          >
-            From Dataverse
-          </button>
+          <Hint label={entry.origin.title}>
+            <Button
+              variant="link"
+              className="max-w-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                const url = webUrl(entry.origin?.url);
+                if (url) openLink(url);
+              }}
+            >
+              <span className="truncate">From Dataverse</span>
+            </Button>
+          </Hint>
         ) : by?.kind === "user" ? (
           <span className="flex items-center gap-2">
             {name && (
-              <span className="flex size-4 items-center justify-center rounded-full bg-muted text-[7px] font-semibold">
-                {initials(name)}
-              </span>
+              <Avatar size="sm">
+                <AvatarFallback>{initials(name)}</AvatarFallback>
+              </Avatar>
             )}
             You
           </span>
         ) : by?.kind === "mini_me" ? (
           <span
             style={surfaceStyle(miniMe?.colors)}
-            className="flex items-center gap-[7px] text-(--mm-ink,var(--foreground))"
+            className="flex items-center gap-2 text-(--mm-ink,var(--foreground))"
           >
-            <MiniMeAvatar miniMe={miniMe} size={18} />
+            <MiniMeAvatar miniMe={miniMe} size={16} />
             {miniMe?.name ?? "Mini-Me"}
           </span>
         ) : (
@@ -241,19 +242,20 @@ function FileRow({
         {entry.used_in.length === 0 ? (
           <span className="text-muted-foreground">—</span>
         ) : entry.used_in.length === 1 ? (
-          <button
-            className="cursor-pointer truncate hover:opacity-70"
+          <Button
+            variant="link"
+            className="max-w-full"
             onClick={(e) => {
               e.stopPropagation();
               onOpenConversation(entry.used_in[0].id);
             }}
           >
-            {entry.used_in[0].title}
-          </button>
+            <span className="truncate">{entry.used_in[0].title}</span>
+          </Button>
         ) : (
-          <span title={entry.used_in.map((c) => c.title).join(", ")}>
-            {entry.used_in.length} conversations
-          </span>
+          <Hint label={entry.used_in.map((c) => c.title).join(", ")}>
+            <span>{entry.used_in.length} conversations</span>
+          </Hint>
         )}
       </TableCell>
       <TableCell className="text-muted-foreground">{formatRelative(entry.created_at)}</TableCell>
