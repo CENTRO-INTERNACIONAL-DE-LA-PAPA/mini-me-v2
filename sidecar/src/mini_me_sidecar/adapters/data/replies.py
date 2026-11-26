@@ -9,8 +9,10 @@ from pydantic import BaseModel
 from mini_me_sidecar.adapters.data.catalogue import (
     CheckPlan,
     CleanPlan,
+    ColumnsPlan,
     JoinPlan,
     describe_entry,
+    pick_columns,
     problem,
 )
 from mini_me_sidecar.adapters.data.charts import ChartDescription
@@ -40,6 +42,7 @@ from mini_me_sidecar.adapters.data.tables import (
     table_sources,
 )
 from mini_me_sidecar.adapters.data.validate import results_frame, run_checks
+from mini_me_sidecar.adapters.data.variables import KINDS, chart_columns, summaries
 from mini_me_sidecar.adapters.data.worker import WORKERS
 from mini_me_sidecar.context import CallContext, CoreRequestError, TraitError
 from mini_me_sidecar.tools.base import ToolError
@@ -158,10 +161,7 @@ async def plot(ctx: CallContext, text: str) -> None:
     _write_plot_intro(ctx, tables, len(drawn))
     results = []
     for choice, chart in drawn:
-        ctx.progress(f"Drawing {chart.title or 'a chart'}")
-        result = await WORKERS.run(ctx, build_chart, table.frame, chart)
-        if table.source_id:
-            result.data.update(source=table.name)
+        result = await _build(ctx, table.frame, chart, table.name if table.source_id else None)
         drew = f"{choice.template} chart, {slots_text(choice)}"
         notes = "".join(f"; {note}" for note in result.notes)
         ctx.write(f"- {result.data['title']}: {drew}{notes}\n")
@@ -173,6 +173,58 @@ async def plot(ctx: CallContext, text: str) -> None:
         await _show_chart(ctx, result, chart_text(result.data, choice), table.source_id)
     heading = f"I couldn't draw this from `{table.name}`:" if not drawn else "I left these out:"
     _write_ignored(ctx, ignored, heading)
+
+
+async def describe_variables(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, malformed = await choose(ctx, ColumnsPlan, text, [describe(table)])
+    columns, left_out = pick_columns(table.frame, plan.columns, KINDS)
+    if not columns:
+        raise TraitError("no_columns", f"None of the columns named are in `{table.name}`.")
+    ctx.progress(f"Describing {table.name}")
+    found = await WORKERS.run(ctx, summaries, table.frame, columns)
+    charted, uncharted = await WORKERS.run(ctx, chart_columns, table.frame, columns)
+    kinds = [f"{len(frame)} {kind}" for kind, frame in found.items()]
+    ctx.write(
+        _table_note(tables)
+        + f"Described {len(columns)} column{'s' if len(columns) != 1 else ''} of "
+        + f"`{table.name}`: {_listed(kinds)}.\n\n"
+    )
+    for kind, frame in found.items():
+        await show_frame(
+            ctx,
+            frame,
+            f"{kind.capitalize()} columns of {table.name}",
+            results_name=f"{table.stem}-{kind}-columns.csv",
+        )
+    for column, template in charted:
+        title = f"Distribution of {column}" if template == "histogram" else f"Rows per {column}"
+        slot = "value" if template == "histogram" else "category"
+        choice = ChartChoice.model_validate({"template": template, "title": title, slot: column})
+        chart, _ = fill_template(choice, table.frame)
+        result = await _build(ctx, table.frame, chart, table.name if table.source_id else None)
+        if result.notes:
+            ctx.write(f"- {title}: {'; '.join(result.notes)}\n")
+        await _show_chart(ctx, result, chart_text(result.data, choice), table.source_id)
+    _write_ignored(ctx, [(f"`{c}`", why) for c, why in uncharted], "I didn't chart:")
+    _write_ignored(ctx, malformed + left_out, "I left these out:")
+
+
+async def _build(
+    ctx: CallContext, frame: pd.DataFrame, chart: ChartDescription, source: str | None
+) -> ChartResult:
+    """The chart's data, computed in a worker; `source` names the file it was drawn from."""
+    ctx.progress(f"Drawing {chart.title or 'a chart'}")
+    result = await WORKERS.run(ctx, build_chart, frame, chart)
+    if source:
+        result.data.update(source=source)
+    return result
+
+
+def _listed(items: list[str]) -> str:
+    """`a`, `a and b`, or `a, b and c`."""
+    return ", ".join(items[:-1]) + (" and " if len(items) > 1 else "") + items[-1]
 
 
 def _fill_choices(
@@ -215,16 +267,23 @@ def _unusable_text(table_name: str) -> str:
     )
 
 
+def _table_note(tables: list[Table]) -> str:
+    """The sheet read, and the tables not used by a Trait that reads only the first."""
+    table = tables[0]
+    unused = [t.name for t in tables[1:]]
+    if not unused:
+        return _sheet_note(table)
+    return (
+        _sheet_note(table)
+        + f"I use one table at a time, so this reply uses `{table.name}` and not "
+        + ", ".join(f"`{name}`" for name in unused)
+        + ".\n\n"
+    )
+
+
 def _write_plot_intro(ctx: CallContext, tables: list[Table], drawn: int) -> None:
     table = tables[0]
-    ctx.write(_sheet_note(table))
-    unused = [t.name for t in tables[1:]]
-    if unused:
-        ctx.write(
-            f"Plot draws one table at a time, so this reply uses `{table.name}` and not "
-            + ", ".join(f"`{name}`" for name in unused)
-            + ".\n\n"
-        )
+    ctx.write(_table_note(tables))
     if drawn:
         ctx.write(f"Drew {drawn} chart{'s' if drawn > 1 else ''} of `{table.name}`:\n")
 

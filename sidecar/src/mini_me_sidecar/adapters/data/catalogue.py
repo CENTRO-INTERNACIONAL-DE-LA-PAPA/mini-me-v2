@@ -5,7 +5,10 @@ tables are dropped before anything runs."""
 import re
 from typing import Literal, Union
 
+import pandas as pd
 from pydantic import BaseModel
+
+from mini_me_sidecar.adapters.data.tables import column_type
 
 ColumnType = Literal["number", "text", "date", "boolean"]
 
@@ -205,6 +208,32 @@ class JoinPlan(BaseModel):
     left_on: list[str]
     right_on: list[str]
     how: Literal["inner", "left", "right", "outer"]
+
+
+class ColumnsPlan(BaseModel):
+    """The columns the message asks about; empty when it names none."""
+
+    columns: list[str] = []
+
+
+def pick_columns(
+    frame: pd.DataFrame, named: list[str], kinds: tuple[str, ...]
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """The `named` columns whose type is one of `kinds`, or every such column when none is
+    named, and the named columns left out with the reasons."""
+    types = {str(c): column_type(frame[c]) for c in frame.columns}
+    if not named:
+        return [c for c, kind in types.items() if kind in kinds], []
+    picked, left_out = [], []
+    for name in dict.fromkeys(named):
+        if name not in types:
+            left_out.append((f"Column `{name}`", "the table has no such column"))
+        elif types[name] not in kinds:
+            wanted = " or ".join(kinds)
+            left_out.append((f"Column `{name}`", f"it is a {types[name]} column, not {wanted}"))
+        else:
+            picked.append(name)
+    return picked, left_out
 
 
 def columns_of(entry: BaseModel) -> list[str]:

@@ -66,6 +66,21 @@ class JoinData(Adapter):
         await replies.join_tables(ctx, str(input.get("text", "")))
 
 
+class DescribeVariables(Adapter):
+    info = AdapterInfo(
+        id="data-describe-variables",
+        description="Describes each column of a table by its type, with distribution charts.",
+        input_schema=TEXT_INPUT,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.describe_variables(ctx, str(input.get("text", "")))
+
+
 class PlotData(Adapter):
     info = AdapterInfo(
         id="data-plot",

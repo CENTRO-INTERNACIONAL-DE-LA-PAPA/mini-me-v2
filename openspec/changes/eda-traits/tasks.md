@@ -21,7 +21,7 @@
 
 ## 3. Describe Variables (sidecar)
 
-- [ ] 3.1 Add `adapters/data/variables.py` with the computation: one summary frame per column
+- [x] 3.1 Add `adapters/data/variables.py` with the computation: one summary frame per column
   type (number: count, missing, mean, standard deviation, minimum, quartiles, maximum,
   skewness; text and boolean: count, missing, distinct, most frequent value and its share;
   date: count, missing, first, last, span), and the choice of columns to chart (histograms
@@ -29,7 +29,7 @@
   8 at most, with the columns left out and why). Verify: one pytest for the summaries of a
   mixed table and one for the chart choice with many columns and a high-cardinality text
   column pass.
-- [ ] 3.2 Add the shared plan handling the four Traits use: a plan schema with `columns` (and
+- [x] 3.2 Add the shared plan handling the four Traits use: a plan schema with `columns` (and
   each Trait's options), the columns used when it names none, and the named columns left out
   for their type with a reason. Add *Describe Variables*' plan, its adapter
   `data-describe-variables` and its reply: the text with the count of columns of each type and
