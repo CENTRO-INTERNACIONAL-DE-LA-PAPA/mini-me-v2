@@ -29,12 +29,12 @@
 
 ## 4. Find Drivers (sidecar)
 
-- [ ] 4.1 Add `adapters/data/drivers.py`: OLS through a statsmodels formula with `Q()` quoting
+- [x] 4.1 Add `adapters/data/drivers.py`: OLS through a statsmodels formula with `Q()` quoting
   and `C()` for text and boolean drivers; per term the coefficient, 95% interval and p-value;
   per driver the largest VIF of its terms; R² and rows used; refuse more terms than complete
   rows. Verify: pytest on generated data with a known slope, a text driver and two collinear
   drivers checks the slope's interval, the dummy terms and the high VIFs.
-- [ ] 4.2 Add the plan (`outcome`, `drivers`), the adapter `data-drivers` and the reply: terms
+- [x] 4.2 Add the plan (`outcome`, `drivers`), the adapter `data-drivers` and the reply: terms
   whose interval excludes zero, drivers with a VIF above 5, rows left out, the terms table and
   the estimates chart. Verify: `cd sidecar && uv run pytest` passes.
 

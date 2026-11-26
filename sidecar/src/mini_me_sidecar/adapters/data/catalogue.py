@@ -247,6 +247,14 @@ class GroupsPlan(BaseModel):
     reference: str | None = None
 
 
+class DriversPlan(BaseModel):
+    """The number column to explain (`outcome`) and the columns that might go with it
+    (`drivers`)."""
+
+    outcome: str
+    drivers: list[str]
+
+
 def role_problem(frame: pd.DataFrame, column: str, role: str, kinds: tuple[str, ...]) -> str | None:
     if column not in frame.columns:
         return f"The table has no column `{column}` for the {role}."

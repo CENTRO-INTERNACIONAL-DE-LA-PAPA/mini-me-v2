@@ -141,6 +141,21 @@ class CompareGroups(Adapter):
         await replies.compare_groups(ctx, str(input.get("text", "")))
 
 
+class FindDrivers(Adapter):
+    info = AdapterInfo(
+        id="data-drivers",
+        description="Regresses an outcome on candidate drivers with statsmodels.",
+        input_schema=TEXT_INPUT,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.find_drivers(ctx, str(input.get("text", "")))
+
+
 class PlotData(Adapter):
     info = AdapterInfo(
         id="data-plot",

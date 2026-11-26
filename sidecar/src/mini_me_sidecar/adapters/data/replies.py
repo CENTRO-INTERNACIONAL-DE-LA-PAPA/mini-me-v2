@@ -11,6 +11,7 @@ from mini_me_sidecar.adapters.data.catalogue import (
     CleanPlan,
     ClusterPlan,
     ColumnsPlan,
+    DriversPlan,
     GroupsPlan,
     CorrelationPlan,
     JoinPlan,
@@ -36,6 +37,7 @@ from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
 from mini_me_sidecar.adapters.data.clusters import cluster
 from mini_me_sidecar.adapters.data.correlations import compared, correlations
 from mini_me_sidecar.adapters.data.describe import describe
+from mini_me_sidecar.adapters.data.drivers import regress
 from mini_me_sidecar.adapters.data.groups import compare
 from mini_me_sidecar.adapters.data.join import join, shared_key
 from mini_me_sidecar.adapters.data.outliers import detect
@@ -442,6 +444,56 @@ async def compare_groups(ctx: CallContext, text: str) -> None:
         }
     )
     await _draw(ctx, table.frame, box, source, table.source_id)
+
+
+MAX_VIF = 5
+
+
+async def find_drivers(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, _ = await choose(ctx, DriversPlan, text, [describe(table)])
+    drivers = [d for d in dict.fromkeys(plan.drivers) if d != plan.outcome]
+    if not drivers:
+        raise TraitError("no_drivers", "Name at least one column that might go with the outcome.")
+    roles = [(plan.outcome, "outcome", ("number",))]
+    roles += [(d, "drivers", ("number", "text", "boolean")) for d in drivers]
+    _check_roles(table, roles)
+    ctx.progress(f"Fitting {plan.outcome} in {table.name}")
+    found = await WORKERS.run(ctx, regress, table.frame, plan.outcome, drivers)
+    terms = found.terms
+    clear = terms[(terms["Low"] > 0) | (terms["High"] < 0)]
+    tangled = {
+        term.split(" = ")[0]: vif for term, vif in zip(terms["Term"], terms["VIF"]) if vif > MAX_VIF
+    }
+    ctx.write(
+        _table_note(tables)
+        + f"Regressed `{plan.outcome}` on {_listed([f'`{d}`' for d in drivers])} over "
+        + f"{found.rows:,} rows (R² = {found.r_squared:.2f})."
+        + (f" {found.left_out:,} rows missing a value were left out." if found.left_out else "")
+        + (
+            " Terms whose 95% interval excludes zero: "
+            + _listed([f"`{t}` ({c:+.3g})" for t, c in zip(clear["Term"], clear["Coefficient"])])
+            + "."
+            if len(clear)
+            else " No term's 95% interval excludes zero."
+        )
+        + (
+            " Hard to tell apart (VIF above 5): "
+            + _listed([f"`{driver}` ({vif:.0f})" for driver, vif in tangled.items()])
+            + "."
+            if tangled
+            else ""
+        )
+        + f" {ASSOCIATION}\n\n"
+    )
+    await show_frame(
+        ctx, terms, f"Drivers of {plan.outcome}", results_name=f"{table.stem}-drivers.csv"
+    )
+    coefficients = _estimates(terms["Term"], terms["Coefficient"], terms["Low"], terms["High"])
+    title = f"Coefficients for {plan.outcome}"
+    source = table.name if table.source_id else None
+    await _draw(ctx, coefficients, _estimates_chart(title), source, table.source_id)
 
 
 def _check_roles(table: Table, roles: list[tuple[str, str, tuple[str, ...]]]) -> None:
