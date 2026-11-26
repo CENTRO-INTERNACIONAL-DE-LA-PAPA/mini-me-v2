@@ -10,6 +10,7 @@ from mini_me_sidecar.adapters.data.catalogue import (
     CheckPlan,
     CleanPlan,
     ColumnsPlan,
+    CorrelationPlan,
     JoinPlan,
     describe_entry,
     pick_columns,
@@ -28,6 +29,7 @@ from mini_me_sidecar.adapters.data.templates import (
 )
 from mini_me_sidecar.adapters.data.choose import UnusableAnswer, choose
 from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
+from mini_me_sidecar.adapters.data.correlations import compared, correlations
 from mini_me_sidecar.adapters.data.describe import describe
 from mini_me_sidecar.adapters.data.join import join, shared_key
 from mini_me_sidecar.adapters.data.plot import ChartResult, build_chart, chart_text
@@ -202,13 +204,77 @@ async def describe_variables(ctx: CallContext, text: str) -> None:
         title = f"Distribution of {column}" if template == "histogram" else f"Rows per {column}"
         slot = "value" if template == "histogram" else "category"
         choice = ChartChoice.model_validate({"template": template, "title": title, slot: column})
-        chart, _ = fill_template(choice, table.frame)
-        result = await _build(ctx, table.frame, chart, table.name if table.source_id else None)
-        if result.notes:
-            ctx.write(f"- {title}: {'; '.join(result.notes)}\n")
-        await _show_chart(ctx, result, chart_text(result.data, choice), table.source_id)
+        source = table.name if table.source_id else None
+        await _draw(ctx, table.frame, choice, source, table.source_id)
     _write_ignored(ctx, [(f"`{c}`", why) for c, why in uncharted], "I didn't chart:")
     _write_ignored(ctx, malformed + left_out, "I left these out:")
+
+
+STRONGEST = 3
+
+
+async def find_correlations(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, malformed = await choose(ctx, CorrelationPlan, text, [describe(table)])
+    columns, left_out = pick_columns(table.frame, plan.columns, ("number",))
+    if len(columns) < 2:
+        raise TraitError(
+            "too_few_columns",
+            f"Correlations need at least two number columns, and I found {len(columns)} "
+            f"to use in `{table.name}`.",
+        )
+    ctx.progress(f"Correlating {table.name}")
+    pairs = await WORKERS.run(ctx, correlations, table.frame, columns, plan.method)
+    strongest = pairs.dropna(subset=["Coefficient"]).head(STRONGEST)
+    named = [
+        f"`{p['Column A']}` and `{p['Column B']}` ({p['Coefficient']:.2f})"
+        for _, p in strongest.iterrows()
+    ]
+    coefficient = "Pearson's" if plan.method == "pearson" else "Spearman's rank"
+    ctx.write(
+        _table_note(tables)
+        + f"Correlated {len(columns)} number columns of `{table.name}` pairwise with "
+        + f"{coefficient} coefficient."
+        + (f" The strongest: {_listed(named)}." if named else " No pair has a coefficient.")
+        + " A correlation shows that two columns move together, not that one causes the other."
+        + "\n\n"
+    )
+    await show_frame(
+        ctx, pairs, f"Correlations in {table.name}", results_name=f"{table.stem}-correlations.csv"
+    )
+    source = table.name if table.source_id else None
+    values = await WORKERS.run(ctx, compared, table.frame, columns, plan.method)
+    heatmap = ChartChoice.model_validate(
+        {
+            "template": "correlation_heatmap",
+            "title": f"{coefficient.split()[0]} correlations",
+            "correlated_columns": columns,
+        }
+    )
+    await _draw(ctx, values, heatmap, source, table.source_id)
+    for _, pair in strongest.iterrows():
+        a, b = pair["Column A"], pair["Column B"]
+        scatter = ChartChoice.model_validate(
+            {"template": "scatter_trend", "title": f"{b} against {a}", "x": a, "y": b}
+        )
+        await _draw(ctx, table.frame, scatter, source, table.source_id)
+    _write_ignored(ctx, malformed + left_out, "I left these out:")
+
+
+async def _draw(
+    ctx: CallContext,
+    frame: pd.DataFrame,
+    choice: ChartChoice,
+    source: str | None,
+    source_id: str | None,
+) -> None:
+    """Draws a chart the Trait chose itself, with a line for its notes when it has any."""
+    chart, _ = fill_template(choice, frame)
+    result = await _build(ctx, frame, chart, source)
+    if result.notes:
+        ctx.write(f"- {choice.title}: {'; '.join(result.notes)}\n")
+    await _show_chart(ctx, result, chart_text(result.data, choice), source_id)
 
 
 async def _build(

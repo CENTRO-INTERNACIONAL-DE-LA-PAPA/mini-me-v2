@@ -81,6 +81,21 @@ class DescribeVariables(Adapter):
         await replies.describe_variables(ctx, str(input.get("text", "")))
 
 
+class FindCorrelations(Adapter):
+    info = AdapterInfo(
+        id="data-correlations",
+        description="Correlates the number columns of a table pairwise, with scipy.",
+        input_schema=TEXT_INPUT,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.find_correlations(ctx, str(input.get("text", "")))
+
+
 class PlotData(Adapter):
     info = AdapterInfo(
         id="data-plot",

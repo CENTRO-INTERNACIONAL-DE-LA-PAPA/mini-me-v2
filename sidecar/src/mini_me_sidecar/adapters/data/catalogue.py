@@ -216,6 +216,13 @@ class ColumnsPlan(BaseModel):
     columns: list[str] = []
 
 
+class CorrelationPlan(ColumnsPlan):
+    """The number columns to correlate (empty for every one) and the coefficient: Pearson's,
+    unless the message asks for ranks or Spearman's."""
+
+    method: Literal["pearson", "spearman"] = "pearson"
+
+
 def pick_columns(
     frame: pd.DataFrame, named: list[str], kinds: tuple[str, ...]
 ) -> tuple[list[str], list[tuple[str, str]]]:

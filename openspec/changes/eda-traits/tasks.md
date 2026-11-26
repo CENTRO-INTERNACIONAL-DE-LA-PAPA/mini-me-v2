@@ -39,11 +39,11 @@
 
 ## 4. Find Correlations (sidecar)
 
-- [ ] 4.1 Add `adapters/data/correlations.py`: pairwise Pearson or Spearman coefficients with the
+- [x] 4.1 Add `adapters/data/correlations.py`: pairwise Pearson or Spearman coefficients with the
   rows used and the p-value (scipy), sorted by absolute coefficient, failing with a clear
   message under two number columns. Verify: pytest on a table with a known strong pair and a
   missing value checks the order, the row count and the method passes.
-- [ ] 4.2 Add the plan (`columns`, `method`), the adapter `data-correlations` and the reply:
+- [x] 4.2 Add the plan (`columns`, `method`), the adapter `data-correlations` and the reply:
   the pairs table, a correlation heatmap and scatter-with-trend charts of the three strongest
   pairs from the templates, and a text naming the strongest pairs and saying a correlation
   does not show cause. Verify: `cd sidecar && uv run pytest` passes.

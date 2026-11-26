@@ -3,6 +3,7 @@ from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 from mini_me_sidecar.adapters.data import (
     CleanData,
     DescribeVariables,
+    FindCorrelations,
     JoinData,
     PlotData,
     ProfileData,
@@ -27,6 +28,7 @@ def load_adapters() -> dict[str, Adapter]:
         JoinData(),
         PlotData(),
         DescribeVariables(),
+        FindCorrelations(),
         SearchDataverse(),
     ]
     by_id: dict[str, Adapter] = {}
