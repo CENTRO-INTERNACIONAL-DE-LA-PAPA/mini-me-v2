@@ -86,7 +86,8 @@ the fallback never reaches other files of the Project.
 
 ### Requirement: What the model sees of the data
 When a data Trait asks the AI model to choose checks, actions or keys, it SHALL send the
-user's message and a description of each table: its file name, row count, and for each
+user's message, the outputs of the run's earlier Steps labelled with their names, and a
+description of each table: its file name, row count, and for each
 column the name, type, count of missing values, count of distinct values, and the minimum
 and maximum when the column is numeric or a date. For a column with at most 30 distinct
 values, the description also lists up to its 20 most frequent values with their counts. A
@@ -102,6 +103,10 @@ Rows SHALL never be sent.
 #### Scenario: Personal column not sampled
 - **WHEN** a table has a column `farmer_name` with 8 distinct values
 - **THEN** the description of `farmer_name` lists no values
+
+#### Scenario: An earlier answer
+- **WHEN** a *Plot* Step follows an approval whose written answer is "show yield by site"
+- **THEN** *Plot*'s model receives that answer along with the user's message
 
 ### Requirement: The model only chooses from fixed lists
 A data Trait SHALL ask the model for a structured answer naming entries of a fixed catalogue
