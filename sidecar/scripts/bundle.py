@@ -28,8 +28,8 @@ UNUSED_STDLIB = [
 ]
 
 UNUSED_RUNTIME = [
-    "include", "tcl", "DLLs/tcl*", "DLLs/tk*", "DLLs/_tkinter*", "lib/pkgconfig", "lib/tcl*",
-    "lib/tk*", "lib/itcl*", "lib/thread*", "lib/libtcl*", "lib/libtk*",
+    "include", "tcl", "DLLs/tcl*", "DLLs/tk*", "DLLs/_tkinter*", "lib/pkgconfig", "lib/tcl[0-9]*",
+    "lib/tk[0-9]*", "lib/itcl[0-9]*", "lib/thread[0-9]*", "lib/libtcl*", "lib/libtk*",
 ]
 
 UNUSED_PACKAGES = ["boto3", "botocore", "s3transfer", "jmespath"]
