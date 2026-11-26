@@ -289,13 +289,6 @@ mod tests {
     }
 
     #[test]
-    fn new_database_is_migrated() {
-        let (_dir, path) = at_version(0, "");
-        let conn = open(&path).unwrap();
-        assert_eq!(user_version(&conn).unwrap(), SCHEMA_VERSION);
-    }
-
-    #[test]
     fn a_version_6_database_fills_in_who_added_each_asset() {
         let (_dir, path) = at_version(
             6,

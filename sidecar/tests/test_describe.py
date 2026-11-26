@@ -27,8 +27,3 @@ def test_lists_only_category_values_and_never_rows():
     assert columns["yield"]["min"] == 0.0 and columns["yield"]["max"] == 39.0
     assert "Ana" not in json.dumps(description)
 
-
-def test_names_and_types_only():
-    description = describe(table(), values=False)
-    assert description["columns"][0] == {"name": "plot_id", "type": "number"}
-

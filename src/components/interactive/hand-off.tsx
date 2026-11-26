@@ -16,7 +16,7 @@ interface HandOffData {
 }
 
 /** A reply's hand-off: the Mini-Me it went to, what it was asked, and the file it was given. */
-export function HandOffCard({
+function HandOffCard({
   miniMe,
   name,
   request,

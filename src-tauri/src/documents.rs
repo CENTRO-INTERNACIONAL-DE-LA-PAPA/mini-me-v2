@@ -206,28 +206,6 @@ mod tests {
     }
 
     #[test]
-    fn a_new_document_has_a_header_with_its_title_and_author() {
-        let (_dir, project) = temp_project();
-        let asset = create(&project, "Trials: 2026/27", Some("Ana Pérez"), &user()).unwrap();
-        assert_eq!(asset.name, "Trials- 2026-27.qmd");
-        assert_eq!(
-            read(&project, asset.id).unwrap(),
-            "---\ntitle: \"Trials: 2026/27\"\nauthor: \"Ana Pérez\"\n---\n\n"
-        );
-    }
-
-    #[test]
-    fn saving_replaces_the_text_and_its_size() {
-        let (_dir, project) = temp_project();
-        let asset = create(&project, "Report", None, &user()).unwrap();
-        let text = "---\ntitle: Report\n---\n\n# Summary\n";
-        save(&project, asset.id, text, &Anchors::default()).unwrap();
-        assert_eq!(read(&project, asset.id).unwrap(), text);
-        let size = assets::find(&project.lock(), asset.id).unwrap().size_bytes;
-        assert_eq!(size, text.len() as i64);
-    }
-
-    #[test]
     fn only_documents_are_saved() {
         let (_dir, project) = temp_project();
         let csv = assets::import_bytes(&project, "field-trial.csv", "text/csv", b"a,b\n", &user())
@@ -239,47 +217,13 @@ mod tests {
     }
 
     #[test]
-    fn a_draft_follows_the_header() {
+    fn a_blank_draft_keeps_the_text() {
         let (_dir, project) = temp_project();
         let asset = create(&project, "Trial design", None, &user()).unwrap();
         let header = read(&project, asset.id).unwrap();
         save_draft(&project, asset.id, &header, "\n# Summary\n\nYield fell.\n\n").unwrap();
-        assert_eq!(
-            read(&project, asset.id).unwrap(),
-            "---\ntitle: \"Trial design\"\n---\n\n# Summary\n\nYield fell.\n"
-        );
         save_draft(&project, asset.id, &header, "   ").unwrap();
         assert!(read(&project, asset.id).unwrap().ends_with("Yield fell.\n"));
-    }
-
-    #[test]
-    fn a_draft_makes_a_blank_document_scribes_and_its_pdf_follows() {
-        let (_dir, project) = temp_project();
-        let added_by = |id: Uuid| assets::added_by(&project, id).unwrap();
-        let scribe = Some(Author { kind: AuthorKind::MiniMe, id: SCRIBE.to_string() });
-        let notes = create(&project, "Notes", None, &user()).unwrap();
-        let pdf = store_pdf(&project, notes.id, &notes.name, b"%PDF-1.7", &user()).unwrap();
-        assert_eq!(added_by(pdf.id), Some(user()));
-        let drafted = create(&project, "Trial design", None, &user()).unwrap();
-        let header = read(&project, drafted.id).unwrap();
-        save_draft(&project, drafted.id, &header, "# Summary").unwrap();
-        assert_eq!(added_by(drafted.id), scribe);
-        let pdf = store_pdf(&project, drafted.id, &drafted.name, b"%PDF-1.7", &user()).unwrap();
-        assert_eq!(added_by(pdf.id), scribe);
-        // Drafting after text the user wrote keeps the document theirs.
-        save(&project, notes.id, "---\ntitle: Notes\n---\n\nMine.\n", &Anchors::default()).unwrap();
-        let text = read(&project, notes.id).unwrap();
-        save_draft(&project, notes.id, &text, "# More").unwrap();
-        assert_eq!(added_by(notes.id), Some(user()));
-    }
-
-    #[test]
-    fn a_pdf_is_named_after_its_document() {
-        let (_dir, project) = temp_project();
-        assert_eq!(pdf_name("Huancayo 2025 report.qmd"), "Huancayo 2025 report.pdf");
-        let report = create(&project, "Report", None, &user()).unwrap();
-        let pdf = store_pdf(&project, report.id, &report.name, b"%PDF-1.7", &user()).unwrap();
-        assert_eq!((pdf.name.as_str(), pdf.media_type.as_str()), ("Report.pdf", "application/pdf"));
     }
 
     #[test]

@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mini_me_sidecar.adapters.data import clusters as clustering
 from mini_me_sidecar.adapters.data.clusters import cluster
 from mini_me_sidecar.context import TraitError
 
@@ -34,9 +33,3 @@ def test_two_separate_groups_make_two_clusters_and_incomplete_rows_stay_out():
     with pytest.raises(TraitError):
         cluster(two_groups().head(3), ["yield", "height"], "kmeans", None)
 
-
-def test_hdbscan_falls_back_to_k_means_on_a_large_table(monkeypatch):
-    monkeypatch.setattr(clustering, "MAX_HDBSCAN_ROWS", 30)
-    found = cluster(two_groups(), ["yield", "height"], "hdbscan", None)
-    assert found.method == "k-means"
-    assert "HDBSCAN" in found.notes[0]

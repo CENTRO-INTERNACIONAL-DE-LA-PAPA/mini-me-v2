@@ -9,7 +9,7 @@ interface Changelog {
 }
 
 /** Splits CHANGELOG.md's text into the version its first line names and the rest. */
-export function parseChangelog(text: string): Changelog {
+function parseChangelog(text: string): Changelog {
   const [first, ...rest] = text.split(/\r?\n/);
   const version = first.match(/^# Mini-Me (\S+)\s*$/)?.[1] ?? null;
   return version ? { version, body: rest.join("\n").trim() } : { version: null, body: text.trim() };

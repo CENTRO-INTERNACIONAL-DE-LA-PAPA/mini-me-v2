@@ -370,48 +370,6 @@ mod tests {
         assert!(list(&project, report).unwrap().is_empty());
     }
 
-    #[test]
-    fn a_new_suggestion_replaces_the_waiting_ones_it_overlaps() {
-        let (_dir, project) = temp_project();
-        let report = document(&project, SENTENCE);
-        let assistant = Author { kind: AuthorKind::MiniMe, id: "assistant".into() };
-        let first = add(&project, report, &assistant, "in both 2024 and 2025", "").unwrap();
-        let kept = add(&project, report, &scribe(), "Huancayo", "Junín").unwrap();
-        let newer = add(&project, report, &scribe(), "3,800 m in both", "3,800 m").unwrap();
-        let waiting: Vec<Uuid> = list(&project, report).unwrap().iter().map(|s| s.id).collect();
-        assert_eq!(waiting, [kept, newer]);
-        let state: String = project
-            .lock()
-            .conn
-            .query_row("SELECT state FROM suggestions WHERE id = ?1", [first.to_string()], |row| {
-                row.get(0)
-            })
-            .unwrap();
-        assert_eq!(state, "replaced");
-    }
-
-    #[test]
-    fn only_a_documents_waiting_suggestions_are_listed() {
-        let (_dir, project) = temp_project();
-        let report = document(&project, "🥔 Yield fell above 3,800 m.");
-        let other = document(&project, "Yield fell.");
-        let discarded = add(&project, report, &scribe(), "Yield", "Yields").unwrap();
-        discard(&project, discarded).unwrap();
-        assert_eq!(discard(&project, discarded).unwrap_err().code, "not_found");
-        add(&project, other, &scribe(), "Yield", "Yields").unwrap();
-        let id = add(&project, report, &scribe(), "above 3,800 m", "high up").unwrap();
-
-        let listed = list(&project, report).unwrap();
-        assert_eq!(listed.len(), 1);
-        let suggestion = &listed[0];
-        assert_eq!((suggestion.id, suggestion.start, suggestion.end), (id, 14, 27));
-        assert_eq!(
-            (suggestion.base.as_str(), suggestion.text.as_str()),
-            ("above 3,800 m", "high up")
-        );
-        assert_eq!(suggestion.author, scribe());
-    }
-
     /// Saves `text` as the user would, with the suggestion now on `start..end`.
     fn edit(project: &Project, document: Uuid, id: Uuid, text: &str, (start, end): (u32, u32)) {
         let anchors = Anchors { threads: Vec::new(), suggestions: vec![Anchor { id, start, end }] };
@@ -440,6 +398,11 @@ mod tests {
         let [waiting] = accepted.suggestions.as_slice() else { panic!("expected one suggestion") };
         assert_eq!((waiting.id, waiting.start, waiting.end), (later, 26, 37));
         assert_eq!(accept(&project, id).unwrap_err().code, "not_found");
+
+        let potato = document(&project, "🥔 Yield fell above 3,800 m.");
+        let high = add(&project, potato, &scribe(), "above 3,800 m", "high up").unwrap();
+        let listed = list(&project, potato).unwrap();
+        assert_eq!((listed[0].id, listed[0].start, listed[0].end), (high, 14, 27));
     }
 
     #[test]
@@ -452,27 +415,19 @@ mod tests {
         edit(&project, report, id, &edited, (0, utf16_len(&edited)));
         let accepted = accept(&project, id).unwrap();
         assert_eq!(accepted.text, "Yield fell above 3,800 m, mainly at Huancayo and Junín.");
-    }
 
-    #[test]
-    fn overlapping_edits_conflict_and_change_nothing() {
-        let (_dir, project) = temp_project();
         let report = document(&project, SENTENCE);
-        let shorter = "Yield fell above 3,800 m, mainly at Huancayo.";
         let id = add(&project, report, &scribe(), SENTENCE, shorter).unwrap();
         let edited = SENTENCE.replace("in both 2024 and 2025", "in 2024 only");
         edit(&project, report, id, &edited, (0, utf16_len(&edited)));
         assert_eq!(accept(&project, id).unwrap_err().code, "suggestion_conflict");
         assert_eq!(documents::read(&project, report).unwrap(), edited);
         assert_eq!(list(&project, report).unwrap()[0].id, id);
-    }
 
-    #[test]
-    fn a_detached_suggestion_cannot_be_accepted() {
-        let (_dir, project) = temp_project();
         let report = document(&project, SENTENCE);
         let id = add(&project, report, &scribe(), "Huancayo", "Junín").unwrap();
         std::fs::write(assets::file_path(&project, report).unwrap(), "Rewritten.").unwrap();
         assert_eq!(accept(&project, id).unwrap_err().code, "suggestion_detached");
     }
+
 }

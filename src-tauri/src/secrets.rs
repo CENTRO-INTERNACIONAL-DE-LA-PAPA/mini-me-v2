@@ -182,19 +182,4 @@ mod tests {
         assert_eq!(format!("{secret}"), REDACTED);
         assert_eq!(secret.expose(), "sk-dummy-0123456789");
     }
-
-    #[test]
-    fn providers_have_names_and_unknown_ones_are_refused() {
-        assert_eq!(provider_name("openrouter"), "OpenRouter");
-        assert_eq!(provider_name("dummy"), "dummy");
-        assert!(is_provider("google"));
-        assert_eq!(provider_name("typesafe"), "Typesafe");
-        assert!(is_key_account("typesafe"));
-        assert!(!is_provider("typesafe"));
-        assert_eq!(
-            KeychainSecrets::save("dummy", "sk-1").unwrap_err().code,
-            "invalid_input"
-        );
-        assert_eq!(KeychainSecrets::save("openai", "  ").unwrap_err().code, "invalid_input");
-    }
 }

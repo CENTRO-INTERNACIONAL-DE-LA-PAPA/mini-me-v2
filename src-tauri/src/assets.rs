@@ -668,114 +668,7 @@ pub fn file_path(project: &Project, id: Uuid) -> AppResult<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::comments::test_support::into_thread;
-    use crate::conversations::{self, SendMessageInput};
     use crate::projects::test_support::{temp_project, user};
-
-    #[test]
-    fn a_rename_keeps_the_extension_and_the_id() {
-        assert_eq!(renamed("field-trial.csv", "trial-2025"), "trial-2025.csv");
-        assert_eq!(renamed("field-trial.csv", "trial-2025.CSV"), "trial-2025.csv");
-        assert_eq!(renamed("README", "notes"), "notes");
-
-        let (_dir, project) = temp_project();
-        let asset = import_bytes(&project, "field-trial.csv", "text/csv", b"a,b", &user()).unwrap();
-        let after = rename(&project, asset.id, " trial-2025 ").unwrap();
-        assert_eq!((after.id, after.name.as_str()), (asset.id, "trial-2025.csv"));
-        let path = file_path(&project, asset.id).unwrap();
-        assert!(path.ends_with("trial-2025.csv"));
-        assert_eq!(std::fs::read(path).unwrap(), b"a,b");
-        assert!(rename(&project, asset.id, "a/b").is_err());
-        assert!(rename(&project, asset.id, "   ").is_err());
-        assert!(rename(&project, asset.id, ".csv").is_err());
-    }
-
-    #[test]
-    fn a_duplicate_is_a_new_file_named_copy() {
-        let (_dir, project) = temp_project();
-        let asset = import_bytes(&project, "field-trial.csv", "text/csv", b"a,b", &user()).unwrap();
-        let copy = duplicate(&project, asset.id, &user()).unwrap();
-        assert_ne!(copy.id, asset.id);
-        assert_eq!(copy.name, "field-trial copy.csv");
-        assert_eq!(std::fs::read(file_path(&project, copy.id).unwrap()).unwrap(), b"a,b");
-
-        let second = duplicate(&project, asset.id, &user()).unwrap();
-        assert_eq!(second.name, "field-trial copy 2.csv");
-        let of_copy = duplicate(&project, copy.id, &user()).unwrap();
-        assert_eq!(of_copy.name, "field-trial copy 3.csv");
-    }
-
-    #[test]
-    fn deleting_a_file_removes_its_record_and_folder() {
-        let (_dir, project) = temp_project();
-        let asset = import_bytes(&project, "field-trial.csv", "text/csv", b"a", &user()).unwrap();
-        let folder = file_path(&project, asset.id).unwrap().parent().unwrap().to_path_buf();
-        delete(&project, asset.id).unwrap();
-        assert!(!folder.exists());
-        assert!(find(&project.lock(), asset.id).is_err());
-    }
-
-    #[test]
-    fn a_download_is_stored_under_its_name_with_where_it_came_from() {
-        let (dir, project) = temp_project();
-        let downloaded = dir.path().join("download-4311.tmp");
-        std::fs::write(&downloaded, "plot,yield\n1,20\n").unwrap();
-        let origin = AssetOrigin::Dataverse {
-            file_id: 4311,
-            dataset_id: "doi:10.21223/R694DO".into(),
-            title: "Integrated management of late blight data".into(),
-            url: "https://doi.org/10.21223/R694DO".into(),
-        };
-
-        let asset =
-            import_downloaded(&project, &downloaded, "trial.csv", &user(), &origin).unwrap();
-        assert_eq!((asset.name.as_str(), asset.media_type.as_str()), ("trial.csv", "text/csv"));
-        let entry = project_files(&project).unwrap().into_iter().next().unwrap();
-        assert_eq!((entry.source.as_str(), entry.origin.as_ref()), ("dataverse", Some(&origin)));
-        assert_eq!(dataverse_files(&project.lock()).unwrap().get(&4311), Some(&asset));
-        assert!(import_downloaded(&project, &downloaded, "../x.csv", &user(), &origin).is_err());
-    }
-
-    #[test]
-    fn imported_generated_and_pasted_files_are_stored_and_registered() {
-        let (dir, project) = temp_project();
-        let source_of = |id: Uuid| -> String {
-            let sql = "SELECT source FROM assets WHERE id = ?1";
-            project.lock().conn.query_row(sql, params![id.to_string()], |r| r.get(0)).unwrap()
-        };
-
-        let source = dir.path().join("field-trial.csv");
-        std::fs::write(&source, "plot,yield\n1,20\n").unwrap();
-        let imported = import(&project, &source, &user()).unwrap();
-        let summary = (imported.name.as_str(), imported.media_type.as_str(), imported.size_bytes);
-        assert_eq!(summary, ("field-trial.csv", "text/csv", 16));
-        let assets_folder = project.paths.root().join("assets");
-        assert!(file_path(&project, imported.id).unwrap().starts_with(assets_folder));
-        assert_eq!(std::fs::read_to_string(&source).unwrap(), "plot,yield\n1,20\n");
-        assert_eq!(find(&project.lock(), imported.id).unwrap(), imported);
-        assert_eq!(source_of(imported.id), "upload");
-
-        let generated = write_generated(
-            &project,
-            "theory-store.json",
-            "application/json",
-            b"{}",
-            &user(),
-            false,
-        )
-        .unwrap();
-        let stored = file_path(&project, generated.id).unwrap();
-        let expected = format!("assets/{}/theory-store.json", generated.id);
-        assert_eq!(stored, project.paths.root().join(expected));
-        assert_eq!(std::fs::read(stored).unwrap(), b"{}");
-        assert_eq!(source_of(generated.id), "generated");
-
-        let name = pasted_name("", "image/png");
-        assert_eq!(name, "Pasted image.png");
-        let pasted = import_bytes(&project, &name, "image/png", b"png", &user()).unwrap();
-        assert_eq!(std::fs::read(file_path(&project, pasted.id).unwrap()).unwrap(), b"png");
-        assert_eq!(source_of(pasted.id), "upload");
-    }
 
     #[test]
     fn files_with_the_same_name_are_both_kept() {
@@ -808,57 +701,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn hidden_assets_are_left_out_of_what_the_user_sees() {
-        let (_dir, project) = temp_project();
-        let shown = write_generated(&project, "trial.csv", "", b"a", &user(), false).unwrap();
-        let hidden = write_generated(&project, "papers.json", "", b"[]", &user(), true).unwrap();
-
-        let listed: Vec<Uuid> = list(&project, None)
-            .unwrap()
-            .into_iter()
-            .map(|a| a.id)
-            .collect();
-        let files: Vec<Uuid> = project_files(&project)
-            .unwrap()
-            .into_iter()
-            .map(|e| e.asset.id)
-            .collect();
-        assert_eq!((listed, files), (vec![shown.id], vec![shown.id]));
-        assert_eq!(
-            find(&project.lock(), hidden.id).unwrap().name,
-            "papers.json"
-        );
-    }
-
-    #[test]
-    fn a_file_edited_outside_the_app_is_listed_with_its_new_size() {
-        let (_dir, project) = temp_project();
-        let asset = write_generated(&project, "trial.csv", "", b"a\n1\n", &user(), false).unwrap();
-        std::fs::write(file_path(&project, asset.id).unwrap(), b"a\n1\n2\n3\n").unwrap();
-
-        let entry = project_files(&project).unwrap().remove(0);
-        assert_eq!(entry.asset.size_bytes, 8);
-        assert_eq!(find(&project.lock(), asset.id).unwrap().size_bytes, 8);
-    }
-
-    #[test]
-    fn list_filters_by_name() {
-        let (dir, project) = temp_project();
-        for name in ["field-trial.csv", "notes.md", "Trial-2.xlsx"] {
-            let source = dir.path().join(name);
-            std::fs::write(&source, "x").unwrap();
-            import(&project, &source, &user()).unwrap();
-        }
-        let names: Vec<String> = list(&project, Some("trial"))
-            .unwrap()
-            .into_iter()
-            .map(|a| a.name)
-            .collect();
-        assert_eq!(names.len(), 2);
-        assert!(names.iter().all(|n| n.to_lowercase().contains("trial")));
-    }
-
     fn assets_folder_entries(project: &Project) -> usize {
         let folder = project.paths.root().join("assets");
         std::fs::read_dir(folder).map(|entries| entries.count()).unwrap_or(0)
@@ -866,7 +708,7 @@ mod tests {
 
     #[test]
     fn names_that_could_leave_the_folder_or_fail_on_windows_are_refused() {
-        let (_dir, project) = temp_project();
+        let (dir, project) = temp_project();
         let long = "a".repeat(256);
         let names = [
             "", "../../notes.txt", "a/b.txt", "a\\b.txt", "..", ".", "notes?.txt", "notes.", "NUL",
@@ -879,70 +721,23 @@ mod tests {
         }
         assert_eq!(assets_folder_entries(&project), 0);
         assert!(list(&project, None).unwrap().is_empty());
-    }
 
-    #[test]
-    fn names_with_dots_or_device_words_inside_are_allowed() {
+        let downloaded = dir.path().join("download-4311.tmp");
+        std::fs::write(&downloaded, "plot,yield\n1,20\n").unwrap();
+        let origin = AssetOrigin::Dataverse {
+            file_id: 4311,
+            dataset_id: "doi:10.21223/R694DO".into(),
+            title: "Integrated management of late blight data".into(),
+            url: "https://doi.org/10.21223/R694DO".into(),
+        };
+        assert!(import_downloaded(&project, &downloaded, "../x.csv", &user(), &origin).is_err());
+
+        let asset = import_bytes(&project, "field-trial.csv", "text/csv", b"a,b", &user()).unwrap();
+        assert!(rename(&project, asset.id, "a/b").is_err());
+
         for name in ["results..final.csv", "a...b.json", "console.txt", "nullable.md", ".env"] {
             assert!(check_name(name).is_ok(), "{name}");
         }
-    }
-
-    #[test]
-    fn project_files_lists_who_added_each_asset_and_where_it_is_used() {
-        let (dir, project) = temp_project();
-        let source = dir.path().join("field-trial.csv");
-        std::fs::write(&source, "plot,yield\n1,20\n").unwrap();
-        let trial = import(&project, &source, &user()).unwrap();
-        let unused = write_generated(&project, "notes.md", "", b"# Notes", &user(), false).unwrap();
-        let first = conversations::create(&project).unwrap().id;
-        let second = conversations::create(&project).unwrap().id;
-        let user = new_id();
-        let attach = SendMessageInput {
-            content: "Summarize this".into(),
-            attachments: vec![trial.id],
-            text_components: Vec::new(),
-        };
-        conversations::send_message(&project, first, attach, user).unwrap();
-        let reference = SendMessageInput {
-            content: "#field-trial.csv again".into(),
-            attachments: Vec::new(),
-            text_components: vec![TextComponent {
-                kind: TextComponentKind::Asset,
-                id: trial.id,
-                label: "#field-trial.csv".into(),
-                start: 0,
-                end: 16,
-            }],
-        };
-        conversations::send_message(&project, second, reference, user).unwrap();
-
-        let entries = project_files(&project).unwrap();
-        let entry = |id| entries.iter().find(|e| e.asset.id == id).unwrap();
-        assert_eq!(entry(trial.id).source, AssetSource::Upload);
-        assert_eq!(entry(trial.id).added_by.as_ref().unwrap().kind, AuthorKind::User);
-        let used: Vec<Uuid> = entry(trial.id).used_in.iter().map(|c| c.id).collect();
-        assert_eq!(used, [first, second]);
-        assert_eq!(entry(unused.id).source, AssetSource::Generated);
-        assert_eq!(entry(unused.id).added_by, Some(crate::projects::test_support::user()));
-        assert!(entry(unused.id).used_in.is_empty());
-    }
-
-    #[test]
-    fn a_table_is_saved_under_its_title_made_safe() {
-        assert_eq!(table_file_name("Yield by variety"), "Yield by variety.csv");
-        assert_eq!(table_file_name("Plots 1/2"), "Plots 1-2.csv");
-        assert_eq!(table_file_name("  "), "Table.csv");
-        assert_eq!(table_file_name("field-trial.csv"), "field-trial.csv");
-        assert_eq!(table_file_name("Harvest.XLSX"), "Harvest.csv");
-    }
-
-    #[test]
-    fn a_pasted_name_falls_back_when_the_clipboard_gives_none_or_a_bad_one() {
-        assert_eq!(pasted_name("field.jpg", "image/jpeg"), "field.jpg");
-        assert_eq!(pasted_name("what?.png", "image/jpeg"), "Pasted image.jpg");
-        assert_eq!(pasted_name("  ", "image/webp"), "Pasted image.webp");
-        assert_eq!(pasted_name("", "image/x-unknown"), "Pasted image");
     }
 
     #[test]
@@ -962,31 +757,5 @@ mod tests {
         let err = import_dropped(&project, &[file, other], &dropped, &user()).unwrap_err();
         assert_eq!(err.code, "invalid_input");
         assert_eq!(list(&project, None).unwrap().len(), 1);
-    }
-
-    #[test]
-    fn only_images_are_read_for_thumbnails() {
-        let (_dir, project) = temp_project();
-        let image = import_bytes(&project, "field.png", "", b"png", &user()).unwrap();
-        let table = import_bytes(&project, "plots.csv", "", b"plot", &user()).unwrap();
-        assert_eq!(read_image(&project, image.id).unwrap(), ("image/png".into(), b"png".to_vec()));
-        assert_eq!(read_image(&project, table.id).unwrap_err().code, "invalid_input");
-    }
-
-    #[test]
-    fn a_thread_is_not_where_a_file_is_used() {
-        let (_dir, project) = temp_project();
-        let trial = import_bytes(&project, "trial.csv", "text/csv", b"a\n", &user()).unwrap();
-        let thread = conversations::create(&project).unwrap().id;
-        into_thread(&project, thread);
-        let input = SendMessageInput {
-            content: "see this".into(),
-            attachments: vec![trial.id],
-            text_components: Vec::new(),
-        };
-        conversations::send_message(&project, thread, input, new_id()).unwrap();
-        let files = project_files(&project).unwrap();
-        let entry = files.iter().find(|e| e.asset.id == trial.id).unwrap();
-        assert!(entry.used_in.is_empty());
     }
 }

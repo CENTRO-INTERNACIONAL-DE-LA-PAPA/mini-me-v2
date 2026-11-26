@@ -1,5 +1,5 @@
 /** The keys that bring the Mini-Mes to Home, in order, as `KeyboardEvent.key` values. */
-export const SUMMON = [
+const SUMMON = [
   "ArrowUp",
   "ArrowUp",
   "ArrowDown",

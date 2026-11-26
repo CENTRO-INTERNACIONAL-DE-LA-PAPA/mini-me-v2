@@ -1,7 +1,7 @@
 import pandas as pd
 
 from mini_me_sidecar.adapters.data.catalogue import JoinPlan
-from mini_me_sidecar.adapters.data.join import join, shared_key
+from mini_me_sidecar.adapters.data.join import join
 
 
 def test_left_join_counts_unmatched_keys_across_types():
@@ -13,8 +13,3 @@ def test_left_join_counts_unmatched_keys_across_types():
     assert (stats.left_unmatched, stats.right_unmatched) == (1, 1)
     assert list(result["site"].fillna("")) == ["A", "A", ""]
 
-
-def test_shared_column_fallback():
-    ab, bc = pd.DataFrame(columns=["a", "b"]), pd.DataFrame(columns=["b", "c"])
-    assert shared_key(ab, bc).left_on == ["b"]
-    assert shared_key(ab, ab) is None

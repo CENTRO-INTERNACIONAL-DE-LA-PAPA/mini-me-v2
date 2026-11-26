@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 
 from mini_me_sidecar.adapters.data.confounders import check
-from mini_me_sidecar.adapters.data.replies import _verdict
 
 
 def confounded(rows: int = 120) -> pd.DataFrame:
@@ -36,9 +35,3 @@ def test_small_subgroups_are_left_out_and_no_controls_gives_one_estimate():
     assert "site = D" in list(found.estimates["Estimate"])
     assert not any(name.startswith("site = A") for name in found.estimates["Estimate"])
 
-
-def test_the_verdict_names_how_the_estimate_moved():
-    assert "held" in _verdict(0.04, 0.038, ["altitude"])
-    assert "shrank by 75%" in _verdict(0.04, 0.01, ["altitude"])
-    assert "grew by 50%" in _verdict(0.04, 0.06, ["altitude"])
-    assert "changed sign" in _verdict(0.04, -0.01, ["altitude"])

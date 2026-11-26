@@ -13,7 +13,7 @@ interface DocumentData {
 }
 
 /** A document a reply wrote or edited, with an Open button, or a note that it was removed. */
-export function DocumentCard({
+function DocumentCard({
   title,
   meta = "Quarto document",
   removed,

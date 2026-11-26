@@ -15,7 +15,7 @@ interface Paper {
 }
 
 /** How many sources show before "Show all sources". */
-export const SHOWN_SOURCES = 5;
+const SHOWN_SOURCES = 5;
 
 function byline(paper: Paper): string {
   const authors = paper.authors ?? [];

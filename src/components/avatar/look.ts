@@ -11,7 +11,7 @@ const CENTRE: Point = { x: 0, y: 0 };
 
 /** Where an avatar drawn in `box` looks for `pointer`: a direction whose length, from 0 to 1, is
  * how far its features lean, each by its own amount in `index.css`. */
-export function lookOffset(pointer: Point, box: Box): Point {
+function lookOffset(pointer: Point, box: Box): Point {
   const dx = pointer.x - (box.left + box.width / 2);
   const dy = pointer.y - (box.top + box.height / 2);
   const distance = Math.hypot(dx, dy);

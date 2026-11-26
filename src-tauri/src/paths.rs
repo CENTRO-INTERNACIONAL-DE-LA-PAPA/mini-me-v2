@@ -84,44 +84,26 @@ mod tests {
     }
 
     #[test]
-    fn accepts_paths_inside() {
-        let (_dir, paths) = project();
+    fn rejects_parent_segments() {
+        let (dir, paths) = project();
         let resolved = paths.resolve("assets/abc/file.csv").unwrap();
         assert!(resolved.starts_with(paths.root()));
-    }
 
-    #[test]
-    fn rejects_parent_segments() {
-        let (_dir, paths) = project();
         let err = paths.resolve("assets/../../outside.txt").unwrap_err();
         assert_eq!(err.code, "confinement");
-    }
 
-    #[test]
-    fn rejects_absolute_paths() {
-        let (dir, paths) = project();
         let absolute = dir.path().join("outside.txt");
         let err = paths.resolve(absolute.to_str().unwrap()).unwrap_err();
         assert_eq!(err.code, "confinement");
-    }
 
-    #[test]
-    fn rejects_symlink_escaping_the_folder() {
-        let (dir, paths) = project();
         let outside = dir.path().join("outside");
         std::fs::create_dir(&outside).unwrap();
         let link = paths.root().join("escape");
-
         #[cfg(unix)]
-        let created = std::os::unix::fs::symlink(&outside, &link).is_ok();
+        let created = std::os::unix::fs::symlink(&outside, &link);
         #[cfg(windows)]
-        let created = std::os::windows::fs::symlink_dir(&outside, &link).is_ok();
-
-        if !created {
-            // Creating symbolic links needs extra privileges on some Windows setups.
-            eprintln!("skipping: cannot create a symbolic link on this machine");
-            return;
-        }
+        let created = std::os::windows::fs::symlink_dir(&outside, &link);
+        created.expect("creating a symbolic link failed; on Windows, turn on Developer Mode or run as administrator");
         let err = paths.resolve("escape/file.txt").unwrap_err();
         assert_eq!(err.code, "confinement");
     }
