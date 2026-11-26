@@ -3,7 +3,9 @@ import {
   BookOpenIcon,
   CalculatorIcon,
   CalendarIcon,
+  ChartColumnIcon,
   ChartLineIcon,
+  ChartScatterIcon,
   ClipboardListIcon,
   CodeIcon,
   CompassIcon,
@@ -13,6 +15,7 @@ import {
   FlaskConicalIcon,
   FunnelIcon,
   GitBranchIcon,
+  GroupIcon,
   GlobeIcon,
   LeafIcon,
   LibraryIcon,
@@ -26,6 +29,7 @@ import {
   PenIcon,
   PuzzleIcon,
   QuoteIcon,
+  RadarIcon,
   ScaleIcon,
   ScanSearchIcon,
   SearchIcon,
@@ -77,6 +81,10 @@ export const TRAIT_ICONS = new Map<string, LucideIcon>([
   ["target", TargetIcon],
   ["git-branch", GitBranchIcon],
   ["pen", PenIcon],
+  ["chart-column", ChartColumnIcon],
+  ["chart-scatter", ChartScatterIcon],
+  ["radar", RadarIcon],
+  ["group", GroupIcon],
 ]);
 
 export function traitIcon(name: string | null): LucideIcon {

@@ -75,10 +75,10 @@
 
 ## 7. Library and icons
 
-- [ ] 7.1 Add `chart-column`, `chart-scatter`, `radar` and `group` to `TRAIT_ICONS` in
+- [x] 7.1 Add `chart-column`, `chart-scatter`, `radar` and `group` to `TRAIT_ICONS` in
   `src/lib/traitIcons.ts`. Verify: `npx tsc --noEmit` passes and the Trait icon picker lists
   them.
-- [ ] 7.2 In `src-tauri/library/builtin.json`, add the four Traits (adapters, icons and colours
+- [x] 7.2 In `src-tauri/library/builtin.json`, add the four Traits (adapters, icons and colours
   from design.md) and the Exploratory Data Analysis Mini-Me in the Data group, with its
   description, look and Workflow (the four Steps, the "cluster"/"skip" condition and the
   "chart"/"no chart" condition). Verify: `cd src-tauri && cargo test` passes, so the built-in
