@@ -138,7 +138,7 @@ class CallContext:
         # Every Mini-Me of the library, `{ id, name, description, traits }`, for hand-offs.
         self.mini_mes: list[dict[str, Any]] = context.get("mini_mes") or []
         # The Mini-Me routing recommends handing off to, `{ mini_me_id }`, or None.
-        self.hand_off: dict[str, Any] | None = context.get("hand_off")
+        self.recommended_hand_off: dict[str, Any] | None = context.get("hand_off")
         # Names of the Traits the run's Workflow can still run after this call.
         self.later_traits: list[str] = context.get("later_traits") or []
         # For a call answering a comment: the thread's document, `{ asset_id, name, passage }`.

@@ -19,4 +19,5 @@
 
 ## Fixed
 
+- A Mini-Me can hand a request to another Mini-Me again; the hand-off used to fail silently, so the other Mini-Me never answered.
 - Stopping a reply while a Mini-Me works through its Workflow ends it as stopped, not as failed.
