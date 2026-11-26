@@ -40,11 +40,11 @@
 
 ## 5. Check Confounders (sidecar)
 
-- [ ] 5.1 Add `adapters/data/confounders.py`: the focus's coefficient alone and with the
+- [x] 5.1 Add `adapters/data/confounders.py`: the focus's coefficient alone and with the
   controls, and within each subgroup with at least 10 rows (at most 10), each with its interval
   and rows used, and the change in percent. Verify: pytest on generated data where a control
   explains the focus's effect checks that the estimate shrinks and the subgroup rows.
-- [ ] 5.2 Add the plan (`outcome`, `focus`, `controls`, `subgroups`), the adapter
+- [x] 5.2 Add the plan (`outcome`, `focus`, `controls`, `subgroups`), the adapter
   `data-confounders` and the reply: held, shrank, grew or changed sign (held below 10%), the
   estimates table and chart. Verify: `cd sidecar && uv run pytest` passes.
 

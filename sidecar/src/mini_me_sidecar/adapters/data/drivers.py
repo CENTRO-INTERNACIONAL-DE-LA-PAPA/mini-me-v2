@@ -78,9 +78,14 @@ def _vif(fitted) -> dict[str, float]:
         if term == "Intercept":
             continue
         value = 1.0 if exog.shape[1] <= 2 else float(variance_inflation_factor(exog, i))
-        driver = CATEGORY_TERM.match(term).group(1) if CATEGORY_TERM.match(term) else term
+        driver = term_driver(term)
         found[driver] = max(found.get(driver, 0.0), value)
     return found
+
+
+def term_driver(term: str) -> str:
+    match = CATEGORY_TERM.match(term)
+    return match.group(1) if match else term
 
 
 def _term(term: str, names: dict[str, str]) -> tuple[str, str]:

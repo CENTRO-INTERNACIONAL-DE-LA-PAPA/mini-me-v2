@@ -11,6 +11,7 @@ from mini_me_sidecar.adapters.data.catalogue import (
     CleanPlan,
     ClusterPlan,
     ColumnsPlan,
+    ConfoundersPlan,
     DriversPlan,
     GroupsPlan,
     CorrelationPlan,
@@ -35,6 +36,7 @@ from mini_me_sidecar.adapters.data.templates import (
 from mini_me_sidecar.adapters.data.choose import UnusableAnswer, choose
 from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
 from mini_me_sidecar.adapters.data.clusters import cluster
+from mini_me_sidecar.adapters.data.confounders import check
 from mini_me_sidecar.adapters.data.correlations import compared, correlations
 from mini_me_sidecar.adapters.data.describe import describe
 from mini_me_sidecar.adapters.data.drivers import regress
@@ -494,6 +496,59 @@ async def find_drivers(ctx: CallContext, text: str) -> None:
     title = f"Coefficients for {plan.outcome}"
     source = table.name if table.source_id else None
     await _draw(ctx, coefficients, _estimates_chart(title), source, table.source_id)
+
+
+HELD_PERCENT = 10
+
+
+async def check_confounders(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, _ = await choose(ctx, ConfoundersPlan, text, [describe(table)])
+    controls = [c for c in dict.fromkeys(plan.controls) if c not in (plan.outcome, plan.focus)]
+    roles = [(plan.outcome, "outcome", ("number",)), (plan.focus, "focus", ("number", "boolean"))]
+    roles += [(c, "controls", ("number", "text", "boolean")) for c in controls]
+    if plan.subgroups:
+        roles.append((plan.subgroups, "subgroups", GROUPING))
+    _check_roles(table, roles)
+    ctx.progress(f"Checking {plan.focus} in {table.name}")
+    found = await WORKERS.run(
+        ctx, check, table.frame, plan.outcome, plan.focus, controls, plan.subgroups
+    )
+    alone = f"{found.alone:+.3g}"
+    ctx.write(
+        _table_note(tables)
+        + f"Alone, `{plan.focus}` goes with a change of {alone} in `{plan.outcome}` per unit. "
+        + (_verdict(found.alone, found.adjusted, controls) if found.adjusted is not None else "")
+        + f"{ASSOCIATION}\n\n"
+    )
+    estimates = found.estimates
+    await show_frame(
+        ctx,
+        estimates,
+        f"{plan.focus} and {plan.outcome}",
+        results_name=f"{table.stem}-confounders.csv",
+    )
+    chart = _estimates(
+        estimates["Estimate"], estimates["Coefficient"], estimates["Low"], estimates["High"]
+    )
+    title = f"Estimates for {plan.focus}"
+    source = table.name if table.source_id else None
+    await _draw(ctx, chart, _estimates_chart(title), source, table.source_id)
+
+
+def _verdict(alone: float, adjusted: float, controls: list[str]) -> str:
+    change = (adjusted - alone) / abs(alone) * 100 if alone else 0.0
+    if alone and adjusted and (alone > 0) != (adjusted > 0):
+        held = "changed sign"
+    elif abs(change) < HELD_PERCENT:
+        held = "held"
+    elif abs(adjusted) < abs(alone):
+        held = f"shrank by {abs(change):.0f}%"
+    else:
+        held = f"grew by {abs(change):.0f}%"
+    with_ = _listed([f"`{c}`" for c in controls])
+    return f"With {with_} accounted for, it is {adjusted:+.3g}: the estimate {held}. "
 
 
 def _check_roles(table: Table, roles: list[tuple[str, str, tuple[str, ...]]]) -> None:

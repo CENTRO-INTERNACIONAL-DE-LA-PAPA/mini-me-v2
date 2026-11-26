@@ -255,6 +255,17 @@ class DriversPlan(BaseModel):
     drivers: list[str]
 
 
+class ConfoundersPlan(BaseModel):
+    """The number column to explain (`outcome`), the one column whose link to it is checked
+    (`focus`), the columns to account for (`controls`), and a column to look within each value
+    of (`subgroups`) only when the message asks for it."""
+
+    outcome: str
+    focus: str
+    controls: list[str] = []
+    subgroups: str | None = None
+
+
 def role_problem(frame: pd.DataFrame, column: str, role: str, kinds: tuple[str, ...]) -> str | None:
     if column not in frame.columns:
         return f"The table has no column `{column}` for the {role}."
