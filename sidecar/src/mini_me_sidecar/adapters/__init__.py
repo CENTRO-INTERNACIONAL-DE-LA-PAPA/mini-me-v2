@@ -4,6 +4,7 @@ from mini_me_sidecar.adapters.data import (
     CleanData,
     DescribeVariables,
     DetectOutliers,
+    FindClusters,
     FindCorrelations,
     JoinData,
     PlotData,
@@ -31,6 +32,7 @@ def load_adapters() -> dict[str, Adapter]:
         DescribeVariables(),
         FindCorrelations(),
         DetectOutliers(),
+        FindClusters(),
         SearchDataverse(),
     ]
     by_id: dict[str, Adapter] = {}

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from mini_me_sidecar.adapters.data.catalogue import (
     CheckPlan,
     CleanPlan,
+    ClusterPlan,
     ColumnsPlan,
     CorrelationPlan,
     JoinPlan,
@@ -30,6 +31,7 @@ from mini_me_sidecar.adapters.data.templates import (
 )
 from mini_me_sidecar.adapters.data.choose import UnusableAnswer, choose
 from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
+from mini_me_sidecar.adapters.data.clusters import cluster
 from mini_me_sidecar.adapters.data.correlations import compared, correlations
 from mini_me_sidecar.adapters.data.describe import describe
 from mini_me_sidecar.adapters.data.join import join, shared_key
@@ -318,6 +320,66 @@ async def detect_outliers(ctx: CallContext, text: str) -> None:
             }
         )
         await _draw(ctx, spread, box, source, table.source_id)
+    _write_ignored(ctx, malformed + left_out, "I left these out:")
+
+
+MAX_CLUSTERS = 20
+
+
+async def find_clusters(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, malformed = await choose(ctx, ClusterPlan, text, [describe(table)])
+    columns, left_out = pick_columns(table.frame, plan.columns, ("number",))
+    if len(columns) < 2:
+        raise TraitError(
+            "too_few_columns",
+            f"Clustering needs at least two number columns, and I found {len(columns)} "
+            f"to use in `{table.name}`.",
+        )
+    clusters = plan.clusters
+    if clusters is not None and not 2 <= clusters <= MAX_CLUSTERS:
+        left_out.append(
+            (f"{clusters} clusters", f"a number from 2 to {MAX_CLUSTERS} is needed")
+        )
+        clusters = None
+    ctx.progress(f"Clustering {table.name}")
+    found = await WORKERS.run(ctx, cluster, table.frame, columns, plan.method, clusters)
+    saved = await _save(ctx, table, found.table, "clusters", csv_only=True)
+    missing = len(table.frame) - found.clustered
+    ctx.write(
+        _table_note(tables)
+        + f"Grouped {found.clustered:,} rows of `{table.name}` by {len(columns)} columns into "
+        + f"{found.clusters} clusters with {found.method}."
+        + (f" {missing:,} rows weren't clustered." if missing else "")
+        + "".join(f" {note}" for note in found.notes)
+        + f" The first two principal components explain {found.explained[0]:g}% and "
+        + f"{found.explained[1]:g}% of the variation."
+        + (
+            f" I saved `{saved['name']}`, which adds the columns `cluster`, `pc1` and `pc2`."
+            if saved
+            else ""
+        )
+        + "\n\n"
+    )
+    await show_frame(
+        ctx,
+        found.summary,
+        f"Clusters of {table.name}",
+        results_name=f"{table.stem}-cluster-summary.csv",
+    )
+    points = found.table[["pc1", "pc2", "cluster"]]
+    scatter = ChartChoice.model_validate(
+        {
+            "template": "scatter",
+            "title": "Clusters on the first two principal components",
+            "x": "pc1",
+            "y": "pc2",
+            "group": "cluster",
+        }
+    )
+    source, source_id = (saved["name"], saved["asset_id"]) if saved else (None, None)
+    await _draw(ctx, points, scatter, source, source_id)
     _write_ignored(ctx, malformed + left_out, "I left these out:")
 
 

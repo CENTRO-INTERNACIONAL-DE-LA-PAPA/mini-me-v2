@@ -230,6 +230,14 @@ class OutlierPlan(ColumnsPlan):
     extreme: bool = False
 
 
+class ClusterPlan(ColumnsPlan):
+    """The number columns to group the rows by (empty for every one), the method, and the
+    number of clusters only when the message names one."""
+
+    method: Literal["kmeans", "hdbscan"] = "kmeans"
+    clusters: int | None = None
+
+
 def pick_columns(
     frame: pd.DataFrame, named: list[str], kinds: tuple[str, ...]
 ) -> tuple[list[str], list[tuple[str, str]]]:

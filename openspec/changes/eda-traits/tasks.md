@@ -61,14 +61,14 @@
 
 ## 6. Find Clusters (sidecar)
 
-- [ ] 6.1 Add `adapters/data/clusters.py`: scale the chosen number columns, cluster the
+- [x] 6.1 Add `adapters/data/clusters.py`: scale the chosen number columns, cluster the
   complete rows with k-means (the given number, or 2 to 8 kept by silhouette on at most 5,000
   rows) or HDBSCAN (k-means above 20,000 rows, with the reason), compute two principal
   components and their explained variance, and return the table with `cluster`, `pc1` and
   `pc2` (empty for rows not clustered) and a per-cluster summary. Verify: pytest on two
   well-separated groups finds 2 clusters, leaves a row with a missing value unclustered, and
   falls back from HDBSCAN on a large table.
-- [ ] 6.2 Add the plan (`columns`, `method`, `clusters`), the adapter `data-clusters` and the
+- [x] 6.2 Add the plan (`columns`, `method`, `clusters`), the adapter `data-clusters` and the
   reply: save `<name>-clusters.csv`, show the summary table, and draw the scatter template of
   `pc1` against `pc2` grouped by `cluster` from the saved file, naming the explained variance.
   Verify: `cd sidecar && uv run pytest` passes.
