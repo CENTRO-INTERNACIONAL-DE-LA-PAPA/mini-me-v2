@@ -9,6 +9,8 @@ import {
   newStep,
   removeStep,
   setAskBeforeRunning,
+  setModelQuestions,
+  setWrittenAnswer,
 } from "./workflowEdit";
 
 const trait = (id: string): WorkflowStep => ({ id, type: "trait", trait: `t-${id}` });
@@ -69,6 +71,14 @@ describe("workflow edits", () => {
     expect(loop[0]).toMatchObject({ type: "approval", prompt: "Run Refute?" });
     expect(asksBeforeRunning(asked, "refute", "Refute")).toBe(true);
     expect(setAskBeforeRunning(asked, "refute", false, "Refute")).toEqual(workflow);
+  });
+
+  it("asks for a written answer, and stops the model writing questions with it", () => {
+    const ask = { id: "ask", type: "approval" as const, prompt: "Which season?" };
+    const written = setModelQuestions(setWrittenAnswer(ask, true), true);
+    expect(written).toEqual({ ...ask, answer: "text", questions_by: "model" });
+    expect(setModelQuestions(ask, true)).toEqual(ask);
+    expect(setWrittenAnswer(written, false)).toEqual(ask);
   });
 
   it("leaves an approval the user wrote alone", () => {

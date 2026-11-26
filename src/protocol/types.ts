@@ -381,10 +381,12 @@ export interface MiniMe {
   built_in: boolean;
 }
 
+export type ApprovalAnswer = { approved: boolean } | { text: string } | { skipped: true };
+
 /** A node of a Workflow: a Trait Step or a control Step. */
 export type WorkflowStep = { id: string; label?: string } & (
   | { type: "trait"; trait: Uuid }
-  | { type: "approval"; prompt: string }
+  | { type: "approval"; prompt: string; answer?: "text"; questions_by?: "model" }
   | { type: "condition"; question: string; branches: WorkflowBranch[] }
   | { type: "loop"; question: string; max_iterations: number; steps: WorkflowStep[] }
   | { type: "parallel"; branches: WorkflowBranch[] }

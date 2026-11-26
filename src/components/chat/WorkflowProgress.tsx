@@ -25,15 +25,20 @@ export function showsProgress(steps: MessageStep[]): boolean {
 }
 
 /** How an approval's answer reads after its Step's name. */
-export const ANSWER_LABELS = { approved: "Approved", rejected: "Rejected" } as const;
+export const ANSWER_LABELS = {
+  approved: "Approved",
+  rejected: "Rejected",
+  answered: "Answered",
+  skipped: "Skipped",
+} as const;
 
-/** Each approval Step run's answer, by index in `steps`: the n-th run of an approval Step asked
- * the n-th `approval` component with its `step_id`, both in the order added. Missing for other
- * Steps, and for an approval without a component or an answer yet. */
-export function approvalAnswers(
+/** Each approval Step run's component, by index in `steps`: the n-th run of an approval Step
+ * asked the n-th `approval` component with its `step_id`, both in the order added. Missing for
+ * other Steps, and for an approval without a component yet. */
+export function approvalComponents(
   steps: MessageStep[],
   components: Component[],
-): Array<"approved" | "rejected" | undefined> {
+): Array<Component | undefined> {
   const asked = (stepId: string) =>
     components.filter(
       (c) => c.kind === "approval" && (c.preview as { step_id?: string } | null)?.step_id === stepId,
@@ -43,8 +48,17 @@ export function approvalAnswers(
     if (step.type !== "approval") return undefined;
     const run = runs.get(step.step_id) ?? 0;
     runs.set(step.step_id, run + 1);
-    const state = approvalState(asked(step.step_id)[run]?.answer, "complete");
-    return state === "approved" || state === "rejected" ? state : undefined;
+    return asked(step.step_id)[run];
+  });
+}
+
+export function approvalAnswers(
+  steps: MessageStep[],
+  components: Component[],
+): Array<keyof typeof ANSWER_LABELS | undefined> {
+  return approvalComponents(steps, components).map((component) => {
+    const state = component && approvalState(component.answer, "complete");
+    return state === "asking" || state === "closed" ? undefined : state;
   });
 }
 
@@ -102,8 +116,10 @@ export function WorkflowProgress({
   const [open, setOpen] = useState<number | null>(null);
   const opened = open === null ? null : steps[open];
   const answers = approvalAnswers(steps, components);
+  const asked = approvalComponents(steps, components);
   const { byStep } = componentPlaces(steps, components, replyStatus);
   const added = open === null ? [] : (byStep.get(open) ?? []);
+  const approval = open === null ? undefined : asked[open];
 
   return (
     <ComponentCard className="gap-0">
@@ -128,7 +144,9 @@ export function WorkflowProgress({
               </>
             );
             const openable =
-              step.type === "trait" && step.done && (step.output || byStep.has(index));
+              step.done &&
+              ((step.type === "trait" && (step.output || byStep.has(index))) ||
+                answers[index] === "answered");
             return (
               <li key={index} className="flex items-center">
                 {openable ? (
@@ -161,20 +179,36 @@ export function WorkflowProgress({
       </div>
       {opened && (opened.output || added.length > 0) && (
         <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3">
-          {opened.output && (
-            <div className="text-ink-2">
-              <Markdown content={opened.output} size="ui" />
-            </div>
+          {approval ? (
+            <WrittenAnswer approval={approval} />
+          ) : (
+            <>
+              {opened.output && (
+                <div className="text-ink-2">
+                  <Markdown content={opened.output} size="ui" />
+                </div>
+              )}
+              <StepComponents
+                components={added}
+                messageId={messageId}
+                replyStatus={replyStatus}
+                color={color}
+              />
+            </>
           )}
-          <StepComponents
-            components={added}
-            messageId={messageId}
-            replyStatus={replyStatus}
-            color={color}
-          />
         </div>
       )}
     </ComponentCard>
+  );
+}
+
+export function WrittenAnswer({ approval }: { approval: Component }) {
+  const text = (approval.answer as { text?: string } | null)?.text;
+  return (
+    <>
+      <p className="text-ui whitespace-pre-wrap text-muted-foreground">{approval.text}</p>
+      {text && <p className="text-ui whitespace-pre-wrap text-ink-2">{text}</p>}
+    </>
   );
 }
 

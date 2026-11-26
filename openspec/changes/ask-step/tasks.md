@@ -50,25 +50,25 @@
 
 ## 5. UI
 
-- [ ] 5.1 Update the protocol types (`src/protocol/types.ts`: the approval Step's fields, the
+- [x] 5.1 Update the protocol types (`src/protocol/types.ts`: the approval Step's fields, the
   answer shapes) and `api.answerApproval` to send the `answer` object. Verify:
   `npx tsc --noEmit` passes.
-- [ ] 5.2 In `src/components/interactive/approval.tsx`, show a written-answer approval with a
+- [x] 5.2 In `src/components/interactive/approval.tsx`, show a written-answer approval with a
   multi-line text box, Skip and Send (Send disabled while blank; Ctrl/Cmd+Enter sends), and
   extend `approvalState` with answered and skipped. Verify: `approval.test.tsx` cases for the
   four answer states and the disabled Send pass (`npm test`).
-- [ ] 5.3 In the Workflow progress card and the Steps timeline (`WorkflowProgress.tsx`,
+- [x] 5.3 In the Workflow progress card and the Steps timeline (`WorkflowProgress.tsx`,
   `SidePanels.tsx`), label written answers "Answered" or "Skipped", and open a done
   written-answer approval to show its questions and the answer. Verify:
   `WorkflowProgress.test.ts` covers the answered and skipped labels (`npm test`).
-- [ ] 5.4 In the Workflow editor's approval inspector (`StepInspector.tsx` and its edit helpers),
+- [x] 5.4 In the Workflow editor's approval inspector (`StepInspector.tsx` and its edit helpers),
   add "Ask for a written answer" and, while on, "AI model writes the questions"; turning the
   first off clears both. Verify: a `workflowEdit.test.ts` case for setting and clearing the two
   fields passes.
 
 ## 6. In the app
 
-- [ ] 6.1 With the app running (the user runs `npm run tauri dev`): in a user-made Mini-Me,
+- [x] 6.1 With the app running (the user runs `npm run tauri dev`): in a user-made Mini-Me,
   add a written-answer approval before a *Plan* Step; send an answer and check *Plan* uses it,
   then skip and check the run goes on; turn on "AI model writes the questions" and check the
   approval shows written questions, also after reopening the Conversation.
