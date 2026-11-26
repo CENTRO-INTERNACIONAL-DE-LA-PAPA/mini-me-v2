@@ -223,11 +223,13 @@ async def find_correlations(ctx: CallContext, text: str) -> None:
     plan, malformed = await choose(ctx, CorrelationPlan, text, [describe(table)])
     columns, left_out = pick_columns(table.frame, plan.columns, ("number",))
     if len(columns) < 2:
-        raise TraitError(
-            "too_few_columns",
-            f"Correlations need at least two number columns, and I found {len(columns)} "
-            f"to use in `{table.name}`.",
+        ctx.write(
+            _table_note(tables)
+            + f"Correlations need at least two number columns, and I found {len(columns)} to "
+            + f"use in `{table.name}`, so there is nothing to correlate.\n\n"
         )
+        _write_ignored(ctx, malformed + left_out, "I left these out:")
+        return
     ctx.progress(f"Correlating {table.name}")
     pairs = await WORKERS.run(ctx, correlations, table.frame, columns, plan.method)
     strongest = pairs.dropna(subset=["Coefficient"]).head(STRONGEST)
@@ -272,7 +274,13 @@ async def detect_outliers(ctx: CallContext, text: str) -> None:
     plan, malformed = await choose(ctx, OutlierPlan, text, [describe(table)])
     columns, left_out = pick_columns(table.frame, plan.columns, ("number",))
     if not columns:
-        raise TraitError("no_columns", f"I found no number columns to check in `{table.name}`.")
+        ctx.write(
+            _table_note(tables)
+            + f"I found no number columns to check in `{table.name}`, so there are no outliers "
+            + "to look for.\n\n"
+        )
+        _write_ignored(ctx, malformed + left_out, "I left these out:")
+        return
     multiple = 3 if plan.extreme else 1.5
     ctx.progress(f"Checking {table.name} for outliers")
     found = await WORKERS.run(ctx, detect, table.frame, columns, multiple)

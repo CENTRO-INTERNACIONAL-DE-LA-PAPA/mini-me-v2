@@ -70,7 +70,7 @@ values, up to 8 charts in all, saying which columns it did not chart.
 The Trait library SHALL contain *Find Correlations*, which computes the pairwise correlation of
 the chosen number columns with the method the model chooses, Pearson or Spearman (Pearson by
 default), and for each pair the coefficient, the number of rows with both values, and the
-p-value. It needs at least two number columns.
+p-value. With fewer than two number columns it replies that there is nothing to correlate.
 
 #### Scenario: Spearman asked for
 - **WHEN** the user asks for rank correlations of `yield` and `rainfall`
@@ -78,7 +78,8 @@ p-value. It needs at least two number columns.
 
 #### Scenario: One number column
 - **WHEN** the chosen columns hold only one number column
-- **THEN** the reply fails with a message saying correlations need at least two number columns
+- **THEN** the reply says correlations need at least two number columns, has no component, and
+  does not fail, so a Workflow goes on to its next Step
 
 ### Requirement: Correlation results
 *Find Correlations*' reply SHALL show a `table` component with one row per pair, sorted by the
@@ -95,7 +96,12 @@ the strongest pairs with their coefficients, and say that a correlation does not
 The Trait library SHALL contain *Detect Outliers*, which flags, for each chosen number column,
 the values outside its quartiles by more than a multiple of the interquartile range that the
 model chooses, 1.5 by default or 3, and, when two or more number columns are chosen, the rows
-that an Isolation Forest finds unusual across those columns.
+that an Isolation Forest finds unusual across those columns. With no number column it replies
+that there is nothing to check.
+
+#### Scenario: No number column
+- **WHEN** the table has only text and date columns
+- **THEN** the reply says there are no number columns to check, and does not fail
 
 #### Scenario: Extreme outliers only
 - **WHEN** the user asks for extreme outliers
