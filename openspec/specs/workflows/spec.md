@@ -29,7 +29,8 @@ A branch is `{ label, steps }`. A Step without `type` is a Trait Step.
 ### Requirement: Workflows are checked when the library loads
 The Rust core SHALL refuse a library whose Workflows break a rule:
 - Step IDs are not unique, or a Trait ID is missing from the library or is a placeholder;
-- a list of Steps is empty, or a Workflow has no Trait Step;
+- a Workflow's or loop's list of Steps is empty, or a Workflow has no Trait Step (a branch of
+  a condition or parallel Step may have no Steps);
 - a condition or parallel Step has fewer than two branches, or two with the same label;
 - `max_iterations` is not from 1 to 10;
 - a question, prompt or label is empty.
@@ -51,6 +52,16 @@ refusing means that Mini-Me is skipped when the library loads, and a save of it 
 - **THEN** the app starts without that Mini-Me, and the Library view names it with the
   problem
 
+#### Scenario: Condition with an empty branch
+- **WHEN** a condition Step has the branches "cluster", running *Find Clusters*, and "skip",
+  with no Steps
+- **THEN** the library is accepted
+
+#### Scenario: Parallel Step with an empty branch
+- **WHEN** a parallel Step has the branches "A", running *Scout*, and "B", with no Steps
+- **THEN** the library is accepted, and the parallel Step's output is *Scout*'s under
+  "## A"
+
 ### Requirement: A run executes Steps in order
 A run SHALL execute a Workflow's Steps one after another, each starting after the previous
 one finished, and end after its last Step. A Trait Step SHALL run its Trait as one Trait
@@ -64,7 +75,8 @@ two Steps, or one Step run twice, SHALL make separate calls.
 ### Requirement: Step outputs
 Each Step SHALL have an output, used by later Steps and by the reply:
 - a Trait Step's output is the text its call wrote;
-- a condition's output is that of the last Step with an output in the chosen branch;
+- a condition's output is that of the last Step with an output in the chosen branch, and
+  none when that branch has no Steps;
 - a loop's output is that of its last iteration;
 - a parallel Step's output is each branch's output under a `## <label>` line, in branch
   order;
@@ -74,6 +86,11 @@ Each Step SHALL have an output, used by later Steps and by the reply:
 - **WHEN** a parallel Step's branches "Directions" and "Questions" end with outputs A and B
 - **THEN** the parallel Step's output is "## Directions", A, "## Questions" and B, in that
   order
+
+#### Scenario: Empty branch chosen
+- **WHEN** a condition's model picks the "skip" branch, which has no Steps
+- **THEN** the condition has no output, the run goes on with the Step after the condition, and
+  the reply's text is the output of the last top-level Step before it that has one
 
 ### Requirement: Trait Steps see earlier outputs
 A Trait call in a run SHALL receive the earlier Step outputs, as `{ step_id, name,

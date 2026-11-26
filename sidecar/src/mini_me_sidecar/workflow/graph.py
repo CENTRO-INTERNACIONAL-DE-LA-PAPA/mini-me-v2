@@ -175,6 +175,9 @@ class _Builder:
         end = self.node(f"condition-end.{step.id}", close)
         targets: dict[str, str] = {}
         for branch in step.branches:
+            if not branch.steps:
+                targets[branch.label] = end
+                continue
             first, link = self.chain(branch.steps, f"{step.id}/{branch.label}", scope)
             targets[branch.label] = first
             link(end)
@@ -252,13 +255,16 @@ class _Builder:
         ends: list[str] = []
         for branch in step.branches:
             inner = {**scope, step.id: branch.label}
-            first, link = self.chain(branch.steps, f"{step.id}/{branch.label}", inner)
-            self.graph.add_edge(start, first)
             # Every branch ends in its own node, so the join can wait for all of them
             # even when a branch ends with a loop's conditional edge.
             branch_end = self.node(f"branch-end.{step.id}/{branch.label}", pass_through)
-            link(branch_end)
             ends.append(branch_end)
+            if not branch.steps:
+                self.graph.add_edge(start, branch_end)
+                continue
+            first, link = self.chain(branch.steps, f"{step.id}/{branch.label}", inner)
+            self.graph.add_edge(start, first)
+            link(branch_end)
         self.graph.add_edge(ends, end)
         return start, self.edge_from(end)
 

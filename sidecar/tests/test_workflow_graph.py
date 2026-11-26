@@ -84,6 +84,22 @@ def test_a_condition_runs_only_the_chosen_branch():
     assert output(result) == "n output"
 
 
+def test_an_empty_branch_skips_to_the_next_step_and_leaves_the_earlier_output():
+    env = FakeEnv(["skip", "skip"])
+    steps = [{"id": "a", "trait": "t"},
+             {"id": "middle", "type": "condition", "question": "?", "branches": [
+                 {"label": "run", "steps": [{"id": "m", "trait": "t"}]},
+                 {"label": "skip", "steps": []}]},
+             {"id": "b", "trait": "t"},
+             {"id": "last", "type": "condition", "question": "?", "branches": [
+                 {"label": "run", "steps": [{"id": "l", "trait": "t"}]},
+                 {"label": "skip", "steps": []}]}]
+    result, _, _ = run(steps, env)
+    assert traits(env) == ["a", "b"]
+    assert env.seen["b"] == ["a"]
+    assert output(result) == "b output"
+
+
 def test_a_loop_stops_at_its_limit_without_asking_again():
     env = FakeEnv(["repeat"])
     steps = [{"id": "again", "type": "loop", "question": "?", "max_iterations": 2,
@@ -107,6 +123,16 @@ def test_a_parallel_step_runs_both_branches_then_joins_them():
     assert env.streamed == []
     assert output(result) == "## A\n\na2 output\n\n## B\n\nb output"
     assert ("completed", "split") in env.events
+
+
+def test_an_empty_parallel_branch_adds_nothing_to_the_joined_output():
+    env = FakeEnv()
+    steps = [{"id": "split", "type": "parallel", "branches": [
+        {"label": "A", "steps": [{"id": "a", "trait": "t"}]},
+        {"label": "B", "steps": []}]}]
+    result, _, _ = run(steps, env)
+    assert traits(env) == ["a"]
+    assert output(result) == "## A\n\na output"
 
 
 def test_a_run_paused_at_an_approval_resumes_from_its_saved_state():

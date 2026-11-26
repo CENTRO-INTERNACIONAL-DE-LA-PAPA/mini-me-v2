@@ -413,9 +413,6 @@ fn branch_problems(at: &str, branches: &[Branch]) -> Vec<String> {
         } else if branches[..i].iter().any(|b| b.label == branch.label) {
             problems.push(format!("{at}: two branches are labelled {:?}", branch.label));
         }
-        if branch.steps.is_empty() {
-            problems.push(format!("{at}: branch {:?} has no Steps", branch.label));
-        }
     }
     problems
 }
@@ -455,6 +452,20 @@ mod tests {
         assert!(problems.iter().any(|p| p.contains("Title Case")));
         assert!(problems.iter().any(|p| p.contains("has no Steps")));
         assert!(problems.iter().any(|p| p.contains("placeholder Trait Code")));
+    }
+
+    #[test]
+    fn branches_may_be_empty() {
+        let mut library = Library::builtin();
+        let investigator = library.mini_mes.iter_mut().find(|m| m.name == "Investigator");
+        for step in &mut investigator.unwrap().workflow.steps {
+            if let StepKind::Condition { branches, .. } | StepKind::Parallel { branches } =
+                &mut step.kind
+            {
+                branches[1].steps.clear();
+            }
+        }
+        assert_eq!(library.problems(), Vec::<String>::new());
     }
 
     #[test]

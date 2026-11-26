@@ -1,6 +1,16 @@
 from mini_me_sidecar.adapters.asta import FindPapers, Theorize
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
-from mini_me_sidecar.adapters.data import CleanData, JoinData, PlotData, ProfileData, ValidateData
+from mini_me_sidecar.adapters.data import (
+    CleanData,
+    DescribeVariables,
+    DetectOutliers,
+    FindClusters,
+    FindCorrelations,
+    JoinData,
+    PlotData,
+    ProfileData,
+    ValidateData,
+)
 from mini_me_sidecar.adapters.dataverse import SearchDataverse
 from mini_me_sidecar.adapters.echo import Echo
 from mini_me_sidecar.adapters.prompt import Prompt
@@ -19,6 +29,10 @@ def load_adapters() -> dict[str, Adapter]:
         CleanData(),
         JoinData(),
         PlotData(),
+        DescribeVariables(),
+        FindCorrelations(),
+        DetectOutliers(),
+        FindClusters(),
         SearchDataverse(),
     ]
     by_id: dict[str, Adapter] = {}
