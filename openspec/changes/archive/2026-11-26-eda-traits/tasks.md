@@ -86,7 +86,7 @@
 
 ## 8. In the app
 
-- [ ] 8.1 With the app running (the user runs `npm run tauri dev`): "@Exploratory Data
+- [x] 8.1 With the app running (the user runs `npm run tauri dev`): "@Exploratory Data
   Analysis explore #<table>.csv" on a table with several number columns shows the four Steps,
   "cluster" with *Find Clusters* and its saved file, and "no chart"; on a table with one number
   column the first condition answers "skip"; with "… and show mean <value> by <group>" the
