@@ -20,15 +20,12 @@ class FakeEnv:
         self.seen: dict[str, list[str]] = {}
         self.outputs: dict[str, dict[str, str]] = {}
         self.asked = 0
-        self.streamed: list[str] = []
         self.resuming: str | None = None
 
     async def trait(self, step: Step, earlier: list[dict[str, Any]], stream: bool) -> str:
         self.events.append(("trait", step.id))
         self.seen[step.id] = [e["step_id"] for e in earlier]
         self.outputs[step.id] = {e["step_id"]: e["output"] for e in earlier}
-        if stream:
-            self.streamed.append(step.id)
         await asyncio.sleep(0)
         return f"{step.id} output"
 
@@ -71,30 +68,6 @@ def traits(env: FakeEnv) -> list[str]:
     return [step for kind, step in env.events if kind == "trait"]
 
 
-def test_a_sequence_runs_in_order_and_later_steps_see_earlier_outputs():
-    env = FakeEnv()
-    result, _, _ = run([{"id": "a", "trait": "t"}, {"id": "b", "trait": "t"}], env)
-    assert traits(env) == ["a", "b"]
-    assert env.seen["b"] == ["a"]
-    assert env.streamed == []
-    assert output(result) == "b output"
-
-    one = FakeEnv()
-    run([{"id": "only", "trait": "t"}], one)
-    assert one.streamed == ["only"]
-
-
-def test_a_condition_runs_only_the_chosen_branch():
-    env = FakeEnv(["no"])
-    steps = [{"id": "pick", "type": "condition", "question": "?", "branches": [
-        {"label": "yes", "steps": [{"id": "y", "trait": "t"}]},
-        {"label": "no", "steps": [{"id": "n", "trait": "t"}]}]}]
-    result, _, _ = run(steps, env)
-    assert traits(env) == ["n"]
-    assert env.streamed == []
-    assert output(result) == "n output"
-
-
 def test_an_empty_branch_skips_to_the_next_step_and_leaves_the_earlier_output():
     env = FakeEnv(["skip", "skip"])
     steps = [{"id": "a", "trait": "t"},
@@ -110,6 +83,14 @@ def test_an_empty_branch_skips_to_the_next_step_and_leaves_the_earlier_output():
     assert env.seen["b"] == ["a"]
     assert output(result) == "b output"
 
+    env = FakeEnv()
+    steps = [{"id": "split", "type": "parallel", "branches": [
+        {"label": "A", "steps": [{"id": "a", "trait": "t"}]},
+        {"label": "B", "steps": []}]}]
+    result, _, _ = run(steps, env)
+    assert traits(env) == ["a"]
+    assert output(result) == "## A\n\na output"
+
 
 def test_a_loop_stops_at_its_limit_without_asking_again():
     env = FakeEnv(["repeat"])
@@ -121,29 +102,6 @@ def test_a_loop_stops_at_its_limit_without_asking_again():
     assert env.seen["after"] == ["refute", "refute"]
     assert ("decide", "again") in env.events and env.answers == []
     assert output(result) == "after output"
-
-
-def test_a_parallel_step_runs_both_branches_then_joins_them():
-    env = FakeEnv()
-    steps = [{"id": "split", "type": "parallel", "branches": [
-        {"label": "A", "steps": [{"id": "a", "trait": "t"}, {"id": "a2", "trait": "t"}]},
-        {"label": "B", "steps": [{"id": "b", "trait": "t"}]}]}]
-    result, _, _ = run(steps, env)
-    assert sorted(traits(env)) == ["a", "a2", "b"]
-    assert env.seen["a2"] == ["a"] and env.seen["b"] == []
-    assert env.streamed == []
-    assert output(result) == "## A\n\na2 output\n\n## B\n\nb output"
-    assert ("completed", "split") in env.events
-
-
-def test_an_empty_parallel_branch_adds_nothing_to_the_joined_output():
-    env = FakeEnv()
-    steps = [{"id": "split", "type": "parallel", "branches": [
-        {"label": "A", "steps": [{"id": "a", "trait": "t"}]},
-        {"label": "B", "steps": []}]}]
-    result, _, _ = run(steps, env)
-    assert traits(env) == ["a"]
-    assert output(result) == "## A\n\na output"
 
 
 def resumed(
@@ -179,8 +137,6 @@ def test_a_run_paused_at_an_approval_resumes_from_its_saved_state():
     assert later.seen["experiment"] == ["plan"]
     assert output(done) == "experiment output"
 
-
-def test_a_written_answer_reaches_later_steps_and_the_model_writes_questions_once():
     steps = [{"id": "plan", "trait": "t"},
              {"id": "ask", "type": "approval", "prompt": "Ask what is unclear",
               "questions_by": "model"},

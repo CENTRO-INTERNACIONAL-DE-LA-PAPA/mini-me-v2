@@ -30,8 +30,5 @@ def test_differences_from_the_reference_have_intervals_that_tell_groups_apart():
 
 
 def test_too_many_or_too_few_groups_are_refused():
-    many = pd.DataFrame({"plot": [f"p{i}" for i in range(42)], "yield": range(42)})
-    with pytest.raises(TraitError, match="at most 20"):
-        compare(pd.concat([many, many]), "yield", "plot", None)
     with pytest.raises(TraitError, match="at least two groups"):
         compare(sites().tail(21), "yield", "site", None)

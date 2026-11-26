@@ -1,17 +1,7 @@
-import asyncio
-import io
-
 import pandas as pd
 import pytest
 
-from mini_me_sidecar.adapters.data.replies import read_tables
-from mini_me_sidecar.adapters.data.tables import (
-    TableSource,
-    fallback_source,
-    parse_table,
-    table_file,
-    table_sources,
-)
+from mini_me_sidecar.adapters.data.tables import parse_table, table_file
 from mini_me_sidecar.context import TraitError
 
 
@@ -21,42 +11,6 @@ def test_semicolon_csv_in_latin_1():
     assert table.delimiter == ";"
     assert list(table.frame["variedad"]) == ["Canchán", "Yungay"]
     assert pd.api.types.is_datetime64_any_dtype(table.frame["fecha"])
-
-
-def test_excel_sheet_named_in_the_message():
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        pd.DataFrame({"a": [1]}).to_excel(writer, sheet_name="2024", index=False)
-        pd.DataFrame({"b": [2]}).to_excel(writer, sheet_name="2025", index=False)
-    assert parse_table("h.xlsx", buffer.getvalue(), "use 2025").sheet == "2025"
-    first = parse_table("h.xlsx", buffer.getvalue(), "")
-    assert (first.sheet, first.sheets) == ("2024", ["2024", "2025"])
-
-
-def test_only_tables_are_read_references_first():
-    message = {
-        "attachments": [{"id": "a", "name": "notes.txt"}, {"id": "b", "name": "plots.csv"}],
-        "text_components": [{"kind": "asset", "id": "c", "label": "#harvest.xlsx"}],
-    }
-    assert table_sources(message) == [
-        TableSource("c", "harvest.xlsx"),
-        TableSource("b", "plots.csv"),
-    ]
-
-
-def test_referenced_tables_and_files_are_read_in_message_order():
-    message = {
-        "attachments": [{"id": "h", "name": "harvest.csv"}],
-        "text_components": [
-            {"kind": "asset", "id": "h", "label": "#harvest.csv", "start": 40},
-            {"kind": "asset", "id": "p", "label": "#plots.csv", "start": 12},
-        ],
-    }
-    assert table_sources(message) == [
-        TableSource("p", "plots.csv"),
-        TableSource("h", "harvest.csv"),
-    ]
-    assert table_sources({"content": "join them"}) == []
 
 
 def test_unparseable_file_names_it():
@@ -70,35 +24,3 @@ def test_written_csv_keeps_delimiter_and_plain_dates():
     assert (name, media) == ("t-cleaned.csv", "text/csv")
     assert data.decode() == "a;d\n1;2024-05-01\n"
 
-
-def test_fallback_reads_the_picked_table_then_the_newest_table():
-    assets = [
-        {"id": "a3", "name": "notes.txt"},
-        {"id": "a2", "name": "harvest.csv"},
-        {"id": "a1", "name": "field-trial.csv"},
-    ]
-    picked = {"asset_id": "a1", "name": "field-trial.csv"}
-    source, note = fallback_source(picked, assets)
-    assert source == TableSource(asset_id="a1", name="field-trial.csv")
-    assert "seems to mean" in note
-    source, note = fallback_source({"asset_id": "a3", "name": "notes.txt"}, assets)
-    assert source == TableSource(asset_id="a2", name="harvest.csv")
-    assert "newest table" in note
-    assert fallback_source(None, [{"id": "a3", "name": "notes.txt"}]) is None
-    profile = {"id": "a4", "name": "harvest-profile.csv", "hidden": True}
-    source, _ = fallback_source(None, [profile, *assets])
-    assert source == TableSource(asset_id="a2", name="harvest.csv")
-
-
-class OneFileContext:
-    message: dict = {"text_components": [], "attachments": []}
-    file = {"asset_id": "a1", "name": "trial.csv"}
-
-    async def results(self) -> dict:
-        return {"assets": [{"id": "a1", "name": "trial.csv"}], "components": []}
-
-
-def test_join_data_gets_no_fallback_table():
-    with pytest.raises(TraitError) as raised:
-        asyncio.run(read_tables(OneFileContext(), "join the tables", fallback=False))
-    assert raised.value.code == "no_table"

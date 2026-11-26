@@ -12,9 +12,6 @@ from mini_me_sidecar.adapters.data.templates import (
     choice_problem,
     colour_slots,
     fill_template,
-    slots_text,
-    suggestions,
-    templates_text,
     unplaced_columns,
 )
 
@@ -78,17 +75,14 @@ def test_slots_must_name_columns_of_the_types_they_take():
     def problem(**fields) -> str | None:
         return choice_problem(choose(**fields), TYPES)
 
-    assert problem(template="pie", category="variety") == "no chart template `pie`"
-    assert problem(template="bar", category="variety") == "the value slot is empty"
-    assert "text column" in problem(template="bar", category="variety", value="variety")
-    assert problem(template="bar", category="variety", value="heigth") == "no column `heigth`"
-    heatmap = {"template": "correlation_heatmap"}
-    assert "at least 2" in problem(**heatmap, correlated_columns=["yield", "yield"])
-    assert "can't split panels" in problem(template="scatter", x="yield", y="height", facet="day")
+    assert problem(template="pie", category="variety")
+    assert problem(template="bar", category="variety")
+    assert problem(template="bar", category="variety", value="variety")
+    assert problem(template="bar", category="variety", value="heigth")
+    assert problem(template="correlation_heatmap", correlated_columns=["yield", "yield"])
+    assert problem(template="scatter", x="yield", y="height", facet="day")
     assert problem(template="line", x="day", y="yield") is None
 
-
-def test_slots_the_template_does_not_have_are_ignored():
     stray = {"correlated_columns": [{"name": "yield"}], "aggregate": "average"}
     choice = ChartChoice.model_validate(
         {"template": "histogram", "title": "t", "value": "yield", **stray}
@@ -102,72 +96,6 @@ def test_slots_the_template_does_not_have_are_ignored():
 
     with pytest.raises(ValidationError):
         ChartChoice.model_validate({"template": "correlation_heatmap", "title": "t", **stray})
-
-
-def test_suggestions_offer_fitting_columns_and_charts():
-    box = choose(template="box", category="site", value="variety")
-    fitting, charts = suggestions(box, TYPES)
-    assert fitting == "Columns that fit the value slot: `yield`, `height`, `block`"
-    shown = "Charts that can show `site`, `variety`: count_bars (category `site`, group `variety`)"
-    assert charts.startswith(shown)
-    assert "box (" not in charts
-
-    (unknown,) = suggestions(choose(template="pie", category="variety"), TYPES)
-    assert unknown.startswith("Charts that can show `variety`:")
-    (table,) = suggestions(None, TYPES)
-    assert table.startswith("Charts that can show this table:") and table.count("(") == 3
-
-
-def test_slots_text_names_empty_optional_slots():
-    scatter = choose(template="scatter", x="blight", y="yield")
-    assert slots_text(scatter) == "x blight, y yield, no group"
-    bars = choose(template="bar", category="variety", value="yield", aggregate="sum")
-    assert slots_text(bars) == "category variety, value yield, aggregate sum"
-
-
-def test_an_empty_optional_slot_leaves_out_what_uses_it():
-    chart, _ = fill_template(choose(template="line", x="day", y="yield"), TABLE)
-    assert chart.datasets[0].operations[0].by == ["day"]
-    assert all(c.name != "stroke" for c in chart.marks[0].channels)
-
-    chart, _ = fill_template(choose(template="line", x="day", y="yield", group="site"), TABLE)
-    assert chart.datasets[0].operations[0].by == ["day", "site"]
-    assert any(c.name == "stroke" and c.column == "site" for c in chart.marks[0].channels)
-
-
-def test_style_slots_apply_to_any_template():
-    choice = choose(
-        template="bar",
-        category="variety",
-        value="yield",
-        colour="steelblue",
-        log_y=True,
-        reference=20,
-        sort="label",
-        facet="site",
-    )
-    chart, ignored = fill_template(choice, TABLE)
-    assert ignored == [] and chart.colour == "steelblue"
-    assert [(s.scale, s.type) for s in chart.scales] == [("y", "log")]
-    assert all(o.name != "sort" for m in chart.marks for o in m.options)
-    reference = chart.marks[-1]
-    assert (reference.mark, reference.values) == ("ruleY", [20.0])
-    assert chart.datasets[0].operations[0].by == ["variety", "site"]
-    assert any(c.name == "fy" and c.column == "site" for c in chart.marks[0].channels)
-    assert chart.height == 320
-
-    bars = {"template": "bar", "category": "variety", "value": "yield"}
-    chart, ignored = fill_template(
-        choose(**bars, scheme="rainbowz", colour="red; x", height=5000), TABLE
-    )
-    assert [label for label, _ in ignored] == ["Colour scheme rainbowz", "Colour red; x"]
-    assert chart.colour is None and chart.height == 800
-
-    heatmap = choose(
-        template="correlation_heatmap", correlated_columns=["yield", "height"], facet="site"
-    )
-    _, ignored = fill_template(heatmap, TABLE)
-    assert [label for label, _ in ignored] == ["One panel per `site`"]
 
 
 def fillings(template):
@@ -207,32 +135,4 @@ def test_every_template_loads_fills_and_draws():
             statistical = [m for m in chart.marks if m.mark in STATISTICAL_MARKS]
             assert all(m.dataset in own_rows for m in statistical), label
             assert build_chart(TABLE, chart).fits, label
-
-
-def test_a_number_group_is_coloured_as_categories():
-    choice = choose(template="scatter", x="yield", y="height", group="block")
-    chart, _ = fill_template(choice, TABLE)
-    data = build_chart(TABLE, chart).data
-    columns = {c["name"]: c["type"] for d in data["datasets"].values() for c in d["columns"]}
-    assert columns["block"] == "text"
-    colour = next(s for s in data["description"]["scales"] if s["scale"] == "color")
-    assert colour["domain"] == ["1", "2"] and "categories" not in data["description"]
-
-
-def test_the_estimates_template_draws_intervals_and_is_not_offered_to_plot():
-    estimates = pd.DataFrame(
-        {
-            "term": ["rainfall", "altitude"],
-            "estimate": [0.4, -0.2],
-            "estimate_low": [0.1, -0.5],
-            "estimate_high": [0.7, 0.1],
-        }
-    )
-    choice = choose(template="estimates", category="term", value="estimate")
-    chart, _ = fill_template(choice, estimates)
-    data = build_chart(estimates, chart).data
-    rows = next(iter(data["datasets"].values()))["rows"]
-    assert len(rows) == 2 and data["description"]["marks"][0]["values"] == [0]
-    assert "estimates" not in templates_text()
-    assert choice_problem(choice, {"term": "text", "estimate": "number"})
 

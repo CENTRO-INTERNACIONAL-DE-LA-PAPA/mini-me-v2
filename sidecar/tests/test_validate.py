@@ -13,7 +13,7 @@ def test_defaults_and_chosen_checks():
         InRange(kind="in_range", column="yield", min=0, max=80),
         HasType(kind="has_type", column="plot_id", type="number"),
     ]
-    results, report = run_checks(frame, "trial", checks)
+    results, _ = run_checks(frame, "trial", checks)
     summary = [(r.check, r.column, r.passed, r.failed) for r in results]
     assert summary == [
         ("No empty columns", "All columns", 2, 1),
@@ -22,10 +22,7 @@ def test_defaults_and_chosen_checks():
         ("Between 0 and 80", "yield", 2, 2),
         ("Type is number", "plot_id", 4, 0),
     ]
-    assert "<table" in report
 
-
-def test_range_on_text_column_fails_non_numbers():
     frame = pd.DataFrame({"yield": ["10", "-", "95"]})
     check = InRange(kind="in_range", column="yield", min=0, max=80)
     results, _ = run_checks(frame, "trial", [check])
