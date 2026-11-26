@@ -68,9 +68,12 @@ MODEL_TOOLS: dict[str, ModelTool] = {
             name="read_file",
             description=(
                 "Reads one of the Conversation's files by its ID. A table (CSV, TSV, Excel) "
-                "comes back as its columns and up to 500 rows as CSV; a text file as up to "
-                "100,000 characters. When `more` is true, read again from a later `start` "
-                "(a row number for tables, a character position for text)."
+                "comes back as its description (columns, types, counts, ranges, top values) and "
+                "20 rows from `start`; give `rows` to get that many rows instead, at most 500, "
+                "only when the answer needs specific rows. To show a table, use show_table with "
+                "its ID. A text file comes back as up to 100,000 characters. When `more` is "
+                "true, read again from a later `start` (a row number for tables, a character "
+                "position for text)."
             ),
             parameters={
                 "type": "object",
@@ -80,6 +83,12 @@ MODEL_TOOLS: dict[str, ModelTool] = {
                         "type": "integer",
                         "minimum": 0,
                         "description": "Row or character to start from; 0 by default.",
+                    },
+                    "rows": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 500,
+                        "description": "For a table: how many rows to read from `start`.",
                     },
                 },
                 "required": ["asset_id"],
