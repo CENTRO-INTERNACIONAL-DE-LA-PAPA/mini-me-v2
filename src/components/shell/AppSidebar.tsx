@@ -1,5 +1,4 @@
 import { Hint } from "./Hint";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -7,7 +6,6 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -31,20 +29,18 @@ import {
   CompassIcon,
   FolderIcon,
   HomeIcon,
+  MessageCircleIcon,
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
 import type { ConversationSummary, ProjectSummary, Uuid } from "../../protocol/types";
-import { formatRelative } from "../../lib/format";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
-import { ConversationStatusLine } from "./ConversationStatusLine";
+import { ConversationStatusMark } from "./ConversationStatusMark";
 import { RoutingWarningLine } from "./RoutingWarningLine";
 import { SidecarStatusLine, sidecarReady, useSidecarStatus } from "./SidecarStatusLine";
-import { DOTS_HOVER, ItemMenu } from "./ItemMenu";
+import { ConversationMenu, DOTS_HOVER } from "./ItemMenu";
 import { UpdateStatusLine } from "./UpdateStatusLine";
 import { useMiniMes } from "../../hooks/useMiniMes";
-import { useUserProfile } from "../../hooks/useUserProfile";
-import { initials } from "../../lib/names";
 import type { View } from "./view";
 import { Wordmark } from "./Wordmark";
 
@@ -80,7 +76,6 @@ export function AppSidebar({
   const sidecar = useSidecarStatus();
   // The navigation sheet shrinks to a rail of icons when a tool sheet opens in a small window.
   const collapsed = useSidebar().state === "collapsed";
-  const name = useUserProfile()?.name;
 
   return (
     <Sidebar variant="floating" collapsible="icon">
@@ -136,7 +131,6 @@ export function AppSidebar({
               project={project}
               projects={projects}
               onOpen={onOpenProject}
-              onHome={() => onNavigate({ kind: "home" })}
             />
           )}
           {project && (
@@ -177,11 +171,11 @@ export function AppSidebar({
             >
               <SidebarGroupLabel
                 className={cn(
-                  "h-auto p-0 font-serif text-subheading font-normal text-foreground",
+                  "h-auto p-0 text-ui font-medium text-foreground",
                   collapsed && "hidden",
                 )}
               >
-                Conversations{conversations.length > 0 && ` (${conversations.length})`}
+                Conversations
               </SidebarGroupLabel>
               <Hint label="New conversation" side={collapsed ? "right" : undefined}>
                 <Button
@@ -194,43 +188,32 @@ export function AppSidebar({
                 </Button>
               </Hint>
             </div>
-            <SidebarMenu className={cn("gap-1", collapsed && "hidden")}>
+            <SidebarMenu className={cn("gap-0.5", collapsed && "hidden")}>
               {conversations.map((conversation) => {
                 const active = view.kind === "conversation" && view.id === conversation.id;
                 return (
                   <SidebarMenuItem key={conversation.id}>
                     <SidebarMenuButton
-                      size="lg"
                       isActive={active}
-                      className={cn(
-                        "h-auto flex-col items-start gap-0 py-2.5 pr-9",
-                        !active && ROW_HOVER,
-                      )}
+                      className={cn("pr-9", !active && ROW_HOVER)}
                       onClick={() => onNavigate({ kind: "conversation", id: conversation.id })}
                     >
+                      <MessageCircleIcon className="text-muted-foreground" />
                       <ConversationTitle
                         title={conversation.title}
                         unseen={unseen.has(conversation.id)}
                       />
-                      {conversation.status ? (
-                        <ConversationStatusLine status={conversation.status} />
-                      ) : (
-                        <span className="text-meta font-normal text-muted-foreground">
-                          {formatRelative(conversation.last_activity_at)}
-                        </span>
-                      )}
                     </SidebarMenuButton>
-                    <ItemMenu
+                    {conversation.status && (
+                      <SidebarMenuBadge className={HIDE_ON_ROW_HOVER}>
+                        <ConversationStatusMark status={conversation.status} />
+                      </SidebarMenuBadge>
+                    )}
+                    <ConversationMenu
                       name={conversation.title}
                       className={cn(ROW_MENU, DOTS_HOVER)}
-                      rename={{
-                        current: conversation.title,
-                        onRename: (title) => onRenameConversation(conversation.id, title),
-                      }}
-                      remove={{
-                        question: `Delete "${conversation.title}" and its messages? This can't be undone.`,
-                        onDelete: () => onDeleteConversation(conversation.id),
-                      }}
+                      onRename={(title) => onRenameConversation(conversation.id, title)}
+                      onDelete={() => onDeleteConversation(conversation.id)}
                     />
                   </SidebarMenuItem>
                 );
@@ -250,25 +233,18 @@ export function AppSidebar({
             <UpdateStatusLine />
           </div>
         )}
-        <div className="flex items-center gap-2">
-          <SidebarMenu className="flex-1">
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                tooltip="Settings"
-                isActive={view.kind === "settings"}
-                onClick={() => onNavigate({ kind: "settings" })}
-              >
-                <SettingsIcon />
-                <span>Settings</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-          {name && !collapsed && (
-            <Avatar size="sm">
-              <AvatarFallback>{initials(name)}</AvatarFallback>
-            </Avatar>
-          )}
-        </div>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="Settings"
+              isActive={view.kind === "settings"}
+              onClick={() => onNavigate({ kind: "settings" })}
+            >
+              <SettingsIcon />
+              <span>Settings</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );
@@ -277,6 +253,9 @@ export function AppSidebar({
 /** Where a row's "…" button sits and when it shows. It is beside the row's button, not in it. */
 const ROW_MENU =
   "absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100";
+
+const HIDE_ON_ROW_HOVER =
+  "group-focus-within/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-has-aria-expanded/menu-item:opacity-0";
 
 /** Keeps a row's hover while the pointer is on its "…" button or its menu is open. */
 const ROW_HOVER =
@@ -306,12 +285,10 @@ function ProjectSwitcher({
   project,
   projects,
   onOpen,
-  onHome,
 }: {
   project: ProjectSummary | null;
   projects: ProjectSummary[];
   onOpen: (project: ProjectSummary) => void;
-  onHome: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -350,11 +327,6 @@ function ProjectSwitcher({
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onHome}>
-          <HomeIcon />
-          All projects
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -312,7 +312,6 @@ function Main({
               onOpenConversation={(id, messageId) =>
                 onNavigate({ kind: "conversation", id, messageId })
               }
-              onOpenFiles={() => onNavigate({ kind: "files" })}
               onChanged={onConversationActivity}
               onOpenDocument={(assetId) => onNavigate({ kind: "document", assetId, from: view })}
               onRenameProject={(name) => onRenameProject(project, name)}
