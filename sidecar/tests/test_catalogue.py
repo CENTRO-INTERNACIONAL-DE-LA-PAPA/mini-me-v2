@@ -6,6 +6,7 @@ from mini_me_sidecar.adapters.data.catalogue import (
     NotNull,
     pick_columns,
     problem,
+    role_problem,
 )
 
 COLUMNS = ["plot_id", "yield"]
@@ -27,3 +28,13 @@ def test_columns_are_the_named_ones_that_fit_or_every_fitting_one():
         ("Column `plot_id`", "it is a text column, not number"),
         ("Column `yeild`", "the table has no such column"),
     ]
+
+
+def test_a_role_needs_a_column_of_its_kinds():
+    frame = pd.DataFrame({"variety": ["a", "b"], "yield": [1.0, 2.0]})
+    assert role_problem(frame, "yield", "outcome", ("number",)) is None
+    assert role_problem(frame, "variety", "outcome", ("number",)) == (
+        "`variety` is a text column, and the outcome needs number."
+    )
+    assert "no column `yeild`" in role_problem(frame, "yeild", "outcome", ("number",))
+

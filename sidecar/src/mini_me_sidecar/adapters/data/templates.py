@@ -50,6 +50,7 @@ class Template(BaseModel):
     slots: dict[str, SlotSpec]
     value_axis: Literal["x", "y"] = "y"
     facets: bool = True
+    internal: bool = False
     chart: dict[str, Any]
 
 
@@ -127,6 +128,8 @@ def _load() -> dict[str, Template]:
 
 TEMPLATES = _load()
 
+PLOT_TEMPLATES = {name: t for name, t in TEMPLATES.items() if not t.internal}
+
 
 def uses_aggregate(template: Template) -> bool:
     return "{aggregate}" in json.dumps(template.chart)
@@ -135,7 +138,7 @@ def uses_aggregate(template: Template) -> bool:
 def templates_text() -> str:
     """The templates as the model reads them: name, description and slots."""
     lines = ["The chart templates, with the slots each takes:"]
-    for template in TEMPLATES.values():
+    for template in PLOT_TEMPLATES.values():
         slots = [
             f"{name} ({' or '.join(spec.types)}{'' if spec.required else ', optional'})"
             for name, spec in template.slots.items()
@@ -149,7 +152,7 @@ def templates_text() -> str:
 
 def choice_problem(choice: ChartChoice, types: dict[str, str]) -> str | None:
     """Why `choice` can't be drawn from a table whose columns have `types`, or None."""
-    template = TEMPLATES.get(choice.template)
+    template = PLOT_TEMPLATES.get(choice.template)
     if template is None:
         return f"no chart template `{choice.template}`"
     for slot, spec in template.slots.items():
@@ -182,7 +185,7 @@ def suggestions(choice: ChartChoice | None, types: dict[str, str]) -> list[str]:
     """What could be drawn instead: for `choice`, the table's columns that fit each slot it gets
     wrong, then up to three charts of the columns it named (or, with none, of the table)."""
     lines = []
-    template = TEMPLATES.get(choice.template) if choice else None
+    template = PLOT_TEMPLATES.get(choice.template) if choice else None
     for slot, spec in (template.slots if template else {}).items():
         if _slot_problem(getattr(choice, slot), slot, spec, types) is None:
             continue
@@ -208,7 +211,7 @@ def _examples(columns: dict[str, str], skip: Template | None, use_all: bool = Fa
     `use_all`, optional slots take the columns left over too, and charts using more of
     `columns` come first; otherwise the simplest come first."""
     found = []
-    for template in TEMPLATES.values():
+    for template in PLOT_TEMPLATES.values():
         filled = _example_slots(template, columns, use_all) if template is not skip else None
         if filled:
             used = sum(len(names) for names in filled.values())

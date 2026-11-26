@@ -3,9 +3,12 @@ import {
   BookOpenIcon,
   CalculatorIcon,
   CalendarIcon,
+  ChartBarBigIcon,
   ChartColumnIcon,
   ChartLineIcon,
+  ChartNetworkIcon,
   ChartScatterIcon,
+  ChartSplineIcon,
   ClipboardListIcon,
   CodeIcon,
   CompassIcon,
@@ -33,6 +36,7 @@ import {
   ScaleIcon,
   ScanSearchIcon,
   SearchIcon,
+  ShieldQuestionIcon,
   SigmaIcon,
   SparklesIcon,
   SproutIcon,
@@ -85,6 +89,10 @@ export const TRAIT_ICONS = new Map<string, LucideIcon>([
   ["chart-scatter", ChartScatterIcon],
   ["radar", RadarIcon],
   ["group", GroupIcon],
+  ["chart-bar-big", ChartBarBigIcon],
+  ["chart-network", ChartNetworkIcon],
+  ["shield-question", ShieldQuestionIcon],
+  ["chart-spline", ChartSplineIcon],
 ]);
 
 export function traitIcon(name: string | null): LucideIcon {

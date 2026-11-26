@@ -11,12 +11,17 @@ from mini_me_sidecar.adapters.data.catalogue import (
     CleanPlan,
     ClusterPlan,
     ColumnsPlan,
+    ConfoundersPlan,
     CorrelationPlan,
+    DriversPlan,
+    GroupsPlan,
     JoinPlan,
     OutlierPlan,
+    TrendsPlan,
     describe_entry,
     pick_columns,
     problem,
+    role_problem,
 )
 from mini_me_sidecar.adapters.data.charts import ChartDescription
 from mini_me_sidecar.adapters.data.templates import (
@@ -32,8 +37,11 @@ from mini_me_sidecar.adapters.data.templates import (
 from mini_me_sidecar.adapters.data.choose import UnusableAnswer, choose
 from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
 from mini_me_sidecar.adapters.data.clusters import cluster
+from mini_me_sidecar.adapters.data.confounders import check
 from mini_me_sidecar.adapters.data.correlations import compared, correlations
 from mini_me_sidecar.adapters.data.describe import describe
+from mini_me_sidecar.adapters.data.drivers import regress
+from mini_me_sidecar.adapters.data.groups import compare
 from mini_me_sidecar.adapters.data.join import join, shared_key
 from mini_me_sidecar.adapters.data.outliers import detect
 from mini_me_sidecar.adapters.data.plot import ChartResult, build_chart, chart_text
@@ -47,6 +55,7 @@ from mini_me_sidecar.adapters.data.tables import (
     table_file,
     table_sources,
 )
+from mini_me_sidecar.adapters.data.trends import analyze
 from mini_me_sidecar.adapters.data.validate import results_frame, run_checks
 from mini_me_sidecar.adapters.data.variables import KINDS, MAX_CHARTS, chart_columns, summaries
 from mini_me_sidecar.adapters.data.worker import WORKERS
@@ -389,6 +398,237 @@ async def find_clusters(ctx: CallContext, text: str) -> None:
     source, source_id = (saved["name"], saved["asset_id"]) if saved else (None, None)
     await _draw(ctx, points, scatter, source, source_id)
     _write_ignored(ctx, malformed + left_out, "I left these out:")
+
+
+ASSOCIATION = "This shows an association, not a cause."
+
+GROUPING = ("text", "boolean", "number")
+
+
+async def compare_groups(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, _ = await choose(ctx, GroupsPlan, text, [describe(table)])
+    _check_roles(table, [(plan.value, "value", ("number",)), (plan.groups, "groups", GROUPING)])
+    ctx.progress(f"Comparing groups in {table.name}")
+    found = await WORKERS.run(ctx, compare, table.frame, plan.value, plan.groups, plan.reference)
+    others = found.table.iloc[1:]
+    top = others.iloc[0]
+    ctx.write(
+        _table_note(tables)
+        + f"Compared `{plan.value}` between {len(found.table)} groups of `{plan.groups}`, each "
+        + f"against `{found.reference}`. The largest difference is `{top['Group']}`'s, "
+        + f"{top['Difference']:+.3g} (95% interval {top['Low']:.3g} to {top['High']:.3g}, "
+        + f"p = {top['p-value']:.2g})."
+        + (
+            " Left out for having fewer than two values: "
+            + ", ".join(f"`{g}`" for g in found.left_out)
+            + "."
+            if found.left_out
+            else ""
+        )
+        + f" {ASSOCIATION}\n\n"
+    )
+    await show_frame(
+        ctx,
+        found.table,
+        f"{plan.value} by {plan.groups}",
+        results_name=f"{table.stem}-group-comparison.csv",
+    )
+    source = table.name if table.source_id else None
+    axis = f"Difference in {plan.value}"
+    title = f"{axis} from {found.reference}"
+    await _draw_estimates(ctx, others, "Group", "Difference", axis, title, table)
+    box = ChartChoice.model_validate(
+        {
+            "template": "box",
+            "title": f"{plan.value} by {plan.groups}",
+            "category": plan.groups,
+            "value": plan.value,
+        }
+    )
+    await _draw(ctx, table.frame, box, source, table.source_id)
+
+
+MAX_VIF = 5
+
+
+async def find_drivers(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, _ = await choose(ctx, DriversPlan, text, [describe(table)])
+    drivers = [d for d in dict.fromkeys(plan.drivers) if d != plan.outcome]
+    if not drivers:
+        raise TraitError("no_drivers", "Name at least one column that might go with the outcome.")
+    roles = [(plan.outcome, "outcome", ("number",))]
+    roles += [(d, "drivers", ("number", "text", "boolean")) for d in drivers]
+    _check_roles(table, roles)
+    ctx.progress(f"Fitting {plan.outcome} in {table.name}")
+    found = await WORKERS.run(ctx, regress, table.frame, plan.outcome, drivers)
+    terms = found.terms
+    clear = terms[(terms["Low"] > 0) | (terms["High"] < 0)]
+    tangled = {
+        term.split(" = ")[0]: vif for term, vif in zip(terms["Term"], terms["VIF"]) if vif > MAX_VIF
+    }
+    ctx.write(
+        _table_note(tables)
+        + f"Regressed `{plan.outcome}` on {_listed([f'`{d}`' for d in drivers])} over "
+        + f"{found.rows:,} rows (R² = {found.r_squared:.2f})."
+        + (f" {found.left_out:,} rows missing a value were left out." if found.left_out else "")
+        + (
+            " Terms whose 95% interval excludes zero: "
+            + _listed([f"`{t}` ({c:+.3g})" for t, c in zip(clear["Term"], clear["Coefficient"])])
+            + "."
+            if len(clear)
+            else " No term's 95% interval excludes zero."
+        )
+        + (
+            " Hard to tell apart (VIF above 5): "
+            + _listed([f"`{driver}` ({vif:.0f})" for driver, vif in tangled.items()])
+            + "."
+            if tangled
+            else ""
+        )
+        + f" {ASSOCIATION}\n\n"
+    )
+    await show_frame(
+        ctx, terms, f"Drivers of {plan.outcome}", results_name=f"{table.stem}-drivers.csv"
+    )
+    title = f"Coefficients for {plan.outcome}"
+    await _draw_estimates(ctx, terms, "Term", "Coefficient", "Coefficient", title, table)
+
+
+HELD_PERCENT = 10
+
+
+async def check_confounders(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, _ = await choose(ctx, ConfoundersPlan, text, [describe(table)])
+    controls = [c for c in dict.fromkeys(plan.controls) if c not in (plan.outcome, plan.focus)]
+    roles = [(plan.outcome, "outcome", ("number",)), (plan.focus, "focus", ("number", "boolean"))]
+    roles += [(c, "controls", ("number", "text", "boolean")) for c in controls]
+    if plan.subgroups:
+        roles.append((plan.subgroups, "subgroups", GROUPING))
+    _check_roles(table, roles)
+    ctx.progress(f"Checking {plan.focus} in {table.name}")
+    found = await WORKERS.run(
+        ctx, check, table.frame, plan.outcome, plan.focus, controls, plan.subgroups
+    )
+    alone = f"{found.alone:+.3g}"
+    ctx.write(
+        _table_note(tables)
+        + f"Alone, `{plan.focus}` goes with a change of {alone} in `{plan.outcome}` per unit. "
+        + (_verdict(found.alone, found.adjusted, controls) if found.adjusted is not None else "")
+        + f"{ASSOCIATION}\n\n"
+    )
+    estimates = found.estimates
+    await show_frame(
+        ctx,
+        estimates,
+        f"{plan.focus} and {plan.outcome}",
+        results_name=f"{table.stem}-confounders.csv",
+    )
+    title = f"Estimates for {plan.focus}"
+    await _draw_estimates(
+        ctx, estimates, "Estimate", "Coefficient", f"Coefficient of {plan.focus}", title, table
+    )
+
+
+async def analyze_trends(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, _ = await choose(ctx, TrendsPlan, text, [describe(table)])
+    roles = [(plan.value, "value", ("number",)), (plan.time, "time", ("date", "number"))]
+    if plan.group:
+        roles.append((plan.group, "group", GROUPING))
+    _check_roles(table, roles)
+    ctx.progress(f"Following {plan.value} in {table.name}")
+    found = await WORKERS.run(
+        ctx, analyze, table.frame, plan.value, plan.time, plan.group, plan.change_date
+    )
+    overall = found.trends.iloc[0]
+    text_parts = [
+        f"`{plan.value}` changed by {overall['Slope']:+.3g} {found.unit} over `{plan.time}` "
+        + f"(95% interval {overall['Low']:.3g} to {overall['High']:.3g}, "
+        + f"p = {overall['p-value']:.2g}, {overall['Rows']:,} rows)."
+    ]
+    if found.change is not None:
+        after = found.change.iloc[1]
+        text_parts.append(
+            f"From {plan.change_date}, its mean was {after['Difference']:+.3g} from before "
+            + f"(95% interval {after['Low']:.3g} to {after['High']:.3g}, "
+            + f"p = {after['p-value']:.2g})."
+        )
+    ctx.write(_table_note(tables) + " ".join(text_parts) + f" {ASSOCIATION}\n\n")
+    await show_frame(
+        ctx,
+        found.trends,
+        f"Trends of {plan.value}",
+        results_name=f"{table.stem}-trends.csv",
+    )
+    if found.change is not None:
+        await show_frame(
+            ctx,
+            found.change,
+            f"{plan.value} around {plan.change_date}",
+            results_name=f"{table.stem}-change.csv",
+        )
+    line = ChartChoice.model_validate(
+        {
+            "template": "line",
+            "title": f"Mean {plan.value} over {plan.time}",
+            "x": plan.time,
+            "y": plan.value,
+            "group": plan.group,
+        }
+    )
+    source = table.name if table.source_id else None
+    await _draw(ctx, table.frame, line, source, table.source_id)
+
+
+def _verdict(alone: float, adjusted: float, controls: list[str]) -> str:
+    change = (adjusted - alone) / abs(alone) * 100 if alone else 0.0
+    if alone and adjusted and (alone > 0) != (adjusted > 0):
+        held = "changed sign"
+    elif abs(change) < HELD_PERCENT:
+        held = "held"
+    elif abs(adjusted) < abs(alone):
+        held = f"shrank by {abs(change):.0f}%"
+    else:
+        held = f"grew by {abs(change):.0f}%"
+    with_ = _listed([f"`{c}`" for c in controls])
+    return f"With {with_} accounted for, it is {adjusted:+.3g}: the estimate {held}. "
+
+
+def _check_roles(table: Table, roles: list[tuple[str, str, tuple[str, ...]]]) -> None:
+    for column, role, kinds in roles:
+        if reason := role_problem(table.frame, column, role, kinds):
+            raise TraitError("column_role", reason)
+
+
+async def _draw_estimates(
+    ctx: CallContext,
+    rows: pd.DataFrame,
+    label: str,
+    value: str,
+    axis: str,
+    title: str,
+    table: Table,
+) -> None:
+    estimates = pd.DataFrame(
+        {
+            "term": rows[label].to_numpy(),
+            axis: rows[value].to_numpy(),
+            f"{axis}_low": rows["Low"].to_numpy(),
+            f"{axis}_high": rows["High"].to_numpy(),
+        }
+    )
+    choice = ChartChoice.model_validate(
+        {"template": "estimates", "title": title, "category": "term", "value": axis}
+    )
+    source = table.name if table.source_id else None
+    await _draw(ctx, estimates, choice, source, table.source_id)
 
 
 async def _draw(

@@ -14,6 +14,7 @@ from mini_me_sidecar.adapters.data.templates import (
     fill_template,
     slots_text,
     suggestions,
+    templates_text,
     unplaced_columns,
 )
 
@@ -194,6 +195,8 @@ def test_every_template_loads_fills_and_draws():
             assert {o["name"] for o in mark.get("options", [])} <= OPTIONS, template.name
         for slot in colour_slots(template) - {"correlated_columns"}:
             assert "number" in template.slots[slot].types, (template.name, slot)
+        if template.internal:
+            continue
         for fields in fillings(template):
             label = (template.name, fields)
             choice = choose(template=template.name, **fields)
@@ -214,3 +217,22 @@ def test_a_number_group_is_coloured_as_categories():
     assert columns["block"] == "text"
     colour = next(s for s in data["description"]["scales"] if s["scale"] == "color")
     assert colour["domain"] == ["1", "2"] and "categories" not in data["description"]
+
+
+def test_the_estimates_template_draws_intervals_and_is_not_offered_to_plot():
+    estimates = pd.DataFrame(
+        {
+            "term": ["rainfall", "altitude"],
+            "estimate": [0.4, -0.2],
+            "estimate_low": [0.1, -0.5],
+            "estimate_high": [0.7, 0.1],
+        }
+    )
+    choice = choose(template="estimates", category="term", value="estimate")
+    chart, _ = fill_template(choice, estimates)
+    data = build_chart(estimates, chart).data
+    rows = next(iter(data["datasets"].values()))["rows"]
+    assert len(rows) == 2 and data["description"]["marks"][0]["values"] == [0]
+    assert "estimates" not in templates_text()
+    assert choice_problem(choice, {"term": "text", "estimate": "number"})
+

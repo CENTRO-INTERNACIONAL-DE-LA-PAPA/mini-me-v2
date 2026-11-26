@@ -126,6 +126,66 @@ class FindClusters(Adapter):
         await replies.find_clusters(ctx, str(input.get("text", "")))
 
 
+class CompareGroups(Adapter):
+    info = AdapterInfo(
+        id="data-compare-groups",
+        description="Compares a number column between groups, with scipy.",
+        input_schema=TEXT_INPUT,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.compare_groups(ctx, str(input.get("text", "")))
+
+
+class FindDrivers(Adapter):
+    info = AdapterInfo(
+        id="data-drivers",
+        description="Regresses an outcome on candidate drivers with statsmodels.",
+        input_schema=TEXT_INPUT,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.find_drivers(ctx, str(input.get("text", "")))
+
+
+class CheckConfounders(Adapter):
+    info = AdapterInfo(
+        id="data-confounders",
+        description="Checks whether a driver's link to an outcome holds with controls.",
+        input_schema=TEXT_INPUT,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.check_confounders(ctx, str(input.get("text", "")))
+
+
+class AnalyzeTrends(Adapter):
+    info = AdapterInfo(
+        id="data-trends",
+        description="Follows a number column over time with statsmodels.",
+        input_schema=TEXT_INPUT,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.analyze_trends(ctx, str(input.get("text", "")))
+
+
 class PlotData(Adapter):
     info = AdapterInfo(
         id="data-plot",
