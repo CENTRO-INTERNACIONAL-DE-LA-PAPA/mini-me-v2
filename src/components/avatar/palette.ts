@@ -51,7 +51,7 @@ export const COLOR_FAMILIES: ColorFamily[] = [
 export const randomFamily = () => COLOR_FAMILIES[Math.floor(Math.random() * COLOR_FAMILIES.length)];
 
 /** The tint of a hue: a pale background in the same tone as the families' tints. */
-export const tintForHue = (hue: number) => `oklch(${TINT.lightness} ${TINT.chroma} ${hue})`;
+const tintForHue = (hue: number) => `oklch(${TINT.lightness} ${TINT.chroma} ${hue})`;
 
 /** A Mini-Me's colours for a picked colour: its solid and ink, and the tint of its hue. */
 export const miniMeColors = ({ hue, solid, ink }: HueColor): MiniMeColors => ({

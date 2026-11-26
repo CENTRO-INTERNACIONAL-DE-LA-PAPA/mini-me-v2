@@ -25,7 +25,7 @@ const PLACEHOLDERS: [string, string][] = [
 /** An exported part made drawable: placeholder colours read the avatar's colour variables,
  * shapes with a `blink…` id get the `blink` class (an id would repeat across avatars), and
  * the svg fills its layer. */
-export function adapt(markup: string): string {
+function adapt(markup: string): string {
   let adapted = markup.replace("<svg ", '<svg class="size-full" ');
   for (const [colour, variable] of PLACEHOLDERS) {
     adapted = adapted.replace(
@@ -53,7 +53,7 @@ export const LAYERS: AvatarLayer[] = LAYER_DEFINITIONS.map(({ files, ...layer })
   parts: loadParts(files),
 }));
 
-export const partMarkup = (layer: AvatarLayer, id: string | undefined) =>
+const partMarkup = (layer: AvatarLayer, id: string | undefined) =>
   layer.parts.find((p) => p.id === id)?.markup ?? null;
 
 /** A random part for each layer with parts; optional layers are left empty a quarter of the

@@ -19,7 +19,7 @@ import { documentsBlocked, quartoNotice } from "./quarto";
 import { ErrorText } from "../shell/ErrorText";
 
 /** The Mini-Mes that replied in `messages`, in the order they first replied. */
-export function draftSources(messages: MessageView[], miniMes: MiniMe[]): MiniMe[] {
+function draftSources(messages: MessageView[], miniMes: MiniMe[]): MiniMe[] {
   const ids: string[] = [];
   for (const message of messages) {
     if (message.author.kind === "mini_me" && !ids.includes(message.author.id)) {
@@ -30,7 +30,7 @@ export function draftSources(messages: MessageView[], miniMes: MiniMe[]): MiniMe
 }
 
 /** The Project's documents, most recently edited first. */
-export function documentsOf(files: FileEntry[]): FileEntry[] {
+function documentsOf(files: FileEntry[]): FileEntry[] {
   return files
     .filter((file) => isDocument(file.name))
     .sort((a, b) => (b.modified_at ?? b.created_at) - (a.modified_at ?? a.created_at));

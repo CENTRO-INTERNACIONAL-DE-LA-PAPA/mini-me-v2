@@ -60,7 +60,7 @@ interface Sorting {
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
 /** The rows sorted by `sorting`; missing values stay last in both directions. */
-export function sortRows(rows: Cell[][], numeric: boolean, sorting: Sorting | null): Cell[][] {
+function sortRows(rows: Cell[][], numeric: boolean, sorting: Sorting | null): Cell[][] {
   if (!sorting) return rows;
   const { column, desc } = sorting;
   const compare = (a: Cell, b: Cell) =>
@@ -80,7 +80,7 @@ function nextSorting(current: Sorting | null, column: number, numeric: boolean):
   return null;
 }
 
-export function TableView({
+function TableView({
   preview,
   sourceAssetId,
   componentId,

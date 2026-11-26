@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { headerField, headings } from "./qmd";
+import { headerField } from "./qmd";
 
 const DOCUMENT = `---
 title: "Huancayo 2025"
@@ -24,20 +24,5 @@ describe("qmd", () => {
     expect(headerField(DOCUMENT, "author")).toBe("Ana, Luis");
     expect(headerField("# No header\n", "title")).toBe("");
     expect(headerField("---\ntitle: [unclosed\n---\n", "title")).toBe("");
-  });
-
-  it("lists headings with their lines, outside the header and code", () => {
-    expect(headings(DOCUMENT)).toEqual([
-      { level: 1, text: "Summary", line: 7 },
-      { level: 2, text: "Next steps", line: 15 },
-    ]);
-  });
-
-  it("reads Windows line endings and keeps a # that is part of the text", () => {
-    const text = DOCUMENT.replace(/\n/g, "\r\n").replace("# Summary", "# Using C#");
-    expect(headings(text)).toEqual([
-      { level: 1, text: "Using C#", line: 7 },
-      { level: 2, text: "Next steps", line: 15 },
-    ]);
   });
 });

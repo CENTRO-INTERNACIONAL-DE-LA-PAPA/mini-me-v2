@@ -43,7 +43,7 @@ const VERSION_LABEL: Record<Version, string> = {
 };
 
 /** The wording to show; a missing technical text shows the plain one. */
-export function worded(wording: Wording, version: Version): string {
+function worded(wording: Wording, version: Version): string {
   return version === "technical" ? wording.technical || wording.plain : wording.plain;
 }
 

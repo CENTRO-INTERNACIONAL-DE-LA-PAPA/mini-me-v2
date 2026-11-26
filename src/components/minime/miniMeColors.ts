@@ -19,7 +19,7 @@ function fromLinear(channel: number): number {
 }
 
 /** `#rrggbb` in OKLCH, with the hue in degrees. */
-export function hexToOklch(hex: string): Oklch {
+function hexToOklch(hex: string): Oklch {
   const [r, g, b] = [1, 3, 5].map((i) => toLinear(parseInt(hex.slice(i, i + 2), 16) / 255));
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
@@ -60,7 +60,7 @@ function hueOf(colour: string): number {
 
 /** A Mini-Me's surface colours: `wash` and `edge` take the hue of its `solid`, at the
  * lightness and chroma DESIGN.md gives for them. */
-export function surfaceColors(colors: MiniMeColors): SurfaceColors {
+function surfaceColors(colors: MiniMeColors): SurfaceColors {
   const hue = hueOf(colors.solid);
   return {
     ...colors,

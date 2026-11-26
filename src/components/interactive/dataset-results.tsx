@@ -26,7 +26,7 @@ interface DatasetResultsData {
 }
 
 /** The authors, three at most, and the year: "Atieno, Elly (2020)". */
-export function datasetByline(dataset: Dataset): string {
+function datasetByline(dataset: Dataset): string {
   const authors = dataset.authors ?? [];
   const names = authors.slice(0, 3).join("; ") + (authors.length > 3 ? " et al." : "");
   const year = dataset.year ? ` (${dataset.year})` : "";

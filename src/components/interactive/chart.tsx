@@ -22,7 +22,7 @@ const numberFormat = new Intl.NumberFormat();
 const PALETTE = SERIES_TOKENS.map((name) => `var(${name})`);
 
 /** A chart card: title, figure, sample note, and a legend that hides and shows values. */
-export function ChartView({
+function ChartView({
   preview,
   color,
   componentId,
