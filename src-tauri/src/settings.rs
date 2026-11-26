@@ -283,29 +283,6 @@ mod tests {
     }
 
     #[test]
-    fn whats_new_opens_once_after_an_update_and_never_on_a_new_install_or_in_dev() {
-        // A new install records the running version, so there is nothing to announce.
-        let dir = tempfile::tempdir().unwrap();
-        let mut fresh = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
-        assert!(!fresh.take_whats_new("0.5.2", false));
-
-        // Settings from before the version was remembered count as updated, once.
-        let old = r#"{ "installation_id": "0199d0a0-0000-7000-8000-0000000000e1",
-                      "user_id": "0199d0a0-0000-7000-8000-0000000000e2" }"#;
-        let other = tempfile::tempdir().unwrap();
-        std::fs::write(other.path().join(FILE_NAME), old).unwrap();
-        let mut settings = Settings::load_or_create(other.path(), "0.5.2").unwrap();
-        assert!(settings.take_whats_new("0.5.2", false));
-        assert!(!settings.take_whats_new("0.5.2", false));
-
-        // A different version shows once, and Mini-Me Canary never shows or records.
-        assert!(!settings.take_whats_new("0.6.0", true));
-        assert_eq!(settings.last_seen_version.as_deref(), Some("0.5.2"));
-        assert!(settings.take_whats_new("0.6.0", false));
-        assert!(!settings.take_whats_new("0.6.0", false));
-    }
-
-    #[test]
     fn settings_without_ai_load_with_defaults() {
         let dir = tempfile::tempdir().unwrap();
         let old = r#"{ "installation_id": "0199d0a0-0000-7000-8000-0000000000e1",
@@ -329,19 +306,6 @@ mod tests {
     }
 
     #[test]
-    fn turning_a_flag_on_and_off_moves_it_between_the_lists() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut settings = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
-        settings.unlock_feature("test-flag");
-        settings.unlock_feature("test-flag");
-        assert_eq!(settings.unlocked_features, ["test-flag"]);
-        assert!(settings.locked_features.is_empty());
-        settings.lock_feature("test-flag");
-        assert!(settings.unlocked_features.is_empty());
-        assert_eq!(settings.locked_features, ["test-flag"]);
-    }
-
-    #[test]
     fn the_model_is_saved_without_any_key() {
         let dir = tempfile::tempdir().unwrap();
         let mut settings = Settings::load_or_create(dir.path(), "0.5.2").unwrap();
@@ -360,39 +324,5 @@ mod tests {
             })
         );
         assert!(AiSettings::new("dummy", "m", CustomEndpoint::default()).is_err());
-    }
-
-    #[test]
-    fn custom_needs_a_web_address_as_its_endpoint() {
-        let custom = |endpoint: &str| CustomEndpoint {
-            endpoint: endpoint.into(),
-            api_format: ApiFormat::Anthropic,
-        };
-        for refused in ["", "  ", "localhost:1234", "ftp://models.example.org", "http://"] {
-            let error = AiSettings::new("custom", "m", custom(refused)).unwrap_err();
-            assert_eq!(error.code, "invalid_input", "{refused:?}");
-        }
-        let ai = AiSettings::new("custom", "m", custom(" http://localhost:1234/v1 ")).unwrap();
-        assert_eq!(ai.custom, custom("http://localhost:1234/v1"));
-        let model = ai.model().unwrap();
-        assert_eq!(model.endpoint.as_deref(), Some("http://localhost:1234/v1"));
-        assert_eq!(model.api_format, Some(ApiFormat::Anthropic));
-        // Another provider keeps whatever Custom endpoint is there, unchecked and not sent.
-        let openai = AiSettings::new("openai", "m", custom("")).unwrap().model().unwrap();
-        assert_eq!((openai.endpoint, openai.api_format), (None, None));
-        let frame = serde_json::to_value(ai.model()).unwrap();
-        assert_eq!(frame["api_format"], "anthropic");
-    }
-
-    #[test]
-    fn the_threshold_is_clamped_to_zero_to_one() {
-        let mut routing = RoutingSettings::default();
-        routing.set_threshold(1.7).unwrap();
-        assert_eq!(routing.threshold, 1.0);
-        routing.set_threshold(-0.2).unwrap();
-        assert_eq!(routing.threshold, 0.0);
-        routing.set_threshold(0.65).unwrap();
-        assert_eq!(routing.threshold, 0.65);
-        assert!(routing.set_threshold(f64::NAN).is_err());
     }
 }

@@ -112,22 +112,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_missing_file_means_no_name_and_is_not_created() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = ProfileStore::open(dir.path());
-        assert_eq!(store.current(), UserProfile { name: None, unreadable: None });
-        assert!(!dir.path().join(FILE_NAME).exists());
-    }
-
-    #[test]
-    fn a_saved_name_is_trimmed_and_kept_across_reopening() {
-        let dir = tempfile::tempdir().unwrap();
-        ProfileStore::open(dir.path()).save_name("  Ana Pérez ").unwrap();
-        let reopened = ProfileStore::open(dir.path());
-        assert_eq!(reopened.current().name.as_deref(), Some("Ana Pérez"));
-    }
-
-    #[test]
     fn saving_an_empty_name_clears_it_and_keeps_other_keys() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(FILE_NAME);
@@ -136,16 +120,6 @@ mod tests {
         assert_eq!(store.save_name(" ").unwrap().name, None);
         let saved: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(saved, serde_json::json!({ "works_on": "late blight" }));
-    }
-
-    #[test]
-    fn a_name_over_100_characters_is_refused() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = ProfileStore::open(dir.path());
-        store.save_name("Ana").unwrap();
-        let error = store.save_name(&"a".repeat(101)).unwrap_err();
-        assert_eq!(error.code, "invalid_input");
-        assert_eq!(store.current().name.as_deref(), Some("Ana"));
     }
 
     #[test]

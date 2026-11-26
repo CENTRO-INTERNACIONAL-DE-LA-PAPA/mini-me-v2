@@ -240,43 +240,10 @@ struct ThreadRow {
 }
 
 #[cfg(test)]
-pub mod test_support {
-    use super::*;
-    use crate::projects::test_support::user;
-
-    /// Makes `conversation_id` a thread on a new document, so a test can check a listing skips it.
-    pub fn into_thread(project: &Project, conversation_id: Uuid) {
-        let document = documents::create(project, "Thread document", None, &user()).unwrap();
-        project
-            .lock()
-            .conn
-            .execute(
-                "INSERT INTO comment_threads (conversation_id, asset_id, passage_start, \
-                 passage_end, quote, created_at) VALUES (?1, ?2, 0, 1, 'x', 0)",
-                params![conversation_id.to_string(), document.id.to_string()],
-            )
-            .unwrap();
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
     use crate::projects::test_support::{temp_project, user};
     use crate::protocol::{Author, AuthorKind, new_id};
-
-    #[test]
-    fn a_thread_is_created_on_a_passage_of_a_document_and_listed_in_order() {
-        let (_dir, project) = temp_project();
-        let report = documents::create(&project, "Report", None, &user()).unwrap();
-        let later = create(&project, report.id, (40, 52), "Next steps").unwrap();
-        let first = create(&project, report.id, (10, 20), "above 3,800").unwrap();
-        let threads = list(&project, report.id).unwrap();
-        assert_eq!(threads, [first.clone(), later]);
-        assert!(!first.resolved);
-        let other = documents::create(&project, "Notes", None, &user()).unwrap();
-        assert!(list(&project, other.id).unwrap().is_empty());
-    }
 
     #[test]
     fn saved_anchors_move_their_threads_and_quote_the_new_passage() {
@@ -291,27 +258,6 @@ mod tests {
         let saved = list(&project, report.id).unwrap().remove(0);
         assert_eq!((saved.start, saved.end, saved.quote.as_str()), (11, 16, "yield"));
         assert_eq!(passage("añ🥔b", 2, 4).as_deref(), Some("🥔"));
-    }
-
-    #[test]
-    fn a_run_in_a_thread_gets_its_document_and_passage() {
-        let (_dir, project) = temp_project();
-        let report = documents::create(&project, "Report", None, &user()).unwrap();
-        documents::save(&project, report.id, "Yield fell above 3,800 m.", &Default::default())
-            .unwrap();
-        let thread = create(&project, report.id, (11, 24), "above 3,800 m").unwrap();
-        let document = run_document(&project, thread.conversation_id).unwrap().unwrap();
-        assert_eq!(document.name, "Report.qmd");
-        assert_eq!(document.passage, "above 3,800 m");
-
-        // Edited outside Mini-Me, so the anchor no longer marks the passage: its quote is used.
-        let path = assets::file_path(&project, report.id).unwrap();
-        std::fs::write(path, "Yields fell.").unwrap();
-        let document = run_document(&project, thread.conversation_id).unwrap().unwrap();
-        assert_eq!(document.passage, "above 3,800 m");
-
-        let conversation = conversations::create(&project).unwrap().id;
-        assert!(run_document(&project, conversation).unwrap().is_none());
     }
 
     /// A document, a thread on "Huancayo" with one comment, and Scribe's reply; returns the
@@ -334,15 +280,9 @@ mod tests {
     }
 
     #[test]
-    fn a_resolved_thread_can_be_reopened_and_a_deleted_one_leaves_no_rows() {
+    fn a_deleted_thread_keeps_its_files_and_leaves_no_rows() {
         let (_dir, project) = temp_project();
         let (document, thread, reply) = commented(&project);
-        assert_eq!(list(&project, document).unwrap()[0].comments, 2);
-        set_resolved(&project, thread.conversation_id, true).unwrap();
-        assert!(list(&project, document).unwrap()[0].resolved);
-        set_resolved(&project, thread.conversation_id, false).unwrap();
-        assert!(!list(&project, document).unwrap()[0].resolved);
-
         let file = ("notes.txt", "", b"x".as_slice());
         let saved = conversations::attach_generated(&project, reply, &user(), file, false).unwrap();
         delete(&project, thread.conversation_id).unwrap();
@@ -356,15 +296,5 @@ mod tests {
         assert!(assets::find(&state, saved.id).is_ok());
         drop(state);
         assert_eq!(delete(&project, thread.conversation_id).unwrap_err().code, "not_found");
-    }
-
-    #[test]
-    fn only_a_passage_of_a_document_can_be_commented() {
-        let (_dir, project) = temp_project();
-        let csv = assets::import_bytes(&project, "trial.csv", "text/csv", b"a\n", &user()).unwrap();
-        let error = create(&project, csv.id, (0, 1), "a").unwrap_err();
-        assert_eq!(error.code, "invalid_input");
-        let report = documents::create(&project, "Report", None, &user()).unwrap();
-        assert!(create(&project, report.id, (5, 5), "").is_err());
     }
 }

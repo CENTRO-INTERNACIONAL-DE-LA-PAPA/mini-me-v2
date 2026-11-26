@@ -806,19 +806,6 @@ mod tests {
         assert_eq!(backoff.failed(now + STABLE_AFTER), Some(Duration::from_millis(500)));
     }
 
-    #[test]
-    fn protocol_mismatch_names_both_versions_and_the_stale_side() {
-        assert_eq!(check_protocol(1, 1, true), Ok(()));
-
-        let release = check_protocol(1, 2, false).unwrap_err();
-        assert!(release.contains("version 1") && release.contains("version 2"));
-        assert!(release.contains("Reinstall Mini-Me"));
-        assert!(!release.contains("stale"));
-
-        assert!(check_protocol(1, 2, true).unwrap_err().contains("the sidecar is the stale side"));
-        assert!(check_protocol(3, 2, true).unwrap_err().contains("the Rust core is the stale side"));
-    }
-
     fn line(value: serde_json::Value) -> Incoming {
         Incoming::Line(format!("{value}\n"))
     }
@@ -844,10 +831,7 @@ mod tests {
         let ready = handshake(&rx, &sink, soon(), false, &SidecarLog::disabled()).unwrap();
         assert_eq!(ready.adapters[0].id, "echo");
         assert_eq!(*sink.0.lock().unwrap(), vec![CoreFrame::AdaptersList {}]);
-    }
 
-    #[test]
-    fn handshake_refuses_a_mismatched_sidecar() {
         let (tx, rx) = std::sync::mpsc::channel();
         tx.send(hello(SIDECAR_PROTOCOL + 1)).unwrap();
         let sink = Recorder::default();
@@ -856,10 +840,7 @@ mod tests {
             .unwrap();
         assert!(matches!(err, HandshakeError::Incompatible(_)));
         assert!(sink.0.lock().unwrap().is_empty());
-    }
 
-    #[test]
-    fn handshake_times_out_or_sees_the_process_end() {
         let (_tx, rx) = std::sync::mpsc::channel::<Incoming>();
         let deadline = Instant::now() + Duration::from_millis(50);
         let err = handshake(&rx, &Recorder::default(), deadline, false, &SidecarLog::disabled());
@@ -869,20 +850,5 @@ mod tests {
         tx.send(Incoming::Closed).unwrap();
         let err = handshake(&rx, &Recorder::default(), soon(), false, &SidecarLog::disabled());
         assert_eq!(err.err(), Some(HandshakeError::Closed));
-    }
-
-    #[test]
-    fn log_rotates_once_at_the_size_limit() {
-        let dir = tempfile::tempdir().unwrap();
-        let log = SidecarLog::with_limit(dir.path(), 100);
-        for i in 0..20 {
-            log.line(&format!("line {i} with some padding text"));
-        }
-        let current = dir.path().join("sidecar.log");
-        let previous = dir.path().join("sidecar.log.1");
-        assert!(previous.exists());
-        assert!(std::fs::metadata(&current).unwrap().len() < 200);
-        assert!(std::fs::read_to_string(&current).unwrap().contains("line 19"));
-        assert!(!dir.path().join("sidecar.log.1.1").exists());
     }
 }

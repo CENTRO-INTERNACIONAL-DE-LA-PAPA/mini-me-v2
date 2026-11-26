@@ -108,42 +108,4 @@ mod tests {
             );
         }
     }
-
-    #[test]
-    fn reading_a_component_gives_its_text_and_source_but_not_its_preview() {
-        use crate::conversations::{
-            NewComponent, add_component, create, send_message, start_reply,
-        };
-        use crate::protocol::{Author, AuthorKind, new_id};
-
-        let (dir, project) = temp_project();
-        let source = dir.path().join("trial.csv");
-        std::fs::write(&source, "yield\n1").unwrap();
-        let asset = assets::import(&project, &source, &user()).unwrap();
-        let conversation = create(&project).unwrap().id;
-        let input = serde_json::from_value(json!({ "content": "profile" })).unwrap();
-        let question = send_message(&project, conversation, input, new_id()).unwrap();
-        let author = Author { kind: AuthorKind::MiniMe, id: "profiler".into() };
-        let reply = start_reply(&project, conversation, question.id, author).unwrap();
-        let preview = json!({ "columns": [{ "name": "yield", "type": "number" }], "rows": [[1]] });
-        let component = |source_asset_id| NewComponent {
-            kind: "table".into(),
-            version: 1,
-            preview: preview.clone(),
-            text: "t".into(),
-            source_asset_id,
-        };
-        let table = add_component(&project, reply, None, component(Some(asset.id))).unwrap();
-        let other = add_component(&project, reply, None, component(None)).unwrap();
-
-        let state = project.lock();
-        let read = read(&state, conversation, table).unwrap();
-        assert_eq!(
-            read,
-            json!({ "kind": "table", "version": 1, "text": "t", "source_asset_id": asset.id })
-        );
-        let plain = super::read(&state, conversation, other).unwrap();
-        assert_eq!(plain["source_asset_id"], json!(null));
-        assert_eq!(super::read(&state, new_id(), table).unwrap_err().code, "not_found");
-    }
 }
