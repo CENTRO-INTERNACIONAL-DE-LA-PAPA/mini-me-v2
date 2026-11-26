@@ -76,13 +76,19 @@ def test_a_long_text_is_read_in_parts():
     assert (len(rest["content"]), rest["more"]) == (10, False)
 
 
-def test_a_table_is_read_from_a_start_row():
-    frame = pd.DataFrame({"plot": range(1200), "yield": [1.5] * 1200})
-    part = table_result(frame, 500)
+def test_a_table_read_gives_its_description_and_a_sample_and_rows_only_when_asked():
+    table = Table("trial.csv", pd.DataFrame({"plot": range(1200), "yield": [1.5] * 1200}))
+    sample = table_result(table, 0)
+    assert sample["description"]["rows"] == 1200 and "show_table" in sample["note"]
+    assert len(sample["csv"].splitlines()) == 21 and sample["more"]
+    assert "columns" not in sample
+
+    part = table_result(table, 500, 600)
     assert part["csv"].splitlines()[1] == "500,1.5"
     assert len(part["csv"].splitlines()) == 501
     assert (part["total_rows"], part["more"]) == (1200, True)
     assert part["columns"] == [{"name": "plot", "type": "number"}, {"name": "yield", "type": "number"}]
+    assert "description" not in part
 
 
 class ReadingContext:
