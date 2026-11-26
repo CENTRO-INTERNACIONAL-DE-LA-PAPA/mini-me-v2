@@ -72,8 +72,9 @@ Each Step SHALL have an output, used by later Steps and by the reply:
 - a loop's output is that of its last iteration;
 - a parallel Step's output is each branch's output under a `## <label>` line, in branch
   order;
-- an approval's output is the written answer sent to it, and none for a yes-or-no approval or
-  a skipped one.
+- an approval's output, when a written answer was sent to it, is its questions and that answer,
+  as "I asked:", the questions, a blank line, "The user answered:" and the answer; none for a
+  yes-or-no approval or a skipped one.
 
 #### Scenario: Parallel output
 - **WHEN** a parallel Step's branches "Directions" and "Questions" end with outputs A and B
@@ -88,8 +89,8 @@ Each Step SHALL have an output, used by later Steps and by the reply:
 #### Scenario: Answer passed on
 - **WHEN** the user sends "outcome is yield; check rainfall and variety" to a written-answer
   approval, and a *Plan* Step follows it
-- **THEN** *Plan*'s call receives that text as the approval Step's output among the earlier
-  outputs
+- **THEN** *Plan*'s call receives the approval's questions and that text as the approval
+  Step's output among the earlier outputs
 
 ### Requirement: Workflow progress in the reply
 A reply whose Workflow has more than one Step SHALL show a Workflow progress card above its
@@ -148,7 +149,7 @@ state:
 - **Approve:** persist `message.resumed` and resume the run after the approval Step, with
   the earlier outputs it had.
 - **Send:** persist `message.resumed` and resume the run after the approval Step, with the
-  sent text as that Step's output. Send needs text that is not blank.
+  questions and the sent text as that Step's output. Send needs text that is not blank.
 - **Skip:** persist `message.resumed` and resume the run after the approval Step, which has
   no output.
 - **Reject:** end the reply with `message.completed`, with the Workflow's output so far as
@@ -170,8 +171,8 @@ Approve or Reject to a written-answer one, or blank text) SHALL be refused with
 
 #### Scenario: Sent
 - **WHEN** the user sends "yield, by rainfall and variety" to a waiting written-answer approval
-- **THEN** the reply is `streaming` again, and the next Step receives that text among the
-  earlier outputs
+- **THEN** the reply is `streaming` again, and the next Step receives the questions and that
+  text among the earlier outputs
 
 #### Scenario: Skipped
 - **WHEN** the user skips a written-answer approval

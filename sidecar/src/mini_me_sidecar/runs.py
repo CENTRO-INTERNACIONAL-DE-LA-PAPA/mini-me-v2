@@ -124,9 +124,11 @@ class Run:
         return choice
 
     async def questions(self, step: Step, earlier: list[dict[str, Any]]) -> str:
+        call_id = str(uuid.uuid4())
+        self.send({"type": "step.started", "step_id": step.id, "call_id": call_id})
         name = step.name(self.trait_names())
         start = {"trait": {"name": name}, "model": self.model, "context": {"steps": earlier}}
-        ctx = self._call(str(uuid.uuid4()), start, stream=False)
+        ctx = self._call(call_id, start, stream=False)
         try:
             message = str(self.input.get("text", ""))
             with recording(self.debug, self.send_debug, name, None):

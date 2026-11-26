@@ -151,9 +151,10 @@ class _Builder:
         async def approve(state: RunState) -> dict[str, Any]:
             prompt = None
             if env.first_visit(step):
-                env.started(step)
                 if step.questions_by == "model":
                     prompt = await env.questions(step, visible_outputs(_log(state), scope))
+                else:
+                    env.started(step)
             answer = interrupt({"step_id": step.id, "prompt": prompt})
             text = answer.get("text") if isinstance(answer, dict) else None
             return {"log": [entry(text, trait=True)]} if text else {}

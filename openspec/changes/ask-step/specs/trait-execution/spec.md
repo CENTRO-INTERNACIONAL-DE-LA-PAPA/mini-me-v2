@@ -23,15 +23,17 @@ the sidecar. A larger `state` SHALL fail the reply with `state_too_large`.
 ### Requirement: Resuming a run
 To resume, the core SHALL send `run.start` with a new `run_id`, the saved Workflow,
 Traits, input and context of the paused run, and `resume` `{ state, step_id, approved:
-true, text }`, with `text` the written answer sent, or `null` for a yes-or-no approval or a
-skipped one. The sidecar SHALL continue after that approval Step, with `text` as its output, or end with `run.error` code
-`resume_failed` when it cannot read `state`.
+true, text }`, with `text` the approval Step's output (its questions and the written answer
+sent), or `null` for a yes-or-no approval or a skipped one. The sidecar SHALL continue after
+that approval Step, with `text` as its output, or end with `run.error` code `resume_failed`
+when it cannot read `state`.
 
 #### Scenario: Approved run
 - **WHEN** the core resumes a run paused at Investigator's approval
 - **THEN** the next `step.started` is for the *Experiment* Step
 
 #### Scenario: Written answer
-- **WHEN** the core resumes a run whose written-answer approval was sent "yield by rainfall"
-- **THEN** the approval Step completes with `output` "yield by rainfall", and the next Step
-  receives it among the earlier outputs
+- **WHEN** the core resumes a run whose written-answer approval "Which column is the outcome?"
+  was sent "yield by rainfall"
+- **THEN** the next Step receives "I asked:\nWhich column is the outcome?\n\nThe user
+  answered:\nyield by rainfall" among the earlier outputs

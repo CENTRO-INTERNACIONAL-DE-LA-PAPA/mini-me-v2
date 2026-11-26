@@ -33,7 +33,8 @@ A condition asks the model through `Run.decide` → `decide()` (`workflow/decide
 ### Approach
 
 6. **The core owns the answer; the sidecar owns the questions.**
-   - The core persists the answer and the approval Step's `step.completed`, now with the sent text as `output`, as it already does with none.
+   - The core persists the answer and the approval Step's `step.completed`, now with an `output` of the questions and the sent text ("I asked: … The user answered: …"), as it already does with none. Only the core has both: the questions are in the approval component.
+   - The answer alone, without its questions, was too little for a later Step: in a test, *Plan* ignored "1. I want to bake a lemon pie" without the question it answered.
    - The sidecar receives the text in `resume` and puts it in the run's log as the approval Step's output, so `visible_outputs` gives it to later Steps.
    - The sidecar does not send a second `step.completed` for the approval.
 7. **Resume value.** `Run.execute` resumes with `Command(resume={"text": resume.get("text")})`. The approval node keeps `interrupt()`'s return value and, when it holds text, returns a log entry with that output.

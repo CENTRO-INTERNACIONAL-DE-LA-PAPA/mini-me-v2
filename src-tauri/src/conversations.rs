@@ -490,6 +490,12 @@ pub struct PausedRun {
     pub state: String,
 }
 
+#[derive(Debug)]
+pub struct Answered {
+    pub paused: PausedRun,
+    pub output: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(untagged)]
 pub enum Answer {
@@ -503,9 +509,9 @@ impl Answer {
         !matches!(self, Answer::Approved { approved: false })
     }
 
-    pub fn output(&self) -> Option<String> {
+    fn text(&self) -> Option<&str> {
         match self {
-            Answer::Written { text } => Some(text.trim().to_string()),
+            Answer::Written { text } => Some(text.trim()),
             _ => None,
         }
     }
@@ -526,7 +532,7 @@ impl Answer {
     fn stored(&self) -> serde_json::Value {
         match self {
             Answer::Approved { approved } => serde_json::json!({ "approved": approved }),
-            Answer::Written { .. } => serde_json::json!({ "text": self.output() }),
+            Answer::Written { .. } => serde_json::json!({ "text": self.text() }),
             Answer::Skipped { .. } => serde_json::json!({ "skipped": true }),
         }
     }
@@ -636,16 +642,23 @@ pub fn answer_approval(
     message_id: Uuid,
     component_id: Uuid,
     answer: &Answer,
-) -> AppResult<PausedRun> {
+) -> AppResult<Answered> {
     let mut state = project.lock();
     let (conversation, paused) = paused_locked(&state, message_id, component_id)?;
-    answer.check(asks_written_answer(&state, message_id, component_id)?)?;
+    let approval = state
+        .load_message_with(message_id, true)?
+        .and_then(|(_, message)| message.components.into_iter().find(|c| c.id == component_id));
+    answer.check(approval.as_ref().is_some_and(|c| c.preview["answer"] == "text"))?;
+    let output = answer.text().map(|text| {
+        let questions = approval.as_ref().map_or("", |c| c.text.as_str());
+        format!("I asked:\n{questions}\n\nThe user answered:\n{text}")
+    });
     let mut kinds = vec![
         EventKind::ComponentAnswered { message_id, component_id, answer: answer.stored() },
         EventKind::StepCompleted {
             message_id,
             step_id: paused.step_id.clone(),
-            output: answer.output(),
+            output: output.clone(),
         },
     ];
     if answer.resumes() {
@@ -664,18 +677,7 @@ pub fn answer_approval(
         tx.execute("DELETE FROM paused_runs WHERE message_id = ?1", params![message_id.to_string()])?;
         Ok(())
     })?;
-    Ok(paused)
-}
-
-fn asks_written_answer(
-    state: &ProjectState,
-    message_id: Uuid,
-    component_id: Uuid,
-) -> AppResult<bool> {
-    let approval = state
-        .load_message_with(message_id, true)?
-        .and_then(|(_, message)| message.components.into_iter().find(|c| c.id == component_id));
-    Ok(approval.is_some_and(|c| c.preview["answer"] == "text"))
+    Ok(Answered { paused, output })
 }
 
 /// Attached and referenced file names, without duplicates.

@@ -2479,7 +2479,7 @@ mod tests {
         let (reply, approval) = paused(&f);
         let first_run = f.sink.last_run();
         let saved = conversations::answer_approval(&f.project, reply, approval, &APPROVE).unwrap();
-        f.runs.resume(Arc::clone(&f.project), f.conversation_of(reply), saved, None, None);
+        f.runs.resume(Arc::clone(&f.project), f.conversation_of(reply), saved.paused, None, None);
 
         let resumed = f.sink.frames().into_iter().rev().find_map(|frame| match frame {
             CoreFrame::RunStart { run_id, plan, resume, .. } => Some((run_id, plan, resume)),
@@ -2537,13 +2537,15 @@ mod tests {
 
         let sent = Answer::Written { text: "yield".into() };
         let saved = conversations::answer_approval(&f.project, reply, approval.id, &sent).unwrap();
-        f.runs.resume(Arc::clone(&f.project), f.conversation_of(reply), saved, None, sent.output());
+        let conversation = f.conversation_of(reply);
+        f.runs.resume(Arc::clone(&f.project), conversation, saved.paused, None, saved.output);
         let resume = f.sink.frames().into_iter().rev().find_map(|frame| match frame {
             CoreFrame::RunStart { resume, .. } => resume,
             _ => None,
         });
-        assert_eq!(resume.unwrap().text.as_deref(), Some("yield"));
-        assert_eq!(f.message(reply).steps[0].output.as_deref(), Some("yield"));
+        let output = "I asked:\nWhich column is the outcome?\n\nThe user answered:\nyield";
+        assert_eq!(resume.unwrap().text.as_deref(), Some(output));
+        assert_eq!(f.message(reply).steps[0].output.as_deref(), Some(output));
     }
 
     #[test]

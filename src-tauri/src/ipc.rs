@@ -766,7 +766,7 @@ pub async fn answer_approval(
             "Mini-Me cannot continue yet. Wait until it is ready, then approve again.",
         ));
     }
-    let paused = conversations::answer_approval(&project, message_id, component_id, &answer)?;
+    let answered = conversations::answer_approval(&project, message_id, component_id, &answer)?;
     if answer.resumes() {
         let conversation_id = project
             .lock()
@@ -774,7 +774,7 @@ pub async fn answer_approval(
             .map(|(conversation, _)| conversation)
             .ok_or_else(|| AppError::not_found("Message not found"))?;
         let model = state.settings().ai.model();
-        state.runs.resume(project, conversation_id, paused, model, answer.output());
+        state.runs.resume(project, conversation_id, answered.paused, model, answered.output);
     }
     Ok(())
 }
