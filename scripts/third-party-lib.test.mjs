@@ -30,7 +30,7 @@ describe("repositoryUrl", () => {
 });
 
 describe("pythonPackage", () => {
-  it("takes the license expression and the repository", () => {
+  it("takes the license from its expression, License field or a classifier", () => {
     const headers = metadataHeaders(
       "Name: langsmith\nVersion: 0.14.8\nLicense-Expression: MIT\n" +
         "Project-URL: Homepage, https://smith.langchain.com/\n" +
@@ -42,9 +42,6 @@ describe("pythonPackage", () => {
       license: "MIT",
       repository: "https://github.com/langchain-ai/langsmith-sdk",
     });
-  });
-
-  it("takes the first line of a License field that holds the whole text, else a classifier", () => {
     const whole = metadataHeaders("Name: pandas\nLicense: BSD 3-Clause License\n         \n  Copyright");
     expect(pythonPackage(whole).license).toBe("BSD 3-Clause License");
     const classified = metadataHeaders(
