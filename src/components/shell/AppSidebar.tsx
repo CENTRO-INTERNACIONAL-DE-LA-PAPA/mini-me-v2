@@ -13,26 +13,28 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
   CheckIcon,
+  ChevronRightIcon,
   ChevronDownIcon,
   CompassIcon,
   FolderIcon,
   HomeIcon,
-  MessageCircleIcon,
+  MessagesSquareIcon,
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { ConversationSummary, ProjectSummary, Uuid } from "../../protocol/types";
 import { MiniMeAvatar } from "../minime/MiniMeAvatar";
 import { ConversationStatusMark } from "./ConversationStatusMark";
@@ -76,6 +78,11 @@ export function AppSidebar({
   const sidecar = useSidecarStatus();
   // The navigation sheet shrinks to a rail of icons when a tool sheet opens in a small window.
   const collapsed = useSidebar().state === "collapsed";
+  const [conversationsOpen, setConversationsOpen] = useState(true);
+  const inConversation = view.kind === "conversation";
+  useEffect(() => {
+    if (inConversation) setConversationsOpen(true);
+  }, [inConversation]);
 
   return (
     <Sidebar variant="floating" collapsible="icon">
@@ -158,72 +165,84 @@ export function AppSidebar({
                   {fileCount}
                 </SidebarMenuBadge>
               </SidebarMenuItem>
+              {collapsed ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton tooltip="New conversation" onClick={onNewConversation}>
+                    <PlusIcon />
+                    <span>New conversation</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    aria-expanded={conversationsOpen}
+                    className="pr-9"
+                    onClick={() => setConversationsOpen(!conversationsOpen)}
+                  >
+                    <MessagesSquareIcon />
+                    <span>Conversations</span>
+                    <ChevronRightIcon
+                      className={cn(
+                        "ml-auto size-3.5! text-chev transition-transform duration-150 ease-out",
+                        conversationsOpen && "rotate-90",
+                      )}
+                    />
+                  </SidebarMenuButton>
+                  <Hint label="New conversation">
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label="New conversation"
+                      className={cn(ROW_END, DOTS_HOVER)}
+                      onClick={onNewConversation}
+                    >
+                      <PlusIcon />
+                    </Button>
+                  </Hint>
+                </SidebarMenuItem>
+              )}
+              {conversationsOpen && !collapsed && (
+                <li>
+                  <SidebarMenuSub className="mx-0 ml-4.5 translate-x-0 gap-0.5 px-0 py-0 pl-1.5">
+                    {conversations.map((conversation) => {
+                      const active = view.kind === "conversation" && view.id === conversation.id;
+                      return (
+                        <SidebarMenuItem key={conversation.id}>
+                          <SidebarMenuButton
+                            isActive={active}
+                            className={cn("pr-9", !active && ROW_HOVER)}
+                            onClick={() => onNavigate({ kind: "conversation", id: conversation.id })}
+                          >
+                            <ConversationTitle
+                              title={conversation.title}
+                              unseen={unseen.has(conversation.id)}
+                            />
+                          </SidebarMenuButton>
+                          {conversation.status && (
+                            <SidebarMenuBadge className={HIDE_ON_ROW_HOVER}>
+                              <ConversationStatusMark status={conversation.status} />
+                            </SidebarMenuBadge>
+                          )}
+                          <ConversationMenu
+                            name={conversation.title}
+                            className={cn(ROW_MENU, DOTS_HOVER)}
+                            onRename={(title) => onRenameConversation(conversation.id, title)}
+                            onDelete={() => onDeleteConversation(conversation.id)}
+                          />
+                        </SidebarMenuItem>
+                      );
+                    })}
+                    {conversations.length === 0 && (
+                      <li className="px-2.5 py-2 text-meta text-muted-foreground">
+                        No conversations yet.
+                      </li>
+                    )}
+                  </SidebarMenuSub>
+                </li>
+              )}
             </SidebarMenu>
           )}
         </SidebarGroup>
-        {project && (
-          <SidebarGroup className="py-0">
-            <div
-              className={cn(
-                "flex items-center pb-1.5",
-                collapsed ? "justify-center" : "justify-between pr-1 pl-2.5",
-              )}
-            >
-              <SidebarGroupLabel
-                className={cn(
-                  "h-auto p-0 text-ui font-medium text-foreground",
-                  collapsed && "hidden",
-                )}
-              >
-                Conversations
-              </SidebarGroupLabel>
-              <Hint label="New conversation" side={collapsed ? "right" : undefined}>
-                <Button
-                  variant={collapsed ? "default" : "ghost"}
-                  size="icon-sm"
-                  aria-label="New conversation"
-                  onClick={onNewConversation}
-                >
-                  <PlusIcon />
-                </Button>
-              </Hint>
-            </div>
-            <SidebarMenu className={cn("gap-0.5", collapsed && "hidden")}>
-              {conversations.map((conversation) => {
-                const active = view.kind === "conversation" && view.id === conversation.id;
-                return (
-                  <SidebarMenuItem key={conversation.id}>
-                    <SidebarMenuButton
-                      isActive={active}
-                      className={cn("pr-9", !active && ROW_HOVER)}
-                      onClick={() => onNavigate({ kind: "conversation", id: conversation.id })}
-                    >
-                      <MessageCircleIcon className="text-muted-foreground" />
-                      <ConversationTitle
-                        title={conversation.title}
-                        unseen={unseen.has(conversation.id)}
-                      />
-                    </SidebarMenuButton>
-                    {conversation.status && (
-                      <SidebarMenuBadge className={HIDE_ON_ROW_HOVER}>
-                        <ConversationStatusMark status={conversation.status} />
-                      </SidebarMenuBadge>
-                    )}
-                    <ConversationMenu
-                      name={conversation.title}
-                      className={cn(ROW_MENU, DOTS_HOVER)}
-                      onRename={(title) => onRenameConversation(conversation.id, title)}
-                      onDelete={() => onDeleteConversation(conversation.id)}
-                    />
-                  </SidebarMenuItem>
-                );
-              })}
-              {conversations.length === 0 && (
-                <p className="px-2.5 text-meta text-muted-foreground">No conversations yet.</p>
-              )}
-            </SidebarMenu>
-          </SidebarGroup>
-        )}
       </SidebarContent>
       <SidebarFooter className={cn("gap-3 pb-3.5", collapsed ? "px-2" : "px-3.5")}>
         {!collapsed && (
@@ -251,8 +270,9 @@ export function AppSidebar({
 }
 
 /** Where a row's "…" button sits and when it shows. It is beside the row's button, not in it. */
-const ROW_MENU =
-  "absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100";
+const ROW_END = "absolute top-1/2 right-1.5 -translate-y-1/2";
+
+const ROW_MENU = `${ROW_END} opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100`;
 
 const HIDE_ON_ROW_HOVER =
   "group-focus-within/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-has-aria-expanded/menu-item:opacity-0";

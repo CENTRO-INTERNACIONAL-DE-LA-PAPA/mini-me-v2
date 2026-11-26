@@ -173,7 +173,7 @@ Values that make room for something (a checkmark, a row's "…" button, a list i
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Navigation sheet, 256px.** The wordmark (it leads Home); the app's rows, Home and Mini-Mes (an avatar stack that hops on hover); the open Project's name as a serif group heading with a ⌄ for its menu, or a dashed placeholder when none is open, above its views; its Conversations under a "Conversations" heading with a + for a new one, as one-line rows, a running or waiting row ending in its Mini-Me's 22px avatar; status lines, and a full-width Settings row at the bottom. The selected item is a white row.
+- **Navigation sheet, 256px.** The wordmark (it leads Home); the app's rows, Home and Mini-Mes (an avatar stack that hops on hover); the open Project's name as a serif group heading with a ⌄ for its menu, or a dashed placeholder when none is open, above its views; its views: Overview, Files and a Conversations row with a + for a new one, which expands to the Conversations behind a thin guide line, as one-line rows, a running or waiting row ending in its Mini-Me's 22px avatar; status lines, and a full-width Settings row at the bottom. The selected item is a white row.
 - **Main sheet, flexible.** The view being worked on.
 - **Tool sheet, 340–380px.** A tool beside the main sheet. Only one at a time; a well-filled close button sits top-right.
 - **Content widths.** A chat column is 820px, or 680px with a tool sheet open; its composer spans it and its messages sit 20px inside. A column page (settings, notes) is a 210px list and content up to 760px, centred together.
