@@ -20,6 +20,15 @@ const approval = (id: string, step_id: string, answer: unknown): Component => ({
 });
 
 describe("approvalAnswers", () => {
+  it("tells written answers from skipped ones", () => {
+    const steps = [step("ask", "approval"), step("ask", "approval")];
+    const components = [
+      approval("c1", "ask", { text: "yield" }),
+      approval("c2", "ask", { skipped: true }),
+    ];
+    expect(approvalAnswers(steps, components)).toEqual(["answered", "skipped"]);
+  });
+
   it("gives each approval Step run the answer of its own approval", () => {
     const steps = [
       step("plan", "trait"),

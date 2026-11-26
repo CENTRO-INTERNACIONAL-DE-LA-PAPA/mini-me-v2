@@ -14,7 +14,7 @@ from mini_me_sidecar.context import CallContext, Requests, TraitError
 from mini_me_sidecar.debug import Parts, recording
 from mini_me_sidecar.link import Link, log
 from mini_me_sidecar.workflow import state as saved_state
-from mini_me_sidecar.workflow.decide import decide
+from mini_me_sidecar.workflow.decide import decide, write_questions
 from mini_me_sidecar.workflow.graph import compile_workflow, workflow_output
 from mini_me_sidecar.workflow.model import Step, later_traits, parse_steps
 
@@ -123,6 +123,19 @@ class Run:
         self.send({"type": "step.completed", "step_id": step.id, "output": choice})
         return choice
 
+    async def questions(self, step: Step, earlier: list[dict[str, Any]]) -> str:
+        call_id = str(uuid.uuid4())
+        self.send({"type": "step.started", "step_id": step.id, "call_id": call_id})
+        name = step.name(self.trait_names())
+        start = {"trait": {"name": name}, "model": self.model, "context": {"steps": earlier}}
+        ctx = self._call(call_id, start, stream=False)
+        try:
+            message = str(self.input.get("text", ""))
+            with recording(self.debug, self.send_debug, name, None):
+                return await write_questions(ctx, step.prompt, message, earlier)
+        finally:
+            self._close(ctx)
+
     def started(self, step: Step) -> None:
         self.send({"type": "step.started", "step_id": step.id, "call_id": None})
 
@@ -144,7 +157,7 @@ class Run:
         """Runs from the start or from `resume`; returns once ended or paused, else raises."""
         if self.resume is not None:
             saver = await saved_state.restore(str(self.resume.get("state", "")), THREAD)
-            start: Any = Command(resume=True)
+            start: Any = Command(resume={"text": self.resume.get("text")})
         else:
             saver = saved_state.new_saver()
             start = {}
@@ -160,6 +173,7 @@ class Run:
                     "step_id": interrupts[0].value["step_id"],
                     "output": out.output if out else None,
                     "state": state,
+                    "prompt": interrupts[0].value.get("prompt"),
                 }
             )
             self.ended = True

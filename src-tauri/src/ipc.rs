@@ -748,32 +748,33 @@ pub async fn stop_reply(
     state.stop_replies(&*state.project(project_id)?, conversation_id)
 }
 
-/// Approving resumes the run; rejecting ends the reply with the output so far.
+/// Rejecting ends the reply with the output so far; every other answer resumes the run.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn answer_approval(
     state: State<'_, AppState>,
     project_id: Uuid,
     message_id: Uuid,
     component_id: Uuid,
-    approved: bool,
+    answer: conversations::Answer,
 ) -> AppResult<()> {
     let project = state.project(project_id)?;
     // Checked first so the answer is not recorded when the run could not resume.
     conversations::paused_run(&project, message_id, component_id)?;
-    if approved && state.sidecar.status().state != SidecarState::Ready {
+    if answer.resumes() && state.sidecar.status().state != SidecarState::Ready {
         return Err(AppError::new(
             "sidecar_unavailable",
             "Mini-Me cannot continue yet. Wait until it is ready, then approve again.",
         ));
     }
-    let paused = conversations::answer_approval(&project, message_id, component_id, approved)?;
-    if approved {
+    let answered = conversations::answer_approval(&project, message_id, component_id, &answer)?;
+    if answer.resumes() {
         let conversation_id = project
             .lock()
             .message_place(message_id)?
             .map(|(conversation, _)| conversation)
             .ok_or_else(|| AppError::not_found("Message not found"))?;
-        state.runs.resume(project, conversation_id, paused, state.settings().ai.model());
+        let model = state.settings().ai.model();
+        state.runs.resume(project, conversation_id, answered.paused, model, answered.output);
     }
     Ok(())
 }

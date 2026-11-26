@@ -490,11 +490,60 @@ pub struct PausedRun {
     pub state: String,
 }
 
+#[derive(Debug)]
+pub struct Answered {
+    pub paused: PausedRun,
+    pub output: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(untagged)]
+pub enum Answer {
+    Approved { approved: bool },
+    Written { text: String },
+    Skipped { skipped: bool },
+}
+
+impl Answer {
+    pub fn resumes(&self) -> bool {
+        !matches!(self, Answer::Approved { approved: false })
+    }
+
+    fn text(&self) -> Option<&str> {
+        match self {
+            Answer::Written { text } => Some(text.trim()),
+            _ => None,
+        }
+    }
+
+    fn check(&self, written: bool) -> AppResult<()> {
+        let fits = match self {
+            Answer::Approved { .. } => !written,
+            Answer::Written { text } => written && !text.trim().is_empty(),
+            Answer::Skipped { skipped } => written && *skipped,
+        };
+        if fits {
+            Ok(())
+        } else {
+            Err(AppError::new("invalid_answer", "This answer doesn't fit the question asked."))
+        }
+    }
+
+    fn stored(&self) -> serde_json::Value {
+        match self {
+            Answer::Approved { approved } => serde_json::json!({ "approved": approved }),
+            Answer::Written { .. } => serde_json::json!({ "text": self.text() }),
+            Answer::Skipped { .. } => serde_json::json!({ "skipped": true }),
+        }
+    }
+}
+
 /// Adds the `approval` component, saves `paused` and persists `message.paused` in one transaction.
 pub fn pause_reply(
     project: &Project,
     paused: PausedRun,
     prompt: &str,
+    written: bool,
 ) -> AppResult<()> {
     let mut state = project.lock();
     let conversation = streaming_reply(&state, paused.message_id)?;
@@ -503,7 +552,11 @@ pub fn pause_reply(
         id: paused.component_id,
         kind: "approval".to_string(),
         version: 1,
-        preview: serde_json::json!({ "step_id": paused.step_id, "prompt": prompt }),
+        preview: if written {
+            serde_json::json!({ "step_id": paused.step_id, "prompt": prompt, "answer": "text" })
+        } else {
+            serde_json::json!({ "step_id": paused.step_id, "prompt": prompt })
+        },
         text: prompt.to_string(),
         source_asset_id: None,
         answer: serde_json::Value::Null,
@@ -582,24 +635,33 @@ fn paused_locked(
     Ok((conversation, paused))
 }
 
-/// Approving resumes the reply; rejecting completes it as is. Deletes and returns the saved run.
+/// Rejecting completes the reply as is; every other answer resumes it. Deletes and returns the
+/// saved run.
 pub fn answer_approval(
     project: &Project,
     message_id: Uuid,
     component_id: Uuid,
-    approved: bool,
-) -> AppResult<PausedRun> {
+    answer: &Answer,
+) -> AppResult<Answered> {
     let mut state = project.lock();
     let (conversation, paused) = paused_locked(&state, message_id, component_id)?;
+    let approval = state
+        .load_message_with(message_id, true)?
+        .and_then(|(_, message)| message.components.into_iter().find(|c| c.id == component_id));
+    answer.check(approval.as_ref().is_some_and(|c| c.preview["answer"] == "text"))?;
+    let output = answer.text().map(|text| {
+        let questions = approval.as_ref().map_or("", |c| c.text.as_str());
+        format!("I asked:\n{questions}\n\nThe user answered:\n{text}")
+    });
     let mut kinds = vec![
-        EventKind::ComponentAnswered {
+        EventKind::ComponentAnswered { message_id, component_id, answer: answer.stored() },
+        EventKind::StepCompleted {
             message_id,
-            component_id,
-            answer: serde_json::json!({ "approved": approved }),
+            step_id: paused.step_id.clone(),
+            output: output.clone(),
         },
-        EventKind::StepCompleted { message_id, step_id: paused.step_id.clone(), output: None },
     ];
-    if approved {
+    if answer.resumes() {
         kinds.push(EventKind::MessageResumed { message_id });
     } else {
         let content = match &paused.output {
@@ -615,7 +677,7 @@ pub fn answer_approval(
         tx.execute("DELETE FROM paused_runs WHERE message_id = ?1", params![message_id.to_string()])?;
         Ok(())
     })?;
-    Ok(paused)
+    Ok(Answered { paused, output })
 }
 
 /// Attached and referenced file names, without duplicates.
@@ -704,7 +766,16 @@ pub fn add_reaction(project: &Project, message_id: Uuid, emoji: &str, by: Author
 }
 
 #[cfg(test)]
+pub mod test_support {
+    use super::Answer;
+
+    pub const APPROVE: Answer = Answer::Approved { approved: true };
+    pub const REJECT: Answer = Answer::Approved { approved: false };
+}
+
+#[cfg(test)]
 mod tests {
+    use super::test_support::{APPROVE, REJECT};
     use super::*;
     use crate::comments::test_support;
     use crate::projects::test_support::{self as project_support, temp_project};
@@ -970,7 +1041,7 @@ mod tests {
     }
 
     /// A Conversation whose reply to "q" is paused at an approval.
-    fn paused_reply() -> (tempfile::TempDir, Project, Uuid, PausedRun) {
+    fn paused_reply(written: bool) -> (tempfile::TempDir, Project, Uuid, PausedRun) {
         let (dir, project) = temp_project();
         let conversation = create(&project).unwrap().id;
         let question = send_message(&project, conversation, text("q"), new_id()).unwrap();
@@ -983,7 +1054,7 @@ mod tests {
             output: Some("the plan".into()),
             state: "opaque".into(),
         };
-        pause_reply(&project, paused.clone(), "Go on?").unwrap();
+        pause_reply(&project, paused.clone(), "Go on?", written).unwrap();
         (dir, project, conversation, paused)
     }
 
@@ -994,7 +1065,7 @@ mod tests {
 
     #[test]
     fn a_paused_reply_blocks_the_conversation_and_survives_reopening() {
-        let (_dir, project, conversation, paused) = paused_reply();
+        let (_dir, project, conversation, paused) = paused_reply(false);
         let err = send_message(&project, conversation, text("next"), new_id()).unwrap_err();
         assert_eq!(err.code, "reply_in_progress");
 
@@ -1008,7 +1079,7 @@ mod tests {
 
     #[test]
     fn a_paused_reply_gives_its_conversation_the_needs_approval_status() {
-        let (_dir, project, conversation, paused) = paused_reply();
+        let (_dir, project, conversation, paused) = paused_reply(false);
         let mini_me = RunMiniMe { id: new_id(), name: "Investigator".into() };
         let run = serde_json::json!({ "spec": { "mini_me": mini_me } });
         project.lock().conn.execute("UPDATE paused_runs SET run = ?1", [run.to_string()]).unwrap();
@@ -1019,35 +1090,62 @@ mod tests {
         assert_eq!(status(&project, conversation), Some(ConversationStatus::NeedsApproval { mini_me }));
         assert_eq!(status(&project, other), None);
 
-        answer_approval(&project, paused.message_id, paused.component_id, false).unwrap();
+        answer_approval(&project, paused.message_id, paused.component_id, &REJECT).unwrap();
         assert_eq!(status(&project, conversation), None);
     }
 
     #[test]
     fn stopping_a_paused_reply_deletes_its_saved_run() {
-        let (_dir, project, conversation, paused) = paused_reply();
+        let (_dir, project, conversation, paused) = paused_reply(false);
         assert_eq!(stop_reply(&project, conversation).unwrap(), vec![paused.message_id]);
         assert_eq!(saved_runs(&project), 0);
-        let err = answer_approval(&project, paused.message_id, paused.component_id, true)
+        let err = answer_approval(&project, paused.message_id, paused.component_id, &APPROVE)
             .unwrap_err();
         assert_eq!(err.code, "not_paused");
     }
 
     #[test]
     fn answering_an_approval_resumes_or_completes_the_reply_once() {
-        let (_dir, project, _conversation, paused) = paused_reply();
-        answer_approval(&project, paused.message_id, paused.component_id, true).unwrap();
+        let (_dir, project, _conversation, paused) = paused_reply(false);
+        answer_approval(&project, paused.message_id, paused.component_id, &APPROVE).unwrap();
         let (_, message) = project.lock().load_message(paused.message_id).unwrap().unwrap();
         assert_eq!(message.status, MessageStatus::Streaming);
         assert_eq!(message.components[0].answer, serde_json::json!({ "approved": true }));
         assert_eq!(saved_runs(&project), 0);
-        let again = answer_approval(&project, paused.message_id, paused.component_id, true);
+        let again = answer_approval(&project, paused.message_id, paused.component_id, &APPROVE);
         assert_eq!(again.unwrap_err().code, "not_paused");
 
-        let (_dir, project, _conversation, paused) = paused_reply();
-        answer_approval(&project, paused.message_id, paused.component_id, false).unwrap();
+        let (_dir, project, _conversation, paused) = paused_reply(false);
+        answer_approval(&project, paused.message_id, paused.component_id, &REJECT).unwrap();
         let (_, message) = project.lock().load_message(paused.message_id).unwrap().unwrap();
         assert_eq!((message.status, message.content.as_str()), (MessageStatus::Complete, "the plan"));
+    }
+
+    #[test]
+    fn written_answers_resume_with_their_text_and_misfits_are_refused() {
+        let (_dir, project, _conversation, paused) = paused_reply(true);
+        let (reply, approval) = (paused.message_id, paused.component_id);
+        for misfit in [APPROVE, Answer::Written { text: "  ".into() }] {
+            let err = answer_approval(&project, reply, approval, &misfit).unwrap_err();
+            assert_eq!(err.code, "invalid_answer");
+        }
+        assert_eq!(saved_runs(&project), 1);
+        let sent = Answer::Written { text: " yield, by rainfall ".into() };
+        answer_approval(&project, reply, approval, &sent).unwrap();
+        let (_, message) = project.lock().load_message(reply).unwrap().unwrap();
+        assert_eq!(message.status, MessageStatus::Streaming);
+        assert_eq!(message.components[0].answer, serde_json::json!({ "text": "yield, by rainfall" }));
+
+        let (_dir, project, _conversation, paused) = paused_reply(true);
+        let skip = Answer::Skipped { skipped: true };
+        answer_approval(&project, paused.message_id, paused.component_id, &skip).unwrap();
+        let (_, message) = project.lock().load_message(paused.message_id).unwrap().unwrap();
+        assert_eq!(message.status, MessageStatus::Streaming);
+        assert_eq!(message.components[0].answer, serde_json::json!({ "skipped": true }));
+
+        let (_dir, project, _conversation, paused) = paused_reply(false);
+        let err = answer_approval(&project, paused.message_id, paused.component_id, &skip);
+        assert_eq!(err.unwrap_err().code, "invalid_answer");
     }
 
     #[test]

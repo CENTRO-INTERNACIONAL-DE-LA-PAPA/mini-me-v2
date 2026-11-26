@@ -209,6 +209,18 @@ export function setAskBeforeRunning(
   return insertStep(steps, at, approval);
 }
 
+type Approval = Extract<WorkflowStep, { type: "approval" }>;
+
+export function setWrittenAnswer(approval: Approval, on: boolean): Approval {
+  const { answer: _answer, questions_by: _questionsBy, ...rest } = approval;
+  return on ? { ...rest, answer: "text" } : rest;
+}
+
+export function setModelQuestions(approval: Approval, on: boolean): Approval {
+  const { questions_by: _questionsBy, ...rest } = approval;
+  return on && approval.answer === "text" ? { ...rest, questions_by: "model" } : rest;
+}
+
 /** Whether `slot` is inside the Step with `id`, where that Step cannot be dropped. */
 export function isSlotInside(steps: WorkflowStep[], id: string, slot: Slot): boolean {
   const at = locate(steps, id);

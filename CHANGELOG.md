@@ -6,6 +6,7 @@
 - More ways to draw a Mini-Me: new bodies, eyes, mouths and accessories, with eyes and mouth picked separately.
 - Plotter draws many more kinds of chart, such as dumbbells, stacked areas, ridgelines and one panel per group, and changes a chart when you ask, for example to use a log scale or colour by a column.
 - A new Mini-Me, Exploratory Data Analysis, explores a data table for you: it describes each column, finds correlations and outliers, and groups similar rows when that helps, with tables and charts for each, and saves the groups as a new file.
+- A Workflow can stop to ask you a question and wait for your written answer, which its next Steps then use. The questions can be written by you in the Workflow editor, or by the AI model from what you asked.
 
 ## Improved
 

@@ -73,6 +73,10 @@ pub enum StepKind {
     },
     Approval {
         prompt: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        answer: Option<ApprovalAnswer>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        questions_by: Option<QuestionsBy>,
     },
     Condition {
         question: String,
@@ -86,6 +90,18 @@ pub enum StepKind {
     Parallel {
         branches: Vec<Branch>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalAnswer {
+    Text,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuestionsBy {
+    Model,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -169,11 +185,16 @@ impl Workflow {
         self.all_steps().into_iter().find(|s| s.id == id)
     }
 
-    /// Whether running this Workflow asks the AI model for decisions.
+    /// Whether running this Workflow asks the AI model for decisions or for questions.
     pub fn has_decisions(&self) -> bool {
-        self.all_steps()
-            .iter()
-            .any(|s| matches!(s.kind, StepKind::Condition { .. } | StepKind::Loop { .. }))
+        self.all_steps().iter().any(|s| {
+            matches!(
+                s.kind,
+                StepKind::Condition { .. }
+                    | StepKind::Loop { .. }
+                    | StepKind::Approval { questions_by: Some(QuestionsBy::Model), .. }
+            )
+        })
     }
 }
 
@@ -368,9 +389,14 @@ impl Library {
                     }
                     Some(_) => {}
                 },
-                StepKind::Approval { prompt } => {
+                StepKind::Approval { prompt, answer, questions_by } => {
                     if prompt.trim().is_empty() {
                         problems.push(format!("{at}: the prompt is empty"));
+                    }
+                    if questions_by.is_some() && answer.is_none() {
+                        problems.push(format!(
+                            "{at}: the AI model writes questions only for a written answer"
+                        ));
                     }
                 }
                 StepKind::Loop { question, max_iterations, steps } => {
@@ -560,6 +586,21 @@ mod tests {
             library.workflow_traits(workflow).iter().map(|t| t.name.as_str()).collect();
         assert_eq!(names, ["Scout", "Wonder"]);
         assert!(workflow.has_decisions());
+    }
+
+    #[test]
+    fn model_questions_need_a_written_answer_and_a_model() {
+        let ask = |fields: serde_json::Value| {
+            let mut step = serde_json::json!({ "id": "ask", "type": "approval", "prompt": "Ask" });
+            step.as_object_mut().unwrap().extend(fields.as_object().unwrap().clone());
+            with_workflow(serde_json::json!({ "steps": [step, { "id": "scout", "trait": SCOUT }] }))
+        };
+        let written = ask(serde_json::json!({ "answer": "text", "questions_by": "model" }));
+        assert_eq!(written.problems(), Vec::<String>::new());
+        assert!(written.mini_mes[0].workflow.has_decisions());
+        assert!(!ask(serde_json::json!({ "answer": "text" })).mini_mes[0].workflow.has_decisions());
+        let unanswerable = ask(serde_json::json!({ "questions_by": "model" }));
+        assert!(unanswerable.problems().iter().any(|p| p.contains("only for a written answer")));
     }
 
     #[test]

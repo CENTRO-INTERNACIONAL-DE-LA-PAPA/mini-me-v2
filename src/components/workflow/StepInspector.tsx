@@ -26,6 +26,8 @@ import {
   findStep,
   removeStep,
   setAskBeforeRunning,
+  setModelQuestions,
+  setWrittenAnswer,
   updateStep,
 } from "./workflowEdit";
 
@@ -133,13 +135,48 @@ export function StepInspector({
           </>
         )}
         {step.type === "approval" && (
-          <LabelledField label="What you are asked">
-            <Textarea
-              value={step.prompt}
-              disabled={!editable}
-              onChange={(e) => change({ ...step, prompt: e.target.value })}
-            />
-          </LabelledField>
+          <>
+            <LabelledField
+              label={step.questions_by === "model" ? "What to ask about" : "What you are asked"}
+              hint={
+                step.questions_by === "model"
+                  ? "The AI model writes the questions from this and the outputs so far."
+                  : undefined
+              }
+            >
+              <Textarea
+                value={step.prompt}
+                disabled={!editable}
+                onChange={(e) => change({ ...step, prompt: e.target.value })}
+              />
+            </LabelledField>
+            <Field orientation="horizontal">
+              <FieldContent>
+                <FieldLabel htmlFor="written-answer">Ask for a written answer</FieldLabel>
+                <FieldDescription>The answer goes to the Steps after this one.</FieldDescription>
+              </FieldContent>
+              <Switch
+                id="written-answer"
+                checked={step.answer === "text"}
+                disabled={!editable}
+                onCheckedChange={(on) => change(setWrittenAnswer(step, on))}
+              />
+            </Field>
+            {step.answer === "text" && (
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldLabel htmlFor="model-questions">AI model writes the questions</FieldLabel>
+                  <FieldDescription>Uses what you write above as its instruction.</FieldDescription>
+                </FieldContent>
+                <Switch
+                  id="model-questions"
+                  checked={step.questions_by === "model"}
+                  disabled={!editable}
+                  onCheckedChange={(on) => change(setModelQuestions(step, on))}
+                />
+              </Field>
+            )}
+          </>
         )}
         {(step.type === "condition" || step.type === "loop") && (
           <LabelledField

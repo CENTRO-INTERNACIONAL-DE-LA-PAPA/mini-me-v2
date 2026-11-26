@@ -22,6 +22,7 @@ class Step:
     label: str | None = None
     trait: str | None = None
     prompt: str = ""
+    questions_by: str | None = None
     question: str = ""
     max_iterations: int = 1
     steps: tuple["Step", ...] = ()
@@ -46,6 +47,7 @@ def _parse_step(raw: dict[str, Any]) -> Step:
         label=raw.get("label"),
         trait=raw.get("trait"),
         prompt=str(raw.get("prompt", "")),
+        questions_by=raw.get("questions_by"),
         question=str(raw.get("question", "")),
         max_iterations=int(raw.get("max_iterations", 1)),
         steps=parse_steps(raw.get("steps") or []),
@@ -153,9 +155,19 @@ def parallel_output(branches: list[tuple[str, str | None]]) -> str | None:
     return "\n\n".join(parts) if parts else None
 
 
+def labelled_outputs(steps: list[dict[str, Any]]) -> list[str]:
+    return [f"--- {s.get('name', '')} ---\n{s.get('output', '')}" for s in steps]
+
+
+def earlier_outputs_text(steps: list[dict[str, Any]]) -> str:
+    intro = "Outputs of the earlier Steps of your Workflow for this message:"
+    return "\n\n".join([intro, *labelled_outputs(steps)])
+
+
 def visible_outputs(log: list[Entry], scope: dict[str, str]) -> list[dict[str, Any]]:
-    """Earlier Trait outputs a Step in `scope` sees, `{ step_id, name, output }` in finishing
-    order: none from other branches of its parallel Steps, cut to the budget, newest kept."""
+    """Earlier outputs of Trait Steps and written answers that a Step in `scope` sees, `{ step_id,
+    name, output }` in finishing order: none from other branches of its parallel Steps, cut to
+    the budget, newest kept."""
     seen = [
         e
         for e in log

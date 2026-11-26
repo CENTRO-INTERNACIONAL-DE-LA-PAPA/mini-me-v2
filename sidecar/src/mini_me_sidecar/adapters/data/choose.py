@@ -10,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 from mini_me_sidecar.adapters.base import require_model
 from mini_me_sidecar.adapters.providers import MAX_LOGGED_CHARS, ask_arguments
 from mini_me_sidecar.context import CallContext, TraitError
+from mini_me_sidecar.workflow.model import earlier_outputs_text
 
 Plan = TypeVar("Plan", bound=BaseModel)
 
@@ -36,11 +37,7 @@ async def choose(
     """The plan, and each malformed entry left out of it as a label and a reason. `extra` is
     more material for the model, after the tables' descriptions."""
     model = require_model(ctx)
-    material = (
-        f"The user's message:\n{text}\n\nThe tables, described without their rows:\n"
-        + json.dumps(descriptions, ensure_ascii=False, indent=1, default=str)
-        + (f"\n\n{extra}" if extra else "")
-    )
+    material = choice_material(text, ctx.steps, descriptions, extra)
     turns = [("system", ctx.trait.instructions or ""), ("human", material)]
     # Tool calling works with every provider and with OpenRouter's models; the default
     # for OpenAI's client, a `json_schema` response format, is refused by many of them.
@@ -55,6 +52,19 @@ async def choose(
         )
         raise UnusableAnswer(malformed)
     return plan, malformed
+
+
+def choice_material(
+    text: str, steps: list[dict[str, Any]], descriptions: list[dict[str, Any]], extra: str
+) -> str:
+    parts = [f"The user's message:\n{text}"]
+    if steps:
+        parts.append(earlier_outputs_text(steps))
+    tables = json.dumps(descriptions, ensure_ascii=False, indent=1, default=str)
+    parts.append(f"The tables, described without their rows:\n{tables}")
+    if extra:
+        parts.append(extra)
+    return "\n\n".join(parts)
 
 
 def fit_plan(schema: type[Plan], arguments: Any) -> tuple[Plan | None, list[tuple[str, str]]]:

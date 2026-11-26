@@ -85,6 +85,12 @@ pub trait FrameSink: Send + Sync {
     fn send(&self, frame: &CoreFrame) -> bool;
 }
 
+struct Paused {
+    output: Option<String>,
+    state: String,
+    prompt: Option<String>,
+}
+
 /// Stored with a paused run, so it resumes with the definitions it started with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunSpec {
@@ -478,6 +484,7 @@ impl Runs {
         conversation_id: Uuid,
         paused: PausedRun,
         model: Option<CallModel>,
+        text: Option<String>,
     ) {
         let sink = match self.sink() {
             Ok(sink) => sink,
@@ -513,7 +520,8 @@ impl Runs {
             );
             return;
         };
-        let resume = RunResume { state: paused.state, step_id: paused.step_id, approved: true };
+        let resume =
+            RunResume { state: paused.state, step_id: paused.step_id, approved: true, text };
         let reply = paused.message_id;
         self.launch(sink, project, conversation_id, &message, reply, saved.spec, model, Some(resume));
     }
@@ -948,16 +956,17 @@ impl Runs {
         }
     }
 
-    fn paused(&self, run_id: Uuid, step_id: String, output: Option<String>, state: String) {
+    fn paused(&self, run_id: Uuid, step_id: String, paused: Paused) {
         let Some(run) = self.take(run_id) else {
             return;
         };
-        self.save_pause(run, step_id, output, state);
+        self.save_pause(run, step_id, paused);
         // After the pause is stored: the sidebar reloads on this and reads the paused reply.
         self.notify();
     }
 
-    fn save_pause(&self, run: Run, step_id: String, output: Option<String>, state: String) {
+    fn save_pause(&self, run: Run, step_id: String, paused: Paused) {
+        let Paused { output, state, prompt: written_prompt } = paused;
         if state.len() > MAX_STATE_BYTES {
             let _ = conversations::fail_reply(
                 &run.project,
@@ -967,8 +976,10 @@ impl Runs {
             );
             return;
         }
-        let prompt = match run.spec.workflow.step(&step_id).map(|s| &s.kind) {
-            Some(StepKind::Approval { prompt }) => prompt.clone(),
+        let (prompt, written) = match run.spec.workflow.step(&step_id).map(|s| &s.kind) {
+            Some(StepKind::Approval { prompt, answer, .. }) => {
+                (written_prompt.unwrap_or_else(|| prompt.clone()), answer.is_some())
+            }
             _ => {
                 let _ = conversations::fail_reply(
                     &run.project,
@@ -988,7 +999,7 @@ impl Runs {
             output,
             state,
         };
-        let _ = conversations::pause_reply(&run.project, paused, &prompt);
+        let _ = conversations::pause_reply(&run.project, paused, &prompt, written);
     }
 
     /// Updates to a reply that has already ended are rejected by `conversations` and dropped.
@@ -1020,8 +1031,8 @@ impl Runs {
             SidecarFrame::StepCompleted { run_id, step_id, output } => {
                 self.step_completed(run_id, step_id, output);
             }
-            SidecarFrame::RunPaused { run_id, step_id, output, state } => {
-                self.paused(run_id, step_id, output, state);
+            SidecarFrame::RunPaused { run_id, step_id, output, state, prompt } => {
+                self.paused(run_id, step_id, Paused { output, state, prompt });
             }
             SidecarFrame::RunDone { run_id } => {
                 if let Some(run) = self.finish(run_id) {
@@ -1585,8 +1596,9 @@ pub mod test_support {
 mod tests {
     use super::*;
     use crate::comments::test_support::into_thread;
-    use crate::conversations::{SendMessageInput, create, send_message, stop_reply};
-    use crate::library::{FALLBACK_MINI_ME, SCRIBE, Step};
+    use crate::conversations::test_support::{APPROVE, REJECT};
+    use crate::conversations::{Answer, SendMessageInput, create, send_message, stop_reply};
+    use crate::library::{ApprovalAnswer, FALLBACK_MINI_ME, SCRIBE, Step};
     use crate::projects::test_support::{temp_project, user};
     use crate::protocol::{EventKind, MessageStatus};
     use crate::secrets::NoSecrets;
@@ -1811,6 +1823,7 @@ mod tests {
             step_id: "ask".into(),
             output: None,
             state: "opaque".into(),
+            prompt: None,
         });
         // When the reply leaves the running list, its paused status is already stored.
         let seen = seen.lock().unwrap().clone();
@@ -2434,7 +2447,11 @@ mod tests {
         let ask = Step {
             id: "ask".into(),
             label: None,
-            kind: StepKind::Approval { prompt: "Go on?".into() },
+            kind: StepKind::Approval {
+                prompt: "Go on?".into(),
+                answer: None,
+                questions_by: None,
+            },
         };
         run.workflow.steps.insert(0, ask);
         run
@@ -2449,6 +2466,7 @@ mod tests {
             step_id: "ask".into(),
             output: Some("so far".into()),
             state: "opaque".into(),
+            prompt: None,
         });
         let message = f.message(reply);
         assert_eq!(message.status, MessageStatus::Paused);
@@ -2460,8 +2478,8 @@ mod tests {
         let f = quick();
         let (reply, approval) = paused(&f);
         let first_run = f.sink.last_run();
-        let saved = conversations::answer_approval(&f.project, reply, approval, true).unwrap();
-        f.runs.resume(Arc::clone(&f.project), f.conversation_of(reply), saved, None);
+        let saved = conversations::answer_approval(&f.project, reply, approval, &APPROVE).unwrap();
+        f.runs.resume(Arc::clone(&f.project), f.conversation_of(reply), saved.paused, None, None);
 
         let resumed = f.sink.frames().into_iter().rev().find_map(|frame| match frame {
             CoreFrame::RunStart { run_id, plan, resume, .. } => Some((run_id, plan, resume)),
@@ -2487,12 +2505,47 @@ mod tests {
         let f = quick();
         let (reply, approval) = paused(&f);
         let sent_before = f.sink.frames().len();
-        conversations::answer_approval(&f.project, reply, approval, false).unwrap();
+        conversations::answer_approval(&f.project, reply, approval, &REJECT).unwrap();
         let message = f.message(reply);
         assert_eq!((message.status, message.content.as_str()), (MessageStatus::Complete, "so far"));
         assert_eq!(f.sink.frames().len(), sent_before);
-        let again = conversations::answer_approval(&f.project, reply, approval, false);
+        let again = conversations::answer_approval(&f.project, reply, approval, &REJECT);
         assert_eq!(again.unwrap_err().code, "not_paused");
+    }
+
+    #[test]
+    fn a_written_answer_pauses_with_the_sent_questions_and_resumes_with_the_text() {
+        let f = quick();
+        let mut spec = approving_spec();
+        spec.workflow.steps[0].kind = StepKind::Approval {
+            prompt: "Ask what is unclear".into(),
+            answer: Some(ApprovalAnswer::Text),
+            questions_by: None,
+        };
+        let (run_id, reply) = f.start_spec(spec, None);
+        f.runs.handle(SidecarFrame::StepStarted { run_id, step_id: "ask".into(), call_id: None });
+        f.runs.handle(SidecarFrame::RunPaused {
+            run_id,
+            step_id: "ask".into(),
+            output: None,
+            state: "opaque".into(),
+            prompt: Some("Which column is the outcome?".into()),
+        });
+        let approval = &f.message(reply).components[0];
+        assert_eq!(approval.text, "Which column is the outcome?");
+        assert_eq!(approval.preview["answer"], "text");
+
+        let sent = Answer::Written { text: "yield".into() };
+        let saved = conversations::answer_approval(&f.project, reply, approval.id, &sent).unwrap();
+        let conversation = f.conversation_of(reply);
+        f.runs.resume(Arc::clone(&f.project), conversation, saved.paused, None, saved.output);
+        let resume = f.sink.frames().into_iter().rev().find_map(|frame| match frame {
+            CoreFrame::RunStart { resume, .. } => resume,
+            _ => None,
+        });
+        let output = "I asked:\nWhich column is the outcome?\n\nThe user answered:\nyield";
+        assert_eq!(resume.unwrap().text.as_deref(), Some(output));
+        assert_eq!(f.message(reply).steps[0].output.as_deref(), Some(output));
     }
 
     #[test]
@@ -2504,6 +2557,7 @@ mod tests {
             step_id: "ask".into(),
             output: None,
             state: "x".repeat(MAX_STATE_BYTES + 1),
+            prompt: None,
         });
         match f.reply_events(reply).last().unwrap() {
             EventKind::MessageFailed { error, .. } => assert_eq!(error.code, "state_too_large"),

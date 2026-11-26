@@ -115,6 +115,7 @@ fn rows(project: &ProjectSummary, conn: &Connection) -> AppResult<Vec<PausedAppr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::conversations::test_support::REJECT;
     use crate::conversations::{self, PausedRun, SendMessageInput};
     use crate::comments::test_support::into_thread;
     use crate::projects::test_support::origin;
@@ -142,7 +143,7 @@ mod tests {
             output: None,
             state: "opaque".into(),
         };
-        conversations::pause_reply(&project, run.clone(), prompt).unwrap();
+        conversations::pause_reply(&project, run.clone(), prompt, false).unwrap();
         project
             .lock()
             .conn
@@ -182,7 +183,7 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[&conversation].name, "Investigator");
 
-        conversations::answer_approval(&project, run.message_id, run.component_id, false).unwrap();
+        conversations::answer_approval(&project, run.message_id, run.component_id, &REJECT).unwrap();
         assert!(paused_mini_mes(&project.lock().conn).unwrap().is_empty());
     }
 
@@ -191,7 +192,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = projects::ensure_data_root(dir.path(), projects::DATA_FOLDER_NAME).unwrap();
         let (project, run) = paused(&root, "Trials", "Investigator", "Go on?", 1);
-        conversations::answer_approval(&project, run.message_id, run.component_id, false).unwrap();
+        conversations::answer_approval(&project, run.message_id, run.component_id, &REJECT).unwrap();
         assert!(list(&root).unwrap().is_empty());
     }
 

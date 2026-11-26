@@ -92,7 +92,12 @@
         "mini_mes": [],
         "debug": { "input": true, "details": true, "tools": false }
       },
-      "resume": { "state": "eyJmb3JtYXQiOjF9", "step_id": "ask", "approved": true }
+      "resume": {
+        "state": "eyJmb3JtYXQiOjF9",
+        "step_id": "ask",
+        "approved": true,
+        "text": "yield, by rainfall"
+      }
     },
     { "type": "run.cancel", "run_id": "0199d0a0-0000-7000-8000-000000000301" },
     {
@@ -203,7 +208,8 @@
       "run_id": "0199d0a0-0000-7000-8000-000000000301",
       "step_id": "ask",
       "output": "Three plots.",
-      "state": "eyJmb3JtYXQiOjF9"
+      "state": "eyJmb3JtYXQiOjF9",
+      "prompt": "Which column is the outcome?"
     },
     { "type": "run.done", "run_id": "0199d0a0-0000-7000-8000-000000000301" },
     {

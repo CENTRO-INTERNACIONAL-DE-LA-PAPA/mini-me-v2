@@ -44,6 +44,8 @@ class Env(Protocol):
         """Asks the model for a condition's or loop's decision, reporting its Step events."""
         ...
 
+    async def questions(self, step: Step, earlier: list[dict[str, Any]]) -> str: ...
+
     def started(self, step: Step) -> None:
         """Reports that a Step without a call started."""
         ...
@@ -105,7 +107,7 @@ class _Builder:
             case "trait":
                 return self._trait(step, parent, scope)
             case "approval":
-                return self._approval(step)
+                return self._approval(step, parent, scope)
             case "condition":
                 return self._condition(step, parent, scope)
             case "loop":
@@ -140,14 +142,22 @@ class _Builder:
         node = self.node(f"trait.{step.id}", run_trait)
         return node, self.edge_from(node)
 
-    def _approval(self, step: Step) -> tuple[str, Callable[[str], None]]:
+    def _approval(
+        self, step: Step, parent: str, scope: dict[str, str]
+    ) -> tuple[str, Callable[[str], None]]:
         env = self.env
+        entry = self._entry(step, parent, scope)
 
         async def approve(state: RunState) -> dict[str, Any]:
+            prompt = None
             if env.first_visit(step):
-                env.started(step)
-            interrupt({"step_id": step.id})
-            return {}
+                if step.questions_by == "model":
+                    prompt = await env.questions(step, visible_outputs(_log(state), scope))
+                else:
+                    env.started(step)
+            answer = interrupt({"step_id": step.id, "prompt": prompt})
+            text = answer.get("text") if isinstance(answer, dict) else None
+            return {"log": [entry(text, trait=True)]} if text else {}
 
         node = self.node(f"approval.{step.id}", approve)
         return node, self.edge_from(node)

@@ -11,8 +11,10 @@ import { useMiniMes } from "../../hooks/useMiniMes";
 import {
   StepComponents,
   StepMark,
+  WrittenAnswer,
   ANSWER_LABELS,
   approvalAnswers,
+  approvalComponents,
   componentPlaces,
   stepState,
 } from "./WorkflowProgress";
@@ -110,6 +112,7 @@ export function StepsPanel({ message, onClose }: { message: MessageView; onClose
   const miniMes = useMiniMes();
   const miniMe = miniMes.find((m) => m.id === message.author.id);
   const answers = approvalAnswers(message.steps, message.components);
+  const asked = approvalComponents(message.steps, message.components);
   const { byStep } = componentPlaces(message.steps, message.components, message.status);
   const done = message.steps.filter((s) => s.done).length;
 
@@ -156,6 +159,9 @@ export function StepsPanel({ message, onClose }: { message: MessageView; onClose
                   <span className="text-meta" style={{ color: miniMe?.colors.ink }}>
                     {message.progress.label}
                   </span>
+                )}
+                {answer === "answered" && asked[index] && (
+                  <WrittenAnswer approval={asked[index]} />
                 )}
                 {step.type === "trait" && step.done && step.output && (
                   <div className="text-ink-2">
