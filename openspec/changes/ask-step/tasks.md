@@ -28,12 +28,12 @@
 
 ## 3. Pause and resume (sidecar)
 
-- [ ] 3.1 In `workflow/decide.py`, move the material building (message and earlier outputs)
+- [x] 3.1 In `workflow/decide.py`, move the material building (message and earlier outputs)
   into a helper used by `decide()` and a new `write_questions(ctx, instruction, message,
   earlier)`, which asks `ask_structured` for one text field and raises `questions_failed`
   ("I couldn't write my questions; send your message again.") when it is empty. Verify:
   `cd sidecar && uv run pytest` passes.
-- [ ] 3.2 Add `questions` to the `Env` protocol and `Run` (`runs.py`, like `Run.decide`); in
+- [x] 3.2 Add `questions` to the `Env` protocol and `Run` (`runs.py`, like `Run.decide`); in
   `_approval` (`graph.py`), on the first visit of a `questions_by` `"model"` approval, write the
   questions and pass them in the interrupt's value; keep `interrupt()`'s return value and, when
   it holds text, add a log entry with that output. In `Run.execute`, resume with
@@ -44,7 +44,7 @@
 
 ## 4. Data Traits read earlier outputs (sidecar)
 
-- [ ] 4.1 In `adapters/data/choose.py`, add the run's earlier Step outputs (`ctx.steps`),
+- [x] 4.1 In `adapters/data/choose.py`, add the run's earlier Step outputs (`ctx.steps`),
   labelled with their names, to the material after the message. Verify: a pytest of the
   material built with and without earlier outputs passes.
 

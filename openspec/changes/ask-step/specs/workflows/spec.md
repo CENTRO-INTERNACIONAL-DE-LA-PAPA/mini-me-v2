@@ -21,9 +21,10 @@ from the user's message and the earlier outputs, and the approval SHALL show the
 - **THEN** the reply fails with `model_not_set` before the run starts
 
 #### Scenario: The model writes no questions
-- **WHEN** the model's call for the questions fails or answers with no text
+- **WHEN** the model answers the call for the questions with no text
 - **THEN** the reply fails with code `questions_failed` and the message "I couldn't write my
-  questions; send your message again."
+  questions; send your message again." A call the provider refuses fails as other model calls
+  do.
 
 ### Requirement: Written-answer approvals are checked
 The Rust core SHALL refuse, as it refuses other broken Workflows, an approval Step whose

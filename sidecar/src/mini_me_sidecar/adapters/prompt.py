@@ -25,6 +25,7 @@ from mini_me_sidecar.adapters.providers import (
 from mini_me_sidecar.context import CallContext, Model, TraitError
 from mini_me_sidecar.routing import mini_me_text
 from mini_me_sidecar.tools import DEFAULT_TOOLS, MODEL_TOOL_NAMES
+from mini_me_sidecar.workflow.model import earlier_outputs_text
 
 MAX_MATERIAL_CHARS = 400_000
 
@@ -388,9 +389,7 @@ def _turns(
     """Instructions, earlier messages, earlier Steps' outputs, then the material."""
     turns = [("system", instructions), *earlier]
     if steps:
-        parts = [f"--- {s.get('name', '')} ---\n{s.get('output', '')}" for s in steps]
-        intro = "Outputs of the earlier Steps of your Workflow for this message:"
-        turns.append(("human", "\n\n".join([intro, *parts])))
+        turns.append(("human", earlier_outputs_text(steps)))
     turns.append(("human", material))
     return turns
 
