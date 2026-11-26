@@ -106,7 +106,7 @@ class Prompt(Adapter):
             await ctx.results(),
             ctx.document,
             ctx.file,
-            _hand_offs(ctx.mini_mes, ctx.hand_off, ctx.later_traits),
+            _hand_offs(ctx.mini_mes, ctx.recommended_hand_off, ctx.later_traits),
             component=ctx.picked_component,
             tools=ctx.tools,
         )

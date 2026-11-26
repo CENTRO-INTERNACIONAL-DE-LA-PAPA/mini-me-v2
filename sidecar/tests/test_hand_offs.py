@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+from mini_me_sidecar.context import CallContext
 from mini_me_sidecar.tools.base import ToolError
 from mini_me_sidecar.tools.hand_offs import hand_off
 
@@ -29,3 +30,27 @@ def test_a_name_is_handed_off_by_its_id():
     assert ctx.sent == [("m-profiler", "profile it", "a1")]
     with pytest.raises(ToolError, match="Profiler, Plotter"):
         asyncio.run(hand_off(ctx, "Theorist", "build a theory"))
+
+
+class RecordingRequests:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, dict]] = []
+
+    async def send(self, call_id: str, method: str, params: dict) -> dict:
+        self.sent.append((call_id, method, params))
+        return {}
+
+
+def test_a_call_with_a_recommended_hand_off_still_hands_off():
+    requests = RecordingRequests()
+    start = {"context": {"mini_mes": MINI_MES, "hand_off": {"mini_me_id": "m-plotter"}}}
+    ctx = CallContext(None, requests, "c1", start)
+    asyncio.run(hand_off(ctx, "Plotter", "draw a histogram of yield"))
+    assert ctx.recommended_hand_off == {"mini_me_id": "m-plotter"}
+    assert requests.sent == [
+        (
+            "c1",
+            "reply.hand_off",
+            {"mini_me_id": "m-plotter", "request": "draw a histogram of yield", "asset_id": None},
+        )
+    ]
