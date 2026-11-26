@@ -137,7 +137,7 @@ export function MiniMeEditor({
               <>
                 {id && !library.unreadable && (
                   <ConfirmButton
-                    trigger={<Button variant="outline" />}
+                    trigger={<Button variant="secondary" />}
                     question={`Delete ${draft.name}? This can't be undone.`}
                     onConfirm={remove}
                   >
@@ -264,7 +264,7 @@ function Appearance({
                 <Avatar avatar={draft.avatar} color={draft.colors} size={150} />
               </Card>
               <Button
-                variant="outline"
+                variant="secondary"
                 onClick={() =>
                   onChange({ avatar: randomAvatar(), colors: miniMeColors(randomFamily()) })
                 }

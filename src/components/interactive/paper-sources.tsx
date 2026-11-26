@@ -40,7 +40,7 @@ function PaperSources({ preview }: { preview: unknown }) {
         />
       ))}
       {papers.length > SHOWN_SOURCES && (
-        <Button variant="outline" className="self-start" onClick={() => setAll(!all)}>
+        <Button variant="secondary" className="self-start" onClick={() => setAll(!all)}>
           {all ? "Show fewer" : `Show all sources (${papers.length})`}
         </Button>
       )}

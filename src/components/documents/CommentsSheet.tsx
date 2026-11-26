@@ -231,9 +231,9 @@ function ThreadView({
           <ChevronDownIcon />
         </Button>
       </nav>
-      <div className="grid grid-cols-1 gap-1.5 border-b border-border pb-3">
+      <div className="grid grid-cols-1 gap-1 border-b border-border pb-3">
         <div className="flex items-center gap-2">
-          <h3 className="flex min-w-0 flex-1 items-center gap-2 font-serif text-subheading text-foreground">
+          <h3 className="flex min-w-0 flex-1 items-center gap-2 text-ui font-medium text-foreground">
             <NumberBadge number={number} />
             <span className="min-w-0 truncate">{location ?? `“${thread.quote}”`}</span>
           </h3>

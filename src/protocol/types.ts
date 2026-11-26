@@ -469,17 +469,6 @@ export interface PausedApproval {
   paused_at: number;
 }
 
-/** One of the most recently active Conversations, in any Project. */
-export interface RecentConversation {
-  project_id: Uuid;
-  project_name: string;
-  conversation_id: Uuid;
-  title: string;
-  /** Unix ms. */
-  last_activity_at: number;
-  status: ConversationStatus | null;
-}
-
 /** What a Project's card on Home shows beyond its name. */
 export interface ProjectActivity {
   project_id: Uuid;

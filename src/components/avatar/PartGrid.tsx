@@ -25,7 +25,7 @@ function PartGrid({ parts, selected, allowNone, preview, color, onSelect }: Grid
       {allowNone && (
         <li>
           <Button
-            variant="outline"
+            variant="secondary"
             aria-pressed={selected === null}
             className={TILE}
             onClick={() => onSelect(null)}
@@ -39,7 +39,7 @@ function PartGrid({ parts, selected, allowNone, preview, color, onSelect }: Grid
         <li key={part.id}>
           <Hint label={part.id}>
             <Button
-              variant="outline"
+              variant="secondary"
               aria-pressed={selected === part.id}
               className={TILE}
               onClick={() => onSelect(part.id)}

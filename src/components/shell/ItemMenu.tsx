@@ -136,7 +136,7 @@ export function ItemMenu({ name, actions = [], rename, remove, className }: Prop
           )}
           {view === "rename" && rename && (
             <form onSubmit={submit} className="grid gap-2">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <Input
                   autoFocus
                   aria-label="New name"
@@ -173,5 +173,37 @@ export function ItemMenu({ name, actions = [], rename, remove, className }: Prop
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+interface NamedMenuProps {
+  name: string;
+  onRename: (name: string) => Promise<unknown>;
+  onDelete: () => Promise<unknown>;
+  className?: string;
+}
+
+export function ConversationMenu({ name, onRename, onDelete, className }: NamedMenuProps) {
+  return (
+    <ItemMenu
+      name={name}
+      className={className}
+      rename={{ current: name, onRename }}
+      remove={{ question: `Delete "${name}" and its messages? This can't be undone.`, onDelete }}
+    />
+  );
+}
+
+export function ProjectMenu({ name, onRename, onDelete, className }: NamedMenuProps) {
+  return (
+    <ItemMenu
+      name={name}
+      className={className}
+      rename={{ current: name, onRename }}
+      remove={{
+        question: `Delete "${name}"? Its Conversations and files are removed for good. This can't be undone.`,
+        onDelete,
+      }}
+    />
   );
 }

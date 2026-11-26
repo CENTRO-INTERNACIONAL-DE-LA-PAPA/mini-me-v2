@@ -35,7 +35,7 @@ export function UpdateStatusLine() {
       error={error}
       action={
         status.state === "ready" && (
-          <Button variant="outline" size="xs" onClick={restart} disabled={restarting}>
+          <Button variant="secondary" size="xs" onClick={restart} disabled={restarting}>
             {restarting && <RefreshCwIcon className="animate-spin" />}
             {restarting ? "Restarting…" : "Restart"}
           </Button>

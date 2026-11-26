@@ -422,7 +422,7 @@ export function Composer({
             onRemove={(asset) => setAttachments((current) => current.filter((a) => a !== asset))}
           />
           <EditorContent editor={editor} className="composer-editor" />
-          <div className="flex items-center gap-0.5 px-1 pb-2.5">
+          <div className="flex items-center gap-1 px-1 pb-2.5">
             <Hint label="Mention a Mini-Me">
               <Button
                 variant="ghost"
@@ -455,7 +455,7 @@ export function Composer({
             </Hint>
             <span className="ml-2 flex-1 truncate text-meta text-muted-foreground">
               {asked ? (
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-2">
                   Asking <MiniMePill miniMe={asked}>{asked.name}</MiniMePill>
                 </span>
               ) : (
@@ -490,7 +490,7 @@ function SuggestionRow({
       aria-selected={selected}
       ref={row}
       className={cn(
-        "flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5",
+        "flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-lg px-2.5 py-2",
         "text-left",
         selected ? "bg-accent" : "hover:bg-accent",
       )}

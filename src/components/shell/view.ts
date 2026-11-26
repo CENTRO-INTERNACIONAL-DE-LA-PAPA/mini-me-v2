@@ -13,6 +13,7 @@ export type View =
   | { kind: "license" }
   | { kind: "third-party" }
   | { kind: "avatars" }
+  | { kind: "components" }
   | { kind: "library"; tab?: LibraryTab }
   | { kind: "mini-me"; id?: string; from?: string }
   | { kind: "trait"; id?: string; from?: string };

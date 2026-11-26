@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 import { PuzzleIcon, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { TRAIT_ICONS, traitIcon } from "../../lib/traitIcons";
@@ -31,13 +30,12 @@ export function TraitIconPicker({
             size="icon"
             aria-label={name ?? "No icon"}
             aria-pressed={name === icon}
-            className={cn(name === icon && "bg-accent")}
             onClick={() => {
               setOpen(false);
               onPick(name);
             }}
           >
-            <Icon className="size-4.5" strokeWidth={1.4} />
+            <Icon className="size-4.5" />
           </Button>
         ))}
       </PopoverContent>

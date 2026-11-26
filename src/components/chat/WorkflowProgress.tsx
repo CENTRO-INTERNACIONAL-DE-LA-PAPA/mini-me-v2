@@ -149,7 +149,7 @@ export function WorkflowProgress({
         </ol>
         {onShowSteps && (
           <Button
-            variant="outline"
+            variant="secondary"
             size="xs"
             className="shrink-0 rounded-full"
             aria-pressed={stepsShown}

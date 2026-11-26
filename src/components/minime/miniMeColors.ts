@@ -79,5 +79,6 @@ export function surfaceStyle(colors: MiniMeColors | undefined): CSSProperties | 
     "--mm-ink": ink,
     "--mm-wash": wash,
     "--mm-edge": edge,
+    "--mm-press-hover": `color-mix(in oklch, ${tint} 50%, white)`,
   } as CSSProperties;
 }

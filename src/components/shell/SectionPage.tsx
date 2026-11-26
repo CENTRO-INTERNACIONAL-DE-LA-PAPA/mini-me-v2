@@ -31,9 +31,9 @@ export function SectionPage<Id extends string>({
       value={active}
       onValueChange={(id) => onSelect(id as Id)}
       orientation="vertical"
-      className="flex-row justify-center gap-14 px-10 py-9"
+      className="flex-row justify-center gap-8 px-8 pt-6 pb-8"
     >
-      <nav aria-label={`${title} sections`} className="sticky top-9 flex w-[210px] shrink-0 flex-col gap-3.5 self-start">
+      <nav aria-label={`${title} sections`} className="sticky top-6 flex w-[210px] shrink-0 flex-col gap-3 self-start">
         <h2 className="px-1 font-serif text-column-title font-medium text-foreground">{title}</h2>
         <TabsList>
           {sections.map(({ id, name, icon: Icon, count }) => (

@@ -9,7 +9,7 @@ import { chatColumn, Composer, type ComposerHandle } from "./Composer";
 import { MessageItem } from "./MessageItem";
 import type { MessageView } from "../../protocol/eventStore";
 import { MiniMePill } from "../minime/MiniMePill";
-import { ItemMenu } from "../shell/ItemMenu";
+import { ConversationMenu } from "../shell/ItemMenu";
 import { ExistingFilesProvider } from "./existingFiles";
 import { MainSheet, SheetHeader, ToolSwitch, type ToolOption } from "../shell/Sheet";
 import { FeaturingProvider } from "../interactive/featuring";
@@ -181,14 +181,7 @@ export function ChatView({
               <SheetHeader
                 title={title}
                 titleAction={
-                  <ItemMenu
-                    name={title}
-                    rename={{ current: title, onRename }}
-                    remove={{
-                      question: `Delete "${title}" and its messages? This can't be undone.`,
-                      onDelete,
-                    }}
-                  />
+                  <ConversationMenu name={title} onRename={onRename} onDelete={onDelete} />
                 }
                 compact={panel !== null}
                 actions={
@@ -220,7 +213,7 @@ export function ChatView({
                 <div
                   ref={column}
                   className={cn(
-                    "flex flex-col gap-5.5 pt-8 pb-[150px]",
+                    "flex flex-col gap-6 pt-8 pb-[150px]",
                     chatColumn(panel !== null, "messages"),
                   )}
                 >

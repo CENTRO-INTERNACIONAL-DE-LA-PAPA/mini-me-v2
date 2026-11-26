@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import {
   BookOpenIcon,
   ChartColumnIcon,
-  ChevronRightIcon,
   DatabaseIcon,
   FileIcon,
   LightbulbIcon,
@@ -33,7 +32,7 @@ import { DOTS_HOVER } from "../shell/ItemMenu";
 import { useOpenFile } from "../documents/openDocument";
 import { isDocument } from "../files/files";
 import { MiniMePill } from "../minime/MiniMePill";
-import { ItemMenu } from "../shell/ItemMenu";
+import { ProjectMenu } from "../shell/ItemMenu";
 import { SheetPage, SheetSection } from "../shell/Sheet";
 import {
   findNamed,
@@ -48,7 +47,6 @@ import { ErrorText } from "../shell/ErrorText";
 interface Props {
   project: ProjectSummary;
   onOpenConversation: (conversationId: string, messageId: string) => void;
-  onOpenFiles: () => void;
   /** Called after a file was renamed, copied or deleted, so counts elsewhere can refresh. */
   onChanged: () => void;
   onOpenDocument: (assetId: string) => void;
@@ -72,7 +70,6 @@ const kindOf = (kind: string) =>
 export function OverviewView({
   project,
   onOpenConversation,
-  onOpenFiles,
   onChanged,
   onOpenDocument,
   onRenameProject,
@@ -122,7 +119,7 @@ export function OverviewView({
   }
 
   if (!overview) {
-    return error ? <ErrorText className="px-8 pt-14">{error}</ErrorText> : null;
+    return error ? <ErrorText className="px-8 pt-6">{error}</ErrorText> : null;
   }
 
   const miniMeOf = (id: string) => miniMes.find((m) => m.id === id);
@@ -135,21 +132,14 @@ export function OverviewView({
     <SheetPage
       title={project.name}
       titleAction={
-        <ItemMenu
-          name={project.name}
-          rename={{ current: project.name, onRename: onRenameProject }}
-          remove={{
-            question: `Delete "${project.name}"? Its Conversations and files are removed for good. This can't be undone.`,
-            onDelete: onDeleteProject,
-          }}
-        />
+        <ProjectMenu name={project.name} onRename={onRenameProject} onDelete={onDeleteProject} />
       }
       description={headerLine(overview)}
     >
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-start gap-4 max-lg:grid-cols-1">
         <div className="flex flex-col gap-4">
-          <Card aria-label="Summary" className="gap-2.5">
-            <h2 className="font-serif text-heading text-foreground">Where things stand</h2>
+          <Card aria-label="Summary" className="gap-3">
+            <h2 className="text-ui font-medium text-foreground">Where things stand</h2>
             {overview.summary ? (
               <p className="text-body whitespace-pre-line text-document-ink">
                 {summaryParts(overview.summary).map((part, index) => {
@@ -170,13 +160,13 @@ export function OverviewView({
                 No summary yet. Mini-Me can write one from this Project's Conversations.
               </p>
             )}
-            <div className="mt-1 flex items-center gap-3">
+            <div className="mt-1 flex items-center gap-2">
               <Hint
                 label="Sends the text of this Project's messages, not its files, to the AI model chosen in Settings."
                 disabled
               >
                 <Button
-                  variant="mini-me"
+                  variant="secondary"
                   size="sm"
                   disabled={writing || overview.conversations === 0}
                   onClick={updateSummary}
@@ -226,12 +216,6 @@ export function OverviewView({
 
         <SheetSection
           title="Latest outputs"
-          actions={
-            <Button variant="link" className="text-meta text-muted-foreground" onClick={onOpenFiles}>
-              Open Files
-              <ChevronRightIcon />
-            </Button>
-          }
         >
           {shown.length === 0 ? (
             <Empty>

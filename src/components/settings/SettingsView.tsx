@@ -97,6 +97,7 @@ const PAGES: Section<Page>[] = [
 /** Settings, opening at `initialPage`; the Developer page can clear `projectId`'s debug records. */
 export function SettingsView({
   onOpenAvatars,
+  onOpenComponents,
   onOpenWhatsNew,
   onOpenLicense,
   onOpenThirdParty,
@@ -104,6 +105,7 @@ export function SettingsView({
   projectId,
 }: {
   onOpenAvatars: () => void;
+  onOpenComponents: () => void;
   onOpenWhatsNew: () => void;
   onOpenLicense: () => void;
   onOpenThirdParty: () => void;
@@ -149,6 +151,7 @@ export function SettingsView({
             settings={settings}
             onChanged={refresh}
             onOpenAvatars={onOpenAvatars}
+            onOpenComponents={onOpenComponents}
             projectId={projectId}
           />
         )}
@@ -247,7 +250,7 @@ function AccountCard({ render, children }: { render?: ReactElement; children: Re
 /** A green or grey dot with its label, for whether something is set up. */
 function StatusLabel({ on, children }: { on: boolean; children: ReactNode }) {
   return (
-    <span className="flex items-center gap-1.5 text-meta text-ink-2">
+    <span className="flex items-center gap-2 text-meta text-ink-2">
       <StatusDot className={on ? "bg-success" : undefined} />
       {children}
     </span>
@@ -282,11 +285,13 @@ function DeveloperPage({
   settings,
   onChanged,
   onOpenAvatars,
+  onOpenComponents,
   projectId,
 }: {
   settings: AiSettings;
   onChanged: () => void;
   onOpenAvatars: () => void;
+  onOpenComponents: () => void;
   projectId?: string;
 }) {
   return (
@@ -304,7 +309,15 @@ function DeveloperPage({
         label="Avatars"
         description="Every avatar base, face, accessory and colour, to try combinations."
       >
-        <Button variant="outline" onClick={onOpenAvatars}>
+        <Button variant="secondary" onClick={onOpenAvatars}>
+          Open
+        </Button>
+      </SettingRow>
+      <SettingRow
+        label="Components"
+        description="Every shared component in each of its states, to check the visual style."
+      >
+        <Button variant="secondary" onClick={onOpenComponents}>
           Open
         </Button>
       </SettingRow>
@@ -384,7 +397,7 @@ function FeatureFlagsSection() {
                   trailing={
                     <>
                       <StatusLabel on>On</StatusLabel>
-                      <Button variant="outline" onClick={() => void turnOff(flag.id)}>
+                      <Button variant="secondary" onClick={() => void turnOff(flag.id)}>
                         Turn off
                       </Button>
                     </>
@@ -461,14 +474,14 @@ function QuartoForm({ status }: { status: QuartoStatus }) {
           Save
         </Button>
         {status.chosen && (
-          <Button type="button" variant="outline" onClick={() => void change(null)}>
+          <Button type="button" variant="secondary" onClick={() => void change(null)}>
             Clear
           </Button>
         )}
         <Hint label="Check again">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="icon"
             aria-label="Check again"
             onClick={recheckQuarto}
@@ -963,12 +976,12 @@ function Ai2Row() {
           <>
             <StatusLabel on={signedIn}>{signedIn ? "Signed in" : "Not signed in"}</StatusLabel>
             {signedIn ? (
-              <Button variant="outline" onClick={() => run(api.ai2SignOut)}>
+              <Button variant="secondary" onClick={() => run(api.ai2SignOut)}>
                 Sign out
               </Button>
             ) : (
               status?.state !== "pending" && (
-                <Button variant="outline" onClick={() => run(api.ai2StartSignIn)}>
+                <Button variant="secondary" onClick={() => run(api.ai2StartSignIn)}>
                   Sign in
                 </Button>
               )
@@ -1039,7 +1052,7 @@ function ThresholdRow({ settings, onChanged }: { settings: AiSettings; onChanged
             setStatus(null);
           }}
         />
-        <Button type="submit" variant="outline" disabled={!valid || value === settings.threshold}>
+        <Button type="submit" variant="secondary" disabled={!valid || value === settings.threshold}>
           Save
         </Button>
       </SettingRow>
@@ -1141,7 +1154,7 @@ function DebugDataRow({ projectId }: { projectId?: string }) {
       status={status}
     >
       <ConfirmButton
-        trigger={<Button variant="outline" disabled={!projectId} />}
+        trigger={<Button variant="secondary" disabled={!projectId} />}
         question="Delete every debug record of this Project?"
         action="Clear"
         onConfirm={() => void clear()}
@@ -1162,7 +1175,7 @@ function SidecarLogRow() {
       error={error}
     >
       <Button
-        variant="outline"
+        variant="secondary"
         onClick={() => {
           setError(null);
           api.openSidecarLog().catch((e) => setError(errorMessage(e)));
@@ -1232,7 +1245,7 @@ function KeyRow({
         trailing={
           <>
             <StatusLabel on={saved}>{saved ? "Connected" : "Not connected"}</StatusLabel>
-            <Button variant="outline" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+            <Button variant="secondary" aria-expanded={editing} onClick={() => setEditing(!editing)}>
               {saved ? "Edit" : "Add key"}
             </Button>
           </>

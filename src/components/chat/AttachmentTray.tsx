@@ -69,7 +69,7 @@ function ImageAttachment({
 
   return (
     <figure className="relative w-20">
-      <div className="size-20 overflow-hidden rounded-lg bg-muted">
+      <div className="size-20 overflow-hidden rounded-xl bg-muted">
         {url && <img src={url} alt={asset.name} className="size-full object-cover" />}
       </div>
       <Hint label={asset.name}>

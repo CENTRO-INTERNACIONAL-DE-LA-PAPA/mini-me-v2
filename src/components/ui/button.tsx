@@ -8,29 +8,22 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/85",
-        // Floating sheets group with fills, not borders: outline and secondary are both a well.
-        outline:
-          "bg-well text-foreground hover:bg-well-hover aria-expanded:bg-well-hover aria-pressed:bg-primary aria-pressed:text-primary-foreground",
         secondary:
-          "bg-well text-secondary-foreground hover:bg-well-hover aria-expanded:bg-well-hover aria-pressed:bg-primary aria-pressed:text-primary-foreground",
-        // Inside a Mini-Me's surface: white with a ring in its edge colour (`--mm-edge`); a
-        // hairline ring elsewhere.
-        "mini-me":
-          "bg-card text-foreground border border-card-edge hover:bg-wash aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:shadow-none",
+          "border-card-edge bg-card text-foreground hover:bg-press-hover aria-expanded:bg-press-hover aria-pressed:border-transparent aria-pressed:bg-pressed",
         ghost:
-          "text-ink-2 hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground",
+          "text-ink-2 hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground aria-pressed:bg-well-hover aria-pressed:text-foreground",
         destructive: "bg-transparent text-destructive hover:opacity-70",
         link: "h-auto! px-0! font-normal text-foreground underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 gap-1.5 px-4",
-        xs: "h-6 gap-1 px-2.5 text-meta [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1.5 px-3.5 text-control",
+        default: "h-9 gap-2 px-4",
+        xs: "h-6 gap-1 px-2.5 text-meta [&_svg:not([class*='size-'])]:size-3.5",
+        sm: "h-8 gap-2 px-3 text-control",
         lg: "h-10 gap-2 px-5",
-        icon: "size-7.5 rounded-lg",
-        "icon-xs": "size-6 rounded-lg [&_svg:not([class*='size-'])]:size-3.5",
-        "icon-sm": "size-7 rounded-lg",
-        "icon-lg": "size-9 rounded-lg",
+        icon: "size-7.5",
+        "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-sm": "size-7",
+        "icon-lg": "size-9",
       },
     },
     defaultVariants: {

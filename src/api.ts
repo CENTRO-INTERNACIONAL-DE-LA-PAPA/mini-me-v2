@@ -35,7 +35,6 @@ import type {
   ProtocolEvent,
   ProviderId,
   ProjectActivity,
-  RecentConversation,
   RunningReply,
   SavedDefinition,
   SendMessageInput,
@@ -90,7 +89,6 @@ export const api = {
   getMessageStatus: (project_id: Uuid, message_id: Uuid) =>
     invoke<MessageStatus | null>("get_message_status", { project_id, message_id }),
   /** The most recently active Conversations across all Projects, newest first. */
-  listRecentConversations: () => invoke<RecentConversation[]>("list_recent_conversations"),
   listProjectActivity: () => invoke<ProjectActivity[]>("list_project_activity"),
 
 

@@ -1,9 +1,9 @@
 import { ListRow } from "../shell/ListRow";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { BackLink, HeaderActions } from "../shell/Sheet";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { ArrowRightIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { ArrowRightIcon, ChevronRightIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { MiniMe } from "../../protocol/types";
 import { count } from "../../lib/format";
@@ -40,30 +40,21 @@ export function EditorHeader({
   onBack,
 }: HeaderProps) {
   return (
-    <div className="flex flex-col gap-4 pt-6 pr-6 pl-8">
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-        <div className="flex min-w-0 flex-col gap-3.5">
-          <Button
-            variant="link"
-            className="w-fit gap-1.5 text-control text-muted-foreground"
-            onClick={onBack}
-          >
-            <ChevronLeftIcon />
-            {back}
-          </Button>
-          <div className="flex min-w-0 items-center gap-4">
-            {icon && <span className="flex shrink-0 text-foreground">{icon}</span>}
-            <div className="grid min-w-0 gap-1">
-              <h1 className="truncate font-serif text-identity font-medium text-foreground">
-                {title}
-              </h1>
-              {subtitle && <p className="truncate text-ui text-muted-foreground">{subtitle}</p>}
-            </div>
+    <div className="flex flex-col gap-4 px-8 pt-6">
+      <header className="flex min-w-0 flex-col gap-3">
+        <BackLink label={back} onBack={onBack} />
+        <div className="flex min-w-0 items-center gap-3">
+          {icon && <span className="flex shrink-0 text-foreground">{icon}</span>}
+          <div className="grid min-w-0 gap-1">
+            <h1 className="truncate font-serif text-identity font-medium text-foreground">
+              {title}
+            </h1>
+            {subtitle && <p className="truncate text-ui text-muted-foreground">{subtitle}</p>}
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {tabs}
-          {actions}
+          <HeaderActions>
+            {tabs}
+            {actions}
+          </HeaderActions>
         </div>
       </header>
       {problems && (
@@ -109,7 +100,7 @@ export function List({ children }: { children: ReactNode }) {
 /** A Trait's mark, the same icon its Trait Steps show. */
 export function TraitIcon({ icon }: { icon: string | null }) {
   const Icon = traitIcon(icon);
-  return <Icon aria-hidden className="size-5 shrink-0 text-ink-2" strokeWidth={1.6} />;
+  return <Icon aria-hidden className="size-4.5 shrink-0 text-ink-2" />;
 }
 
 /** One Mini-Me or Trait in a list, opening its editor. */
@@ -162,7 +153,7 @@ export function MiniMeCard({
         miniMe={coloured}
         render={<button type="button" onClick={onOpen} />}
         className={cn(
-          "flex h-full w-full cursor-pointer flex-col gap-4.5 rounded-2xl p-5 text-left",
+          "flex h-full w-full cursor-pointer flex-col gap-3 rounded-2xl p-5 text-left",
           "transition-colors duration-150 ease-out hover:bg-tint",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         )}
@@ -171,7 +162,7 @@ export function MiniMeCard({
           <MiniMeAvatar miniMe={miniMe} size={56} />
           <OriginBadge builtIn={miniMe.built_in} />
         </span>
-        <span className="flex flex-1 flex-col gap-1.5">
+        <span className="flex flex-1 flex-col gap-1">
           <span className="font-serif text-tool-title font-medium text-foreground">
             {miniMe.name}
           </span>

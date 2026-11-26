@@ -13,7 +13,6 @@ import {
   BaseEdge,
   Controls,
   EdgeLabelRenderer,
-  getSmoothStepPath,
   Handle,
   Position,
   ReactFlow,
@@ -53,6 +52,7 @@ import {
 } from "./workflowEdit";
 import {
   EMPTY_SLOT,
+  GAP_Y,
   layoutWorkflow,
   type LayoutEdge,
   type LayoutNode,
@@ -297,22 +297,22 @@ function StepCard({
       {...press}
       className={cn(
         press.className,
-        "group/step flex items-center gap-2.5 rounded-xl px-3.5",
+        "flex items-center gap-3 rounded-xl px-4",
         step.type === "trait"
-          ? "h-10 w-[180px] justify-center border border-edge bg-wash"
-          : "h-14 w-[220px] border border-transparent bg-card",
+          ? "h-10 w-[220px] justify-center border border-edge bg-wash"
+          : "h-14 w-[220px] border border-border bg-card",
         editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
-        selectedId === step.id && "border-foreground outline-4 outline-tint",
+        selectedId === step.id &&
+          (step.type === "trait" ? "border-(--mm-solid)" : "border-foreground"),
       )}
-      data-selected={selectedId === step.id || undefined}
     >
       <Ends />
       <Icon
         aria-hidden
-        className="size-4 shrink-0 text-foreground group-data-selected/step:text-(--mm-ink,var(--foreground))"
+        className="size-4.5 shrink-0 text-foreground"
       />
       <span className="grid min-w-0 gap-px">
-        <span className="truncate text-ui font-semibold">{name}</span>
+        <span className="truncate text-ui font-medium">{name}</span>
         {meta && <span className="truncate text-meta text-muted-foreground">{meta}</span>}
       </span>
     </div>
@@ -354,9 +354,9 @@ function Pill({
       {...press}
       className={cn(
         press.className,
-        "flex h-8 w-[180px] items-center justify-center gap-2 rounded-full bg-card px-3 text-control font-medium",
+        "flex h-8 w-[220px] items-center justify-center gap-2 rounded-full border border-border-strong px-3 text-control font-medium whitespace-nowrap",
         step && (editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"),
-        step && selectedId === step.id && "border-foreground outline-4 outline-tint",
+        step && selectedId === step.id && "border-foreground",
         className,
       )}
     >
@@ -379,8 +379,8 @@ function EndPill({ text }: { text: string }) {
   const { miniMe } = useCanvas();
   return (
     <Pill>
-      <MiniMeAvatar miniMe={miniMe} size={18} />
-      {text}
+      <MiniMeAvatar miniMe={miniMe} size={24} />
+      <span className="truncate">{text}</span>
     </Pill>
   );
 }
@@ -392,7 +392,7 @@ function ControlNode({ data }: NodeProps<LayoutNode>) {
     step.type === "loop" ? RepeatIcon : step.type === "parallel" ? SplitIcon : GitForkIcon;
   return (
     <Pill step={step}>
-      <Icon className="size-3.5 shrink-0" strokeWidth={1.4} />
+      <Icon className="size-4 shrink-0" />
       <span className="truncate">{pillText(step)}</span>
     </Pill>
   );
@@ -451,7 +451,14 @@ const NODE_TYPES = {
 function ConnectorEdge(props: EdgeProps<LayoutEdge>) {
   const { drag, editable, steps } = useCanvas();
   const data: LayoutEdgeData = props.data ?? {};
-  const [path, labelX, labelY] = getSmoothStepPath({ ...props, borderRadius: 0 });
+  const { sourceX, sourceY, targetX, targetY } = props;
+  const turnY = targetY - GAP_Y / 2;
+  const path = `M ${sourceX} ${sourceY} V ${turnY} H ${targetX} V ${targetY}`;
+  const labelY = (turnY + targetY) / 2;
+  const intoJoin = props.target.endsWith(":join");
+  const plusX = intoJoin ? sourceX : targetX;
+  const plusY =
+    sourceX === targetX ? (sourceY + targetY) / 2 : intoJoin ? (sourceY + turnY) / 2 : labelY;
   const key = data.slot ? JSON.stringify(data.slot) : null;
   const blocked =
     drag?.payload.kind === "move" && data.slot && isSlotInside(steps, drag.payload.id, data.slot);
@@ -464,7 +471,7 @@ function ConnectorEdge(props: EdgeProps<LayoutEdge>) {
           <span
             className="absolute text-meta text-muted-foreground"
             style={{
-              transform: `translate(-50%, -100%) translate(${props.targetX}px, ${props.targetY - 6}px)`,
+              transform: `translate(6px, -50%) translate(${targetX}px, ${labelY}px)`,
             }}
           >
             {data.label}
@@ -478,7 +485,7 @@ function ConnectorEdge(props: EdgeProps<LayoutEdge>) {
               drag.over === key && "size-6 border-primary bg-primary text-primary-foreground",
             )}
             style={{
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              transform: `translate(-50%, -50%) translate(${plusX}px, ${plusY}px)`,
               pointerEvents: "all",
             }}
           >

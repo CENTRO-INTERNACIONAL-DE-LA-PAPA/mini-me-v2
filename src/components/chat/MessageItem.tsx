@@ -118,7 +118,7 @@ export const MessageItem = memo(function MessageItem({
   );
 
   const attachments = message.attachments.length > 0 && (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-2">
       {message.attachments.map((asset) => (
         <AttachmentChip key={asset.id} asset={asset} onOpen={() => open(asset.id)} />
       ))}
@@ -156,7 +156,7 @@ export const MessageItem = memo(function MessageItem({
 
   if (fromUser) {
     return (
-      <article data-message-id={message.id} className="flex max-w-[520px] flex-col items-end gap-1.5 self-end">
+      <article data-message-id={message.id} className="flex max-w-[520px] flex-col items-end gap-1 self-end">
         <div className="relative flex flex-col gap-2 rounded-2xl rounded-br-sm bg-bubble [--card-edge:transparent] px-4 py-3 text-foreground">
           {text}
           {attachments}
@@ -174,17 +174,17 @@ export const MessageItem = memo(function MessageItem({
     (replyDebug.reply_input || replyDebug.reply_details || replyDebug.reply_tools);
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <MiniMeSurface
         miniMe={authorMiniMe}
         render={<article />}
         data-message-id={message.id}
         className={cn(
           "relative flex flex-col text-foreground",
-          compact ? "gap-2.5 px-3 py-2.5" : "gap-3.5 px-4.5 py-4",
+          compact ? "gap-3 p-3" : "gap-3 p-4",
         )}
       >
-        <header className="flex items-center gap-2.5 text-meta">
+        <header className="flex items-center gap-3 text-meta">
           <MiniMeAvatar
             miniMe={authorMiniMe}
             size={compact ? 20 : 40}
