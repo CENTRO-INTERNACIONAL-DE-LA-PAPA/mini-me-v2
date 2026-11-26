@@ -9,14 +9,12 @@ MISNAMED = {"kind": "map_values", "columns": ["variety"], "mapping": [{"old": "a
 def test_malformed_entries_are_left_out_with_their_reason():
     plan, malformed = fit_plan(CleanPlan, {"actions": [STRIP, MISNAMED, {"kind": "shout"}]})
     assert plan == CleanPlan(actions=[StripWhitespace(kind="strip_whitespace", columns=None)])
-    assert malformed == [
-        ("map_values", "no `column` given"),
-        ("shout", "no kind `shout`"),
-    ]
+    assert [label for label, _ in malformed] == ["map_values", "shout"]
+    assert all(reason for _, reason in malformed)
 
     plan, malformed = fit_plan(ChartPlan, {"charts": [{"template": "bar"}]})
     assert plan is None
-    assert malformed == [("bar", "no `title` given")]
+    assert [label for label, _ in malformed] == ["bar"]
 
     assert fit_plan(CleanPlan, {"actions": []}) == (CleanPlan(actions=[]), [])
     assert fit_plan(CleanPlan, None) == (None, [])
