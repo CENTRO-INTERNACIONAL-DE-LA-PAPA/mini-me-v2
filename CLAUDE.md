@@ -134,28 +134,42 @@ Risks, follow-ups, decisions the reviewer should know about, screenshots.
 
 ## Code conventions
 
-- Rust unit tests stay inline at the end of each file in `#[cfg(test)] mod tests { … }`.
-  Do not move tests into separate folders or files. Frontend tests are `*.test.ts` files
-  next to the code they test. Sidecar Python tests use pytest and live in `sidecar/tests/`
-  as `test_<module>.py`; run them with `cd sidecar && uv run pytest`.
 - Put imports at the top of the file. Import inside a function or condition only for a
   reason you can name, and state it in a comment: an optional or platform-specific module,
   a package that is slow to load and that most runs never use, or an import that must run
   after something else (such as reserving stdout in the sidecar). In TypeScript the
   equivalent is a dynamic `import()`, used only to split off code that loads on demand.
-- A test checks our own behaviour. Do not write tests that pin a version number, restate data
-  (the built-in library, lists of names), check what a dependency already guarantees (that serde
-  round-trips a derived type, that pydantic validates a field), drive a fake AI model, or only
-  check a constant or a one-line lookup. Testing how our code uses a dependency is fine.
-- Tests of the built-in Mini-Mes and Traits check their format, never their content, so editing
-  them never breaks a test.
-- Cases of one rule go in one test, not one test each. No skipped or `#[ignore]`d tests that
-  nothing runs.
 - Write a block of code once: its second copy becomes a helper in the file of its concern, never
   in a catch-all module.
 - Read rows and other positional data into named structs or types, not tuples of more than three.
 - A function that does several things in turn is split into named steps.
 - Delete code nothing calls, exports nothing imports, and code that exists only for a test.
+
+## Tests
+
+No test by default. A test exists only to catch a failure that using the app would not show,
+or that would cost data. Write or keep one only when it guards against:
+
+1. **Lost or damaged data:** saving and loading Projects, database migrations, replaying events,
+   writing files.
+2. **The processes disagreeing:** the protocol fixtures shared by the UI, the Rust core and the
+   sidecar.
+3. **Crashes on input the app does not control:** the user's files (CSV, Excel), malformed model
+   answers, broken user-made library entries, a sidecar that stops.
+4. **Safety:** Project-folder confinement, secrets never leaking.
+5. **Silently wrong results the user relies on:** the numbers a data Trait computes.
+
+Everything else is not tested: UI rendering, wording and labels; happy paths that using the
+feature once would show working; what the compiler or `tsc` catches; version numbers,
+constants, one-line lookups and the content of the built-in library; what a dependency already
+guarantees (testing how our code uses it is fine); anything that needs a fake AI model.
+
+- At most one test per guarded behaviour, with the smallest input that shows it; cases of one
+  rule go in one test.
+- No skipped or `#[ignore]`d tests, and no code that exists only for a test.
+- Rust tests stay inline at the end of each file in `#[cfg(test)] mod tests { … }`. Frontend
+  tests are `*.test.ts` files next to the code they test. Sidecar tests use pytest and live in
+  `sidecar/tests/` as `test_<module>.py`.
 
 ## Comments
 

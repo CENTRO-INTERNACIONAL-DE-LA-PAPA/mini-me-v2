@@ -134,8 +134,5 @@ rules:
       system-level prerequisites.
     - Keep Trait-provider specifics behind the Trait adapter interface.
   tasks:
-    - Include minimal tests only - Rust unit tests, frontend tests for core logic, and
-      concise pytest tests for the sidecar's Python tools (functions that compute results,
-      such as data reading, checks and cleaning; not adapters' model calls) - until the
-      overall architecture is confirmed as stable.
+    - Include tests only where CLAUDE.md's Tests section calls for them.
     - Each task is a small, independently verifiable unit of work.
