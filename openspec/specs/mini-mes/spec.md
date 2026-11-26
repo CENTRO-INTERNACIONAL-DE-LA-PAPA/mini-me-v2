@@ -24,8 +24,8 @@ The library holds built-in Traits, which are read-only, and user-made Traits, wh
 creates, edits and deletes as the Library editors describe. The built-in Traits are
 *Summarize*, *Assist*, *Find Papers*, *Theorize*, *Scout*, *Refute*, *Plan*, *Wonder*,
 *Experiment*, *Profile Data*, *Validate Data*, *Clean Data*, *Join Data*, *Plot*, *Describe
-Variables*, *Find Correlations*, *Detect Outliers* and *Find Clusters*, and the placeholder
-Traits.
+Variables*, *Find Correlations*, *Detect Outliers*, *Find Clusters*, *Compare Groups*, *Find
+Drivers*, *Check Confounders* and *Analyze Trends*, and the placeholder Traits.
 
 #### Scenario: Built-in Traits
 - **WHEN** the app starts
@@ -36,7 +36,9 @@ Traits.
   `data-clean`), *Join Data* (adapter `data-join`), *Plot* (adapter `data-plot`), *Describe
   Variables* (adapter `data-describe-variables`), *Find Correlations* (adapter
   `data-correlations`), *Detect Outliers* (adapter `data-outliers`), *Find Clusters* (adapter
-  `data-clusters`), and the placeholder Traits (adapter `echo`)
+  `data-clusters`), *Compare Groups* (adapter `data-compare-groups`), *Find Drivers* (adapter
+  `data-drivers`), *Check Confounders* (adapter `data-confounders`), *Analyze Trends* (adapter
+  `data-trends`), and the placeholder Traits (adapter `echo`)
 
 #### Scenario: Components of the built-in Traits
 - **WHEN** the app starts
@@ -119,7 +121,7 @@ parts SHALL NOT be offered, and an unknown part id SHALL draw nothing for its la
 - **THEN** no Held item is offered when picking a Mini-Me's avatar
 
 ### Requirement: Predefined Mini-Mes
-Mini-Me SHALL ship with seventeen Mini-Mes:
+Mini-Me SHALL ship with eighteen Mini-Mes:
 - **Scribe:** "Summarizes your messages and the files you reference"; one Step running
   *Summarize*.
 - **Assistant:** "Answers general questions and requests that no other Mini-Me specializes
@@ -156,14 +158,17 @@ Mini-Me SHALL ship with seventeen Mini-Mes:
 - **Exploratory Data Analysis:** "Explores a data table: describes its columns, finds
   correlations and outliers, and groups similar rows when that helps"; the Workflow
   described by the Exploratory Data Analysis requirement below.
+- **Diagnostic Analytics:** "Looks into why something happened in a data table: compares
+  groups, finds what goes with an outcome and checks for confounders, or follows a trend over
+  time"; the Workflow described by the Diagnostic Analytics requirement below.
 
 Their colours follow DESIGN.md's Mini-Me colour family, and no two share a colour.
 
 #### Scenario: Mini-Mes available
 - **WHEN** the user types `@` in the composer
 - **THEN** Scribe, Assistant, Researcher, Theorist, Explorer, Skeptic, Planner, Inquirer,
-  Experimenter, Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist, Investigator
-  and Exploratory Data Analysis are offered
+  Experimenter, Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist, Investigator,
+  Exploratory Data Analysis and Diagnostic Analytics are offered
 
 #### Scenario: General question
 - **WHEN** the user sends "@Assistant what is late blight?"
@@ -339,13 +344,13 @@ line typed with Shift+Enter SHALL be sent as a line break.
 ### Requirement: Predefined Mini-Mes have groups
 The predefined Mini-Mes SHALL have these groups: Thinking for Assistant, Scribe, Explorer,
 Skeptic, Planner, Inquirer, Experimenter and Investigator; Literature for Researcher and
-Theorist; Data for Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist and Exploratory Data
-Analysis.
+Theorist; Data for Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist, Exploratory Data
+Analysis and Diagnostic Analytics.
 
 #### Scenario: Data Mini-Mes
 - **WHEN** the user types "@" alone
-- **THEN** Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist and Exploratory Data
-  Analysis are listed under Data
+- **THEN** Profiler, Validator, Curator, Linker, Plotter, CIP's Archivist, Exploratory Data
+  Analysis and Diagnostic Analytics are listed under Data
 
 ### Requirement: Exploratory Data Analysis explores a table in Steps
 The Exploratory Data Analysis Mini-Me's Workflow SHALL run *Profile Data*, *Describe
@@ -373,3 +378,26 @@ has no Steps.
 #### Scenario: Every Step reads the same table
 - **WHEN** the message references `field-trial.csv`
 - **THEN** every Step of the run reads `field-trial.csv`
+
+### Requirement: Diagnostic Analytics asks, then picks its method
+The Diagnostic Analytics Mini-Me's Workflow SHALL run three conditions in order: "clear"
+(no Steps) or "unclear" (a written-answer approval whose questions the AI model writes); then
+"groups" (*Compare Groups*), "drivers" (*Find Drivers*, then *Check Confounders*) or "trend"
+(*Analyze Trends*); then "chart" (*Plot*) or "no chart" (no Steps), as for Exploratory Data
+Analysis.
+
+#### Scenario: A clear groups question
+- **WHEN** the user sends "@Diagnostic Analytics #field-trial.csv does yield_t_ha differ
+  between sites?"
+- **THEN** the first condition answers "clear", the second "groups", *Compare Groups* runs, and
+  no approval is shown
+
+#### Scenario: An unclear question
+- **WHEN** the user sends "@Diagnostic Analytics why is yield low? #field-trial.csv"
+- **THEN** the first condition answers "unclear", and the reply waits at an approval with
+  questions about the outcome and the possible drivers
+
+#### Scenario: Drivers, then confounders
+- **WHEN** the user's answer says "yield_t_ha; check rainfall_mm, with altitude_m as a control"
+- **THEN** the second condition answers "drivers", and *Find Drivers* runs, then *Check
+  Confounders* with `rainfall_mm` as its focus and `altitude_m` as a control
