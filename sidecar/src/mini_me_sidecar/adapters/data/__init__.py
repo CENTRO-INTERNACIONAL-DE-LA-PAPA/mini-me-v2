@@ -126,6 +126,21 @@ class FindClusters(Adapter):
         await replies.find_clusters(ctx, str(input.get("text", "")))
 
 
+class CompareGroups(Adapter):
+    info = AdapterInfo(
+        id="data-compare-groups",
+        description="Compares a number column between groups, with scipy.",
+        input_schema=TEXT_INPUT,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.compare_groups(ctx, str(input.get("text", "")))
+
+
 class PlotData(Adapter):
     info = AdapterInfo(
         id="data-plot",

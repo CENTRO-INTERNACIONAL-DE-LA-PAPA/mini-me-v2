@@ -1,0 +1,32 @@
+{
+  "name": "estimates",
+  "description": "Each category's estimate as a dot, with a line from its lower to its upper bound.",
+  "internal": true,
+  "slots": {"category": {"types": ["text", "boolean", "number"]}, "value": {"types": ["number"]}},
+  "value_axis": "x",
+  "chart": {
+    "datasets": [{"name": "estimates", "operations": []}],
+    "marks": [
+      {"mark": "ruleX", "dataset": null, "values": [0]},
+      {
+        "mark": "ruleY",
+        "dataset": "estimates",
+        "channels": [
+          {"name": "y", "column": "{category}"},
+          {"name": "x1", "column": "{value}_low"},
+          {"name": "x2", "column": "{value}_high"}
+        ]
+      },
+      {
+        "mark": "dot",
+        "dataset": "estimates",
+        "channels": [
+          {"name": "y", "column": "{category}"},
+          {"name": "x", "column": "{value}"},
+          {"name": "r", "value": 4}
+        ]
+      }
+    ],
+    "scales": [{"scale": "x", "label": "{value}"}, {"scale": "y", "label": ""}]
+  }
+}

@@ -2,6 +2,7 @@ from mini_me_sidecar.adapters.asta import FindPapers, Theorize
 from mini_me_sidecar.adapters.base import Adapter, AdapterInfo
 from mini_me_sidecar.adapters.data import (
     CleanData,
+    CompareGroups,
     DescribeVariables,
     DetectOutliers,
     FindClusters,
@@ -33,6 +34,7 @@ def load_adapters() -> dict[str, Adapter]:
         FindCorrelations(),
         DetectOutliers(),
         FindClusters(),
+        CompareGroups(),
         SearchDataverse(),
     ]
     by_id: dict[str, Adapter] = {}

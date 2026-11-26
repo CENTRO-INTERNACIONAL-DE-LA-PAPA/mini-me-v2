@@ -238,6 +238,24 @@ class ClusterPlan(ColumnsPlan):
     clusters: int | None = None
 
 
+class GroupsPlan(BaseModel):
+    """The number column to compare (`value`), the column whose values form the groups
+    (`groups`), and the reference group only when the message names one."""
+
+    value: str
+    groups: str
+    reference: str | None = None
+
+
+def role_problem(frame: pd.DataFrame, column: str, role: str, kinds: tuple[str, ...]) -> str | None:
+    if column not in frame.columns:
+        return f"The table has no column `{column}` for the {role}."
+    kind = column_type(frame[column])
+    if kind not in kinds:
+        return f"`{column}` is a {kind} column, and the {role} needs {' or '.join(kinds)}."
+    return None
+
+
 def pick_columns(
     frame: pd.DataFrame, named: list[str], kinds: tuple[str, ...]
 ) -> tuple[list[str], list[tuple[str, str]]]:

@@ -11,12 +11,14 @@ from mini_me_sidecar.adapters.data.catalogue import (
     CleanPlan,
     ClusterPlan,
     ColumnsPlan,
+    GroupsPlan,
     CorrelationPlan,
     JoinPlan,
     OutlierPlan,
     describe_entry,
     pick_columns,
     problem,
+    role_problem,
 )
 from mini_me_sidecar.adapters.data.charts import ChartDescription
 from mini_me_sidecar.adapters.data.templates import (
@@ -34,6 +36,7 @@ from mini_me_sidecar.adapters.data.clean import apply_actions, log_frame
 from mini_me_sidecar.adapters.data.clusters import cluster
 from mini_me_sidecar.adapters.data.correlations import compared, correlations
 from mini_me_sidecar.adapters.data.describe import describe
+from mini_me_sidecar.adapters.data.groups import compare
 from mini_me_sidecar.adapters.data.join import join, shared_key
 from mini_me_sidecar.adapters.data.outliers import detect
 from mini_me_sidecar.adapters.data.plot import ChartResult, build_chart, chart_text
@@ -389,6 +392,81 @@ async def find_clusters(ctx: CallContext, text: str) -> None:
     source, source_id = (saved["name"], saved["asset_id"]) if saved else (None, None)
     await _draw(ctx, points, scatter, source, source_id)
     _write_ignored(ctx, malformed + left_out, "I left these out:")
+
+
+ASSOCIATION = "This shows an association, not a cause."
+
+GROUPING = ("text", "boolean", "number")
+
+
+async def compare_groups(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, _ = await choose(ctx, GroupsPlan, text, [describe(table)])
+    _check_roles(table, [(plan.value, "value", ("number",)), (plan.groups, "groups", GROUPING)])
+    ctx.progress(f"Comparing groups in {table.name}")
+    found = await WORKERS.run(ctx, compare, table.frame, plan.value, plan.groups, plan.reference)
+    others = found.table.iloc[1:]
+    top = others.iloc[0]
+    ctx.write(
+        _table_note(tables)
+        + f"Compared `{plan.value}` between {len(found.table)} groups of `{plan.groups}`, each "
+        + f"against `{found.reference}`. The largest difference is `{top['Group']}`'s, "
+        + f"{top['Difference']:+.3g} (95% interval {top['Low']:.3g} to {top['High']:.3g}, "
+        + f"p = {top['p-value']:.2g})."
+        + (
+            " Left out for having fewer than two values: "
+            + ", ".join(f"`{g}`" for g in found.left_out)
+            + "."
+            if found.left_out
+            else ""
+        )
+        + f" {ASSOCIATION}\n\n"
+    )
+    await show_frame(
+        ctx,
+        found.table,
+        f"{plan.value} by {plan.groups}",
+        results_name=f"{table.stem}-group-comparison.csv",
+    )
+    source = table.name if table.source_id else None
+    differences = _estimates(others["Group"], others["Difference"], others["Low"], others["High"])
+    title = f"Difference in {plan.value} from {found.reference}"
+    await _draw(ctx, differences, _estimates_chart(title), source, table.source_id)
+    box = ChartChoice.model_validate(
+        {
+            "template": "box",
+            "title": f"{plan.value} by {plan.groups}",
+            "category": plan.groups,
+            "value": plan.value,
+        }
+    )
+    await _draw(ctx, table.frame, box, source, table.source_id)
+
+
+def _check_roles(table: Table, roles: list[tuple[str, str, tuple[str, ...]]]) -> None:
+    for column, role, kinds in roles:
+        if reason := role_problem(table.frame, column, role, kinds):
+            raise TraitError("column_role", reason)
+
+
+def _estimates(
+    labels: pd.Series, estimates: pd.Series, low: pd.Series, high: pd.Series
+) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "term": labels.to_numpy(),
+            "estimate": estimates.to_numpy(),
+            "estimate_low": low.to_numpy(),
+            "estimate_high": high.to_numpy(),
+        }
+    )
+
+
+def _estimates_chart(title: str) -> ChartChoice:
+    return ChartChoice.model_validate(
+        {"template": "estimates", "title": title, "category": "term", "value": "estimate"}
+    )
 
 
 async def _draw(
