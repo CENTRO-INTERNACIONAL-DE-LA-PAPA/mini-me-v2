@@ -52,8 +52,10 @@ def compare(frame: pd.DataFrame, value: str, groups: str, reference: str | None)
 
 def _row(group: str, values: np.ndarray, base: np.ndarray | None) -> dict[str, object]:
     row: dict[str, object] = {"Group": group, "Count": len(values), "Mean": float(values.mean())}
-    if base is None:
-        return row
+    return row if base is None else row | difference(values, base)
+
+
+def difference(values: np.ndarray, base: np.ndarray) -> dict[str, float]:
     interval = stats.bootstrap(
         (values, base),
         lambda a, b, axis: a.mean(axis=axis) - b.mean(axis=axis),
@@ -62,7 +64,7 @@ def _row(group: str, values: np.ndarray, base: np.ndarray | None) -> dict[str, o
         vectorized=True,
         rng=np.random.default_rng(0),
     ).confidence_interval
-    return row | {
+    return {
         "Difference": float(values.mean() - base.mean()),
         "Low": float(interval.low),
         "High": float(interval.high),

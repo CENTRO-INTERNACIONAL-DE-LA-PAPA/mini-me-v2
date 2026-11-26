@@ -12,11 +12,12 @@ from mini_me_sidecar.adapters.data.catalogue import (
     ClusterPlan,
     ColumnsPlan,
     ConfoundersPlan,
+    CorrelationPlan,
     DriversPlan,
     GroupsPlan,
-    CorrelationPlan,
     JoinPlan,
     OutlierPlan,
+    TrendsPlan,
     describe_entry,
     pick_columns,
     problem,
@@ -54,6 +55,7 @@ from mini_me_sidecar.adapters.data.tables import (
     table_file,
     table_sources,
 )
+from mini_me_sidecar.adapters.data.trends import analyze
 from mini_me_sidecar.adapters.data.validate import results_frame, run_checks
 from mini_me_sidecar.adapters.data.variables import KINDS, MAX_CHARTS, chart_columns, summaries
 from mini_me_sidecar.adapters.data.worker import WORKERS
@@ -535,6 +537,58 @@ async def check_confounders(ctx: CallContext, text: str) -> None:
     title = f"Estimates for {plan.focus}"
     source = table.name if table.source_id else None
     await _draw(ctx, chart, _estimates_chart(title), source, table.source_id)
+
+
+async def analyze_trends(ctx: CallContext, text: str) -> None:
+    tables = await read_tables(ctx, text)
+    table = tables[0]
+    plan, _ = await choose(ctx, TrendsPlan, text, [describe(table)])
+    roles = [(plan.value, "value", ("number",)), (plan.time, "time", ("date", "number"))]
+    if plan.group:
+        roles.append((plan.group, "group", GROUPING))
+    _check_roles(table, roles)
+    ctx.progress(f"Following {plan.value} in {table.name}")
+    found = await WORKERS.run(
+        ctx, analyze, table.frame, plan.value, plan.time, plan.group, plan.change_date
+    )
+    overall = found.trends.iloc[0]
+    text_parts = [
+        f"`{plan.value}` changed by {overall['Slope']:+.3g} {found.unit} over `{plan.time}` "
+        + f"(95% interval {overall['Low']:.3g} to {overall['High']:.3g}, "
+        + f"p = {overall['p-value']:.2g}, {overall['Rows']:,} rows)."
+    ]
+    if found.change is not None:
+        after = found.change.iloc[1]
+        text_parts.append(
+            f"From {plan.change_date}, its mean was {after['Difference']:+.3g} from before "
+            + f"(95% interval {after['Low']:.3g} to {after['High']:.3g}, "
+            + f"p = {after['p-value']:.2g})."
+        )
+    ctx.write(_table_note(tables) + " ".join(text_parts) + f" {ASSOCIATION}\n\n")
+    await show_frame(
+        ctx,
+        found.trends,
+        f"Trends of {plan.value}",
+        results_name=f"{table.stem}-trends.csv",
+    )
+    if found.change is not None:
+        await show_frame(
+            ctx,
+            found.change,
+            f"{plan.value} around {plan.change_date}",
+            results_name=f"{table.stem}-change.csv",
+        )
+    line = ChartChoice.model_validate(
+        {
+            "template": "line",
+            "title": f"Mean {plan.value} over {plan.time}",
+            "x": plan.time,
+            "y": plan.value,
+            "group": plan.group,
+        }
+    )
+    source = table.name if table.source_id else None
+    await _draw(ctx, table.frame, line, source, table.source_id)
 
 
 def _verdict(alone: float, adjusted: float, controls: list[str]) -> str:

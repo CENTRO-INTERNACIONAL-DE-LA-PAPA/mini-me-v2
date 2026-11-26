@@ -171,6 +171,21 @@ class CheckConfounders(Adapter):
         await replies.check_confounders(ctx, str(input.get("text", "")))
 
 
+class AnalyzeTrends(Adapter):
+    info = AdapterInfo(
+        id="data-trends",
+        description="Follows a number column over time with statsmodels.",
+        input_schema=TEXT_INPUT,
+        providers=tuple(PROVIDER_NAMES),
+    )
+
+    async def run(self, ctx: CallContext, input: dict[str, Any]) -> None:
+        # Imported on demand; see ProfileData.run.
+        from mini_me_sidecar.adapters.data import replies
+
+        await replies.analyze_trends(ctx, str(input.get("text", "")))
+
+
 class PlotData(Adapter):
     info = AdapterInfo(
         id="data-plot",

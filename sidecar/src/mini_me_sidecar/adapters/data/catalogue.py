@@ -266,6 +266,18 @@ class ConfoundersPlan(BaseModel):
     subgroups: str | None = None
 
 
+class TrendsPlan(BaseModel):
+    """The number column to follow (`value`), the date or number column it changes over
+    (`time`), a column to follow each value of separately (`group`) only when the message asks,
+    and `change_date`, a date or time from the message to compare before and after, only when
+    it names one."""
+
+    value: str
+    time: str
+    group: str | None = None
+    change_date: str | None = None
+
+
 def role_problem(frame: pd.DataFrame, column: str, role: str, kinds: tuple[str, ...]) -> str | None:
     if column not in frame.columns:
         return f"The table has no column `{column}` for the {role}."

@@ -50,12 +50,12 @@
 
 ## 6. Analyze Trends (sidecar)
 
-- [ ] 6.1 Add `adapters/data/trends.py`: the OLS slope of the value over time (dates as
+- [x] 6.1 Add `adapters/data/trends.py`: the OLS slope of the value over time (dates as
   fractional years) with its interval and p-value, overall and per group (at most 10, at least
   10 rows each), and, with a change date, the means before and after and their difference with
   a bootstrap interval and Welch p-value. Verify: pytest on a series rising one unit a year
   with a step at a date checks the slope and the before/after difference.
-- [ ] 6.2 Add the plan (`value`, `time`, `group`, `change_date`), the adapter `data-trends` and
+- [x] 6.2 Add the plan (`value`, `time`, `group`, `change_date`), the adapter `data-trends` and
   the reply: the trends table, the before/after table when there is one, and a line chart of the
   mean over time per group. Verify: `cd sidecar && uv run pytest` passes.
 
