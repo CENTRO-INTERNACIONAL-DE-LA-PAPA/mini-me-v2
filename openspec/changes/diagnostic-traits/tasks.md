@@ -61,9 +61,9 @@
 
 ## 7. Library and icons
 
-- [ ] 7.1 Add `chart-bar-big`, `chart-network`, `shield-question` and `chart-spline` to
+- [x] 7.1 Add `chart-bar-big`, `chart-network`, `shield-question` and `chart-spline` to
   `TRAIT_ICONS` in `src/lib/traitIcons.ts`. Verify: `npx tsc --noEmit` passes.
-- [ ] 7.2 In `src-tauri/library/builtin.json`, add the four Traits (adapters, icons, colours,
+- [x] 7.2 In `src-tauri/library/builtin.json`, add the four Traits (adapters, icons, colours,
   instructions that fill the roles from the message and the earlier outputs) and the
   Diagnostic Analytics Mini-Me in the Data group with its look and Workflow (the three
   conditions and the written-answer approval, wording from design.md). Verify:
@@ -71,7 +71,7 @@
 
 ## 8. In the app
 
-- [ ] 8.1 With the app running (the user runs `npm run tauri dev`), on the EDA test table:
+- [x] 8.1 With the app running (the user runs `npm run tauri dev`), on the EDA test table:
   "@Diagnostic Analytics does yield_t_ha differ between sites?" runs *Compare Groups* without
   asking; "@Diagnostic Analytics why is yield low?" asks questions, and after an answer naming
   the outcome, drivers and a control runs *Find Drivers* then *Check Confounders*; a question

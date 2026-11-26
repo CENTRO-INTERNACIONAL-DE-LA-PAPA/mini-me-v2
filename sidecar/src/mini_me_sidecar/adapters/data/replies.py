@@ -436,9 +436,9 @@ async def compare_groups(ctx: CallContext, text: str) -> None:
         results_name=f"{table.stem}-group-comparison.csv",
     )
     source = table.name if table.source_id else None
-    differences = _estimates(others["Group"], others["Difference"], others["Low"], others["High"])
-    title = f"Difference in {plan.value} from {found.reference}"
-    await _draw(ctx, differences, _estimates_chart(title), source, table.source_id)
+    axis = f"Difference in {plan.value}"
+    title = f"{axis} from {found.reference}"
+    await _draw_estimates(ctx, others, "Group", "Difference", axis, title, table)
     box = ChartChoice.model_validate(
         {
             "template": "box",
@@ -494,10 +494,8 @@ async def find_drivers(ctx: CallContext, text: str) -> None:
     await show_frame(
         ctx, terms, f"Drivers of {plan.outcome}", results_name=f"{table.stem}-drivers.csv"
     )
-    coefficients = _estimates(terms["Term"], terms["Coefficient"], terms["Low"], terms["High"])
     title = f"Coefficients for {plan.outcome}"
-    source = table.name if table.source_id else None
-    await _draw(ctx, coefficients, _estimates_chart(title), source, table.source_id)
+    await _draw_estimates(ctx, terms, "Term", "Coefficient", "Coefficient", title, table)
 
 
 HELD_PERCENT = 10
@@ -531,12 +529,10 @@ async def check_confounders(ctx: CallContext, text: str) -> None:
         f"{plan.focus} and {plan.outcome}",
         results_name=f"{table.stem}-confounders.csv",
     )
-    chart = _estimates(
-        estimates["Estimate"], estimates["Coefficient"], estimates["Low"], estimates["High"]
-    )
     title = f"Estimates for {plan.focus}"
-    source = table.name if table.source_id else None
-    await _draw(ctx, chart, _estimates_chart(title), source, table.source_id)
+    await _draw_estimates(
+        ctx, estimates, "Estimate", "Coefficient", f"Coefficient of {plan.focus}", title, table
+    )
 
 
 async def analyze_trends(ctx: CallContext, text: str) -> None:
@@ -611,23 +607,28 @@ def _check_roles(table: Table, roles: list[tuple[str, str, tuple[str, ...]]]) ->
             raise TraitError("column_role", reason)
 
 
-def _estimates(
-    labels: pd.Series, estimates: pd.Series, low: pd.Series, high: pd.Series
-) -> pd.DataFrame:
-    return pd.DataFrame(
+async def _draw_estimates(
+    ctx: CallContext,
+    rows: pd.DataFrame,
+    label: str,
+    value: str,
+    axis: str,
+    title: str,
+    table: Table,
+) -> None:
+    estimates = pd.DataFrame(
         {
-            "term": labels.to_numpy(),
-            "estimate": estimates.to_numpy(),
-            "estimate_low": low.to_numpy(),
-            "estimate_high": high.to_numpy(),
+            "term": rows[label].to_numpy(),
+            axis: rows[value].to_numpy(),
+            f"{axis}_low": rows["Low"].to_numpy(),
+            f"{axis}_high": rows["High"].to_numpy(),
         }
     )
-
-
-def _estimates_chart(title: str) -> ChartChoice:
-    return ChartChoice.model_validate(
-        {"template": "estimates", "title": title, "category": "term", "value": "estimate"}
+    choice = ChartChoice.model_validate(
+        {"template": "estimates", "title": title, "category": "term", "value": axis}
     )
+    source = table.name if table.source_id else None
+    await _draw(ctx, estimates, choice, source, table.source_id)
 
 
 async def _draw(

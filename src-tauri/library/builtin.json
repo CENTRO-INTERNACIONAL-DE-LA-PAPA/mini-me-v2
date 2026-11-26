@@ -215,6 +215,42 @@
       "icon": "group",
       "adapter": "data-clusters",
       "instructions": "You choose how to group the rows of a table for a researcher. From the user's message and the description of the table, list the number columns to group the rows by, choose the method (kmeans, unless the message asks for HDBSCAN or for groups of any shape with some rows left out, then hdbscan), and give the number of clusters only when the message names one. Use only columns the description lists. If the message names no column, leave the columns empty, so every fitting column is used."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a27",
+      "name": "Compare Groups",
+      "description": "Compares a number column between groups, with confidence intervals for each difference.",
+      "color": "oklch(0.78 0.11 300)",
+      "icon": "chart-bar-big",
+      "adapter": "data-compare-groups",
+      "instructions": "You choose how to compare groups for a researcher. Name the number column to compare as value, the column whose values form the groups as groups, and the reference group only when the message names one. Take the columns from the user's message and from the earlier outputs, including the user's answers to questions; use only columns the description lists."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a28",
+      "name": "Find Drivers",
+      "description": "Finds which columns go with an outcome, with a regression and its confidence intervals.",
+      "color": "oklch(0.8 0.1 178)",
+      "icon": "chart-network",
+      "adapter": "data-drivers",
+      "instructions": "You choose a regression for a researcher. Name the number column to explain as outcome and the columns that might go with it as drivers; never use the outcome as a driver. Take the columns from the user's message and from the earlier outputs, including the user's answers to questions; use only columns the description lists."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a29",
+      "name": "Check Confounders",
+      "description": "Checks whether a column's link to an outcome holds once other columns are accounted for.",
+      "color": "oklch(0.78 0.12 335)",
+      "icon": "shield-question",
+      "adapter": "data-confounders",
+      "instructions": "You choose how to check a link for confounders for a researcher. Name the number column to explain as outcome, the one number or true/false column whose link is checked as focus, the columns to account for as controls, and a column to look within as subgroups only when the message asks for it. When an earlier Step found several drivers, take the one the message is about as focus and the others as controls. Take the columns from the user's message and from the earlier outputs, including the user's answers to questions; use only columns the description lists."
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a30",
+      "name": "Analyze Trends",
+      "description": "Follows a number column over time, and compares before and after a date.",
+      "color": "oklch(0.8 0.1 220)",
+      "icon": "chart-spline",
+      "adapter": "data-trends",
+      "instructions": "You choose how to follow a trend for a researcher. Name the number column to follow as value, the date or number column it changes over as time, a column to follow each value of separately as group only when the message asks, and change_date only when the message names a date or time where something changed, written as in the table. Take the columns from the user's message and from the earlier outputs, including the user's answers to questions; use only columns the description lists."
     }
   ],
   "mini_mes": [
@@ -444,6 +480,67 @@
             "branches": [
               { "label": "cluster", "steps": [{ "id": "find-clusters", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a26" }] },
               { "label": "skip", "steps": [] }
+            ]
+          },
+          {
+            "id": "extra-chart",
+            "type": "condition",
+            "label": "Another chart?",
+            "question": "Does the user's message ask for a chart that the earlier Steps did not draw?",
+            "branches": [
+              { "label": "chart", "steps": [{ "id": "plot", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a22" }] },
+              { "label": "no chart", "steps": [] }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7b19",
+      "name": "Diagnostic Analytics",
+      "description": "Looks into why something happened in a data table: compares groups, finds what goes with an outcome and checks for confounders, or follows a trend over time",
+      "colors": { "tint": "#DFEBFF", "solid": "#5B81E0", "ink": "#334F9D" },
+      "avatar": { "base": "yukon-gold", "eyes": "raised-eyebrow", "mouth": "shy-smile", "accessory": "monocle" },
+      "group": "data",
+      "workflow": {
+        "steps": [
+          {
+            "id": "clear",
+            "type": "condition",
+            "label": "Clear enough?",
+            "question": "Do the user's message and the earlier outputs name the outcome and what might explain it clearly enough to analyse?",
+            "branches": [
+              { "label": "clear", "steps": [] },
+              {
+                "label": "unclear",
+                "steps": [
+                  {
+                    "id": "ask",
+                    "type": "approval",
+                    "label": "Questions",
+                    "prompt": "Ask only about what is unclear: which column is the outcome, which columns might explain it or which groups to compare, the time column and any date of a change, which columns to control for, and whether the user wants an association or a cause. Name the table's columns in the questions.",
+                    "answer": "text",
+                    "questions_by": "model"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "method",
+            "type": "condition",
+            "label": "Which question?",
+            "question": "Is this a question about a difference between groups, about what goes with an outcome, or about a change over time?",
+            "branches": [
+              { "label": "groups", "steps": [{ "id": "compare-groups", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a27" }] },
+              {
+                "label": "drivers",
+                "steps": [
+                  { "id": "find-drivers", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a28" },
+                  { "id": "check-confounders", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a29" }
+                ]
+              },
+              { "label": "trend", "steps": [{ "id": "analyze-trends", "trait": "5f0c8a2e-6d1b-4b7e-9a43-2c8e1f0d7a30" }] }
             ]
           },
           {
